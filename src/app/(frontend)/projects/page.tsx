@@ -10,9 +10,6 @@ export default async function ProjectsPage() {
   const projects = await getProjectProgress(payload)
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">프로젝트 목록</h1>
-      <ProjectTableFilter projects={projects} />
-    </div>
+    <ProjectTableFilter projects={projects} />
   )
 }
