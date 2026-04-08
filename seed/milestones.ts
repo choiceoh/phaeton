@@ -65,7 +65,8 @@ const essTemplates: MilestoneTemplate[] = [
 ]
 
 export async function seedMilestoneTemplates(payload: Payload) {
-  const allTemplates: { projectType: string; templates: MilestoneTemplate[] }[] = [
+  type ProjectType = 'solar' | 'wind' | 'ess'
+  const allTemplates: { projectType: ProjectType; templates: MilestoneTemplate[] }[] = [
     { projectType: 'solar', templates: solarTemplates },
     { projectType: 'wind', templates: windTemplates },
     { projectType: 'ess', templates: essTemplates },

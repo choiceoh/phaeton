@@ -20,6 +20,7 @@ export const copyMilestones: CollectionAfterChangeHook = async ({ doc, operation
     for (const tmpl of templates.docs) {
       await payload.create({
         collection: 'project-milestones',
+        req,
         data: {
           project: doc.id,
           template: tmpl.id,
@@ -48,6 +49,7 @@ export const copyMilestones: CollectionAfterChangeHook = async ({ doc, operation
     for (const tmpl of essExtras.docs) {
       await payload.create({
         collection: 'project-milestones',
+        req,
         data: {
           project: doc.id,
           template: tmpl.id,
