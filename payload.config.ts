@@ -11,6 +11,7 @@ import { ProjectMilestones } from './src/collections/ProjectMilestones'
 import { Staff } from './src/collections/Staff'
 import { StaffAssignments } from './src/collections/StaffAssignments'
 import { ProjectDocuments } from './src/collections/ProjectDocuments'
+import { SiteSettings } from './src/globals/SiteSettings'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -37,6 +38,8 @@ export default buildConfig({
     StaffAssignments,
     ProjectDocuments,
   ],
+
+  globals: [SiteSettings],
 
   db: postgresAdapter({
     pool: {

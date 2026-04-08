@@ -11,12 +11,11 @@ import './globals.css'
 
 export const dynamic = 'force-dynamic'
 
-const NAV = [
-  { href: '/dashboard', label: '대시보드' },
-  { href: '/projects', label: '프로젝트' },
-  { href: '/staff', label: '인력 현황' },
-  { href: '/alerts', label: '알림' },
-]
+const BANNER_STYLES = {
+  info: 'bg-blue-50 text-blue-800 border-blue-200',
+  warning: 'bg-amber-50 text-amber-800 border-amber-200',
+  urgent: 'bg-red-50 text-red-800 border-red-200',
+} as const
 
 export const metadata = {
   title: 'Phaeton — 에너지 프로젝트 관리',
@@ -31,9 +30,28 @@ export default async function FrontendLayout({
   const { user } = await payload.auth({ headers: await headers() })
   if (!user) redirect('/admin/login')
 
+  const settings = await payload.findGlobal({ slug: 'site-settings' })
+  const nav = settings?.navigation
+  const banner = settings?.banner
+
+  const NAV = [
+    { href: '/dashboard', label: nav?.dashboardLabel || '대시보드' },
+    { href: '/projects', label: nav?.projectsLabel || '프로젝트' },
+    { href: '/staff', label: nav?.staffLabel || '인력 현황' },
+    { href: '/alerts', label: nav?.alertsLabel || '알림' },
+  ]
+
   return (
     <html lang="ko">
       <body className="min-h-screen bg-ivory-100">
+        {banner?.enabled && banner?.text && (
+          <div className={`border-b px-6 py-2 text-sm ${
+            BANNER_STYLES[banner.type as keyof typeof BANNER_STYLES]
+              || BANNER_STYLES.info
+          }`}>
+            {banner.text}
+          </div>
+        )}
         <nav className="bg-ivory-50 border-b border-stone-200 px-6 py-3
           flex items-center justify-between"
         >
