@@ -1,3 +1,5 @@
+'use client'
+
 import { Card, Badge, ProgressBar, Text } from '@tremor/react'
 
 import {
