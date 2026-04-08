@@ -1,8 +1,13 @@
 import type { CollectionConfig } from 'payload'
 
+import { validateAssignment } from '../hooks/validateAssignment'
+
 export const StaffAssignments: CollectionConfig = {
   slug: 'staff-assignments',
   labels: { singular: '인력 배치', plural: '인력 배치 목록' },
+  hooks: {
+    beforeChange: [validateAssignment],
+  },
   fields: [
     { name: 'staff', type: 'relationship', relationTo: 'staff', required: true, label: '인력' },
     {

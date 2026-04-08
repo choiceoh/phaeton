@@ -40,7 +40,7 @@ Payload CMS 3.0을 인프라 레이어로 사용하고, 에너지 사업 특화 
 | 프레임워크 | Payload CMS 3.0 + Next.js 14 | 인증·RBAC·Admin UI 내장, TS 단일 스택 |
 | DB | PostgreSQL 16 | Payload의 Drizzle 어댑터 공식 지원 |
 | ORM | Drizzle (Payload 내장) | Payload가 스키마 관리, 필요 시 raw SQL 가능 |
-| UI | shadcn/ui + Tailwind + Recharts | 대시보드 커스텀 페이지 |
+| UI | Tremor + Tailwind | 대시보드 특화 컴포넌트 (Table, Card, ProgressBar 내장) |
 | 인프라 | Docker Compose (Caddy + App + PG) | 단일 서버, HTTPS 자동 |
 | 인증 | Payload 내장 (이메일/비밀번호) | RBAC 함수 기반, 필드 레벨 접근 제어 |
 
