@@ -4,13 +4,13 @@ import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import { Users } from './src/collections/Users'
-import { Projects } from './src/collections/Projects'
-import { MilestoneTemplates } from './src/collections/MilestoneTemplates'
-import { ProjectMilestones } from './src/collections/ProjectMilestones'
-import { Staff } from './src/collections/Staff'
-import { StaffAssignments } from './src/collections/StaffAssignments'
-import { ProjectDocuments } from './src/collections/ProjectDocuments'
+import { Users } from './src/collections/Users.ts'
+import { Projects } from './src/collections/Projects.ts'
+import { MilestoneTemplates } from './src/collections/MilestoneTemplates.ts'
+import { ProjectMilestones } from './src/collections/ProjectMilestones.ts'
+import { Staff } from './src/collections/Staff.ts'
+import { StaffAssignments } from './src/collections/StaffAssignments.ts'
+import { ProjectDocuments } from './src/collections/ProjectDocuments.ts'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -42,7 +42,7 @@ export default buildConfig({
     pool: {
       connectionString: process.env.DATABASE_URL,
     },
-    migrationDir: path.resolve(dirname, 'migrations'),
+    push: true,
   }),
 
   editor: lexicalEditor({}),
