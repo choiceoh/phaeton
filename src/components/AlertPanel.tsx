@@ -1,3 +1,5 @@
+'use client'
+
 import { Card, Badge, List, ListItem, Text } from '@tremor/react'
 import Link from 'next/link'
 

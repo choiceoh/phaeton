@@ -8,6 +8,8 @@ import config from '@payload-config'
 
 import './globals.css'
 
+export const dynamic = 'force-dynamic'
+
 const NAV = [
   { href: '/dashboard', label: '대시보드' },
   { href: '/staff', label: '인력 현황' },

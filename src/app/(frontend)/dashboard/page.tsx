@@ -1,7 +1,7 @@
-import { Card, Metric, Text } from '@tremor/react'
 import { getPayload } from 'payload'
 
 import { AlertPanel } from '@/components/AlertPanel'
+import { DashboardCards } from '@/components/DashboardCards'
 import { ProjectGrid } from '@/components/ProjectGrid'
 import {
   getSummaryStats,
@@ -33,24 +33,7 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">포트폴리오 대시보드</h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <Text>진행중 프로젝트</Text>
-          <Metric>{summary.active_projects}</Metric>
-        </Card>
-        <Card decoration="top" decorationColor="red">
-          <Text>지연 프로젝트</Text>
-          <Metric>{summary.delayed_projects}</Metric>
-        </Card>
-        <Card decoration="top" decorationColor="amber">
-          <Text>금주 마감</Text>
-          <Metric>{summary.due_this_week}</Metric>
-        </Card>
-        <Card decoration="top" decorationColor="red">
-          <Text>과할당 인력</Text>
-          <Metric>{summary.overloaded_staff}</Metric>
-        </Card>
-      </div>
+      <DashboardCards summary={summary} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
