@@ -19,6 +19,7 @@ import {
   PROJECT_TYPE_COLORS,
   PROJECT_TYPE_LABELS,
 } from '@/lib/constants'
+import { formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
 export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
@@ -73,7 +74,9 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
                 <TableCell>
                   {p.done_milestones}/{p.total_milestones}
                 </TableCell>
-                <TableCell>{p.cod_target ?? '-'}</TableCell>
+                <TableCell>
+                  {p.cod_target ? formatCodTarget(p.cod_target) : '-'}
+                </TableCell>
               </TableRow>
             )
           })}
