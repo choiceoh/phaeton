@@ -16,35 +16,47 @@ import config from '@payload-config'
 export default async function DashboardPage() {
   const payload = await getPayload({ config })
 
-  const [summary, projects, overdue, expiring, staffLoad] =
+  const [summary, projects, overdue, expiring, staffLoad, settings] =
     await Promise.all([
       getSummaryStats(payload),
       getProjectProgress(payload),
       getOverdueMilestones(payload, 5),
       getExpiringDocuments(payload),
       getStaffLoad(payload),
+      payload.findGlobal({ slug: 'site-settings' }),
     ])
 
   const overloadedStaff = staffLoad.filter(
     s => Number(s.total_allocation) > 100,
   )
 
+  const dash = settings?.dashboard
+  const showCards = dash?.showStatusCards !== false
+  const showGrid = dash?.showProjectGrid !== false
+  const showAlerts = dash?.showAlertPanel !== false
+
   return (
     <div className="space-y-6">
-      <DashboardCards summary={summary} />
+      {showCards && <DashboardCards summary={summary} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <ProjectGrid projects={projects} />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold mb-3">알림</h2>
-          <AlertPanel
-            overdueMilestones={overdue}
-            expiringDocuments={expiring}
-            overloadedStaff={overloadedStaff}
-          />
-        </div>
+        {showGrid && (
+          <div className={showAlerts ? 'lg:col-span-2' : 'lg:col-span-3'}>
+            <ProjectGrid projects={projects} />
+          </div>
+        )}
+        {showAlerts && (
+          <div className={showGrid ? '' : 'lg:col-span-3'}>
+            <h2 className="text-lg font-semibold mb-3">
+              {dash?.alertSectionTitle || '알림'}
+            </h2>
+            <AlertPanel
+              overdueMilestones={overdue}
+              expiringDocuments={expiring}
+              overloadedStaff={overloadedStaff}
+            />
+          </div>
+        )}
       </div>
     </div>
   )
