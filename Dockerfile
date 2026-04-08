@@ -11,7 +11,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN node --experimental-strip-types --no-warnings ./node_modules/payload/bin.js --disable-transpile generate:types \
     && node --experimental-strip-types --no-warnings ./node_modules/payload/bin.js --disable-transpile migrate:create \
-    && sed -i "s/import { MigrateUpArgs, MigrateDownArgs, sql }/import type { MigrateUpArgs, MigrateDownArgs } from '@payloadcms\/db-postgres'\nimport { sql }/" src/migrations/*.ts \
+    && sed -i "s/import { MigrateUpArgs, MigrateDownArgs, sql }/import type { MigrateUpArgs, MigrateDownArgs } from '@payloadcms\/db-postgres'\nimport { sql }/" migrations/*.ts \
     && npm run build
 
 FROM base AS runner
