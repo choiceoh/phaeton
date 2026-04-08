@@ -1,6 +1,6 @@
 import type { PayloadRequest } from 'payload'
 
-import { getExpiringDocuments } from '@/lib/queries'
+import { getExpiringDocuments } from '../lib/queries.ts'
 
 export async function checkExpiringDocsHandler({ req }: { req: PayloadRequest }) {
   const { payload } = req

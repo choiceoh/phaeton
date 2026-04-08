@@ -16,6 +16,7 @@ import { ProjectMilestones } from './src/collections/ProjectMilestones.ts'
 import { Staff } from './src/collections/Staff.ts'
 import { StaffAssignments } from './src/collections/StaffAssignments.ts'
 import { ProjectDocuments } from './src/collections/ProjectDocuments.ts'
+import { DashboardConfigs } from './src/collections/DashboardConfigs.ts'
 import { SiteSettings } from './src/globals/SiteSettings.ts'
 import { checkOverdueHandler } from './src/jobs/checkOverdue.ts'
 import { checkExpiringDocsHandler } from './src/jobs/checkExpiringDocs.ts'
@@ -56,6 +57,7 @@ export default buildConfig({
     Staff,
     StaffAssignments,
     ProjectDocuments,
+    DashboardConfigs,
   ],
 
   globals: [SiteSettings],
