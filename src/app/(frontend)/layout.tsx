@@ -12,8 +12,8 @@ import './globals.css'
 export const dynamic = 'force-dynamic'
 
 const NAV = [
-  { href: '/dashboard', label: '대시보드' },
   { href: '/projects', label: '프로젝트' },
+  { href: '/dashboard', label: '대시보드' },
   { href: '/staff', label: '인력 현황' },
   { href: '/alerts', label: '알림' },
 ]
@@ -38,7 +38,7 @@ export default async function FrontendLayout({
           flex items-center justify-between"
         >
           <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="font-semibold text-lg">
+            <Link href="/projects" className="font-semibold text-lg">
               Phaeton
             </Link>
             {NAV.map(n => (
