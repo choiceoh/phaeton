@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 
 import { copyMilestones } from '../hooks/copyMilestones.ts'
 import { calculateProgress } from '../hooks/calculateProgress.ts'
+import { autoGenerateCode } from '../hooks/autoGenerateCode.ts'
 
 const CODE_PATTERN = /^(SL|WD|ES|HB)-\d{4}-\d{3}$/
 
@@ -11,6 +12,7 @@ export const Projects: CollectionConfig = {
   labels: { singular: '프로젝트', plural: '프로젝트 목록' },
   versions: { drafts: false, maxPerDoc: 20 },
   hooks: {
+    beforeValidate: [autoGenerateCode],
     afterChange: [copyMilestones],
     afterRead: [calculateProgress],
   },
@@ -311,6 +313,57 @@ export const Projects: CollectionConfig = {
                 defaultColumns: ['title', 'docType', 'expiryDate'],
                 allowCreate: true,
               },
+            },
+          ],
+        },
+
+        {
+          label: '활동 로그',
+          fields: [
+            {
+              name: 'activityLog',
+              type: 'blocks',
+              label: '활동 기록',
+              labels: { singular: '활동', plural: '활동 목록' },
+              blocks: [
+                {
+                  slug: 'note',
+                  labels: { singular: '메모', plural: '메모' },
+                  fields: [
+                    { name: 'content', type: 'textarea', required: true, label: '내용' },
+                    { name: 'author', type: 'relationship', relationTo: 'users', label: '작성자' },
+                  ],
+                },
+                {
+                  slug: 'status-change',
+                  labels: { singular: '상태 변경', plural: '상태 변경' },
+                  fields: [
+                    { name: 'fromStatus', type: 'text', label: '이전 상태' },
+                    { name: 'toStatus', type: 'text', label: '변경 상태' },
+                    { name: 'reason', type: 'textarea', label: '변경 사유' },
+                  ],
+                },
+                {
+                  slug: 'issue',
+                  labels: { singular: '이슈', plural: '이슈' },
+                  fields: [
+                    { name: 'title', type: 'text', required: true, label: '제목' },
+                    {
+                      name: 'severity',
+                      type: 'select',
+                      label: '심각도',
+                      options: [
+                        { label: '낮음', value: 'low' },
+                        { label: '보통', value: 'medium' },
+                        { label: '높음', value: 'high' },
+                        { label: '긴급', value: 'critical' },
+                      ],
+                    },
+                    { name: 'description', type: 'textarea', label: '상세 내용' },
+                    { name: 'resolved', type: 'checkbox', label: '해결됨' },
+                  ],
+                },
+              ],
             },
           ],
         },
