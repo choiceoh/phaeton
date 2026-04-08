@@ -1,6 +1,6 @@
 import type { PayloadRequest } from 'payload'
 
-import { getOverdueMilestones } from '@/lib/queries'
+import { getOverdueMilestones } from '../lib/queries.ts'
 
 export async function checkOverdueHandler({ req }: { req: PayloadRequest }) {
   const { payload } = req

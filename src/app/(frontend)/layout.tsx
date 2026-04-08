@@ -30,7 +30,7 @@ export default async function FrontendLayout({
   const { user } = await payload.auth({ headers: await headers() })
   if (!user) redirect('/admin/login')
 
-  const settings = await payload.findGlobal({ slug: 'site-settings' })
+  const settings = await (payload as any).findGlobal({ slug: 'site-settings' })
   const nav = settings?.navigation
   const banner = settings?.banner
 

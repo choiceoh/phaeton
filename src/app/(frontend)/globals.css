@@ -4,6 +4,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* react-grid-layout */
+.react-grid-item.react-grid-placeholder {
+  background: #3b82f6;
+  opacity: 0.15;
+  border-radius: 0.5rem;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-right-color: #9ca3af;
+  border-bottom-color: #9ca3af;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+}
+
 /* 웜톤 테마 — Tremor 컴포넌트 배경 통일 (Claude Pampas 톤) */
 .tremor-Card-root {
   background-color: #FAF9F5;

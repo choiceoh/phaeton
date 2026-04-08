@@ -377,7 +377,7 @@ export const Projects: CollectionConfig = {
       const role = req.user?.role as string
       if (role === 'director') return true
       if (role === 'pm') {
-        const dept = req.user?.department as string | undefined
+        const dept = (req.user as any)?.department as string | undefined
         const conditions = [{ assignedPM: { equals: req.user?.id } }]
         if (dept) conditions.push({ department: { equals: dept } } as any)
         return { or: conditions }
