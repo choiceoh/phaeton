@@ -9,6 +9,7 @@
 
 코드 작성 전 반드시 해당 문서를 읽을 것:
 - `docs/00-MASTER-PLAN.md` — 아키텍처, 디렉토리 구조, 전체 컨텍스트
+- `docs/05-SOLAR-DOMAIN.md` — 태양광 인허가 절차, 공사 단계, 관련 법규, 마일스톤 템플릿. 도메인 작업 시 필수
 - `docs/06-DESIGN-SYSTEM.md` — 색상, 상태 매핑, 톤앤매너. UI 작업 시 필수
 - `docs/07-LINT-RULES.md` — 포매팅, 네이밍, import 순서
 
