@@ -44,7 +44,7 @@ export async function getProjectProgress(
   const db = payload.db.drizzle
   const result = await db.execute(`
     SELECT
-      p.id, p.name, p.type, p.status, p.capacity_kw, p.cod_target,
+      p.id, p.name, p.type, p.status, p.department, p.capacity_kw, p.cod_target,
       COUNT(pm.id) AS total_milestones,
       COUNT(pm.id) FILTER (WHERE pm.status = 'done') AS done_milestones,
       ROUND(

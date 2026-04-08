@@ -3,6 +3,7 @@ export interface ProjectProgress {
   name: string
   type: string
   status: string
+  department: string | null
   capacity_kw: number | null
   cod_target: string | null
   total_milestones: string

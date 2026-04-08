@@ -15,11 +15,13 @@ export function ProjectGrid({
 }) {
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [deptFilter, setDeptFilter] = useState('all')
   const [search, setSearch] = useState('')
 
   const filtered = projects.filter(p => {
     if (typeFilter !== 'all' && p.type !== typeFilter) return false
     if (statusFilter !== 'all' && p.status !== statusFilter) return false
+    if (deptFilter !== 'all' && p.department !== deptFilter) return false
     if (search && !p.name.toLowerCase().includes(search.toLowerCase()))
       return false
     return true
@@ -56,6 +58,20 @@ export function ProjectGrid({
           <SelectItem value="construction">시공</SelectItem>
           <SelectItem value="testing">시운전</SelectItem>
           <SelectItem value="cod">운영</SelectItem>
+        </Select>
+        <Select
+          value={deptFilter}
+          onValueChange={setDeptFilter}
+          className="max-w-[10rem]"
+        >
+          <SelectItem value="all">전체 부서</SelectItem>
+          <SelectItem value="renewable">신재생사업본부</SelectItem>
+          <SelectItem value="strategy">전략사업본부</SelectItem>
+          <SelectItem value="onm">O&M사업본부</SelectItem>
+          <SelectItem value="future">미래사업실</SelectItem>
+          <SelectItem value="planning">기획조정실</SelectItem>
+          <SelectItem value="solar">솔라사업실</SelectItem>
+          <SelectItem value="development">개발사업본부</SelectItem>
         </Select>
       </div>
 

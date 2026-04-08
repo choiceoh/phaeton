@@ -37,6 +37,16 @@ export const PROJECT_TYPE_COLORS: Record<string, string> = {
   hybrid: 'violet',
 }
 
+export const DEPARTMENT_LABELS: Record<string, string> = {
+  renewable: '신재생사업본부',
+  strategy: '전략사업본부',
+  onm: 'O&M사업본부',
+  future: '미래사업실',
+  planning: '기획조정실',
+  solar: '솔라사업실',
+  development: '개발사업본부',
+}
+
 export const CATEGORY_LABELS: Record<string, string> = {
   admin: '행정·인허가',
   engineering: '설계',
