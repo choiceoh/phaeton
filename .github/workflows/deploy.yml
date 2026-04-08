@@ -9,8 +9,35 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Deploy
+        env:
+          DEPLOY_DIR: ~/phaeton-deploy
+          REPO_URL: https://github.com/${{ github.repository }}.git
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          PAYLOAD_SECRET: ${{ secrets.PAYLOAD_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
         run: |
-          cd ~/음악/phaeton
-          git pull origin main
-          docker compose down
-          docker compose up -d --build
+          # secrets 필수값 검증
+          if [ -z "$DB_PASSWORD" ] || [ -z "$PAYLOAD_SECRET" ]; then
+            echo "::error::DB_PASSWORD, PAYLOAD_SECRET secrets가 설정되지 않았습니다."
+            echo "GitHub repo → Settings → Secrets → Actions에서 추가하세요."
+            exit 1
+          fi
+
+          if [ ! -d "$DEPLOY_DIR" ]; then
+            git clone --branch main --single-branch "$REPO_URL" "$DEPLOY_DIR"
+          fi
+          cd "$DEPLOY_DIR"
+          git fetch origin main
+          git reset --hard origin/main
+
+          # .env 생성 (GitHub secrets → docker compose 환경변수)
+          cat > .env <<EOF
+          DB_PASSWORD=${DB_PASSWORD}
+          PAYLOAD_SECRET=${PAYLOAD_SECRET}
+          NEXT_PUBLIC_APP_URL=${APP_URL:-https://phaeton.example.com}
+          VLLM_BASE_URL=http://host.docker.internal:8000
+          VLLM_MODEL=gemma4
+          EOF
+
+          docker compose -f docker-compose.prod.yml down
+          docker compose -f docker-compose.prod.yml up -d --build
