@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
+import { getPayload } from 'payload'
 
-// TODO: implement in later phase
+import config from '@payload-config'
+import { getStaffLoad } from '@/lib/queries'
+
 export async function GET() {
-  return NextResponse.json([])
+  const payload = await getPayload({ config })
+  const staffLoad = await getStaffLoad(payload)
+  return NextResponse.json(staffLoad)
 }

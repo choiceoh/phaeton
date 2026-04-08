@@ -21,6 +21,20 @@ export const Users: CollectionConfig = {
         { label: '열람자', value: 'viewer' },
       ],
     },
+    {
+      name: 'department',
+      type: 'select',
+      label: '소속부서',
+      options: [
+        { label: '신재생사업본부', value: 'renewable' },
+        { label: '전략사업본부', value: 'strategy' },
+        { label: 'O&M사업본부', value: 'onm' },
+        { label: '미래사업실', value: 'future' },
+        { label: '기획조정실', value: 'planning' },
+        { label: '솔라사업실', value: 'solar' },
+        { label: '개발사업본부', value: 'development' },
+      ],
+    },
     { name: 'phone', type: 'text', label: '전화번호' },
   ],
   access: {

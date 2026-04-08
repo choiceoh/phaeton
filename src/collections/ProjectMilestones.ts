@@ -6,6 +6,7 @@ export const ProjectMilestones: CollectionConfig = {
   slug: 'project-milestones',
   admin: { useAsTitle: 'name' },
   labels: { singular: '프로젝트 마일스톤', plural: '프로젝트 마일스톤 목록' },
+  versions: { drafts: false, maxPerDoc: 10 },
   hooks: {
     beforeChange: [checkMilestoneDeps],
   },
