@@ -93,5 +93,28 @@ export default buildConfig({
     ],
   },
 
+  queryPresets: {
+    access: {
+      create: ({ req }) => ['director', 'pm'].includes(req.user?.role as string),
+      delete: ({ req }) => ['director', 'pm'].includes(req.user?.role as string),
+      read: () => true,
+      update: ({ req }) => ['director', 'pm'].includes(req.user?.role as string),
+    },
+    constraints: {
+      read: [
+        {
+          label: '전체 공개',
+          value: 'public',
+          access: () => true,
+        },
+        {
+          label: '관리자 전용',
+          value: 'admin-only',
+          access: ({ req }: any) => ['director', 'pm'].includes(req.user?.role),
+        },
+      ],
+    },
+  },
+
   secret: process.env.PAYLOAD_SECRET || 'CHANGE_ME_IN_PRODUCTION',
 })
