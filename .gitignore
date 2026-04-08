@@ -4,3 +4,4 @@ node_modules/
 payload-types.ts
 *.tsbuildinfo
 next-env.d.ts
+docker-compose.yml
