@@ -3,30 +3,45 @@
 import { Card, Metric, Text } from '@tremor/react'
 
 interface SummaryStats {
-  active_projects: number | string
+  gen_permit_count: number | string
+  dev_permit_count: number | string
+  civil_count: number | string
+  structural_elec_count: number | string
+  inspection_count: number | string
+  pre_cod_count: number | string
   delayed_projects: number | string
-  due_this_week: number | string
-  overloaded_staff: number | string
 }
 
 export function DashboardCards({ summary }: { summary: SummaryStats }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
       <Card>
-        <Text>진행중 프로젝트</Text>
-        <Metric>{summary.active_projects}</Metric>
-      </Card>
-      <Card decoration="top" decorationColor="red">
-        <Text>지연 프로젝트</Text>
-        <Metric>{summary.delayed_projects}</Metric>
+        <Text>발전허가</Text>
+        <Metric>{summary.gen_permit_count}</Metric>
       </Card>
       <Card decoration="top" decorationColor="amber">
-        <Text>금주 마감</Text>
-        <Metric>{summary.due_this_week}</Metric>
+        <Text>개발허가</Text>
+        <Metric>{summary.dev_permit_count}</Metric>
+      </Card>
+      <Card decoration="top" decorationColor="blue">
+        <Text>토목</Text>
+        <Metric>{summary.civil_count}</Metric>
+      </Card>
+      <Card decoration="top" decorationColor="blue">
+        <Text>구조물·전기</Text>
+        <Metric>{summary.structural_elec_count}</Metric>
+      </Card>
+      <Card decoration="top" decorationColor="amber">
+        <Text>사용전 검사</Text>
+        <Metric>{summary.inspection_count}</Metric>
+      </Card>
+      <Card decoration="top" decorationColor="green">
+        <Text>준공대기</Text>
+        <Metric>{summary.pre_cod_count}</Metric>
       </Card>
       <Card decoration="top" decorationColor="red">
-        <Text>과할당 인력</Text>
-        <Metric>{summary.overloaded_staff}</Metric>
+        <Text>지연</Text>
+        <Metric>{summary.delayed_projects}</Metric>
       </Card>
     </div>
   )

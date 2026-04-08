@@ -51,11 +51,12 @@ export function ProjectGrid({
           className="max-w-[10rem]"
         >
           <SelectItem value="all">전체 상태</SelectItem>
-          <SelectItem value="planning">기획</SelectItem>
-          <SelectItem value="permit">인허가</SelectItem>
-          <SelectItem value="construction">시공</SelectItem>
-          <SelectItem value="testing">시운전</SelectItem>
-          <SelectItem value="cod">운영</SelectItem>
+          <SelectItem value="gen-permit">발전허가</SelectItem>
+          <SelectItem value="dev-permit">개발허가</SelectItem>
+          <SelectItem value="civil">토목</SelectItem>
+          <SelectItem value="structural-elec">구조물 및 전기공사</SelectItem>
+          <SelectItem value="inspection">사용전 검사</SelectItem>
+          <SelectItem value="pre-cod">준공대기</SelectItem>
         </Select>
       </div>
 
