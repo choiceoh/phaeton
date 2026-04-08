@@ -29,7 +29,7 @@ export function ProjectGrid({
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
+      <div className="flex items-center gap-3 mb-4">
         <TextInput
           placeholder="프로젝트 검색..."
           value={search}
