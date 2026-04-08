@@ -5,12 +5,9 @@ import { ProjectDetailView } from '@/components/ProjectDetailView'
 
 import config from '@payload-config'
 
+export const revalidate = 10
 
-export default async function ProjectDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const payload = await getPayload({ config })
 
@@ -42,7 +39,7 @@ export default async function ProjectDetailPage({
     }),
   ])
 
-  const milestones = milestonesRes.docs.map(m => ({
+  const milestones = milestonesRes.docs.map((m) => ({
     id: m.id,
     name: m.name,
     status: m.status,
@@ -72,7 +69,7 @@ export default async function ProjectDetailPage({
         client: project.client ?? null,
       }}
       milestones={milestones}
-      assignments={assignmentsRes.docs.map(a => ({
+      assignments={assignmentsRes.docs.map((a) => ({
         id: a.id,
         staff:
           typeof a.staff === 'object' && a.staff
@@ -83,7 +80,7 @@ export default async function ProjectDetailPage({
         startDate: a.startDate ?? null,
         endDate: a.endDate ?? null,
       }))}
-      documents={docsRes.docs.map(d => ({
+      documents={docsRes.docs.map((d) => ({
         id: d.id,
         title: d.title,
         docType: d.docType,

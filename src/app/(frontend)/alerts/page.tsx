@@ -1,32 +1,20 @@
-import { getPayload } from 'payload'
-
 import { AlertsView } from '@/components/AlertsView'
 import {
-  getOverdueMilestones,
-  getExpiringDocuments,
-  getStaffLoad,
-} from '@/lib/queries'
+  getCachedOverdueMilestones,
+  getCachedExpiringDocuments,
+  getCachedStaffLoad,
+} from '@/lib/cachedQueries'
 
-import config from '@payload-config'
+export const revalidate = 60
 
 export default async function AlertsPage() {
-  const payload = await getPayload({ config })
-
   const [overdue, expiring, staffLoad] = await Promise.all([
-    getOverdueMilestones(payload),
-    getExpiringDocuments(payload),
-    getStaffLoad(payload),
+    getCachedOverdueMilestones(),
+    getCachedExpiringDocuments(),
+    getCachedStaffLoad(),
   ])
 
-  const overloaded = staffLoad.filter(
-    s => Number(s.total_allocation) > 100,
-  )
+  const overloaded = staffLoad.filter((s) => Number(s.total_allocation) > 100)
 
-  return (
-    <AlertsView
-      overdue={overdue}
-      expiring={expiring}
-      overloaded={overloaded}
-    />
-  )
+  return <AlertsView overdue={overdue} expiring={expiring} overloaded={overloaded} />
 }

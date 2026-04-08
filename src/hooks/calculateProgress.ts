@@ -1,9 +1,6 @@
 import type { CollectionAfterReadHook } from 'payload'
 
-export const calculateProgress: CollectionAfterReadHook = async ({
-  doc,
-  req: { payload },
-}) => {
+export const calculateProgress: CollectionAfterReadHook = async ({ doc, req: { payload } }) => {
   const milestones = await payload.find({
     collection: 'project-milestones',
     where: { project: { equals: doc.id } },

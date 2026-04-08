@@ -34,10 +34,9 @@ export function StaffTable({ staff }: { staff: StaffRow[] }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {staff.map(s => {
+          {staff.map((s) => {
             const alloc = Number(s.total_allocation)
-            const color =
-              alloc > 100 ? 'red' : alloc >= 80 ? 'amber' : 'blue'
+            const color = alloc > 100 ? 'red' : alloc >= 80 ? 'amber' : 'blue'
             return (
               <TableRow key={s.id}>
                 <TableCell>
@@ -46,11 +45,7 @@ export function StaffTable({ staff }: { staff: StaffRow[] }) {
                 <TableCell>{s.role || '-'}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <ProgressBar
-                      value={Math.min(alloc, 100)}
-                      color={color}
-                      className="w-24"
-                    />
+                    <ProgressBar value={Math.min(alloc, 100)} color={color} className="w-24" />
                     <Badge color={color}>{alloc}%</Badge>
                   </div>
                 </TableCell>
@@ -60,10 +55,7 @@ export function StaffTable({ staff }: { staff: StaffRow[] }) {
           })}
           {staff.length === 0 && (
             <TableRow>
-              <TableCell
-                colSpan={4}
-                className="text-center text-gray-500"
-              >
+              <TableCell colSpan={4} className="text-center text-gray-500">
                 등록된 인력이 없습니다
               </TableCell>
             </TableRow>

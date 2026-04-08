@@ -23,13 +23,7 @@ export interface DashboardData {
   staffLoad: StaffLoadItem[]
 }
 
-export function WidgetRenderer({
-  widgetId,
-  data,
-}: {
-  widgetId: string
-  data: DashboardData
-}) {
+export function WidgetRenderer({ widgetId, data }: { widgetId: string; data: DashboardData }) {
   switch (widgetId) {
     case 'status-cards':
       return <DashboardCards summary={data.summary} />
@@ -51,7 +45,7 @@ export function WidgetRenderer({
 
     default:
       return (
-        <Card className="h-full flex items-center justify-center">
+        <Card className="flex h-full items-center justify-center">
           <Text className="text-gray-400">알 수 없는 위젯: {widgetId}</Text>
         </Card>
       )
@@ -61,7 +55,7 @@ export function WidgetRenderer({
 function OverdueWidget({ items }: { items: OverdueMilestone[] }) {
   return (
     <Card className="h-full overflow-auto">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="mb-3 flex items-center gap-2">
         <Text className="font-medium">지연 마일스톤</Text>
         {items.length > 0 && <Badge color="red">{items.length}</Badge>}
       </div>
@@ -92,7 +86,7 @@ function OverdueWidget({ items }: { items: OverdueMilestone[] }) {
 function ExpiringWidget({ items }: { items: ExpiringDocument[] }) {
   return (
     <Card className="h-full overflow-auto">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="mb-3 flex items-center gap-2">
         <Text className="font-medium">만료 임박 서류</Text>
         {items.length > 0 && <Badge color="amber">{items.length}</Badge>}
       </div>
@@ -123,7 +117,7 @@ function ExpiringWidget({ items }: { items: ExpiringDocument[] }) {
 function OverloadedWidget({ items }: { items: StaffLoadItem[] }) {
   return (
     <Card className="h-full overflow-auto">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="mb-3 flex items-center gap-2">
         <Text className="font-medium">과할당 인력</Text>
         {items.length > 0 && <Badge color="red">{items.length}</Badge>}
       </div>

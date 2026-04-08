@@ -3,11 +3,7 @@
 import { Card, Badge, List, ListItem, Text } from '@tremor/react'
 import Link from 'next/link'
 
-import type {
-  OverdueMilestone,
-  ExpiringDocument,
-  StaffLoadItem,
-} from '@/lib/types'
+import type { OverdueMilestone, ExpiringDocument, StaffLoadItem } from '@/lib/types'
 
 interface AlertPanelProps {
   overdueMilestones: OverdueMilestone[]
@@ -23,15 +19,13 @@ export function AlertPanel({
   return (
     <div className="space-y-4">
       <Card>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="mb-3 flex items-center gap-2">
           <Text className="font-medium">지연 마일스톤</Text>
-          {overdueMilestones.length > 0 && (
-            <Badge color="red">{overdueMilestones.length}</Badge>
-          )}
+          {overdueMilestones.length > 0 && <Badge color="red">{overdueMilestones.length}</Badge>}
         </div>
         {overdueMilestones.length > 0 ? (
           <List>
-            {overdueMilestones.map(m => (
+            {overdueMilestones.map((m) => (
               <ListItem key={m.id}>
                 <div>
                   <Text className="text-sm font-medium">{m.name}</Text>
@@ -52,15 +46,13 @@ export function AlertPanel({
       </Card>
 
       <Card>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="mb-3 flex items-center gap-2">
           <Text className="font-medium">만료 임박 서류</Text>
-          {expiringDocuments.length > 0 && (
-            <Badge color="amber">{expiringDocuments.length}</Badge>
-          )}
+          {expiringDocuments.length > 0 && <Badge color="amber">{expiringDocuments.length}</Badge>}
         </div>
         {expiringDocuments.length > 0 ? (
           <List>
-            {expiringDocuments.map(d => (
+            {expiringDocuments.map((d) => (
               <ListItem key={d.id}>
                 <div>
                   <Text className="text-sm font-medium">{d.title}</Text>
@@ -76,28 +68,23 @@ export function AlertPanel({
             ))}
           </List>
         ) : (
-          <Text className="text-sm text-gray-400">
-            만료 임박 서류 없음
-          </Text>
+          <Text className="text-sm text-gray-400">만료 임박 서류 없음</Text>
         )}
       </Card>
 
       <Card>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="mb-3 flex items-center gap-2">
           <Text className="font-medium">과할당 인력</Text>
-          {overloadedStaff.length > 0 && (
-            <Badge color="red">{overloadedStaff.length}</Badge>
-          )}
+          {overloadedStaff.length > 0 && <Badge color="red">{overloadedStaff.length}</Badge>}
         </div>
         {overloadedStaff.length > 0 ? (
           <List>
-            {overloadedStaff.map(s => (
+            {overloadedStaff.map((s) => (
               <ListItem key={s.id}>
                 <div>
                   <Text className="text-sm font-medium">{s.name}</Text>
                   <Text className="text-xs text-gray-500">
-                    {s.role || '직무 미지정'} · {s.active_projects}개
-                    프로젝트
+                    {s.role || '직무 미지정'} · {s.active_projects}개 프로젝트
                   </Text>
                 </div>
                 <Badge color="red">{s.total_allocation}%</Badge>
@@ -105,17 +92,12 @@ export function AlertPanel({
             ))}
           </List>
         ) : (
-          <Text className="text-sm text-gray-400">
-            과할당 인력 없음
-          </Text>
+          <Text className="text-sm text-gray-400">과할당 인력 없음</Text>
         )}
       </Card>
 
       <div className="text-center">
-        <Link
-          href="/alerts"
-          className="text-sm text-blue-600 hover:underline"
-        >
+        <Link href="/alerts" className="text-sm text-blue-600 hover:underline">
           전체 알림 보기
         </Link>
       </div>

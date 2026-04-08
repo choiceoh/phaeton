@@ -73,30 +73,26 @@ export function ProjectDetailView({
   documents: DocumentItem[]
 }) {
   const total = milestones.length
-  const done = milestones.filter(m => m.status === 'done').length
+  const done = milestones.filter((m) => m.status === 'done').length
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
   return (
     <div className="space-y-6">
       <Card>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">{project.name}</h1>
             <Text className="text-gray-500">{project.code}</Text>
           </div>
           <div className="flex items-center gap-2">
-            <Badge
-              color={PROJECT_TYPE_COLORS[project.type] || 'gray'}
-            >
+            <Badge color={PROJECT_TYPE_COLORS[project.type] || 'gray'}>
               {PROJECT_TYPE_LABELS[project.type] || project.type}
             </Badge>
-            <Badge color="gray">
-              {PROJECT_STATUS_LABELS[project.status] || project.status}
-            </Badge>
+            <Badge color="gray">{PROJECT_STATUS_LABELS[project.status] || project.status}</Badge>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
           <div>
             <Text className="text-xs text-gray-500">설비용량</Text>
             <Metric className="text-lg">
@@ -115,30 +111,25 @@ export function ProjectDetailView({
           </div>
           <div>
             <Text className="text-xs text-gray-500">발주처</Text>
-            <Metric className="text-lg">
-              {project.client || '-'}
-            </Metric>
+            <Metric className="text-lg">{project.client || '-'}</Metric>
           </div>
         </div>
 
-        <ProgressBar
-          value={pct}
-          color={pct === 100 ? 'green' : 'blue'}
-        />
-        <Text className="text-xs text-gray-500 mt-1">
+        <ProgressBar value={pct} color={pct === 100 ? 'green' : 'blue'} />
+        <Text className="mt-1 text-xs text-gray-500">
           {done}/{total} 마일스톤 완료
         </Text>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <Text className="font-medium mb-4">마일스톤 타임라인</Text>
+          <Text className="mb-4 font-medium">마일스톤 타임라인</Text>
           <MilestoneTimeline milestones={milestones} />
         </Card>
 
         <div className="space-y-6">
           <Card>
-            <Text className="font-medium mb-4">배정 인력</Text>
+            <Text className="mb-4 font-medium">배정 인력</Text>
             <Table>
               <TableHead>
                 <TableRow>
@@ -149,22 +140,14 @@ export function ProjectDetailView({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {assignments.map(a => (
+                {assignments.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell>
-                      {typeof a.staff === 'object' && a.staff
-                        ? a.staff.name
-                        : '-'}
+                      {typeof a.staff === 'object' && a.staff ? a.staff.name : '-'}
                     </TableCell>
                     <TableCell>{a.roleOnProject || '-'}</TableCell>
                     <TableCell>
-                      <Badge
-                        color={
-                          Number(a.allocationPct) > 100
-                            ? 'red'
-                            : 'blue'
-                        }
-                      >
+                      <Badge color={Number(a.allocationPct) > 100 ? 'red' : 'blue'}>
                         {a.allocationPct}%
                       </Badge>
                     </TableCell>
@@ -175,10 +158,7 @@ export function ProjectDetailView({
                 ))}
                 {assignments.length === 0 && (
                   <TableRow>
-                    <TableCell
-                      colSpan={4}
-                      className="text-center text-gray-500"
-                    >
+                    <TableCell colSpan={4} className="text-center text-gray-500">
                       배정된 인력이 없습니다
                     </TableCell>
                   </TableRow>
@@ -188,7 +168,7 @@ export function ProjectDetailView({
           </Card>
 
           <Card>
-            <Text className="font-medium mb-4">서류 목록</Text>
+            <Text className="mb-4 font-medium">서류 목록</Text>
             <Table>
               <TableHead>
                 <TableRow>
@@ -198,24 +178,18 @@ export function ProjectDetailView({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {documents.map(d => {
+                {documents.map((d) => {
                   const expSoon =
-                    d.expiryDate &&
-                    new Date(d.expiryDate).getTime() <
-                      Date.now() + 90 * 86400000
+                    d.expiryDate && new Date(d.expiryDate).getTime() < Date.now() + 90 * 86400000
                   return (
                     <TableRow key={d.id}>
                       <TableCell>{d.title}</TableCell>
                       <TableCell>
-                        <Badge color="gray">
-                          {DOC_TYPE_LABELS[d.docType] || d.docType}
-                        </Badge>
+                        <Badge color="gray">{DOC_TYPE_LABELS[d.docType] || d.docType}</Badge>
                       </TableCell>
                       <TableCell>
                         {d.expiryDate ? (
-                          <Badge color={expSoon ? 'amber' : 'gray'}>
-                            {d.expiryDate}
-                          </Badge>
+                          <Badge color={expSoon ? 'amber' : 'gray'}>{d.expiryDate}</Badge>
                         ) : (
                           '-'
                         )}
@@ -225,10 +199,7 @@ export function ProjectDetailView({
                 })}
                 {documents.length === 0 && (
                   <TableRow>
-                    <TableCell
-                      colSpan={3}
-                      className="text-center text-gray-500"
-                    >
+                    <TableCell colSpan={3} className="text-center text-gray-500">
                       서류가 없습니다
                     </TableCell>
                   </TableRow>

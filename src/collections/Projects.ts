@@ -1,8 +1,8 @@
 import type { CollectionConfig } from 'payload'
 
-import { copyMilestones } from '../hooks/copyMilestones.ts'
-import { calculateProgress } from '../hooks/calculateProgress.ts'
 import { autoGenerateCode } from '../hooks/autoGenerateCode.ts'
+import { calculateProgress } from '../hooks/calculateProgress.ts'
+import { copyMilestones } from '../hooks/copyMilestones.ts'
 
 const CODE_PATTERN = /^(SL|WD|ES|HB)-\d{4}-\d{3}$/
 
@@ -42,8 +42,7 @@ export const Projects: CollectionConfig = {
                   validate: (value: unknown) => {
                     if (!value) return true
                     if (typeof value !== 'string') return '문자열이어야 합니다'
-                    return CODE_PATTERN.test(value)
-                      || '형식 오류: SL-2025-001 (유형-연도-번호)'
+                    return CODE_PATTERN.test(value) || '형식 오류: SL-2025-001 (유형-연도-번호)'
                   },
                 },
               ],
@@ -241,8 +240,10 @@ export const Projects: CollectionConfig = {
                   label: 'COD 실제일',
                   validate: (value: unknown, { siblingData }: any) => {
                     if (!value || !siblingData?.codTarget) return true
-                    return new Date(value as string) >= new Date(siblingData.codTarget)
-                      || 'COD 실제일이 목표일보다 이전일 수 없습니다'
+                    return (
+                      new Date(value as string) >= new Date(siblingData.codTarget) ||
+                      'COD 실제일이 목표일보다 이전일 수 없습니다'
+                    )
                   },
                 },
               ],

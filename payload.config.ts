@@ -1,25 +1,26 @@
-import { buildConfig } from 'payload'
-import { postgresAdapter } from '@payloadcms/db-postgres'
-import { lexicalEditor } from '@payloadcms/richtext-lexical'
-import { nodemailerAdapter } from '@payloadcms/email-nodemailer'
-import { searchPlugin } from '@payloadcms/plugin-search'
-import { nestedDocsPlugin } from '@payloadcms/plugin-nested-docs'
-import { formBuilderPlugin } from '@payloadcms/plugin-form-builder'
-import { s3Storage } from '@payloadcms/storage-s3'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import { Users } from './src/collections/Users.ts'
-import { Projects } from './src/collections/Projects.ts'
+import { postgresAdapter } from '@payloadcms/db-postgres'
+import { nodemailerAdapter } from '@payloadcms/email-nodemailer'
+import { formBuilderPlugin } from '@payloadcms/plugin-form-builder'
+import { nestedDocsPlugin } from '@payloadcms/plugin-nested-docs'
+import { searchPlugin } from '@payloadcms/plugin-search'
+import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import { s3Storage } from '@payloadcms/storage-s3'
+import { buildConfig } from 'payload'
+
+import { DashboardConfigs } from './src/collections/DashboardConfigs.ts'
 import { MilestoneTemplates } from './src/collections/MilestoneTemplates.ts'
+import { ProjectDocuments } from './src/collections/ProjectDocuments.ts'
 import { ProjectMilestones } from './src/collections/ProjectMilestones.ts'
+import { Projects } from './src/collections/Projects.ts'
 import { Staff } from './src/collections/Staff.ts'
 import { StaffAssignments } from './src/collections/StaffAssignments.ts'
-import { ProjectDocuments } from './src/collections/ProjectDocuments.ts'
-import { DashboardConfigs } from './src/collections/DashboardConfigs.ts'
+import { Users } from './src/collections/Users.ts'
 import { SiteSettings } from './src/globals/SiteSettings.ts'
-import { checkOverdueHandler } from './src/jobs/checkOverdue.ts'
 import { checkExpiringDocsHandler } from './src/jobs/checkExpiringDocs.ts'
+import { checkOverdueHandler } from './src/jobs/checkOverdue.ts'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -77,8 +78,7 @@ export default buildConfig({
     nestedDocsPlugin({
       collections: ['milestone-templates'],
       generateLabel: (_, doc) => (doc as any).name,
-      generateURL: (docs) =>
-        docs.reduce((url, doc) => `${url}/${(doc as any).slug || doc.id}`, ''),
+      generateURL: (docs) => docs.reduce((url, doc) => `${url}/${(doc as any).slug || doc.id}`, ''),
     }),
 
     formBuilderPlugin({

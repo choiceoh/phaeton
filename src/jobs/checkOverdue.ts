@@ -23,17 +23,12 @@ export async function checkOverdueHandler({ req }: { req: PayloadRequest }) {
       to: director.email,
       subject: `[Phaeton] 지연 마일스톤 ${overdue.length}건`,
       text: overdue
-        .map(
-          (m) =>
-            `- ${m.project_name} / ${m.name}: ${m.days_overdue}일 지연`,
-        )
+        .map((m) => `- ${m.project_name} / ${m.name}: ${m.days_overdue}일 지연`)
         .join('\n'),
     })
     notified++
   }
 
-  console.warn(
-    `[checkOverdue] ${overdue.length}건 지연, ${notified}명에게 알림 발송`,
-  )
+  console.warn(`[checkOverdue] ${overdue.length}건 지연, ${notified}명에게 알림 발송`)
   return { output: { checked: overdue.length, notified } }
 }

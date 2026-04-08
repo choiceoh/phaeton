@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 
+import { advanceMilestone } from '@/app/(frontend)/my-projects/actions'
 import {
   MILESTONE_STATUS_LABELS,
   MILESTONE_STATUS_COLORS,
@@ -14,8 +15,6 @@ import {
   CATEGORY_LABELS,
 } from '@/lib/constants'
 import type { MyProjectMilestone } from '@/lib/types'
-
-import { advanceMilestone } from '@/app/(frontend)/my-projects/actions'
 
 const ACTION_LABEL: Record<string, string> = {
   pending: '착수',
@@ -69,8 +68,8 @@ function MilestoneRow({ m }: { m: MyProjectMilestone }) {
   }
 
   return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-      <div className="flex items-center gap-2 flex-wrap min-w-0">
+    <div className="flex items-center justify-between border-b border-gray-100 py-2 last:border-0">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{m.milestone_name}</span>
         <Badge color={MILESTONE_STATUS_COLORS[m.milestone_status] || 'gray'} size="xs">
           {MILESTONE_STATUS_LABELS[m.milestone_status] || m.milestone_status}
@@ -81,11 +80,11 @@ function MilestoneRow({ m }: { m: MyProjectMilestone }) {
           </Badge>
         )}
         {overdue > 0 && (
-          <Badge color="red" size="xs">{overdue}일 지연</Badge>
+          <Badge color="red" size="xs">
+            {overdue}일 지연
+          </Badge>
         )}
-        {m.due_date && (
-          <Text className="text-xs text-gray-400">마감: {m.due_date}</Text>
-        )}
+        {m.due_date && <Text className="text-xs text-gray-400">마감: {m.due_date}</Text>}
       </div>
       {canAdvance && (
         <Button
@@ -103,31 +102,23 @@ function MilestoneRow({ m }: { m: MyProjectMilestone }) {
   )
 }
 
-export function MyMilestoneList({
-  milestones,
-}: {
-  milestones: MyProjectMilestone[]
-}) {
+export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone[] }) {
   const groups = groupByProject(milestones)
 
   if (groups.length === 0) {
-    return (
-      <p className="text-center text-gray-500 py-12">
-        현재 배치된 프로젝트가 없습니다.
-      </p>
-    )
+    return <p className="py-12 text-center text-gray-500">현재 배치된 프로젝트가 없습니다.</p>
   }
 
   return (
     <div className="space-y-6">
-      {groups.map(g => {
-        const done = g.milestones.filter(m => m.milestone_status === 'done').length
+      {groups.map((g) => {
+        const done = g.milestones.filter((m) => m.milestone_status === 'done').length
         const total = g.milestones.length
 
         return (
           <Card key={g.projectId}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex flex-wrap items-center gap-2">
                 <Link
                   href={`/projects/${g.projectId}`}
                   className="text-base font-semibold hover:underline"
@@ -140,16 +131,14 @@ export function MyMilestoneList({
                 <Badge color="gray" size="xs">
                   {PROJECT_STATUS_LABELS[g.projectStatus] || g.projectStatus}
                 </Badge>
-                {g.projectCode && (
-                  <Text className="text-xs text-gray-400">{g.projectCode}</Text>
-                )}
+                {g.projectCode && <Text className="text-xs text-gray-400">{g.projectCode}</Text>}
               </div>
               <Text className="text-sm text-gray-500">
                 {done}/{total} 완료
               </Text>
             </div>
             <div>
-              {g.milestones.map(m => (
+              {g.milestones.map((m) => (
                 <MilestoneRow key={m.milestone_id} m={m} />
               ))}
             </div>

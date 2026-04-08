@@ -16,6 +16,8 @@
     "test:live": "bash scripts/live-test.sh",
     "test:live:dev": "bash scripts/live-test.sh --dev",
     "generate:types": "payload generate:types",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
