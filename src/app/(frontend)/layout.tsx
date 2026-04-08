@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic'
 
 const NAV = [
   { href: '/dashboard', label: '대시보드' },
+  { href: '/projects', label: '프로젝트' },
   { href: '/staff', label: '인력 현황' },
   { href: '/alerts', label: '알림' },
 ]
