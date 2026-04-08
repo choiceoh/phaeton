@@ -19,12 +19,13 @@ import {
   PROJECT_TYPE_COLORS,
   PROJECT_TYPE_LABELS,
 } from '@/lib/constants'
+import { formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
 export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
   return (
     <Card>
-      <Table>
+      <Table className="[&_td]:py-1.5 [&_th]:py-2">
         <TableHead>
           <TableRow>
             <TableHeaderCell>프로젝트명</TableHeaderCell>
@@ -44,7 +45,7 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
                 <TableCell>
                   <Link
                     href={`/projects/${p.id}`}
-                    className="text-blue-600 hover:underline font-medium"
+                    className="text-gray-900 hover:underline font-medium"
                   >
                     {p.name}
                   </Link>
@@ -73,7 +74,9 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
                 <TableCell>
                   {p.done_milestones}/{p.total_milestones}
                 </TableCell>
-                <TableCell>{p.cod_target ?? '-'}</TableCell>
+                <TableCell>
+                  {p.cod_target ? formatCodTarget(p.cod_target) : '-'}
+                </TableCell>
               </TableRow>
             )
           })}

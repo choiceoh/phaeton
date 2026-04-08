@@ -36,6 +36,7 @@ export default async function FrontendLayout({
 
   const NAV = [
     { href: '/dashboard', label: nav?.dashboardLabel || '대시보드' },
+    { href: '/my-projects', label: nav?.myProjectsLabel || '내 업무' },
     { href: '/projects', label: nav?.projectsLabel || '프로젝트' },
     { href: '/staff', label: nav?.staffLabel || '인력 현황' },
     { href: '/alerts', label: nav?.alertsLabel || '알림' },

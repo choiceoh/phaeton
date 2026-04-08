@@ -46,18 +46,6 @@ export const SiteSettings: GlobalConfig = {
       label: '대시보드',
       fields: [
         {
-          name: 'title',
-          type: 'text',
-          label: '대시보드 제목',
-          defaultValue: '포트폴리오 대시보드',
-        },
-        {
-          name: 'projectSectionTitle',
-          type: 'text',
-          label: '프로젝트 섹션 제목',
-          defaultValue: '프로젝트 현황',
-        },
-        {
           name: 'alertSectionTitle',
           type: 'text',
           label: '알림 섹션 제목',
@@ -93,6 +81,12 @@ export const SiteSettings: GlobalConfig = {
           type: 'text',
           label: '대시보드 메뉴명',
           defaultValue: '대시보드',
+        },
+        {
+          name: 'myProjectsLabel',
+          type: 'text',
+          label: '내 업무 메뉴명',
+          defaultValue: '내 업무',
         },
         {
           name: 'projectsLabel',

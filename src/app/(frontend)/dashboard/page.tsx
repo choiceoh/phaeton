@@ -37,18 +37,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">
-        {dash?.title || '포트폴리오 대시보드'}
-      </h1>
-
       {showCards && <DashboardCards summary={summary} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {showGrid && (
           <div className={showAlerts ? 'lg:col-span-2' : 'lg:col-span-3'}>
-            <h2 className="text-lg font-semibold mb-3">
-              {dash?.projectSectionTitle || '프로젝트 현황'}
-            </h2>
             <ProjectGrid projects={projects} />
           </div>
         )}
