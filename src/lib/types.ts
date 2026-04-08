@@ -41,8 +41,11 @@ export interface ExpiringDocument {
 }
 
 export interface SummaryStats {
-  active_projects: string
+  gen_permit_count: string
+  dev_permit_count: string
+  civil_count: string
+  structural_elec_count: string
+  inspection_count: string
+  pre_cod_count: string
   delayed_projects: string
-  due_this_week: string
-  overloaded_staff: string
 }

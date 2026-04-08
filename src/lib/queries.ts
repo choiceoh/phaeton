@@ -14,26 +14,17 @@ export async function getSummaryStats(
   const db = payload.db.drizzle
   const result = await db.execute(`
     SELECT
-      (SELECT COUNT(*) FROM projects
-       WHERE status NOT IN ('cod', 'decommission')) AS active_projects,
+      COUNT(*) FILTER (WHERE status = 'gen-permit') AS gen_permit_count,
+      COUNT(*) FILTER (WHERE status = 'dev-permit') AS dev_permit_count,
+      COUNT(*) FILTER (WHERE status = 'civil') AS civil_count,
+      COUNT(*) FILTER (WHERE status = 'structural-elec') AS structural_elec_count,
+      COUNT(*) FILTER (WHERE status = 'inspection') AS inspection_count,
+      COUNT(*) FILTER (WHERE status = 'pre-cod') AS pre_cod_count,
       (SELECT COUNT(DISTINCT pm.project_id)
        FROM project_milestones pm
        WHERE pm.status IN ('pending', 'active')
-         AND pm.due_date < CURRENT_DATE) AS delayed_projects,
-      (SELECT COUNT(*)
-       FROM project_milestones
-       WHERE status IN ('pending', 'active')
-         AND due_date BETWEEN CURRENT_DATE
-           AND CURRENT_DATE + INTERVAL '7 days') AS due_this_week,
-      (SELECT COUNT(*) FROM (
-         SELECT s.id FROM staff s
-         LEFT JOIN staff_assignments sa ON sa.staff_id = s.id
-           AND sa.start_date <= CURRENT_DATE
-           AND (sa.end_date IS NULL OR sa.end_date >= CURRENT_DATE)
-         WHERE s.is_active = true
-         GROUP BY s.id
-         HAVING COALESCE(SUM(sa.allocation_pct), 0) > 100
-       ) t) AS overloaded_staff
+         AND pm.due_date < CURRENT_DATE) AS delayed_projects
+    FROM projects
   `)
   return result.rows[0] as unknown as SummaryStats
 }

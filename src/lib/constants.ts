@@ -1,10 +1,10 @@
 export const PROJECT_STATUS_LABELS: Record<string, string> = {
-  planning: '기획',
-  permit: '인허가',
-  construction: '시공',
-  testing: '시운전',
-  cod: '운영',
-  decommission: '해체',
+  'gen-permit': '발전허가',
+  'dev-permit': '개발허가',
+  civil: '토목',
+  'structural-elec': '구조물 및 전기공사',
+  inspection: '사용전 검사',
+  'pre-cod': '준공대기',
 }
 
 export const MILESTONE_STATUS_LABELS: Record<string, string> = {
