@@ -1,0 +1,21 @@
+# 개발 전용: DB만 컨테이너, 앱은 로컬 next dev
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: phaeton
+      POSTGRES_USER: phaeton
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U phaeton"]
+      interval: 5s
+      retries: 5
+
+volumes:
+  pgdata_dev:
