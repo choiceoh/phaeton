@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { checkMilestoneDeps } from '../hooks/checkMilestoneDeps'
+import { checkMilestoneDeps } from '../hooks/checkMilestoneDeps.ts'
 
 export const ProjectMilestones: CollectionConfig = {
   slug: 'project-milestones',

@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { validateAssignment } from '../hooks/validateAssignment'
+import { validateAssignment } from '../hooks/validateAssignment.ts'
 
 export const StaffAssignments: CollectionConfig = {
   slug: 'staff-assignments',
