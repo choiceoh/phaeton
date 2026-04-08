@@ -46,10 +46,7 @@ export async function advanceMilestone(milestoneId: number) {
         { project: { equals: milestone.project } },
         { startDate: { less_than_equal: today } },
         {
-          or: [
-            { endDate: { exists: false } },
-            { endDate: { greater_than_equal: today } },
-          ],
+          or: [{ endDate: { exists: false } }, { endDate: { greater_than_equal: today } }],
         },
       ],
     },

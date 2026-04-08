@@ -1,15 +1,10 @@
-import { getPayload } from 'payload'
-
 import { ProjectTableFilter } from '@/components/ProjectTableFilter'
-import { getProjectProgress } from '@/lib/queries'
+import { getCachedProjectProgress } from '@/lib/cachedQueries'
 
-import config from '@payload-config'
+export const revalidate = 30
 
 export default async function ProjectsPage() {
-  const payload = await getPayload({ config })
-  const projects = await getProjectProgress(payload)
+  const projects = await getCachedProjectProgress()
 
-  return (
-    <ProjectTableFilter projects={projects} />
-  )
+  return <ProjectTableFilter projects={projects} />
 }

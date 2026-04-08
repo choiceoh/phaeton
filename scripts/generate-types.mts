@@ -1,10 +1,12 @@
-import { buildConfig } from 'payload'
-import { postgresAdapter } from '@payloadcms/db-postgres'
-import { lexicalEditor } from '@payloadcms/richtext-lexical'
-import { generateTypes } from '../node_modules/payload/dist/bin/generateTypes.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
+
+import { postgresAdapter } from '@payloadcms/db-postgres'
+import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import { buildConfig } from 'payload'
 import type { CollectionConfig } from 'payload'
+
+import { generateTypes } from '../node_modules/payload/dist/bin/generateTypes.js'
 
 const Users: CollectionConfig = {
   slug: 'users',

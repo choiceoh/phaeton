@@ -5,7 +5,6 @@ import { getStaffLoad } from '@/lib/queries'
 
 import config from '@payload-config'
 
-
 export default async function StaffPage() {
   const payload = await getPayload({ config })
   const staff = await getStaffLoad(payload)

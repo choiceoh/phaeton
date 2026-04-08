@@ -1,11 +1,11 @@
 import { headers } from 'next/headers'
 import { getPayload } from 'payload'
 
-import config from '@payload-config'
-
 import '@/lib/ai/prompts'
 import { runPromptStream } from '@/lib/ai/client'
 import type { ChatMessage } from '@/lib/ai/client'
+
+import config from '@payload-config'
 
 export async function POST(req: Request) {
   const payload = await getPayload({ config })
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     return Response.json({ error: '인증이 필요합니다' }, { status: 401 })
   }
 
-  let body: { message?: string, history?: ChatMessage[], context?: string }
+  let body: { message?: string; history?: ChatMessage[]; context?: string }
   try {
     body = await req.json()
   } catch {
@@ -42,9 +42,6 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     console.error('[AI Chat]', err)
-    return Response.json(
-      { error: 'AI 서버에 연결할 수 없습니다' },
-      { status: 502 },
-    )
+    return Response.json({ error: 'AI 서버에 연결할 수 없습니다' }, { status: 502 })
   }
 }

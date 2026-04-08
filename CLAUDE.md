@@ -8,6 +8,7 @@
 ## 필독 문서
 
 코드 작성 전 반드시 해당 문서를 읽을 것:
+
 - `docs/00-MASTER-PLAN.md` — 아키텍처, 디렉토리 구조, 전체 컨텍스트
 - `docs/05-SOLAR-DOMAIN.md` — 태양광 인허가 절차, 공사 단계, 관련 법규, 마일스톤 템플릿. 도메인 작업 시 필수
 - `docs/06-DESIGN-SYSTEM.md` — 색상, 상태 매핑, 톤앤매너. UI 작업 시 필수
@@ -40,6 +41,7 @@
 ## 색상 규칙 (절대 준수)
 
 색상은 의미 기반으로만 사용. 장식용 색상 금지.
+
 - 정상/완료: `green-500`
 - 진행중/정보: `blue-500`
 - 경고/주의: `amber-500`
@@ -55,21 +57,18 @@
 ## 대시보드 데이터 접근
 
 서버 컴포넌트에서 Payload Local API 직접 호출:
+
 ```typescript
 const payload = await getPayload({ config })
 const projects = await payload.find({ collection: 'projects' })
 ```
+
 집계 쿼리는 `src/lib/queries.ts`의 함수 사용. 새 집계 쿼리가 필요하면 이 파일에 추가.
 
 ## 로컬 AI 호출
 
 `src/lib/ai/`의 `runPrompt()` 함수를 통해서만 호출. vLLM 직접 fetch 금지.
 새 AI 기능은 `src/lib/ai/prompts/`에 프롬프트 파일 추가 + `registerPrompt()`.
-
-## Deneb 연동
-
-`/api/phaeton/*` 라우트만 사용. Payload REST API 직접 노출 금지.
-API 스펙: `docs/phaeton-api.yaml` (OpenAPI 3.1).
 
 ## 커밋 메시지
 
@@ -86,17 +85,20 @@ docs: API 스펙 staff-load 응답 형식 수정
 충돌 방지를 위해 아래 규칙을 반드시 지킬 것.
 
 ### 파일 충돌 방지
+
 - 하나의 작업 단위(PR)에서 수정하는 파일 범위를 최소화
 - Collection 파일 하나당 하나의 에이전트만 수정. 여러 Collection을 동시에 건드리지 않음
 - `payload.config.ts`, `src/lib/queries.ts` 같은 공유 파일 수정 시 최소한의 라인만 변경
 - `package.json` 의존성 추가는 반드시 별도 브랜치에서 단독으로
 
 ### DB 공유
+
 - 모든 worktree는 동일한 PostgreSQL 인스턴스(localhost:5432) 공유
 - 마이그레이션은 메인 브랜치에서만 실행. worktree에서 `payload migrate` 금지
 - seed 데이터 변경은 기존 데이터를 삭제하지 않고 추가만 (upsert 패턴)
 
 ### 라이브 테스트
+
 - 코드 작업 완료 후 반드시 `npm run test:live`로 스모크 테스트 실행
 - 포트 3100–3199 범위에서 자동 할당 (10개 에이전트 동시 가능)
 - 빌드 없이 빠른 확인: `npm run test:live:dev`
@@ -105,11 +107,13 @@ docs: API 스펙 staff-load 응답 형식 수정
 - 서버는 테스트 후 자동 종료 (수동 정리 불필요)
 
 ### 빌드/타입
+
 - `payload-types.ts`는 자동 생성 파일. 직접 수정 금지
 - worktree에서 `generate:types` 실행 시 메인과 diff가 생기면 무시 (커밋하지 않음)
 - `.next/`는 각 worktree별 독립 — 병렬 빌드 충돌 없음
 
 ### 커밋/브랜치
+
 - 브랜치명: `feat/기능명`, `fix/버그명` — 작업 내용이 명확하게 드러나야 함
 - 커밋은 작고 자주. 하나의 PR에 하나의 기능/버그
 - 메인 브랜치에 직접 push 금지. 반드시 PR을 통해 merge

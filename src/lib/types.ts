@@ -12,6 +12,17 @@ export interface ProjectProgress {
   next_due: string | null
 }
 
+export interface ProjectExportRow {
+  code: string
+  name: string
+  type: string
+  status: string
+  progress_pct: string | null
+  created_at: string
+  cod_target: string | null
+  epc_value: number | null
+}
+
 export interface OverdueMilestone {
   id: number
   name: string

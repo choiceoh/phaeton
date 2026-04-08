@@ -56,8 +56,8 @@ export function AlertsView({
       <h1 className="text-2xl font-bold">알림 센터</h1>
 
       <Card>
-        <div className="flex items-center gap-2 mb-4">
-          <Text className="font-medium text-lg">지연 마일스톤</Text>
+        <div className="mb-4 flex items-center gap-2">
+          <Text className="text-lg font-medium">지연 마일스톤</Text>
           <Badge color="red">{overdue.length}</Badge>
         </div>
         <Table>
@@ -70,7 +70,7 @@ export function AlertsView({
             </TableRow>
           </TableHead>
           <TableBody>
-            {overdue.map(m => (
+            {overdue.map((m) => (
               <TableRow key={m.id}>
                 <TableCell>{m.name}</TableCell>
                 <TableCell>
@@ -89,10 +89,7 @@ export function AlertsView({
             ))}
             {overdue.length === 0 && (
               <TableRow>
-                <TableCell
-                  colSpan={4}
-                  className="text-center text-gray-500"
-                >
+                <TableCell colSpan={4} className="text-center text-gray-500">
                   지연된 마일스톤이 없습니다
                 </TableCell>
               </TableRow>
@@ -102,8 +99,8 @@ export function AlertsView({
       </Card>
 
       <Card>
-        <div className="flex items-center gap-2 mb-4">
-          <Text className="font-medium text-lg">만료 임박 서류</Text>
+        <div className="mb-4 flex items-center gap-2">
+          <Text className="text-lg font-medium">만료 임박 서류</Text>
           <Badge color="amber">{expiring.length}</Badge>
         </div>
         <Table>
@@ -117,7 +114,7 @@ export function AlertsView({
             </TableRow>
           </TableHead>
           <TableBody>
-            {expiring.map(d => (
+            {expiring.map((d) => (
               <TableRow key={d.id}>
                 <TableCell>{d.title}</TableCell>
                 <TableCell>
@@ -129,24 +126,17 @@ export function AlertsView({
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <Badge color="gray">
-                    {DOC_TYPE_LABELS[d.doc_type] || d.doc_type}
-                  </Badge>
+                  <Badge color="gray">{DOC_TYPE_LABELS[d.doc_type] || d.doc_type}</Badge>
                 </TableCell>
                 <TableCell>{d.expiry_date}</TableCell>
                 <TableCell>
-                  <Badge color="amber">
-                    {d.days_until_expiry}일
-                  </Badge>
+                  <Badge color="amber">{d.days_until_expiry}일</Badge>
                 </TableCell>
               </TableRow>
             ))}
             {expiring.length === 0 && (
               <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="text-center text-gray-500"
-                >
+                <TableCell colSpan={5} className="text-center text-gray-500">
                   만료 임박 서류가 없습니다
                 </TableCell>
               </TableRow>
@@ -156,8 +146,8 @@ export function AlertsView({
       </Card>
 
       <Card>
-        <div className="flex items-center gap-2 mb-4">
-          <Text className="font-medium text-lg">과할당 인력</Text>
+        <div className="mb-4 flex items-center gap-2">
+          <Text className="text-lg font-medium">과할당 인력</Text>
           <Badge color="red">{overloaded.length}</Badge>
         </div>
         <Table>
@@ -170,7 +160,7 @@ export function AlertsView({
             </TableRow>
           </TableHead>
           <TableBody>
-            {overloaded.map(s => (
+            {overloaded.map((s) => (
               <TableRow key={s.id}>
                 <TableCell>{s.name}</TableCell>
                 <TableCell>{s.role || '-'}</TableCell>
@@ -182,10 +172,7 @@ export function AlertsView({
             ))}
             {overloaded.length === 0 && (
               <TableRow>
-                <TableCell
-                  colSpan={4}
-                  className="text-center text-gray-500"
-                >
+                <TableCell colSpan={4} className="text-center text-gray-500">
                   과할당 인력이 없습니다
                 </TableCell>
               </TableRow>

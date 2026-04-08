@@ -14,11 +14,7 @@ import {
 } from '@tremor/react'
 import Link from 'next/link'
 
-import {
-  PROJECT_STATUS_LABELS,
-  PROJECT_TYPE_COLORS,
-  PROJECT_TYPE_LABELS,
-} from '@/lib/constants'
+import { PROJECT_STATUS_LABELS, PROJECT_TYPE_COLORS, PROJECT_TYPE_LABELS } from '@/lib/constants'
 import { formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
@@ -38,14 +34,14 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {projects.map(p => {
+          {projects.map((p) => {
             const progress = Number(p.progress_pct) || 0
             return (
               <TableRow key={p.id}>
                 <TableCell>
                   <Link
                     href={`/projects/${p.id}`}
-                    className="text-gray-900 hover:underline font-medium"
+                    className="font-medium text-gray-900 hover:underline"
                   >
                     {p.name}
                   </Link>
@@ -56,13 +52,11 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge color="gray">
-                    {PROJECT_STATUS_LABELS[p.status] || p.status}
-                  </Badge>
+                  <Badge color="gray">{PROJECT_STATUS_LABELS[p.status] || p.status}</Badge>
                 </TableCell>
                 <TableCell>{p.capacity_kw ?? '-'}</TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2 min-w-[8rem]">
+                  <div className="flex min-w-[8rem] items-center gap-2">
                     <ProgressBar
                       value={progress}
                       color={progress === 100 ? 'green' : 'blue'}
@@ -74,9 +68,7 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
                 <TableCell>
                   {p.done_milestones}/{p.total_milestones}
                 </TableCell>
-                <TableCell>
-                  {p.cod_target ? formatCodTarget(p.cod_target) : '-'}
-                </TableCell>
+                <TableCell>{p.cod_target ? formatCodTarget(p.cod_target) : '-'}</TableCell>
               </TableRow>
             )
           })}

@@ -16,6 +16,8 @@
     "test:live": "bash scripts/live-test.sh",
     "test:live:dev": "bash scripts/live-test.sh --dev",
     "generate:types": "payload generate:types",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -58,6 +60,7 @@
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "typescript": "^6.0.2",
-    "typescript-eslint": "^8.58.1"
+    "typescript-eslint": "^8.58.1",
+    "vitest": "^4.1.3"
   }
 }

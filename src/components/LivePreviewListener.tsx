@@ -1,7 +1,6 @@
 'use client'
 
 import { useLivePreview } from '@payloadcms/live-preview-react'
-import { useCallback, useEffect, useState } from 'react'
 
 type Props = {
   initialData: any

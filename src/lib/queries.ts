@@ -3,15 +3,14 @@ import type { Payload } from 'payload'
 import type {
   SummaryStats,
   ProjectProgress,
+  ProjectExportRow,
   OverdueMilestone,
   StaffLoadItem,
   ExpiringDocument,
   MyProjectMilestone,
 } from '@/lib/types'
 
-export async function getSummaryStats(
-  payload: Payload,
-): Promise<SummaryStats> {
+export async function getSummaryStats(payload: Payload): Promise<SummaryStats> {
   const db = payload.db.drizzle
   const result = await db.execute(`
     SELECT
@@ -30,9 +29,7 @@ export async function getSummaryStats(
   return result.rows[0] as unknown as SummaryStats
 }
 
-export async function getProjectProgress(
-  payload: Payload,
-): Promise<ProjectProgress[]> {
+export async function getProjectProgress(payload: Payload): Promise<ProjectProgress[]> {
   const db = payload.db.drizzle
   const result = await db.execute(`
     SELECT
@@ -75,9 +72,7 @@ export async function getOverdueMilestones(
   return result.rows as unknown as OverdueMilestone[]
 }
 
-export async function getStaffLoad(
-  payload: Payload,
-): Promise<StaffLoadItem[]> {
+export async function getStaffLoad(payload: Payload): Promise<StaffLoadItem[]> {
   const db = payload.db.drizzle
   const result = await db.execute(`
     SELECT s.id, s.name, s.role,
@@ -93,9 +88,7 @@ export async function getStaffLoad(
   return result.rows as unknown as StaffLoadItem[]
 }
 
-export async function getExpiringDocuments(
-  payload: Payload,
-): Promise<ExpiringDocument[]> {
+export async function getExpiringDocuments(payload: Payload): Promise<ExpiringDocument[]> {
   const db = payload.db.drizzle
   const result = await db.execute(`
     SELECT pd.id, pd.title, pd.doc_type, pd.expiry_date,
@@ -150,4 +143,27 @@ export async function getMyMilestones(
     ORDER BY p.name, pm.seq_order
   `)
   return result.rows as unknown as MyProjectMilestone[]
+}
+
+export async function getProjectExportRows(payload: Payload): Promise<ProjectExportRow[]> {
+  const db = payload.db.drizzle
+  const result = await db.execute(`
+    SELECT
+      p.code,
+      p.name,
+      p.type,
+      p.status,
+      ROUND(
+        100.0 * COUNT(pm.id) FILTER (WHERE pm.status = 'done')
+        / NULLIF(COUNT(pm.id), 0), 1
+      ) AS progress_pct,
+      p.created_at,
+      p.cod_target,
+      p.epc_value
+    FROM projects p
+    LEFT JOIN project_milestones pm ON pm.project_id = p.id
+    GROUP BY p.id
+    ORDER BY p.code
+  `)
+  return result.rows as unknown as ProjectExportRow[]
 }

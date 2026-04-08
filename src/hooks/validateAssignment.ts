@@ -13,8 +13,7 @@ export const validateAssignment: CollectionBeforeChangeHook = async ({
 }) => {
   const { payload } = req
 
-  const staffId =
-    typeof data.staff === 'object' ? data.staff?.id : data.staff
+  const staffId = typeof data.staff === 'object' ? data.staff?.id : data.staff
   const startDate = data.startDate as string | undefined
   const endDate = data.endDate as string | undefined
   const allocationPct = (data.allocationPct as number) ?? 100
@@ -27,10 +26,7 @@ export const validateAssignment: CollectionBeforeChangeHook = async ({
       { staff: { equals: staffId } },
       { startDate: { less_than: endDate || '9999-12-31' } },
       {
-        or: [
-          { endDate: { exists: false } },
-          { endDate: { greater_than: startDate } },
-        ],
+        or: [{ endDate: { exists: false } }, { endDate: { greater_than: startDate } }],
       },
     ],
   }

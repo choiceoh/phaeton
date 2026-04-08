@@ -3,9 +3,9 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
-import config from '@payload-config'
-
 import ChatWidget from '@/components/ChatWidget'
+
+import config from '@payload-config'
 
 import './globals.css'
 
@@ -21,11 +21,7 @@ export const metadata = {
   title: 'Phaeton — 에너지 프로젝트 관리',
 }
 
-export default async function FrontendLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function FrontendLayout({ children }: { children: React.ReactNode }) {
   const payload = await getPayload({ config })
   const { user } = await payload.auth({ headers: await headers() })
   if (!user) redirect('/admin/login')
@@ -46,21 +42,20 @@ export default async function FrontendLayout({
     <html lang="ko">
       <body className="min-h-screen bg-ivory-100">
         {banner?.enabled && banner?.text && (
-          <div className={`border-b px-6 py-2 text-sm ${
-            BANNER_STYLES[banner.type as keyof typeof BANNER_STYLES]
-              || BANNER_STYLES.info
-          }`}>
+          <div
+            className={`border-b px-6 py-2 text-sm ${
+              BANNER_STYLES[banner.type as keyof typeof BANNER_STYLES] || BANNER_STYLES.info
+            }`}
+          >
             {banner.text}
           </div>
         )}
-        <nav className="bg-ivory-50 border-b border-stone-200 px-6 py-3
-          flex items-center justify-between"
-        >
+        <nav className="flex items-center justify-between border-b border-stone-200 bg-ivory-50 px-6 py-3">
           <div className="flex items-center gap-6">
-            <Link href="/projects" className="font-semibold text-lg">
+            <Link href="/projects" className="text-lg font-semibold">
               Phaeton
             </Link>
-            {NAV.map(n => (
+            {NAV.map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
@@ -79,7 +74,7 @@ export default async function FrontendLayout({
             )}
           </div>
         </nav>
-        <main className="max-w-7xl mx-auto p-6">{children}</main>
+        <main className="mx-auto max-w-7xl p-6">{children}</main>
         <ChatWidget />
       </body>
     </html>

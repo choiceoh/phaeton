@@ -20,10 +20,10 @@ export interface ChatMessage {
 interface ChatCompletionResponse {
   id: string
   choices: {
-    message: { role: string, content: string }
+    message: { role: string; content: string }
     finish_reason: string
   }[]
-  usage?: { prompt_tokens: number, completion_tokens: number, total_tokens: number }
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
 }
 
 const registry = new Map<string, PromptConfig>()
@@ -43,10 +43,7 @@ function interpolate(template: string, variables: Record<string, string>): strin
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => variables[key] ?? '')
 }
 
-export async function runPrompt(
-  promptName: string,
-  options: RunPromptOptions,
-): Promise<string> {
+export async function runPrompt(promptName: string, options: RunPromptOptions): Promise<string> {
   const config = registry.get(promptName)
   if (!config) {
     throw new Error(`Prompt "${promptName}" is not registered`)
