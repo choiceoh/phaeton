@@ -5,6 +5,7 @@ import { getPayload } from 'payload'
 
 import config from '@payload-config'
 
+import ChatWidget from '@/components/ChatWidget'
 
 import './globals.css'
 
@@ -59,6 +60,7 @@ export default async function FrontendLayout({
           </div>
         </nav>
         <main className="max-w-7xl mx-auto p-6">{children}</main>
+        <ChatWidget />
       </body>
     </html>
   )
