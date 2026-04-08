@@ -50,3 +50,20 @@ export interface SummaryStats {
   pre_cod_count: string
   delayed_projects: string
 }
+
+export interface MyProjectMilestone {
+  milestone_id: number
+  milestone_name: string
+  milestone_status: string
+  seq_order: number
+  due_date: string | null
+  planned_date: string | null
+  actual_date: string | null
+  days_overdue: number | null
+  project_id: number
+  project_name: string
+  project_code: string
+  project_type: string
+  project_status: string
+  category: string | null
+}

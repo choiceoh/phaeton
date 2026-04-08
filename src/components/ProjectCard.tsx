@@ -7,6 +7,7 @@ import {
   PROJECT_TYPE_LABELS,
   PROJECT_TYPE_COLORS,
 } from '@/lib/constants'
+import { formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
 export function ProjectCard({ project }: { project: ProjectProgress }) {
@@ -40,7 +41,7 @@ export function ProjectCard({ project }: { project: ProjectProgress }) {
         </Text>
         {project.cod_target && (
           <Text className="text-xs text-gray-500">
-            COD: {project.cod_target}
+            COD: {formatCodTarget(project.cod_target)}
           </Text>
         )}
       </div>

@@ -5,3 +5,5 @@ payload-types.ts
 *.tsbuildinfo
 next-env.d.ts
 docker-compose.yml
+.deploy-slot
+.deploy-lock

@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { copyMilestones } from '../hooks/copyMilestones'
+import { copyMilestones } from '../hooks/copyMilestones.ts'
 
 export const Projects: CollectionConfig = {
   slug: 'projects',

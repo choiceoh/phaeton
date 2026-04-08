@@ -21,6 +21,7 @@ import {
   PROJECT_TYPE_COLORS,
   DOC_TYPE_LABELS,
 } from '@/lib/constants'
+import { formatCodTarget } from '@/lib/format'
 
 interface MilestoneItem {
   id: number | string
@@ -109,7 +110,7 @@ export function ProjectDetailView({
           <div>
             <Text className="text-xs text-gray-500">COD 목표</Text>
             <Metric className="text-lg">
-              {project.codTarget || '-'}
+              {project.codTarget ? formatCodTarget(project.codTarget) : '-'}
             </Metric>
           </div>
           <div>
