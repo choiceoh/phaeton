@@ -2,7 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Tremor Select 드롭다운 배경 흰색 강제 */
+/* 웜톤 테마 — Tremor 컴포넌트 배경 통일 (Claude Pampas 톤) */
+.tremor-Card-root {
+  background-color: #FAF9F5;
+}
+
+.tremor-TextInput-root input,
+.tremor-Select-root button {
+  background-color: #FAF9F5;
+}
+
 [data-radix-popper-content-wrapper] ul {
-  background-color: white;
+  background-color: #FAF9F5;
 }

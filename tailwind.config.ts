@@ -6,7 +6,14 @@ const config: Config = {
     './node_modules/@tremor/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        ivory: {
+          50: '#FAF9F5',
+          100: '#F4F3EE',
+        },
+      },
+    },
   },
   plugins: [],
 }
