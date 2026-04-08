@@ -23,6 +23,9 @@ export default buildConfig({
       titleSuffix: '— Phaeton',
     },
     dateFormat: 'yyyy-MM-dd',
+    components: {
+      afterNavLinks: ['@/components/AdminBackLink'],
+    },
   },
 
   i18n: {
