@@ -6,6 +6,7 @@ import type {
   OverdueMilestone,
   StaffLoadItem,
   ExpiringDocument,
+  MyProjectMilestone,
 } from '@/lib/types'
 
 export async function getSummaryStats(
@@ -108,4 +109,45 @@ export async function getExpiringDocuments(
     ORDER BY pd.expiry_date
   `)
   return result.rows as unknown as ExpiringDocument[]
+}
+
+export async function getMyMilestones(
+  payload: Payload,
+  userId: number,
+): Promise<MyProjectMilestone[]> {
+  const db = payload.db.drizzle
+  const result = await db.execute(`
+    SELECT
+      pm.id AS milestone_id,
+      pm.name AS milestone_name,
+      pm.status AS milestone_status,
+      pm.seq_order,
+      pm.due_date,
+      pm.planned_date,
+      pm.actual_date,
+      CASE
+        WHEN pm.status IN ('pending', 'active') AND pm.due_date < CURRENT_DATE
+        THEN CURRENT_DATE - pm.due_date
+        ELSE NULL
+      END AS days_overdue,
+      p.id AS project_id,
+      p.name AS project_name,
+      p.code AS project_code,
+      p.type AS project_type,
+      p.status AS project_status,
+      mt.category
+    FROM project_milestones pm
+    JOIN projects p ON p.id = pm.project_id
+    LEFT JOIN milestone_templates mt ON mt.id = pm.template_id
+    WHERE pm.project_id IN (
+      SELECT sa.project_id
+      FROM staff_assignments sa
+      JOIN staff s ON s.id = sa.staff_id
+      WHERE s.user_id = ${Number(userId)}
+        AND sa.start_date <= CURRENT_DATE
+        AND (sa.end_date IS NULL OR sa.end_date >= CURRENT_DATE)
+    )
+    ORDER BY p.name, pm.seq_order
+  `)
+  return result.rows as unknown as MyProjectMilestone[]
 }
