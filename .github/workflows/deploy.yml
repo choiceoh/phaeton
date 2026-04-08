@@ -9,8 +9,15 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Deploy
+        env:
+          DEPLOY_DIR: ~/phaeton-deploy
+          REPO_URL: https://github.com/${{ github.repository }}.git
         run: |
-          cd ~/음악/phaeton
-          git pull origin main
+          if [ ! -d "$DEPLOY_DIR" ]; then
+            git clone --branch main --single-branch "$REPO_URL" "$DEPLOY_DIR"
+          fi
+          cd "$DEPLOY_DIR"
+          git fetch origin main
+          git reset --hard origin/main
           docker compose down
           docker compose up -d --build
