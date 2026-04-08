@@ -12,6 +12,8 @@ import { Staff } from './src/collections/Staff.ts'
 import { StaffAssignments } from './src/collections/StaffAssignments.ts'
 import { ProjectDocuments } from './src/collections/ProjectDocuments.ts'
 import { SiteSettings } from './src/globals/SiteSettings.ts'
+import { checkOverdueHandler } from './src/jobs/checkOverdue.ts'
+import { checkExpiringDocsHandler } from './src/jobs/checkExpiringDocs.ts'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -25,6 +27,15 @@ export default buildConfig({
     dateFormat: 'yyyy-MM-dd',
     components: {
       afterNavLinks: ['@/components/AdminBackLink'],
+    },
+    livePreview: {
+      url: ({ data, collectionConfig }) => {
+        const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        if (collectionConfig?.slug === 'projects') return `${base}/projects/${data.id}`
+        return `${base}/dashboard`
+      },
+      collections: ['projects'],
+      globals: ['site-settings'],
     },
   },
 
@@ -57,6 +68,29 @@ export default buildConfig({
 
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
+  },
+
+  jobs: {
+    tasks: [
+      {
+        slug: 'checkOverdue',
+        label: '지연 마일스톤 점검',
+        handler: checkOverdueHandler as any,
+        outputSchema: [
+          { name: 'checked', type: 'number' },
+          { name: 'notified', type: 'number' },
+        ],
+      },
+      {
+        slug: 'checkExpiringDocs',
+        label: '만료 임박 문서 점검',
+        handler: checkExpiringDocsHandler as any,
+        outputSchema: [
+          { name: 'checked', type: 'number' },
+          { name: 'notified', type: 'number' },
+        ],
+      },
+    ],
   },
 
   secret: process.env.PAYLOAD_SECRET || 'CHANGE_ME_IN_PRODUCTION',

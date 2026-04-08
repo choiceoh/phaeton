@@ -6,6 +6,7 @@ export const Projects: CollectionConfig = {
   slug: 'projects',
   admin: { useAsTitle: 'name' },
   labels: { singular: '프로젝트', plural: '프로젝트 목록' },
+  versions: { drafts: false, maxPerDoc: 20 },
   hooks: {
     afterChange: [copyMilestones],
   },
@@ -99,7 +100,12 @@ export const Projects: CollectionConfig = {
     update: ({ req }) => {
       const role = req.user?.role as string
       if (role === 'director') return true
-      if (role === 'pm') return { assignedPM: { equals: req.user?.id } }
+      if (role === 'pm') {
+        const dept = req.user?.department as string | undefined
+        const conditions = [{ assignedPM: { equals: req.user?.id } }]
+        if (dept) conditions.push({ department: { equals: dept } } as any)
+        return { or: conditions }
+      }
       return false
     },
     delete: ({ req }) => req.user?.role === 'director',
