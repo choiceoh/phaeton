@@ -5,7 +5,6 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 import { Users } from './src/collections/Users'
-import { Sites } from './src/collections/Sites'
 import { Projects } from './src/collections/Projects'
 import { MilestoneTemplates } from './src/collections/MilestoneTemplates'
 import { ProjectMilestones } from './src/collections/ProjectMilestones'
@@ -31,7 +30,6 @@ export default buildConfig({
 
   collections: [
     Users,
-    Sites,
     Projects,
     MilestoneTemplates,
     ProjectMilestones,
