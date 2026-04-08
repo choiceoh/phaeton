@@ -33,9 +33,9 @@ export default async function FrontendLayout({
 
   return (
     <html lang="ko">
-      <body className="min-h-screen bg-gray-50">
-        <nav className="bg-white border-b px-6 py-3 flex items-center
-          justify-between"
+      <body className="min-h-screen bg-ivory-100">
+        <nav className="bg-ivory-50 border-b border-stone-200 px-6 py-3
+          flex items-center justify-between"
         >
           <div className="flex items-center gap-6">
             <Link href="/dashboard" className="font-semibold text-lg">
