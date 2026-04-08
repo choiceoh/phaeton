@@ -47,7 +47,26 @@ export const Projects: CollectionConfig = {
         { label: '해체', value: 'decommission' },
       ],
     },
-    { name: 'site', type: 'relationship', relationTo: 'sites', label: '현장' },
+    {
+      name: 'site',
+      type: 'group',
+      label: '현장 정보',
+      fields: [
+        { name: 'address', type: 'text', label: '주소' },
+        { name: 'region', type: 'text', label: '지역 (시도)' },
+        {
+          name: 'coordinates',
+          type: 'group',
+          label: '좌표',
+          fields: [
+            { name: 'lat', type: 'number', label: '위도' },
+            { name: 'lng', type: 'number', label: '경도' },
+          ],
+        },
+        { name: 'landAreaM2', type: 'number', label: '부지면적 (m²)' },
+        { name: 'landType', type: 'text', label: '지목 (임야, 답, 전 등)' },
+      ],
+    },
     { name: 'codTarget', type: 'date', label: 'COD 목표일' },
     { name: 'codActual', type: 'date', label: 'COD 실제일' },
     { name: 'client', type: 'text', label: '발주처 / 사업주' },

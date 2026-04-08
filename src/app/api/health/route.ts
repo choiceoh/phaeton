@@ -22,11 +22,11 @@ export async function GET() {
     }
 
     // Collection 접근 확인
-    const collections = ['sites', 'projects', 'staff', 'project-milestones']
+    const collections = ['projects', 'staff', 'project-milestones']
     let allOk = true
     for (const slug of collections) {
       try {
-        await payload.find({ collection: slug as 'sites', limit: 0 })
+        await payload.find({ collection: slug as 'projects', limit: 0 })
       } catch {
         allOk = false
       }
