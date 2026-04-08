@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Tremor Select 드롭다운 배경 흰색 강제 */
+[data-radix-popper-content-wrapper] ul {
+  background-color: white;
+}
