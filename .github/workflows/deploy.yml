@@ -29,8 +29,16 @@ jobs:
     needs: validate
     runs-on: self-hosted
     steps:
-      - name: 코드 체크아웃
-        uses: actions/checkout@v4
-
-      - name: 블루-그린 배포
-        run: bash scripts/deploy.sh
+      - name: 배포 실행
+        env:
+          DEPLOY_DIR: ~/phaeton-deploy
+          REPO_URL: https://github.com/${{ github.repository }}.git
+        run: |
+          if [ ! -d "$DEPLOY_DIR" ]; then
+            git clone --branch main --single-branch "$REPO_URL" "$DEPLOY_DIR"
+          fi
+          cd "$DEPLOY_DIR"
+          git fetch origin main
+          git reset --hard origin/main
+          docker compose -f docker-compose.prod.yml down
+          docker compose -f docker-compose.prod.yml up -d --build

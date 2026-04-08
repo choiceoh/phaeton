@@ -31,5 +31,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "seed", "vitest.config.ts", "src/hooks/__tests__"]
+  "exclude": ["node_modules", "seed"]
 }
