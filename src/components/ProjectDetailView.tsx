@@ -16,6 +16,7 @@ import {
   Text,
 } from '@tremor/react'
 
+import { DocumentUploadForm } from '@/components/DocumentUploadForm'
 import { MilestoneTimeline } from '@/components/MilestoneTimeline'
 import {
   DOC_TYPE_LABELS,
@@ -23,7 +24,7 @@ import {
   PROJECT_TYPE_COLORS,
   PROJECT_TYPE_LABELS,
 } from '@/lib/constants'
-import { formatCodTarget } from '@/lib/format'
+import { fmtNum, formatCodTarget } from '@/lib/format'
 
 interface MilestoneItem {
   id: number | string
@@ -54,7 +55,7 @@ interface DocumentItem {
 }
 
 interface ProjectData {
-  id: string
+  id: string | number
   name: string
   code: string
   type: string
@@ -106,7 +107,7 @@ export function ProjectDetailView({
           <div>
             <Text className="text-xs text-gray-500">설비용량</Text>
             <Metric className="text-lg">
-              {project.capacityKw ? `${project.capacityKw} kW` : '-'}
+              {project.capacityKw ? `${fmtNum(project.capacityKw)} kW` : '-'}
             </Metric>
           </div>
           <div>
@@ -158,7 +159,7 @@ export function ProjectDetailView({
                     <TableCell>{a.roleOnProject || '-'}</TableCell>
                     <TableCell>
                       <Badge color={Number(a.allocationPct) > 100 ? 'red' : 'gray'}>
-                        {a.allocationPct}%
+                        {fmtNum(a.allocationPct)}%
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs">
@@ -216,6 +217,7 @@ export function ProjectDetailView({
                 )}
               </TableBody>
             </Table>
+            <DocumentUploadForm projectId={String(project.id)} />
           </Card>
         </div>
       </div>

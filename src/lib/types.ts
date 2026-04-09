@@ -17,7 +17,12 @@ export interface ProjectExportRow {
   name: string
   type: string
   status: string
+  department: string | null
+  capacity_kw: number | null
   progress_pct: string | null
+  total_milestones: string
+  done_milestones: string
+  next_due: string | null
   created_at: string
   cod_target: string | null
   epc_value: number | null
@@ -77,4 +82,23 @@ export interface MyProjectMilestone {
   project_type: string
   project_status: string
   category: string | null
+}
+
+export interface PaginatedResult<T> {
+  docs: T[]
+  totalDocs: number
+  totalPages: number
+  page: number
+  limit: number
+}
+
+export interface MonthlyMilestoneCount {
+  month: string
+  completed: string
+}
+
+export interface MonthlyCodData {
+  month: string
+  project_count: string
+  total_kw: string
 }

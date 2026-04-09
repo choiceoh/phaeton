@@ -3,15 +3,23 @@
 import { Card, Badge, List, ListItem, Text } from '@tremor/react'
 import Link from 'next/link'
 
+import { CodChart } from '@/components/CodChart'
 import { DashboardCards } from '@/components/DashboardCards'
+import { ExpiringDocsTimeline } from '@/components/ExpiringDocsTimeline'
 import { ProjectGrid } from '@/components/ProjectGrid'
+import { ProjectProgressChart } from '@/components/ProjectProgressChart'
+import { ProjectStatusDonut } from '@/components/ProjectStatusDonut'
+import { StaffLoadBar } from '@/components/StaffLoadBar'
 import { StaffTable } from '@/components/StaffTable'
+import { fmtNum } from '@/lib/format'
 import type {
   SummaryStats,
   ProjectProgress,
   OverdueMilestone,
   ExpiringDocument,
   StaffLoadItem,
+  MonthlyMilestoneCount,
+  MonthlyCodData,
 } from '@/lib/types'
 
 export interface DashboardData {
@@ -21,6 +29,8 @@ export interface DashboardData {
   expiring: ExpiringDocument[]
   overloadedStaff: StaffLoadItem[]
   staffLoad: StaffLoadItem[]
+  trends: MonthlyMilestoneCount[]
+  codData: MonthlyCodData[]
 }
 
 export function WidgetRenderer({ widgetId, data }: { widgetId: string; data: DashboardData }) {
@@ -43,6 +53,21 @@ export function WidgetRenderer({ widgetId, data }: { widgetId: string; data: Das
     case 'staff-table':
       return <StaffTable staff={data.staffLoad} />
 
+    case 'progress-chart':
+      return <ProjectProgressChart data={data.trends} />
+
+    case 'cod-chart':
+      return <CodChart data={data.codData} />
+
+    case 'status-donut':
+      return <ProjectStatusDonut projects={data.projects} />
+
+    case 'staff-load-chart':
+      return <StaffLoadBar staff={data.staffLoad} />
+
+    case 'expiring-calendar':
+      return <ExpiringDocsTimeline documents={data.expiring} />
+
     default:
       return (
         <Card className="flex h-full items-center justify-center">
@@ -57,7 +82,7 @@ function OverdueWidget({ items }: { items: OverdueMilestone[] }) {
     <Card className="h-full overflow-auto">
       <div className="mb-3 flex items-center gap-2">
         <Text className="font-medium">지연 마일스톤</Text>
-        {items.length > 0 && <Badge color="red">{items.length}</Badge>}
+        {items.length > 0 && <Badge color="red">{fmtNum(items.length)}</Badge>}
       </div>
       {items.length > 0 ? (
         <List>
@@ -72,7 +97,7 @@ function OverdueWidget({ items }: { items: OverdueMilestone[] }) {
                   {m.project_name}
                 </Link>
               </div>
-              <Badge color="red">{m.days_overdue}일 지연</Badge>
+              <Badge color="red">{fmtNum(m.days_overdue)}일 지연</Badge>
             </ListItem>
           ))}
         </List>
@@ -88,7 +113,7 @@ function ExpiringWidget({ items }: { items: ExpiringDocument[] }) {
     <Card className="h-full overflow-auto">
       <div className="mb-3 flex items-center gap-2">
         <Text className="font-medium">만료 임박 서류</Text>
-        {items.length > 0 && <Badge color="amber">{items.length}</Badge>}
+        {items.length > 0 && <Badge color="amber">{fmtNum(items.length)}</Badge>}
       </div>
       {items.length > 0 ? (
         <List>
@@ -103,7 +128,7 @@ function ExpiringWidget({ items }: { items: ExpiringDocument[] }) {
                   {d.project_name}
                 </Link>
               </div>
-              <Badge color="amber">{d.days_until_expiry}일 남음</Badge>
+              <Badge color="amber">{fmtNum(d.days_until_expiry)}일 남음</Badge>
             </ListItem>
           ))}
         </List>
@@ -119,7 +144,7 @@ function OverloadedWidget({ items }: { items: StaffLoadItem[] }) {
     <Card className="h-full overflow-auto">
       <div className="mb-3 flex items-center gap-2">
         <Text className="font-medium">과할당 인력</Text>
-        {items.length > 0 && <Badge color="red">{items.length}</Badge>}
+        {items.length > 0 && <Badge color="red">{fmtNum(items.length)}</Badge>}
       </div>
       {items.length > 0 ? (
         <List>
@@ -128,10 +153,10 @@ function OverloadedWidget({ items }: { items: StaffLoadItem[] }) {
               <div>
                 <Text className="text-sm font-medium">{s.name}</Text>
                 <Text className="text-xs text-gray-500">
-                  {s.role || '직무 미지정'} · {s.active_projects}개 프로젝트
+                  {s.role || '직무 미지정'} · {fmtNum(s.active_projects)}개 프로젝트
                 </Text>
               </div>
-              <Badge color="red">{s.total_allocation}%</Badge>
+              <Badge color="red">{fmtNum(s.total_allocation)}%</Badge>
             </ListItem>
           ))}
         </List>

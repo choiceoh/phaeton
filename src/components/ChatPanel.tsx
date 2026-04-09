@@ -7,7 +7,7 @@ interface Message {
   content: string
 }
 
-export default function ChatPanel({ onClose }: { onClose: () => void }) {
+export default function ChatPanel({ onClose, context }: { onClose: () => void; context?: string }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -40,7 +40,7 @@ export default function ChatPanel({ onClose }: { onClose: () => void }) {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, history }),
+        body: JSON.stringify({ message: text, history, context: context || undefined }),
       })
 
       if (!res.ok) {
@@ -95,7 +95,7 @@ export default function ChatPanel({ onClose }: { onClose: () => void }) {
     } finally {
       setLoading(false)
     }
-  }, [input, loading, messages])
+  }, [input, loading, messages, context])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
