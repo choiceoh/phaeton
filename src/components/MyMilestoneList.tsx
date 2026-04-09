@@ -1,11 +1,30 @@
 'use client'
 
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
 import { Badge, Button, Card, Select, SelectItem, Text } from '@tremor/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 
 import {
+  advanceMilestone,
+  reorderMilestones,
   updateMilestoneStatus,
   bulkAdvanceMilestones,
 } from '@/app/(frontend)/my-projects/actions'
@@ -23,6 +42,11 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   pending: ['active', 'skipped'],
   active: ['done', 'blocked', 'pending'],
   blocked: ['active', 'pending'],
+}
+
+const ACTION_LABEL: Record<string, string> = {
+  pending: '착수',
+  active: '완료 처리',
 }
 
 interface ProjectGroup {
@@ -54,7 +78,7 @@ function groupByProject(milestones: MyProjectMilestone[]): ProjectGroup[] {
   return Array.from(map.values())
 }
 
-function MilestoneRow({
+function SortableMilestoneRow({
   m,
   bulkMode,
   selected,
@@ -68,62 +92,210 @@ function MilestoneRow({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const transitions = VALID_TRANSITIONS[m.milestone_status]
+  const canAdvance = m.milestone_status === 'pending' || m.milestone_status === 'active'
   const overdue = Number(m.days_overdue) || 0
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: m.milestone_id,
+  })
+
+  const style = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  function handleAdvance() {
+    startTransition(async () => {
+      const result = await advanceMilestone(m.milestone_id)
+      if ('error' in result) {
+        toast.error(result.error)
+        return
+      }
+      toast.success(`${result.milestoneName} → ${result.newStatus === 'done' ? '완료' : '진행중'}`)
+      router.refresh()
+    })
+  }
 
   function handleStatusChange(newStatus: string) {
     startTransition(async () => {
       const result = await updateMilestoneStatus(m.milestone_id, newStatus)
       if ('error' in result) {
-        alert(result.error)
+        toast.error(result.error)
         return
       }
+      toast.success(
+        `${result.milestoneName} → ${MILESTONE_STATUS_LABELS[result.newStatus] || result.newStatus}`,
+      )
       router.refresh()
     })
   }
 
   return (
-    <div className="flex items-center justify-between border-b border-stone-100 py-2 last:border-0">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        {bulkMode && transitions && (
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => onToggle(m.milestone_id)}
-            className="h-4 w-4 rounded border-stone-300"
-          />
-        )}
-        <span className="text-sm font-medium">{m.milestone_name}</span>
-        <Badge color={MILESTONE_STATUS_COLORS[m.milestone_status] || 'gray'} size="xs">
-          {MILESTONE_STATUS_LABELS[m.milestone_status] || m.milestone_status}
-        </Badge>
-        {m.category && (
-          <Badge color="gray" size="xs">
-            {CATEGORY_LABELS[m.category] || m.category}
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <div className="flex items-center justify-between border-b border-stone-100 py-2 last:border-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {bulkMode && transitions ? (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggle(m.milestone_id)}
+              className="h-4 w-4 rounded border-stone-300"
+            />
+          ) : (
+            <button
+              type="button"
+              className="cursor-grab touch-none text-stone-300 hover:text-stone-500"
+              aria-label="드래그하여 순서 변경"
+              {...listeners}
+            >
+              ⠿
+            </button>
+          )}
+          <span className="text-sm font-medium">{m.milestone_name}</span>
+          <Badge color={MILESTONE_STATUS_COLORS[m.milestone_status] || 'gray'} size="xs">
+            {MILESTONE_STATUS_LABELS[m.milestone_status] || m.milestone_status}
           </Badge>
-        )}
-        {overdue > 0 && (
-          <Badge color="red" size="xs">
-            {overdue}일 지연
-          </Badge>
-        )}
-        {m.due_date && <Text className="text-xs text-stone-400">마감: {m.due_date}</Text>}
+          {m.category && (
+            <Badge color="gray" size="xs">
+              {CATEGORY_LABELS[m.category] || m.category}
+            </Badge>
+          )}
+          {overdue > 0 && (
+            <Badge color="red" size="xs">
+              {overdue}일 지연
+            </Badge>
+          )}
+          {m.due_date && <Text className="text-xs text-stone-400">마감: {m.due_date}</Text>}
+        </div>
+        <div className="flex items-center gap-2">
+          {!bulkMode && transitions && (
+            <Select
+              value=""
+              placeholder="상태 변경"
+              onValueChange={handleStatusChange}
+              disabled={isPending}
+              className="w-28"
+            >
+              {transitions.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {MILESTONE_STATUS_LABELS[s]}
+                </SelectItem>
+              ))}
+            </Select>
+          )}
+          {!bulkMode && canAdvance && (
+            <Button
+              size="xs"
+              variant="secondary"
+              color={m.milestone_status === 'active' ? 'green' : 'gray'}
+              onClick={handleAdvance}
+              loading={isPending}
+              disabled={isPending}
+            >
+              {ACTION_LABEL[m.milestone_status]}
+            </Button>
+          )}
+        </div>
       </div>
-      {!bulkMode && transitions && (
-        <Select
-          value=""
-          placeholder="상태 변경"
-          onValueChange={handleStatusChange}
-          disabled={isPending}
-          className="w-28"
-        >
-          {transitions.map((s) => (
-            <SelectItem key={s} value={s}>
-              {MILESTONE_STATUS_LABELS[s]}
-            </SelectItem>
-          ))}
-        </Select>
-      )}
     </div>
+  )
+}
+
+function ProjectGroupCard({
+  group,
+  bulkMode,
+  selectedIds,
+  onToggle,
+  onToggleGroup,
+}: {
+  group: ProjectGroup
+  bulkMode: boolean
+  selectedIds: Set<number>
+  onToggle: (id: number) => void
+  onToggleGroup: (group: ProjectGroup) => void
+}) {
+  const [milestones, setMilestones] = useState(group.milestones)
+  const done = milestones.filter((m) => m.milestone_status === 'done').length
+  const total = milestones.length
+
+  const actionable = milestones.filter((m) => VALID_TRANSITIONS[m.milestone_status])
+  const allSelected =
+    actionable.length > 0 && actionable.every((m) => selectedIds.has(m.milestone_id))
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = milestones.findIndex((m) => m.milestone_id === active.id)
+    const newIndex = milestones.findIndex((m) => m.milestone_id === over.id)
+    const reordered = arrayMove(milestones, oldIndex, newIndex)
+    setMilestones(reordered)
+
+    reorderMilestones(reordered.map((m) => m.milestone_id)).then((result) => {
+      if ('error' in result) {
+        toast.error(result.error)
+        setMilestones(milestones)
+      } else {
+        toast.success('순서가 변경되었습니다')
+      }
+    })
+  }
+
+  return (
+    <Card>
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {bulkMode && actionable.length > 0 && (
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => onToggleGroup(group)}
+              className="h-4 w-4 rounded border-stone-300"
+            />
+          )}
+          <Link
+            href={`/projects/${group.projectId}`}
+            className="text-base font-semibold hover:underline"
+          >
+            {group.projectName}
+          </Link>
+          <Badge color={PROJECT_TYPE_COLORS[group.projectType] || 'gray'} size="xs">
+            {PROJECT_TYPE_LABELS[group.projectType] || group.projectType}
+          </Badge>
+          <Badge color="gray" size="xs">
+            {PROJECT_STATUS_LABELS[group.projectStatus] || group.projectStatus}
+          </Badge>
+          {group.projectCode && <Text className="text-xs text-stone-400">{group.projectCode}</Text>}
+        </div>
+        <Text className="text-sm text-stone-500">
+          {done}/{total} 완료
+        </Text>
+      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext
+          items={milestones.map((m) => m.milestone_id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {milestones.map((m) => (
+            <SortableMilestoneRow
+              key={m.milestone_id}
+              m={m}
+              bulkMode={bulkMode}
+              selected={selectedIds.has(m.milestone_id)}
+              onToggle={onToggle}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </Card>
   )
 }
 
@@ -144,9 +316,7 @@ export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone
   }
 
   function toggleGroup(group: ProjectGroup) {
-    const actionable = group.milestones.filter(
-      (m) => VALID_TRANSITIONS[m.milestone_status],
-    )
+    const actionable = group.milestones.filter((m) => VALID_TRANSITIONS[m.milestone_status])
     const allSelected = actionable.every((m) => selectedIds.has(m.milestone_id))
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -162,9 +332,10 @@ export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone
     startTransition(async () => {
       const result = await bulkAdvanceMilestones(Array.from(selectedIds))
       if ('error' in result) {
-        alert(result.error)
+        toast.error(result.error)
         return
       }
+      toast.success(`${result.results.length}개 마일스톤 진행 완료`)
       setSelectedIds(new Set())
       setBulkMode(false)
       router.refresh()
@@ -191,59 +362,16 @@ export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone
         </Button>
       </div>
 
-      {groups.map((g) => {
-        const done = g.milestones.filter((m) => m.milestone_status === 'done').length
-        const total = g.milestones.length
-        const actionable = g.milestones.filter(
-          (m) => VALID_TRANSITIONS[m.milestone_status],
-        )
-        const allSelected =
-          actionable.length > 0 && actionable.every((m) => selectedIds.has(m.milestone_id))
-
-        return (
-          <Card key={g.projectId}>
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex flex-wrap items-center gap-2">
-                {bulkMode && actionable.length > 0 && (
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={() => toggleGroup(g)}
-                    className="h-4 w-4 rounded border-stone-300"
-                  />
-                )}
-                <Link
-                  href={`/projects/${g.projectId}`}
-                  className="text-base font-semibold hover:underline"
-                >
-                  {g.projectName}
-                </Link>
-                <Badge color={PROJECT_TYPE_COLORS[g.projectType] || 'gray'} size="xs">
-                  {PROJECT_TYPE_LABELS[g.projectType] || g.projectType}
-                </Badge>
-                <Badge color="gray" size="xs">
-                  {PROJECT_STATUS_LABELS[g.projectStatus] || g.projectStatus}
-                </Badge>
-                {g.projectCode && <Text className="text-xs text-stone-400">{g.projectCode}</Text>}
-              </div>
-              <Text className="text-sm text-stone-500">
-                {done}/{total} 완료
-              </Text>
-            </div>
-            <div>
-              {g.milestones.map((m) => (
-                <MilestoneRow
-                  key={m.milestone_id}
-                  m={m}
-                  bulkMode={bulkMode}
-                  selected={selectedIds.has(m.milestone_id)}
-                  onToggle={toggleId}
-                />
-              ))}
-            </div>
-          </Card>
-        )
-      })}
+      {groups.map((g) => (
+        <ProjectGroupCard
+          key={g.projectId}
+          group={g}
+          bulkMode={bulkMode}
+          selectedIds={selectedIds}
+          onToggle={toggleId}
+          onToggleGroup={toggleGroup}
+        />
+      ))}
 
       {bulkMode && selectedIds.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200 bg-ivory-50 px-6 py-3">

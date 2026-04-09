@@ -1,8 +1,15 @@
 'use client'
 
 import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  type SortingState,
+  type ColumnDef,
+} from '@tanstack/react-table'
+import {
   Card,
-  Text,
   Badge,
   ProgressBar,
   Table,
@@ -11,8 +18,9 @@ import {
   TableBody,
   TableRow,
   TableCell,
+  Text,
 } from '@tremor/react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 interface StaffRow {
   id: number | string
@@ -22,99 +30,85 @@ interface StaffRow {
   active_projects: number | string
 }
 
-type SortKey = 'name' | 'total_allocation' | 'active_projects'
-
-function SortableHeader({
-  label,
-  column,
-  sortKey,
-  sortDesc,
-  onSort,
-}: {
-  label: string
-  column: SortKey
-  sortKey: SortKey
-  sortDesc: boolean
-  onSort: (key: SortKey) => void
-}) {
-  const active = sortKey === column
-  const indicator = active ? (sortDesc ? ' \u2193' : ' \u2191') : ''
-  return (
-    <TableHeaderCell
-      className="cursor-pointer select-none hover:text-stone-900"
-      onClick={() => onSort(column)}
-    >
-      {label}{indicator}
-    </TableHeaderCell>
-  )
+function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
+  if (!sorted) return <span className="ml-1 text-stone-300">{'\u2195'}</span>
+  return <span className="ml-1">{sorted === 'asc' ? '\u2191' : '\u2193'}</span>
 }
 
+const columns: ColumnDef<StaffRow>[] = [
+  {
+    accessorKey: 'name',
+    header: '이름',
+    cell: ({ row }) => <Text className="font-medium">{row.original.name}</Text>,
+  },
+  {
+    accessorKey: 'role',
+    header: '직무',
+    cell: ({ row }) => row.original.role || '-',
+  },
+  {
+    id: 'allocation',
+    accessorFn: (row) => Number(row.total_allocation),
+    header: '할당률',
+    cell: ({ row }) => {
+      const alloc = Number(row.original.total_allocation)
+      const color = alloc > 100 ? 'red' : alloc >= 80 ? 'amber' : 'gray'
+      return (
+        <div className="flex items-center gap-2">
+          <ProgressBar value={Math.min(alloc, 100)} color={color} className="w-24" />
+          <Badge color={color}>{alloc}%</Badge>
+        </div>
+      )
+    },
+  },
+  {
+    id: 'projects',
+    accessorFn: (row) => Number(row.active_projects),
+    header: '프로젝트 수',
+  },
+]
+
 export function StaffTable({ staff }: { staff: StaffRow[] }) {
-  const [sortKey, setSortKey] = useState<SortKey>('total_allocation')
-  const [sortDesc, setSortDesc] = useState(true)
+  const [sorting, setSorting] = useState<SortingState>([])
 
-  function handleSort(key: SortKey) {
-    if (sortKey === key) setSortDesc((d) => !d)
-    else {
-      setSortKey(key)
-      setSortDesc(true)
-    }
-  }
-
-  const sorted = useMemo(
-    () => [...staff].sort((a, b) => {
-      if (sortKey === 'name') {
-        return sortDesc
-          ? b.name.localeCompare(a.name)
-          : a.name.localeCompare(b.name)
-      }
-      const av = Number(a[sortKey])
-      const bv = Number(b[sortKey])
-      return sortDesc ? bv - av : av - bv
-    }),
-    [staff, sortKey, sortDesc],
-  )
+  const table = useReactTable({
+    data: staff,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
 
   return (
     <Card>
       <Table>
         <TableHead>
-          <TableRow>
-            <SortableHeader
-              label="이름" column="name"
-              sortKey={sortKey} sortDesc={sortDesc} onSort={handleSort}
-            />
-            <TableHeaderCell>직무</TableHeaderCell>
-            <SortableHeader
-              label="할당률" column="total_allocation"
-              sortKey={sortKey} sortDesc={sortDesc} onSort={handleSort}
-            />
-            <SortableHeader
-              label="프로젝트 수" column="active_projects"
-              sortKey={sortKey} sortDesc={sortDesc} onSort={handleSort}
-            />
-          </TableRow>
+          {table.getHeaderGroups().map((hg) => (
+            <TableRow key={hg.id}>
+              {hg.headers.map((header) => (
+                <TableHeaderCell
+                  key={header.id}
+                  className="cursor-pointer select-none"
+                  onClick={header.column.getToggleSortingHandler()}
+                >
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                  <SortIcon sorted={header.column.getIsSorted()} />
+                </TableHeaderCell>
+              ))}
+            </TableRow>
+          ))}
         </TableHead>
         <TableBody>
-          {sorted.map((s) => {
-            const alloc = Number(s.total_allocation)
-            const color = alloc > 100 ? 'red' : alloc >= 80 ? 'amber' : 'gray'
-            return (
-              <TableRow key={s.id}>
-                <TableCell>
-                  <Text className="font-medium">{s.name}</Text>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow key={row.id}>
+              {row.getVisibleCells().map((cell) => (
+                <TableCell key={cell.id}>
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>
-                <TableCell>{s.role || '-'}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <ProgressBar value={Math.min(alloc, 100)} color={color} className="w-24" />
-                    <Badge color={color}>{alloc}%</Badge>
-                  </div>
-                </TableCell>
-                <TableCell>{s.active_projects}</TableCell>
-              </TableRow>
-            )
-          })}
+              ))}
+            </TableRow>
+          ))}
           {staff.length === 0 && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-gray-500">
