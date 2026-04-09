@@ -1,3 +1,4 @@
+import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 
@@ -19,7 +20,17 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     notFound()
   }
 
-  const [milestonesRes, assignmentsRes, docsRes] = await Promise.all([
+  let user: { role?: string } | null = null
+  try {
+    const result = await payload.auth({ headers: await headers() })
+    user = result.user as { role?: string } | null
+  } catch {
+    /* 개발 단계 */
+  }
+
+  const canEdit = ['director', 'pm'].includes(user?.role as string)
+
+  const [milestonesRes, assignmentsRes, docsRes, allStaffRes] = await Promise.all([
     payload.find({
       collection: 'project-milestones',
       where: { project: { equals: id } },
@@ -38,6 +49,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       where: { project: { equals: id } },
       limit: 100,
     }),
+    canEdit
+      ? payload.find({
+          collection: 'staff',
+          where: { isActive: { equals: true } },
+          limit: 500,
+        })
+      : Promise.resolve({ docs: [] }),
   ])
 
   const milestones = milestonesRes.docs.map((m) => ({
@@ -50,12 +68,21 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     seqOrder: m.seqOrder,
     assignee:
       m.assignee && typeof m.assignee === 'object'
-        ? { name: (m.assignee as { name: string }).name }
+        ? {
+            id: (m.assignee as { id: number; name: string }).id,
+            name: (m.assignee as { id: number; name: string }).name,
+          }
         : null,
     template:
       m.template && typeof m.template === 'object'
         ? { category: (m.template as { category: string }).category }
         : null,
+    note: m.note ?? null,
+  }))
+
+  const staffList = allStaffRes.docs.map((s) => ({
+    id: s.id as number,
+    name: s.name,
   }))
 
   const chatContext = [
@@ -83,7 +110,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           id: a.id,
           staff:
             typeof a.staff === 'object' && a.staff
-              ? { name: (a.staff as { name: string }).name }
+              ? {
+                  id: (a.staff as { id: number; name: string }).id,
+                  name: (a.staff as { id: number; name: string }).name,
+                }
               : null,
           roleOnProject: a.roleOnProject ?? null,
           allocationPct: a.allocationPct ?? null,
@@ -96,6 +126,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           docType: d.docType,
           expiryDate: d.expiryDate ?? null,
         }))}
+        staffList={staffList}
+        canEdit={canEdit}
       />
     </>
   )

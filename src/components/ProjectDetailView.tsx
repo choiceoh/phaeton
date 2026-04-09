@@ -1,7 +1,5 @@
 'use client'
 
-import Link from 'next/link'
-
 import {
   Badge,
   Card,
@@ -15,8 +13,15 @@ import {
   TableRow,
   Text,
 } from '@tremor/react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 
+import { deleteAssignment, deleteMilestone } from '@/app/(frontend)/projects/[id]/actions'
+import { AssignmentForm } from '@/components/AssignmentForm'
 import { DocumentUploadForm } from '@/components/DocumentUploadForm'
+import { MilestoneInlineForm } from '@/components/MilestoneInlineForm'
 import { MilestoneTimeline } from '@/components/MilestoneTimeline'
 import {
   DOC_TYPE_LABELS,
@@ -26,6 +31,11 @@ import {
 } from '@/lib/constants'
 import { fmtNum, formatCodTarget } from '@/lib/format'
 
+interface StaffOption {
+  id: number
+  name: string
+}
+
 interface MilestoneItem {
   id: number | string
   name: string
@@ -34,13 +44,14 @@ interface MilestoneItem {
   actualDate: string | null
   dueDate: string | null
   seqOrder: number
-  assignee: { name: string } | null
+  assignee: { id: number; name: string } | null
   template: { category: string } | null
+  note?: string | null
 }
 
 interface AssignmentItem {
   id: number | string
-  staff: { name: string } | number | null
+  staff: { id: number; name: string } | number | null
   roleOnProject?: string | null
   allocationPct?: number | null
   startDate?: string | null
@@ -70,15 +81,56 @@ export function ProjectDetailView({
   milestones,
   assignments,
   documents,
+  staffList = [],
+  canEdit = false,
 }: {
   project: ProjectData
   milestones: MilestoneItem[]
   assignments: AssignmentItem[]
   documents: DocumentItem[]
+  staffList?: StaffOption[]
+  canEdit?: boolean
 }) {
+  const router = useRouter()
   const total = milestones.length
   const done = milestones.filter((m) => m.status === 'done').length
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
+
+  const [showMilestoneForm, setShowMilestoneForm] = useState(false)
+  const [editingMilestone, setEditingMilestone] = useState<MilestoneItem | null>(null)
+  const [showAssignmentForm, setShowAssignmentForm] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  function handleDeleteMilestone(id: number) {
+    if (!confirm('마일스톤을 삭제하시겠습니까?')) return
+    setDeletingId(id)
+    startTransition(async () => {
+      const result = await deleteMilestone(id)
+      setDeletingId(null)
+      if ('error' in result) {
+        toast.error(result.error)
+        return
+      }
+      toast.success('마일스톤이 삭제되었습니다')
+      router.refresh()
+    })
+  }
+
+  function handleDeleteAssignment(id: number) {
+    if (!confirm('인력 배정을 삭제하시겠습니까?')) return
+    setDeletingId(id)
+    startTransition(async () => {
+      const result = await deleteAssignment(id, String(project.id))
+      setDeletingId(null)
+      if ('error' in result) {
+        toast.error(result.error)
+        return
+      }
+      toast.success('배정이 삭제되었습니다')
+      router.refresh()
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -95,8 +147,7 @@ export function ProjectDetailView({
             <Badge color="gray">{PROJECT_STATUS_LABELS[project.status] || project.status}</Badge>
             <Link
               href={`/projects/${project.id}/edit`}
-              className="ml-2 rounded-md border border-gray-300 px-3 py-1 text-sm
-                text-gray-600 hover:bg-gray-50"
+              className="ml-2 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
             >
               수정
             </Link>
@@ -133,14 +184,105 @@ export function ProjectDetailView({
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* ── 마일스톤 ───────────────────────────── */}
         <Card>
-          <Text className="mb-4 font-medium">마일스톤 타임라인</Text>
+          <div className="mb-4 flex items-center justify-between">
+            <Text className="font-medium">마일스톤 타임라인</Text>
+            {canEdit && (
+              <button
+                onClick={() => {
+                  setEditingMilestone(null)
+                  setShowMilestoneForm(true)
+                }}
+                className="text-sm text-stone-500 underline underline-offset-2 hover:text-stone-700"
+              >
+                마일스톤 추가
+              </button>
+            )}
+          </div>
+
+          {showMilestoneForm && !editingMilestone && (
+            <div className="mb-4">
+              <MilestoneInlineForm
+                projectId={String(project.id)}
+                staffList={staffList}
+                onClose={() => setShowMilestoneForm(false)}
+              />
+            </div>
+          )}
+
+          {milestones.map((m) => (
+            <div key={m.id}>
+              {editingMilestone?.id === m.id ? (
+                <div className="mb-4">
+                  <MilestoneInlineForm
+                    projectId={String(project.id)}
+                    milestone={{
+                      id: Number(m.id),
+                      name: m.name,
+                      status: m.status,
+                      plannedDate: m.plannedDate,
+                      dueDate: m.dueDate,
+                      assignee: m.assignee,
+                      note: m.note,
+                    }}
+                    staffList={staffList}
+                    onClose={() => setEditingMilestone(null)}
+                  />
+                </div>
+              ) : (
+                canEdit && (
+                  <div className="-mb-1 flex justify-end gap-1">
+                    <button
+                      onClick={() => {
+                        setShowMilestoneForm(false)
+                        setEditingMilestone(m)
+                      }}
+                      className="text-xs text-stone-400 hover:text-stone-600"
+                    >
+                      수정
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMilestone(Number(m.id))}
+                      disabled={isPending && deletingId === Number(m.id)}
+                      className="text-xs text-red-400 hover:text-red-600"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+          ))}
+
           <MilestoneTimeline milestones={milestones} />
         </Card>
 
         <div className="space-y-6">
+          {/* ── 배정 인력 ──────────────────────────── */}
           <Card>
-            <Text className="mb-4 font-medium">배정 인력</Text>
+            <div className="mb-4 flex items-center justify-between">
+              <Text className="font-medium">배정 인력</Text>
+              {canEdit && (
+                <button
+                  onClick={() => setShowAssignmentForm(true)}
+                  className="text-sm text-stone-500 underline underline-offset-2 hover:text-stone-700"
+                >
+                  인력 배정
+                </button>
+              )}
+            </div>
+
+            {showAssignmentForm && (
+              <div className="mb-4">
+                <AssignmentForm
+                  projectId={String(project.id)}
+                  staffList={staffList}
+                  onClose={() => setShowAssignmentForm(false)}
+                />
+              </div>
+            )}
+
             <Table>
               <TableHead>
                 <TableRow>
@@ -148,6 +290,7 @@ export function ProjectDetailView({
                   <TableHeaderCell>역할</TableHeaderCell>
                   <TableHeaderCell>할당률</TableHeaderCell>
                   <TableHeaderCell>기간</TableHeaderCell>
+                  {canEdit && <TableHeaderCell />}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -165,11 +308,22 @@ export function ProjectDetailView({
                     <TableCell className="text-xs">
                       {a.startDate || '-'} ~ {a.endDate || '진행중'}
                     </TableCell>
+                    {canEdit && (
+                      <TableCell>
+                        <button
+                          onClick={() => handleDeleteAssignment(Number(a.id))}
+                          disabled={isPending && deletingId === Number(a.id)}
+                          className="text-xs text-red-400 hover:text-red-600"
+                        >
+                          삭제
+                        </button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
                 {assignments.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-gray-500">
+                    <TableCell colSpan={canEdit ? 5 : 4} className="text-center text-gray-500">
                       배정된 인력이 없습니다
                     </TableCell>
                   </TableRow>
@@ -178,6 +332,7 @@ export function ProjectDetailView({
             </Table>
           </Card>
 
+          {/* ── 서류 ───────────────────────────────── */}
           <Card>
             <Text className="mb-4 font-medium">서류 목록</Text>
             <Table>
