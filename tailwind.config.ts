@@ -2,6 +2,13 @@ import type { Config } from 'tailwindcss'
 
 const config: Config = {
   content: ['./src/**/*.{js,ts,jsx,tsx}', './node_modules/@tremor/**/*.{js,ts,jsx,tsx}'],
+  safelist: [
+    // 프로젝트 유형·상태 색상 — Tremor color prop으로 동적 사용
+    { pattern: /bg-(amber|sky|emerald|violet|green|blue|red|gray)-(50|100|200|300|400|500|600|700)/ },
+    { pattern: /text-(amber|sky|emerald|violet|green|blue|red|gray)-(50|100|200|300|400|500|600|700|800|900)/ },
+    { pattern: /border-(amber|sky|emerald|violet|green|blue|red|gray)-(200|300|400|500)/ },
+    { pattern: /ring-(amber|sky|emerald|violet|green|blue|red|gray)-(200|300|400|500)/ },
+  ],
   theme: {
     extend: {
       fontFamily: {

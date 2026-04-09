@@ -39,6 +39,11 @@ export default buildConfig({
 
   admin: {
     user: Users.slug,
+    autoLogin: {
+      email: 'admin@phaeton.local',
+      password: 'admin',
+      prefillOnly: false,
+    },
     meta: {
       titleSuffix: '— Phaeton',
     },
