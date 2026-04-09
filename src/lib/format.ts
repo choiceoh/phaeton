@@ -1,3 +1,8 @@
+export function fmtNum(v: number | string | null | undefined): string {
+  if (v == null) return '-'
+  return Number(v).toLocaleString('ko-KR')
+}
+
 export function formatCodTarget(dateStr: string): string {
   const date = new Date(dateStr)
   const yy = String(date.getFullYear()).slice(2)

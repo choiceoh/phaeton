@@ -15,7 +15,7 @@ import Link from 'next/link'
 
 import { WarmBadge } from '@/components/WarmBadge'
 import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/constants'
-import { formatCodTarget } from '@/lib/format'
+import { fmtNum, formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
 export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
@@ -53,7 +53,7 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
                 <TableCell>
                   <WarmBadge>{PROJECT_STATUS_LABELS[p.status] || p.status}</WarmBadge>
                 </TableCell>
-                <TableCell>{p.capacity_kw ?? '-'}</TableCell>
+                <TableCell>{p.capacity_kw != null ? fmtNum(p.capacity_kw) : '-'}</TableCell>
                 <TableCell>
                   <div className="flex min-w-[8rem] items-center gap-2">
                     <ProgressBar

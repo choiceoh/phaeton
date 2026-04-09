@@ -13,6 +13,8 @@ import {
   TableCell,
 } from '@tremor/react'
 
+import { fmtNum } from '@/lib/format'
+
 interface StaffRow {
   id: number | string
   name: string
@@ -46,10 +48,10 @@ export function StaffTable({ staff }: { staff: StaffRow[] }) {
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <ProgressBar value={Math.min(alloc, 100)} color={color} className="w-24" />
-                    <Badge color={color}>{alloc}%</Badge>
+                    <Badge color={color}>{fmtNum(alloc)}%</Badge>
                   </div>
                 </TableCell>
-                <TableCell>{s.active_projects}</TableCell>
+                <TableCell>{fmtNum(s.active_projects)}</TableCell>
               </TableRow>
             )
           })}
