@@ -1,54 +1,56 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { FormProvider, useForm } from 'react-hook-form'
+import { toast } from 'sonner'
+import { z } from 'zod'
 
-import { api } from '@/lib/api'
+import { FormField } from '@/components/common/Form'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useLogin } from '@/hooks/useAuth'
+import { formatError } from '@/lib/api'
+
+const schema = z.object({
+  email: z.string().email('이메일 형식이 올바르지 않습니다'),
+  password: z.string().min(1, '비밀번호를 입력하세요'),
+})
+
+type LoginForm = z.infer<typeof schema>
 
 export default function LoginPage() {
-  const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const form = useForm<LoginForm>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: '', password: '' },
+  })
+  const login = useLogin()
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    try {
-      await api.post('/auth/login', { email, password })
-      navigate('/')
-    } catch {
-      setError('이메일 또는 비밀번호가 올바르지 않습니다.')
-    }
+  function onSubmit(values: LoginForm) {
+    login.mutate(values, {
+      onError: (err) => toast.error(formatError(err)),
+    })
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-stone-50">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-bold text-stone-900">Phaeton</h1>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <div>
-          <label className="block text-sm text-stone-600">이메일</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm text-stone-600">비밀번호</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm"
-            required
-          />
-        </div>
-        <button type="submit" className="w-full rounded-md bg-stone-900 py-2 text-sm text-white hover:bg-stone-800">
-          로그인
-        </button>
-      </form>
+      <FormProvider {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow-sm"
+        >
+          <h1 className="text-xl font-bold text-stone-900">Phaeton</h1>
+
+          <FormField<LoginForm> name="email" label="이메일" required>
+            <Input type="email" autoComplete="email" {...form.register('email')} />
+          </FormField>
+
+          <FormField<LoginForm> name="password" label="비밀번호" required>
+            <Input type="password" autoComplete="current-password" {...form.register('password')} />
+          </FormField>
+
+          <Button type="submit" disabled={login.isPending} className="w-full">
+            {login.isPending ? '로그인 중...' : '로그인'}
+          </Button>
+        </form>
+      </FormProvider>
     </div>
   )
 }

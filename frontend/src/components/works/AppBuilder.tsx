@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { api } from '@/lib/api'
-import type { Collection, CreateCollectionReq, FieldType } from '@/lib/types'
+import { useCollections, useCreateCollection } from '@/hooks/useCollections'
+import { formatError } from '@/lib/api'
+import type { CreateCollectionReq, FieldType } from '@/lib/types'
 
 import FieldPalette from './FieldPalette'
 import FieldPreview, { type FieldDraft } from './FieldPreview'
@@ -21,13 +23,10 @@ export default function AppBuilder() {
   const [description, setDescription] = useState('')
   const [fields, setFields] = useState<FieldDraft[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [collections, setCollections] = useState<Collection[]>([])
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    api.get<Collection[]>('/schema/collections').then(setCollections).catch(() => {})
-  }, [])
+  const { data: collections = [] } = useCollections()
+  const createCollection = useCreateCollection()
 
   const selectedField = fields.find((f) => f.id === selectedId) || null
 
@@ -55,7 +54,7 @@ export default function AppBuilder() {
     if (selectedId === id) setSelectedId(null)
   }
 
-  async function handleSave() {
+  function handleSave() {
     setError('')
     if (!slug.trim() || !label.trim()) {
       setError('slug과 label은 필수입니다.')
@@ -68,30 +67,33 @@ export default function AppBuilder() {
       }
     }
 
-    setSaving(true)
-    try {
-      const body: CreateCollectionReq = {
-        slug,
-        label,
-        description: description || undefined,
-        fields: fields.map((f) => ({
-          slug: f.slug,
-          label: f.label,
-          field_type: f.field_type,
-          is_required: f.is_required,
-          is_unique: f.is_unique,
-          is_indexed: f.is_indexed,
-          options: f.options,
-          relation: f.relation,
-        })),
-      }
-      const created = await api.post<Collection>('/schema/collections', body)
-      navigate(`/apps/${created.id}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '저장 실패')
-    } finally {
-      setSaving(false)
+    const body: CreateCollectionReq = {
+      slug,
+      label,
+      description: description || undefined,
+      fields: fields.map((f) => ({
+        slug: f.slug,
+        label: f.label,
+        field_type: f.field_type,
+        is_required: f.is_required,
+        is_unique: f.is_unique,
+        is_indexed: f.is_indexed,
+        options: f.options,
+        relation: f.relation,
+      })),
     }
+
+    createCollection.mutate(body, {
+      onSuccess: (created) => {
+        toast.success(`${created.label} 컬렉션이 생성되었습니다`)
+        navigate(`/apps/${created.id}`)
+      },
+      onError: (err) => {
+        const msg = formatError(err)
+        setError(msg)
+        toast.error(msg)
+      },
+    })
   }
 
   return (
@@ -137,8 +139,11 @@ export default function AppBuilder() {
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving || !label.trim() || !slug.trim()}>
-          {saving ? '저장 중...' : '저장'}
+        <Button
+          onClick={handleSave}
+          disabled={createCollection.isPending || !label.trim() || !slug.trim()}
+        >
+          {createCollection.isPending ? '저장 중...' : '저장'}
         </Button>
       </div>
     </div>
