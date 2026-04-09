@@ -197,7 +197,14 @@ const SORT_COLUMNS: Record<string, string> = {
 
 export async function getProjectProgressPaginated(
   payload: Payload,
-  opts: { page?: number; limit?: number; sort?: string; type?: string; status?: string; q?: string },
+  opts: {
+    page?: number
+    limit?: number
+    sort?: string
+    type?: string
+    status?: string
+    q?: string
+  },
 ): Promise<PaginatedResult<ProjectProgress>> {
   const db = payload.db.drizzle
   const page = Math.max(1, opts.page || 1)

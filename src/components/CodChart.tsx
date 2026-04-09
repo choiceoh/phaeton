@@ -24,9 +24,7 @@ export function CodChart({ data }: { data: MonthlyCodData[] }) {
           showAnimation={false}
         />
       ) : (
-        <Text className="py-8 text-center text-sm text-stone-400">
-          COD 데이터가 없습니다
-        </Text>
+        <Text className="py-8 text-center text-sm text-stone-400">COD 데이터가 없습니다</Text>
       )}
     </Card>
   )

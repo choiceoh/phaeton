@@ -2,11 +2,7 @@ import { headers } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
-import {
-  PROJECT_STATUS_LABELS,
-  PROJECT_TYPE_LABELS,
-  DEPARTMENT_LABELS,
-} from '@/lib/constants'
+import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS, DEPARTMENT_LABELS } from '@/lib/constants'
 import { getProjectExportRows } from '@/lib/queries'
 
 import config from '@payload-config'
@@ -76,9 +72,7 @@ export async function GET(req: NextRequest) {
       escapeCSV(row.name || ''),
       escapeCSV(PROJECT_TYPE_LABELS[row.type] || row.type),
       escapeCSV(PROJECT_STATUS_LABELS[row.status] || row.status),
-      escapeCSV(
-        row.department ? (DEPARTMENT_LABELS[row.department] || row.department) : '',
-      ),
+      escapeCSV(row.department ? DEPARTMENT_LABELS[row.department] || row.department : ''),
       row.capacity_kw !== null && row.capacity_kw !== undefined ? String(row.capacity_kw) : '',
       row.progress_pct !== null && row.progress_pct !== undefined ? String(row.progress_pct) : '0',
       String(row.total_milestones || '0'),

@@ -26,9 +26,7 @@ export function StaffLoadBar({ staff }: { staff: StaffLoadItem[] }) {
           showAnimation={false}
         />
       ) : (
-        <Text className="py-8 text-center text-sm text-stone-400">
-          할당된 인력이 없습니다
-        </Text>
+        <Text className="py-8 text-center text-sm text-stone-400">할당된 인력이 없습니다</Text>
       )}
     </Card>
   )

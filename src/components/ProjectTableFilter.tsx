@@ -99,11 +99,7 @@ export function ProjectTableFilter({ result }: { result: PaginatedResult<Project
         </div>
       </div>
 
-      <ProjectTable
-        projects={result.docs}
-        sort={currentSort}
-        onSort={handleSort}
-      />
+      <ProjectTable projects={result.docs} sort={currentSort} onSort={handleSort} />
 
       {result.totalPages > 1 && (
         <div className="mt-4 flex items-center justify-center gap-2">

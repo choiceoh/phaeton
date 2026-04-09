@@ -82,7 +82,7 @@ export async function GET() {
       escapeCSV(r.project_code || ''),
       escapeCSV(r.project_name || ''),
       escapeCSV(r.milestone_name || ''),
-      escapeCSV(r.category ? (CATEGORY_LABELS[r.category] || r.category) : ''),
+      escapeCSV(r.category ? CATEGORY_LABELS[r.category] || r.category : ''),
       escapeCSV(MILESTONE_STATUS_LABELS[r.status] || r.status),
       String(r.seq_order || ''),
       formatDate(r.planned_date),

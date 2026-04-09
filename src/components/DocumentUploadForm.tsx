@@ -61,16 +61,8 @@ export function DocumentUploadForm({ projectId }: { projectId: string }) {
     <div className="mt-4 space-y-3 rounded-md border border-stone-200 bg-stone-50 p-4">
       <p className="text-sm font-medium">서류 업로드</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <TextInput
-          placeholder="서류명"
-          value={title}
-          onValueChange={setTitle}
-        />
-        <Select
-          placeholder="유형 선택"
-          value={docType}
-          onValueChange={setDocType}
-        >
+        <TextInput placeholder="서류명" value={title} onValueChange={setTitle} />
+        <Select placeholder="유형 선택" value={docType} onValueChange={setDocType}>
           {Object.entries(DOC_TYPE_LABELS).map(([value, label]) => (
             <SelectItem key={value} value={value}>
               {label}
@@ -94,21 +86,10 @@ export function DocumentUploadForm({ projectId }: { projectId: string }) {
         />
       </div>
       <div className="flex gap-2">
-        <Button
-          size="xs"
-          variant="primary"
-          color="blue"
-          onClick={handleSubmit}
-          loading={isPending}
-        >
+        <Button size="xs" variant="primary" color="blue" onClick={handleSubmit} loading={isPending}>
           업로드
         </Button>
-        <Button
-          size="xs"
-          variant="secondary"
-          color="gray"
-          onClick={() => setOpen(false)}
-        >
+        <Button size="xs" variant="secondary" color="gray" onClick={() => setOpen(false)}>
           취소
         </Button>
       </div>

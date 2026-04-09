@@ -83,7 +83,9 @@ export function ExpiringDocsTimeline({ documents }: { documents: ExpiringDocumen
                           {DOC_TYPE_LABELS[d.doc_type] || d.doc_type}
                         </Badge>
                       </div>
-                      <Badge color="amber" size="xs">{d.days_until_expiry}일 남음</Badge>
+                      <Badge color="amber" size="xs">
+                        {d.days_until_expiry}일 남음
+                      </Badge>
                     </div>
                   ))}
                 </div>
@@ -92,9 +94,7 @@ export function ExpiringDocsTimeline({ documents }: { documents: ExpiringDocumen
           </div>
         </>
       ) : (
-        <Text className="py-8 text-center text-sm text-stone-400">
-          만료 임박 서류 없음
-        </Text>
+        <Text className="py-8 text-center text-sm text-stone-400">만료 임박 서류 없음</Text>
       )}
     </Card>
   )

@@ -66,37 +66,37 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
   return (
     <>
-    <ChatContextSetter context={chatContext} />
-    <ProjectDetailView
-      project={{
-        id,
-        name: project.name,
-        code: project.code,
-        type: project.type,
-        status: project.status,
-        capacityKw: project.capacityKw ?? null,
-        codTarget: project.codTarget ?? null,
-        client: project.client ?? null,
-      }}
-      milestones={milestones}
-      assignments={assignmentsRes.docs.map((a) => ({
-        id: a.id,
-        staff:
-          typeof a.staff === 'object' && a.staff
-            ? { name: (a.staff as { name: string }).name }
-            : null,
-        roleOnProject: a.roleOnProject ?? null,
-        allocationPct: a.allocationPct ?? null,
-        startDate: a.startDate ?? null,
-        endDate: a.endDate ?? null,
-      }))}
-      documents={docsRes.docs.map((d) => ({
-        id: d.id,
-        title: d.title,
-        docType: d.docType,
-        expiryDate: d.expiryDate ?? null,
-      }))}
-    />
+      <ChatContextSetter context={chatContext} />
+      <ProjectDetailView
+        project={{
+          id,
+          name: project.name,
+          code: project.code,
+          type: project.type,
+          status: project.status,
+          capacityKw: project.capacityKw ?? null,
+          codTarget: project.codTarget ?? null,
+          client: project.client ?? null,
+        }}
+        milestones={milestones}
+        assignments={assignmentsRes.docs.map((a) => ({
+          id: a.id,
+          staff:
+            typeof a.staff === 'object' && a.staff
+              ? { name: (a.staff as { name: string }).name }
+              : null,
+          roleOnProject: a.roleOnProject ?? null,
+          allocationPct: a.allocationPct ?? null,
+          startDate: a.startDate ?? null,
+          endDate: a.endDate ?? null,
+        }))}
+        documents={docsRes.docs.map((d) => ({
+          id: d.id,
+          title: d.title,
+          docType: d.docType,
+          expiryDate: d.expiryDate ?? null,
+        }))}
+      />
     </>
   )
 }

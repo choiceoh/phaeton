@@ -25,9 +25,7 @@ export function ProjectStatusDonut({ projects }: { projects: ProjectProgress[] }
     value: count,
   }))
 
-  const colors = Array.from(counts.keys()).map(
-    (s) => STATUS_COLORS[s] || 'gray',
-  )
+  const colors = Array.from(counts.keys()).map((s) => STATUS_COLORS[s] || 'gray')
 
   return (
     <Card className="h-full">
@@ -41,9 +39,7 @@ export function ProjectStatusDonut({ projects }: { projects: ProjectProgress[] }
           showAnimation={false}
         />
       ) : (
-        <Text className="py-8 text-center text-sm text-stone-400">
-          프로젝트 데이터가 없습니다
-        </Text>
+        <Text className="py-8 text-center text-sm text-stone-400">프로젝트 데이터가 없습니다</Text>
       )}
     </Card>
   )
