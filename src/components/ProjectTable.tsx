@@ -1,7 +1,6 @@
 'use client'
 
 import {
-  Badge,
   Card,
   ProgressBar,
   Table,
@@ -14,7 +13,8 @@ import {
 } from '@tremor/react'
 import Link from 'next/link'
 
-import { PROJECT_STATUS_LABELS, PROJECT_TYPE_COLORS, PROJECT_TYPE_LABELS } from '@/lib/constants'
+import { WarmBadge } from '@/components/WarmBadge'
+import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/constants'
 import { formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
@@ -48,19 +48,17 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <Badge color={PROJECT_TYPE_COLORS[p.type] || 'gray'}>
-                    {PROJECT_TYPE_LABELS[p.type] || p.type}
-                  </Badge>
+                  <WarmBadge>{PROJECT_TYPE_LABELS[p.type] || p.type}</WarmBadge>
                 </TableCell>
                 <TableCell>
-                  <Badge color="gray">{PROJECT_STATUS_LABELS[p.status] || p.status}</Badge>
+                  <WarmBadge>{PROJECT_STATUS_LABELS[p.status] || p.status}</WarmBadge>
                 </TableCell>
                 <TableCell>{p.capacity_kw ?? '-'}</TableCell>
                 <TableCell>
                   <div className="flex min-w-[8rem] items-center gap-2">
                     <ProgressBar
                       value={progress}
-                      color={progress === 100 ? 'green' : 'blue'}
+                      color={progress === 100 ? 'green' : 'neutral'}
                       className="w-20"
                       aria-label={`${p.name} 진행률 ${progress}%`}
                     />

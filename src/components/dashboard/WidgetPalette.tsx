@@ -58,7 +58,7 @@ export function WidgetPalette({ activeWidgets, onAdd, onRemove, onClose }: Widge
                           <Text className="text-sm font-medium">{w.label}</Text>
                           <Text className="text-xs text-stone-500">{w.description}</Text>
                         </div>
-                        <Badge color={isActive ? 'blue' : 'gray'}>
+                        <Badge color={isActive ? 'emerald' : 'gray'}>
                           {isActive ? '활성' : '추가'}
                         </Badge>
                       </div>

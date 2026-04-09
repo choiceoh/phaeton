@@ -6,30 +6,55 @@
 
 /* react-grid-layout */
 .react-grid-item.react-grid-placeholder {
-  background: #3b82f6;
+  background: #78716c;
   opacity: 0.15;
   border-radius: 0.5rem;
 }
 
 .react-grid-item > .react-resizable-handle::after {
-  border-right-color: #9ca3af;
-  border-bottom-color: #9ca3af;
+  border-right-color: #a8a29e;
+  border-bottom-color: #a8a29e;
 }
 
 .react-grid-item {
   transition: all 200ms ease;
 }
 
-/* 웜톤 테마 — Tremor 컴포넌트 배경 통일 (Claude Pampas 톤) */
-.tremor-Card-root {
-  background-color: #faf9f5;
+/*
+ * Tremor 웜톤 오버라이드
+ * Tremor 컴포넌트가 하드코딩하는 blue/gray/sky 등의 색상을
+ * 아이보리 배경에 맞는 stone 웜톤으로 강제 교체.
+ * Tailwind purge를 피하기 위해 @layer 밖에 !important로 배치.
+ */
+
+/* Badge — 파란 ring/bg 제거, 통일된 웜톤 */
+[class*='tremor-Badge-root'] {
+  --tw-ring-color: #d6d3d1 !important;
+  --tw-ring-opacity: 0.4 !important;
+  color: #57534e !important;
+  background-color: #f4f3ee !important;
 }
 
-.tremor-TextInput-root input,
-.tremor-Select-root button {
-  background-color: #faf9f5;
+/* Button — 기본 blue border 제거 */
+[class*='tremor-Button-root'] {
+  border-color: #78716c !important;
+  color: #57534e !important;
 }
 
-[data-radix-popper-content-wrapper] ul {
-  background-color: #faf9f5;
+[class*='tremor-Button-root']:hover {
+  background-color: rgba(120, 113, 108, 0.1) !important;
+}
+
+/* Select 포커스 — blue ring 제거 */
+[class*='tremor-Select'] button:focus,
+[class*='tremor-Select'] button[data-state='open'] {
+  border-color: #78716c !important;
+  box-shadow: 0 0 0 2px #d6d3d1 !important;
+}
+
+/* Radix 드롭다운/팝오버 */
+[data-radix-popper-content-wrapper] ul,
+[data-radix-popper-content-wrapper] div {
+  background-color: #faf9f5 !important;
+  border-color: #d6d3d1 !important;
 }
