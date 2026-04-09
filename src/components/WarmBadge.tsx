@@ -5,8 +5,6 @@
  */
 export function WarmBadge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center rounded bg-ivory-100 px-2 py-0.5 text-sm text-stone-600 ring-1 ring-inset ring-stone-300">
-      {children}
-    </span>
+    <span className="inline-flex items-center px-2 py-0.5 text-sm text-stone-500">{children}</span>
   )
 }
