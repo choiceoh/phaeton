@@ -3,13 +3,16 @@
 import { Select, SelectItem, TextInput } from '@tremor/react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 
+import { ColumnSettings } from '@/components/ColumnSettings'
 import { ProjectTable } from '@/components/ProjectTable'
 import type { PaginatedResult, ProjectProgress } from '@/lib/types'
+import { useColumnPrefs } from '@/lib/useColumnPrefs'
 
 export function ProjectTableFilter({ result }: { result: PaginatedResult<ProjectProgress> }) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
+  const { visibleKeys } = useColumnPrefs()
 
   const typeFilter = searchParams.get('type') || 'all'
   const statusFilter = searchParams.get('status') || 'all'
@@ -81,7 +84,8 @@ export function ProjectTableFilter({ result }: { result: PaginatedResult<Project
           <SelectItem value="inspection">사용전 검사</SelectItem>
           <SelectItem value="pre-cod">준공대기</SelectItem>
         </Select>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-4">
+          <ColumnSettings />
           <a
             href={`/api/export/projects${exportQuery ? `?${exportQuery}` : ''}`}
             download
@@ -99,7 +103,12 @@ export function ProjectTableFilter({ result }: { result: PaginatedResult<Project
         </div>
       </div>
 
-      <ProjectTable projects={result.docs} sort={currentSort} onSort={handleSort} />
+      <ProjectTable
+        projects={result.docs}
+        visibleKeys={visibleKeys}
+        sort={currentSort}
+        onSort={handleSort}
+      />
 
       {result.totalPages > 1 && (
         <div className="mt-4 flex items-center justify-center gap-2">

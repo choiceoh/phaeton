@@ -36,7 +36,10 @@ export async function getProjectProgress(payload: Payload): Promise<ProjectProgr
   const db = payload.db.drizzle
   const result = await db.execute(`
     SELECT
-      p.id, p.name, p.type, p.status, p.department, p.capacity_kw, p.cod_target,
+      p.id, p.name, p.code, p.type, p.status, p.department,
+      p.capacity_kw, p.cod_target, p.client, p.epc_value,
+      p.site_region AS region,
+      u.name AS pm_name,
       COUNT(pm.id) AS total_milestones,
       COUNT(pm.id) FILTER (WHERE pm.status = 'done') AS done_milestones,
       ROUND(
@@ -48,7 +51,8 @@ export async function getProjectProgress(payload: Payload): Promise<ProjectProgr
       ) AS next_due
     FROM projects p
     LEFT JOIN project_milestones pm ON pm.project_id = p.id
-    GROUP BY p.id
+    LEFT JOIN users u ON u.id = p.assigned_p_m
+    GROUP BY p.id, u.name
     ORDER BY progress_pct DESC
   `)
   return result.rows as unknown as ProjectProgress[]
@@ -228,7 +232,10 @@ export async function getProjectProgressPaginated(
   const [dataResult, countResult] = await Promise.all([
     db.execute(`
       SELECT
-        p.id, p.name, p.type, p.status, p.department, p.capacity_kw, p.cod_target,
+        p.id, p.name, p.code, p.type, p.status, p.department,
+        p.capacity_kw, p.cod_target, p.client, p.epc_value,
+        p.site_region AS region,
+        u.name AS pm_name,
         COUNT(pm.id) AS total_milestones,
         COUNT(pm.id) FILTER (WHERE pm.status = 'done') AS done_milestones,
         ROUND(
@@ -240,8 +247,9 @@ export async function getProjectProgressPaginated(
         ) AS next_due
       FROM projects p
       LEFT JOIN project_milestones pm ON pm.project_id = p.id
+      LEFT JOIN users u ON u.id = p.assigned_p_m
       ${where}
-      GROUP BY p.id
+      GROUP BY p.id, u.name
       ORDER BY ${orderBy}
       LIMIT ${limit} OFFSET ${offset}
     `),

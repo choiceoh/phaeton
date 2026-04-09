@@ -1,6 +1,7 @@
 export interface ProjectProgress {
   id: number
   name: string
+  code: string | null
   type: string
   status: string
   department: string | null
@@ -10,6 +11,10 @@ export interface ProjectProgress {
   done_milestones: string
   progress_pct: string | null
   next_due: string | null
+  client: string | null
+  pm_name: string | null
+  epc_value: number | null
+  region: string | null
 }
 
 export interface ProjectExportRow {

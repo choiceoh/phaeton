@@ -13,11 +13,17 @@ import {
   Text,
 } from '@tremor/react'
 import Link from 'next/link'
+import { useMemo } from 'react'
 
 import { WarmBadge } from '@/components/WarmBadge'
-import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/constants'
-import { fmtNum, formatCodTarget } from '@/lib/format'
+import {
+  DEPARTMENT_LABELS,
+  PROJECT_STATUS_LABELS,
+  PROJECT_TYPE_LABELS,
+} from '@/lib/constants'
+import { daysFromNow, fmtNum, formatCodTarget, formatDate } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
+import type { ColumnKey } from '@/lib/useColumnPrefs'
 
 function SortIcon({ column, sort }: { column: string; sort: string }) {
   const active = sort === column || sort === `-${column}`
@@ -27,7 +33,7 @@ function SortIcon({ column, sort }: { column: string; sort: string }) {
 
 const SORTABLE_COLUMNS = new Set(['name', 'capacity_kw', 'progress', 'cod_target'])
 
-const columns: ColumnDef<ProjectProgress>[] = [
+const allColumns: (ColumnDef<ProjectProgress> & { id: ColumnKey })[] = [
   {
     id: 'name',
     accessorKey: 'name',
@@ -42,6 +48,15 @@ const columns: ColumnDef<ProjectProgress>[] = [
     ),
   },
   {
+    id: 'code',
+    accessorKey: 'code',
+    header: '프로젝트 코드',
+    cell: ({ row }) => (
+      <span className="text-xs text-gray-500">{row.original.code ?? '-'}</span>
+    ),
+  },
+  {
+    id: 'type',
     accessorKey: 'type',
     header: '유형',
     cell: ({ row }) => (
@@ -49,20 +64,28 @@ const columns: ColumnDef<ProjectProgress>[] = [
     ),
   },
   {
+    id: 'status',
     accessorKey: 'status',
     header: '상태',
     cell: ({ row }) => (
-      <WarmBadge>{PROJECT_STATUS_LABELS[row.original.status] || row.original.status}</WarmBadge>
+      <WarmBadge>
+        {PROJECT_STATUS_LABELS[row.original.status] || row.original.status}
+      </WarmBadge>
     ),
+  },
+  {
+    id: 'department',
+    accessorKey: 'department',
+    header: '부서',
+    cell: ({ row }) =>
+      DEPARTMENT_LABELS[row.original.department ?? ''] ?? row.original.department ?? '-',
   },
   {
     id: 'capacity_kw',
     accessorKey: 'capacity_kw',
     header: '용량(kW)',
     cell: ({ row }) =>
-      row.original.capacity_kw !== null && row.original.capacity_kw !== undefined
-        ? fmtNum(row.original.capacity_kw)
-        : '-',
+      row.original.capacity_kw != null ? fmtNum(row.original.capacity_kw) : '-',
   },
   {
     id: 'progress',
@@ -93,23 +116,82 @@ const columns: ColumnDef<ProjectProgress>[] = [
     id: 'cod_target',
     accessorKey: 'cod_target',
     header: 'COD 목표',
-    cell: ({ row }) => (row.original.cod_target ? formatCodTarget(row.original.cod_target) : '-'),
+    cell: ({ row }) =>
+      row.original.cod_target ? formatCodTarget(row.original.cod_target) : '-',
+  },
+  {
+    id: 'next_due',
+    accessorKey: 'next_due',
+    header: '다음 기한',
+    cell: ({ row }) => {
+      const d = row.original.next_due
+      if (!d) return '-'
+      const days = daysFromNow(d)
+      return (
+        <span className={days < 0 ? 'text-red-600' : ''}>
+          {formatDate(d, 'MM/dd')}
+          {' '}
+          ({days < 0 ? `${Math.abs(days)}일 초과` : days === 0 ? '오늘' : `${days}일`})
+        </span>
+      )
+    },
+  },
+  {
+    id: 'client',
+    accessorKey: 'client',
+    header: '발주처',
+    cell: ({ row }) => row.original.client ?? '-',
+  },
+  {
+    id: 'pm_name',
+    accessorKey: 'pm_name',
+    header: '담당 PM',
+    cell: ({ row }) => row.original.pm_name ?? '-',
+  },
+  {
+    id: 'epc_value',
+    accessorKey: 'epc_value',
+    header: 'EPC 금액',
+    cell: ({ row }) => {
+      const val = row.original.epc_value
+      if (val == null) return '-'
+      if (val >= 1_0000_0000) return `${(val / 1_0000_0000).toFixed(1)}억`
+      if (val >= 1_0000) return `${(val / 1_0000).toFixed(0)}만`
+      return fmtNum(val)
+    },
+  },
+  {
+    id: 'region',
+    accessorKey: 'region',
+    header: '지역',
+    cell: ({ row }) => row.original.region ?? '-',
   },
 ]
 
 export function ProjectTable({
   projects,
+  visibleKeys,
   sort = '',
   onSort,
 }: {
   projects: ProjectProgress[]
+  visibleKeys: ColumnKey[]
   sort?: string
   onSort?: (col: string) => void
 }) {
+  const columnVisibility = useMemo(() => {
+    const vis: Record<string, boolean> = {}
+    for (const col of allColumns) {
+      vis[col.id] = visibleKeys.includes(col.id)
+    }
+    return vis
+  }, [visibleKeys])
+
   const table = useReactTable({
     data: projects,
-    columns,
+    columns: allColumns,
     getCoreRowModel: getCoreRowModel(),
+    state: { columnVisibility },
   })
 
   return (
@@ -157,7 +239,10 @@ export function ProjectTable({
           ))}
           {projects.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-gray-500">
+              <TableCell
+                colSpan={visibleKeys.length}
+                className="text-center text-gray-500"
+              >
                 조건에 맞는 프로젝트가 없습니다
               </TableCell>
             </TableRow>
