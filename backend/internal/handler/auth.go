@@ -140,6 +140,22 @@ func Login(pool *pgxpool.Pool, limiter *middleware.RateLimiter) http.HandlerFunc
 	}
 }
 
+// Logout handles POST /api/auth/logout.
+// Clears the httpOnly cookie server-side so the client doesn't have to.
+func Logout() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "token",
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   -1,
+		})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
+	}
+}
+
 // Me handles GET /api/auth/me.
 func Me() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

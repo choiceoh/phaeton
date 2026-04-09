@@ -146,6 +146,7 @@ func buildRouter(
 
 	// Auth (public).
 	r.Post("/api/auth/login", handler.Login(pool, loginLimiter))
+	r.Post("/api/auth/logout", handler.Logout())
 
 	// Protected routes.
 	r.Group(func(r chi.Router) {
@@ -158,30 +159,42 @@ func buildRouter(
 
 		// Schema API — collection/field/migration management.
 		r.Route("/api/schema", func(r chi.Router) {
+			// Read-only: all authenticated users.
 			r.Get("/collections", schemaH.ListCollections)
-			r.Post("/collections", schemaH.CreateCollection)
 			r.Get("/collections/{id}", schemaH.GetCollection)
-			r.Patch("/collections/{id}", schemaH.UpdateCollection)
-			r.Delete("/collections/{id}", schemaH.DeleteCollection)
-
-			r.Post("/collections/{id}/fields", schemaH.AddField)
-			r.Patch("/fields/{fieldId}", schemaH.UpdateField)
-			r.Delete("/fields/{fieldId}", schemaH.DeleteField)
-
 			r.Get("/migrations/history", schemaH.MigrationHistory)
-			r.Post("/migrations/rollback/{migrationId}", schemaH.RollbackMigration)
+
+			// Write: director and pm only.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("director", "pm"))
+				r.Post("/collections", schemaH.CreateCollection)
+				r.Patch("/collections/{id}", schemaH.UpdateCollection)
+				r.Delete("/collections/{id}", schemaH.DeleteCollection)
+
+				r.Post("/collections/{id}/fields", schemaH.AddField)
+				r.Patch("/fields/{fieldId}", schemaH.UpdateField)
+				r.Delete("/fields/{fieldId}", schemaH.DeleteField)
+
+				r.Post("/migrations/rollback/{migrationId}", schemaH.RollbackMigration)
+			})
 		})
 
 		// Dynamic API — auto-generated CRUD for data tables.
 		r.Route("/api/data", func(r chi.Router) {
+			// Read: all authenticated users.
 			r.Get("/{slug}", dynH.List)
-			r.Post("/{slug}", dynH.Create)
-			r.Post("/{slug}/bulk", dynH.BulkCreate)
-			r.Delete("/{slug}/bulk", dynH.BulkDelete)
 			r.Get("/{slug}/aggregate", dynH.Aggregate)
 			r.Get("/{slug}/{id}", dynH.Get)
-			r.Patch("/{slug}/{id}", dynH.Update)
-			r.Delete("/{slug}/{id}", dynH.Delete)
+
+			// Write: director, pm, engineer.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("director", "pm", "engineer"))
+				r.Post("/{slug}", dynH.Create)
+				r.Post("/{slug}/bulk", dynH.BulkCreate)
+				r.Delete("/{slug}/bulk", dynH.BulkDelete)
+				r.Patch("/{slug}/{id}", dynH.Update)
+				r.Delete("/{slug}/{id}", dynH.Delete)
+			})
 		})
 
 		// File upload.
@@ -241,4 +254,3 @@ func envOr(key, fallback string) string {
 	}
 	return fallback
 }
-

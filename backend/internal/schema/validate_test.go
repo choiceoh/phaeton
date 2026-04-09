@@ -17,16 +17,16 @@ func TestValidateSlug(t *testing.T) {
 		{"a1", false},
 		{"a_1_b_2", false},
 
-		{"", true},                // empty
-		{"1abc", true},            // starts with digit
-		{"_abc", true},            // starts with underscore
-		{"ABC", true},             // uppercase
-		{"abc-def", true},         // dash not allowed
-		{"abc.def", true},         // dot not allowed
-		{"select", true},          // PG reserved
-		{"id", true},              // auto column
-		{"created_at", true},      // auto column
-		{"deleted_at", true},      // auto column
+		{"", true},                       // empty
+		{"1abc", true},                   // starts with digit
+		{"_abc", true},                   // starts with underscore
+		{"ABC", true},                    // uppercase
+		{"abc-def", true},                // dash not allowed
+		{"abc.def", true},                // dot not allowed
+		{"select", true},                 // PG reserved
+		{"id", true},                     // auto column
+		{"created_at", true},             // auto column
+		{"deleted_at", true},             // auto column
 		{string(make([]byte, 64)), true}, // > 63 chars
 	}
 	for _, tc := range cases {
@@ -134,14 +134,14 @@ func TestValidateSelectOptions(t *testing.T) {
 		{`{"choices":["a","b","c"]}`, false},
 		{`{"choices":["one"]}`, false},
 
-		{`{"choices":[]}`, true},      // empty
-		{`{}`, true},                  // missing choices
-		{`null`, true},                // null
-		{``, true},                    // empty
-		{`{"choices":["a","a"]}`, true}, // duplicate
-		{`{"choices":["a",""]}`, true}, // empty value
+		{`{"choices":[]}`, true},              // empty
+		{`{}`, true},                          // missing choices
+		{`null`, true},                        // null
+		{``, true},                            // empty
+		{`{"choices":["a","a"]}`, true},       // duplicate
+		{`{"choices":["a",""]}`, true},        // empty value
 		{`{"choices": "not an array"}`, true}, // wrong type
-		{`not json`, true},            // invalid JSON
+		{`not json`, true},                    // invalid JSON
 	}
 	for _, tc := range cases {
 		err := validateSelectOptions(json.RawMessage(tc.opts))

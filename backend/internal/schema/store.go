@@ -117,8 +117,8 @@ func (s *Store) GetCollectionBySlug(ctx context.Context, slug string) (Collectio
 // CreateCollectionTx inserts a collection row inside an existing transaction.
 func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCollectionReq) (Collection, error) {
 	var (
-		id  pgtype.UUID
-		c   Collection
+		id pgtype.UUID
+		c  Collection
 	)
 	err := tx.QueryRow(ctx, `
 		INSERT INTO _meta.collections (slug, label, description, icon)

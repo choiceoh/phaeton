@@ -69,10 +69,10 @@ func NewGauge(name, help string) *Gauge {
 	return &Gauge{name: name, help: help}
 }
 
-func (g *Gauge) Inc()         { g.value.Add(1) }
-func (g *Gauge) Dec()         { g.value.Add(-1) }
-func (g *Gauge) Set(v int64)  { g.value.Store(v) }
-func (g *Gauge) Load() int64  { return g.value.Load() }
+func (g *Gauge) Inc()        { g.value.Add(1) }
+func (g *Gauge) Dec()        { g.value.Add(-1) }
+func (g *Gauge) Set(v int64) { g.value.Store(v) }
+func (g *Gauge) Load() int64 { return g.value.Load() }
 
 func (g *Gauge) writeTo(w io.Writer) {
 	fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s gauge\n%s %d\n", g.name, g.help, g.name, g.name, g.value.Load())
