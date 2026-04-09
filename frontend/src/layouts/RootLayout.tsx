@@ -1,23 +1,23 @@
-import { Link, Outlet } from 'react-router'
+import { useEffect } from 'react'
+import { Link, Outlet, useNavigate } from 'react-router'
 
-import { useAuth } from '@/lib/auth'
+import LoadingState from '@/components/common/LoadingState'
+import { Button } from '@/components/ui/button'
+import { useCurrentUser, useLogout } from '@/hooks/useAuth'
 import { ROLE_LABELS } from '@/lib/constants'
 
 export default function RootLayout() {
-  const { user, loading } = useAuth()
+  const { data: user, isLoading, isError } = useCurrentUser()
+  const logout = useLogout()
+  const navigate = useNavigate()
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-        로딩 중...
-      </div>
-    )
-  }
+  // 401 from /me means session expired or never existed.
+  useEffect(() => {
+    if (isError) navigate('/login', { replace: true })
+  }, [isError, navigate])
 
-  if (!user) {
-    // useAuth already redirected — render nothing to avoid flicker.
-    return null
-  }
+  if (isLoading) return <LoadingState />
+  if (!user) return null // useEffect will redirect
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -35,8 +35,13 @@ export default function RootLayout() {
             </Link>
           )}
         </div>
-        <div className="text-sm text-stone-500">
-          {user.name} ({ROLE_LABELS[user.role] || user.role})
+        <div className="flex items-center gap-3 text-sm text-stone-500">
+          <span>
+            {user.name} ({ROLE_LABELS[user.role] || user.role})
+          </span>
+          <Button variant="ghost" size="sm" onClick={() => logout.mutate()}>
+            로그아웃
+          </Button>
         </div>
       </nav>
       <main className="mx-auto max-w-7xl p-6">
