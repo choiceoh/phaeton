@@ -1,11 +1,14 @@
 'use client'
 
-import { Badge, Button, Card, Text } from '@tremor/react'
+import { Badge, Button, Card, Select, SelectItem, Text } from '@tremor/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 
-import { advanceMilestone } from '@/app/(frontend)/my-projects/actions'
+import {
+  updateMilestoneStatus,
+  bulkAdvanceMilestones,
+} from '@/app/(frontend)/my-projects/actions'
 import {
   MILESTONE_STATUS_LABELS,
   MILESTONE_STATUS_COLORS,
@@ -16,9 +19,10 @@ import {
 } from '@/lib/constants'
 import type { MyProjectMilestone } from '@/lib/types'
 
-const ACTION_LABEL: Record<string, string> = {
-  pending: '착수',
-  active: '완료 처리',
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  pending: ['active', 'skipped'],
+  active: ['done', 'blocked', 'pending'],
+  blocked: ['active', 'pending'],
 }
 
 interface ProjectGroup {
@@ -50,15 +54,25 @@ function groupByProject(milestones: MyProjectMilestone[]): ProjectGroup[] {
   return Array.from(map.values())
 }
 
-function MilestoneRow({ m }: { m: MyProjectMilestone }) {
+function MilestoneRow({
+  m,
+  bulkMode,
+  selected,
+  onToggle,
+}: {
+  m: MyProjectMilestone
+  bulkMode: boolean
+  selected: boolean
+  onToggle: (id: number) => void
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const canAdvance = m.milestone_status === 'pending' || m.milestone_status === 'active'
+  const transitions = VALID_TRANSITIONS[m.milestone_status]
   const overdue = Number(m.days_overdue) || 0
 
-  function handleAdvance() {
+  function handleStatusChange(newStatus: string) {
     startTransition(async () => {
-      const result = await advanceMilestone(m.milestone_id)
+      const result = await updateMilestoneStatus(m.milestone_id, newStatus)
       if ('error' in result) {
         alert(result.error)
         return
@@ -70,6 +84,14 @@ function MilestoneRow({ m }: { m: MyProjectMilestone }) {
   return (
     <div className="flex items-center justify-between border-b border-stone-100 py-2 last:border-0">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {bulkMode && transitions && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggle(m.milestone_id)}
+            className="h-4 w-4 rounded border-stone-300"
+          />
+        )}
         <span className="text-sm font-medium">{m.milestone_name}</span>
         <Badge color={MILESTONE_STATUS_COLORS[m.milestone_status] || 'gray'} size="xs">
           {MILESTONE_STATUS_LABELS[m.milestone_status] || m.milestone_status}
@@ -86,24 +108,68 @@ function MilestoneRow({ m }: { m: MyProjectMilestone }) {
         )}
         {m.due_date && <Text className="text-xs text-stone-400">마감: {m.due_date}</Text>}
       </div>
-      {canAdvance && (
-        <Button
-          size="xs"
-          variant="secondary"
-          color={m.milestone_status === 'active' ? 'green' : 'gray'}
-          onClick={handleAdvance}
-          loading={isPending}
+      {!bulkMode && transitions && (
+        <Select
+          value=""
+          placeholder="상태 변경"
+          onValueChange={handleStatusChange}
           disabled={isPending}
+          className="w-28"
         >
-          {ACTION_LABEL[m.milestone_status]}
-        </Button>
+          {transitions.map((s) => (
+            <SelectItem key={s} value={s}>
+              {MILESTONE_STATUS_LABELS[s]}
+            </SelectItem>
+          ))}
+        </Select>
       )}
     </div>
   )
 }
 
 export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone[] }) {
+  const router = useRouter()
   const groups = groupByProject(milestones)
+  const [bulkMode, setBulkMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [isPending, startTransition] = useTransition()
+
+  function toggleId(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleGroup(group: ProjectGroup) {
+    const actionable = group.milestones.filter(
+      (m) => VALID_TRANSITIONS[m.milestone_status],
+    )
+    const allSelected = actionable.every((m) => selectedIds.has(m.milestone_id))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (const m of actionable) {
+        if (allSelected) next.delete(m.milestone_id)
+        else next.add(m.milestone_id)
+      }
+      return next
+    })
+  }
+
+  function handleBulkAdvance() {
+    startTransition(async () => {
+      const result = await bulkAdvanceMilestones(Array.from(selectedIds))
+      if ('error' in result) {
+        alert(result.error)
+        return
+      }
+      setSelectedIds(new Set())
+      setBulkMode(false)
+      router.refresh()
+    })
+  }
 
   if (groups.length === 0) {
     return <p className="py-12 text-center text-stone-500">현재 배치된 프로젝트가 없습니다.</p>
@@ -111,14 +177,41 @@ export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button
+          size="xs"
+          variant={bulkMode ? 'primary' : 'secondary'}
+          color="gray"
+          onClick={() => {
+            setBulkMode((prev) => !prev)
+            setSelectedIds(new Set())
+          }}
+        >
+          {bulkMode ? '선택 모드 해제' : '선택 모드'}
+        </Button>
+      </div>
+
       {groups.map((g) => {
         const done = g.milestones.filter((m) => m.milestone_status === 'done').length
         const total = g.milestones.length
+        const actionable = g.milestones.filter(
+          (m) => VALID_TRANSITIONS[m.milestone_status],
+        )
+        const allSelected =
+          actionable.length > 0 && actionable.every((m) => selectedIds.has(m.milestone_id))
 
         return (
           <Card key={g.projectId}>
             <div className="mb-4 flex items-center justify-between">
               <div className="flex flex-wrap items-center gap-2">
+                {bulkMode && actionable.length > 0 && (
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() => toggleGroup(g)}
+                    className="h-4 w-4 rounded border-stone-300"
+                  />
+                )}
                 <Link
                   href={`/projects/${g.projectId}`}
                   className="text-base font-semibold hover:underline"
@@ -139,12 +232,45 @@ export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone
             </div>
             <div>
               {g.milestones.map((m) => (
-                <MilestoneRow key={m.milestone_id} m={m} />
+                <MilestoneRow
+                  key={m.milestone_id}
+                  m={m}
+                  bulkMode={bulkMode}
+                  selected={selectedIds.has(m.milestone_id)}
+                  onToggle={toggleId}
+                />
               ))}
             </div>
           </Card>
         )
       })}
+
+      {bulkMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200 bg-ivory-50 px-6 py-3">
+          <div className="mx-auto flex max-w-7xl items-center justify-between">
+            <Text className="text-sm font-medium">{selectedIds.size}개 선택됨</Text>
+            <div className="flex gap-2">
+              <Button
+                size="xs"
+                variant="primary"
+                color="blue"
+                onClick={handleBulkAdvance}
+                loading={isPending}
+              >
+                일괄 진행
+              </Button>
+              <Button
+                size="xs"
+                variant="secondary"
+                color="gray"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                선택 해제
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

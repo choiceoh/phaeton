@@ -14,6 +14,7 @@ import {
   TableCell,
 } from '@tremor/react'
 
+import { DocumentUploadForm } from '@/components/DocumentUploadForm'
 import { MilestoneTimeline } from '@/components/MilestoneTimeline'
 import {
   PROJECT_STATUS_LABELS,
@@ -52,6 +53,7 @@ interface DocumentItem {
 }
 
 interface ProjectData {
+  id: string | number
   name: string
   code: string
   type: string
@@ -206,6 +208,7 @@ export function ProjectDetailView({
                 )}
               </TableBody>
             </Table>
+            <DocumentUploadForm projectId={String(project.id)} />
           </Card>
         </div>
       </div>

@@ -18,20 +18,67 @@ import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/constants'
 import { formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
-export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
+interface SortableHeaderProps {
+  label: string
+  column: string
+  sort: string
+  onSort: (col: string) => void
+}
+
+function SortableHeader({ label, column, sort, onSort }: SortableHeaderProps) {
+  const active = sort === column || sort === `-${column}`
+  const desc = sort === `-${column}`
+  const indicator = active ? (desc ? ' \u2193' : ' \u2191') : ''
+
+  return (
+    <TableHeaderCell
+      className="cursor-pointer select-none hover:text-stone-900"
+      onClick={() => onSort(column)}
+    >
+      {label}{indicator}
+    </TableHeaderCell>
+  )
+}
+
+export function ProjectTable({
+  projects,
+  sort = '',
+  onSort,
+}: {
+  projects: ProjectProgress[]
+  sort?: string
+  onSort?: (col: string) => void
+}) {
+  const handleSort = onSort || (() => {})
+
   return (
     <Card>
       <Table className="[&_td]:py-1.5 [&_th]:py-2">
         <caption className="sr-only">프로젝트 진행 현황</caption>
         <TableHead>
           <TableRow>
-            <TableHeaderCell>프로젝트명</TableHeaderCell>
+            <SortableHeader label="프로젝트명" column="name" sort={sort} onSort={handleSort} />
             <TableHeaderCell>유형</TableHeaderCell>
             <TableHeaderCell>상태</TableHeaderCell>
-            <TableHeaderCell>용량(kW)</TableHeaderCell>
-            <TableHeaderCell>진행률</TableHeaderCell>
+            <SortableHeader
+              label="용량(kW)"
+              column="capacity_kw"
+              sort={sort}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              label="진행률"
+              column="progress_pct"
+              sort={sort}
+              onSort={handleSort}
+            />
             <TableHeaderCell>마일스톤</TableHeaderCell>
-            <TableHeaderCell>COD 목표</TableHeaderCell>
+            <SortableHeader
+              label="COD 목표"
+              column="cod_target"
+              sort={sort}
+              onSort={handleSort}
+            />
           </TableRow>
         </TableHead>
         <TableBody>

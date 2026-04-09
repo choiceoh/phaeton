@@ -8,6 +8,8 @@ import {
   getCachedOverdueMilestones,
   getCachedExpiringDocuments,
   getCachedStaffLoad,
+  getCachedMilestoneTrends,
+  getCachedMonthlyCod,
 } from '@/lib/cachedQueries'
 
 import config from '@payload-config'
@@ -26,12 +28,14 @@ export default async function DashboardPage() {
     // 미인증 사용자 — 기본 레이아웃 사용
   }
 
-  const [summary, projects, overdue, expiring, staffLoad] = await Promise.all([
+  const [summary, projects, overdue, expiring, staffLoad, trends, codData] = await Promise.all([
     getCachedSummaryStats(),
     getCachedProjectProgress(),
     getCachedOverdueMilestones(),
     getCachedExpiringDocuments(),
     getCachedStaffLoad(),
+    getCachedMilestoneTrends(),
+    getCachedMonthlyCod(),
   ])
 
   const overloadedStaff = staffLoad.filter((s) => Number(s.total_allocation) > 100)
@@ -70,6 +74,8 @@ export default async function DashboardPage() {
         expiring,
         overloadedStaff,
         staffLoad,
+        trends,
+        codData,
       }}
       userId={userId || 0}
       savedConfig={savedConfig}

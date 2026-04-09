@@ -2,6 +2,7 @@ import { headers } from 'next/headers'
 import Link from 'next/link'
 import { getPayload } from 'payload'
 
+import { ChatContextProvider } from '@/components/ChatContext'
 import ChatWidget from '@/components/ChatWidget'
 
 import config from '@payload-config'
@@ -89,8 +90,10 @@ export default async function FrontendLayout({ children }: { children: React.Rea
             )}
           </div>
         </nav>
-        <main className="mx-auto max-w-7xl p-6">{children}</main>
-        <ChatWidget />
+        <ChatContextProvider>
+          <main className="mx-auto max-w-7xl p-6">{children}</main>
+          <ChatWidget />
+        </ChatContextProvider>
       </body>
     </html>
   )

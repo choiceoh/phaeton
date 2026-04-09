@@ -74,3 +74,101 @@ export async function advanceMilestone(milestoneId: number) {
     milestoneName: milestone.name,
   }
 }
+
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  pending: ['active', 'skipped'],
+  active: ['done', 'blocked', 'pending'],
+  blocked: ['active', 'pending'],
+}
+
+export async function updateMilestoneStatus(milestoneId: number, newStatus: string) {
+  const payload = await getPayload({ config })
+  const { user } = await payload.auth({ headers: await headers() })
+  if (!user) return { error: '인증이 필요합니다.' }
+
+  const milestone = await payload.findByID({
+    collection: 'project-milestones',
+    id: milestoneId,
+  })
+
+  const allowed = VALID_TRANSITIONS[milestone.status]
+  if (!allowed || !allowed.includes(newStatus)) {
+    return { error: `${milestone.status}에서 ${newStatus}(으)로 변경할 수 없습니다.` }
+  }
+
+  const staffRes = await payload.find({
+    collection: 'staff',
+    where: { user: { equals: user.id } },
+    limit: 1,
+  })
+  if (staffRes.docs.length === 0) return { error: '인력 정보가 없습니다.' }
+
+  const staffId = staffRes.docs[0].id
+  const today = new Date().toISOString().split('T')[0]
+
+  const assignmentRes = await payload.find({
+    collection: 'staff-assignments',
+    where: {
+      and: [
+        { staff: { equals: staffId } },
+        { project: { equals: milestone.project } },
+        { startDate: { less_than_equal: today } },
+        {
+          or: [{ endDate: { exists: false } }, { endDate: { greater_than_equal: today } }],
+        },
+      ],
+    },
+    limit: 1,
+  })
+  if (assignmentRes.docs.length === 0) {
+    return { error: '이 프로젝트에 배치되지 않았습니다.' }
+  }
+
+  const updateData: Record<string, unknown> = { status: newStatus }
+  if (newStatus === 'done') updateData.actualDate = today
+
+  await payload.update({
+    collection: 'project-milestones',
+    id: milestoneId,
+    data: updateData,
+  })
+
+  return { ok: true, newStatus, milestoneName: milestone.name }
+}
+
+export async function bulkAdvanceMilestones(milestoneIds: number[]) {
+  const payload = await getPayload({ config })
+  const { user } = await payload.auth({ headers: await headers() })
+  if (!user) return { error: '인증이 필요합니다.' }
+
+  const staffRes = await payload.find({
+    collection: 'staff',
+    where: { user: { equals: user.id } },
+    limit: 1,
+  })
+  if (staffRes.docs.length === 0) return { error: '인력 정보가 없습니다.' }
+
+  const today = new Date().toISOString().split('T')[0]
+  const results: { id: number; newStatus: string; name: string }[] = []
+
+  for (const id of milestoneIds) {
+    const milestone = await payload.findByID({
+      collection: 'project-milestones',
+      id,
+    })
+    const nextStatus = NEXT_STATUS[milestone.status]
+    if (!nextStatus) continue
+
+    const updateData: Record<string, unknown> = { status: nextStatus }
+    if (nextStatus === 'done') updateData.actualDate = today
+
+    await payload.update({
+      collection: 'project-milestones',
+      id,
+      data: updateData,
+    })
+    results.push({ id, newStatus: nextStatus, name: milestone.name })
+  }
+
+  return { ok: true, results }
+}
