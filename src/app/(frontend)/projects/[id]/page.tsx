@@ -69,7 +69,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       <ChatContextSetter context={chatContext} />
       <ProjectDetailView
         project={{
-          id,
+          id: String(project.id),
           name: project.name,
           code: project.code,
           type: project.type,
