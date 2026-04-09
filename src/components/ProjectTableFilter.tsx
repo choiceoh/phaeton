@@ -65,7 +65,7 @@ export function ProjectTableFilter({ projects }: { projects: ProjectProgress[] }
           <SelectItem value="cod">운영</SelectItem>
         </Select>
         <a href="/api/export/projects" download className="ml-auto">
-          <Button variant="secondary" color="blue" size="sm">
+          <Button variant="secondary" size="sm">
             Excel 다운로드
           </Button>
         </a>

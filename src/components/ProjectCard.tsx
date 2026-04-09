@@ -23,7 +23,7 @@ export function ProjectCard({ project }: { project: ProjectProgress }) {
           <Text className="text-xs text-stone-500">{project.capacity_kw} kW</Text>
         )}
       </div>
-      <ProgressBar value={progress} color={progress === 100 ? 'green' : 'blue'} />
+      <ProgressBar value={progress} color={progress === 100 ? 'green' : 'neutral'} />
       <div className="mt-1 flex justify-between">
         <Text className="text-xs text-stone-500">
           {project.done_milestones}/{project.total_milestones} 마일스톤

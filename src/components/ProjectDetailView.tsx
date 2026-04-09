@@ -115,7 +115,7 @@ export function ProjectDetailView({
           </div>
         </div>
 
-        <ProgressBar value={pct} color={pct === 100 ? 'green' : 'blue'} />
+        <ProgressBar value={pct} color={pct === 100 ? 'green' : 'neutral'} />
         <Text className="mt-1 text-xs text-gray-500">
           {done}/{total} 마일스톤 완료
         </Text>
@@ -147,7 +147,7 @@ export function ProjectDetailView({
                     </TableCell>
                     <TableCell>{a.roleOnProject || '-'}</TableCell>
                     <TableCell>
-                      <Badge color={Number(a.allocationPct) > 100 ? 'red' : 'blue'}>
+                      <Badge color={Number(a.allocationPct) > 100 ? 'red' : 'gray'}>
                         {a.allocationPct}%
                       </Badge>
                     </TableCell>

@@ -36,7 +36,7 @@ export function StaffTable({ staff }: { staff: StaffRow[] }) {
         <TableBody>
           {staff.map((s) => {
             const alloc = Number(s.total_allocation)
-            const color = alloc > 100 ? 'red' : alloc >= 80 ? 'amber' : 'blue'
+            const color = alloc > 100 ? 'red' : alloc >= 80 ? 'amber' : 'gray'
             return (
               <TableRow key={s.id}>
                 <TableCell>

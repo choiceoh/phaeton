@@ -27,11 +27,11 @@ export function DashboardCards({ summary }: { summary: SummaryStats }) {
         <Text>개발허가</Text>
         <Metric>{summary.dev_permit_count}</Metric>
       </Card>
-      <Card decoration="top" decorationColor="blue">
+      <Card decoration="top" decorationColor="stone">
         <Text>토목</Text>
         <Metric>{summary.civil_count}</Metric>
       </Card>
-      <Card decoration="top" decorationColor="blue">
+      <Card decoration="top" decorationColor="stone">
         <Text>구조물·전기</Text>
         <Metric>{summary.structural_elec_count}</Metric>
       </Card>

@@ -90,7 +90,7 @@ function MilestoneRow({ m }: { m: MyProjectMilestone }) {
         <Button
           size="xs"
           variant="secondary"
-          color={m.milestone_status === 'active' ? 'green' : 'blue'}
+          color={m.milestone_status === 'active' ? 'green' : 'gray'}
           onClick={handleAdvance}
           loading={isPending}
           disabled={isPending}
