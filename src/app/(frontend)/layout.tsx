@@ -25,7 +25,7 @@ export default async function FrontendLayout({ children }: { children: React.Rea
   let user: { name?: string; role?: string } | null = null
   try {
     const result = await payload.auth({ headers: await headers() })
-    user = result.user
+    user = result.user as { name?: string; role?: string } | null
   } catch {
     // 개발 단계 — 인증 없이 접근 허용
   }

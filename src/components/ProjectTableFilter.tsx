@@ -3,13 +3,16 @@
 import { Select, SelectItem, TextInput } from '@tremor/react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 
+import { ColumnSettings } from '@/components/ColumnSettings'
 import { ProjectTable } from '@/components/ProjectTable'
 import type { ProjectProgress } from '@/lib/types'
+import { useColumnPrefs } from '@/lib/useColumnPrefs'
 
 export function ProjectTableFilter({ projects }: { projects: ProjectProgress[] }) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
+  const { visibleKeys } = useColumnPrefs()
 
   const typeFilter = searchParams.get('type') || 'all'
   const statusFilter = searchParams.get('status') || 'all'
@@ -64,15 +67,18 @@ export function ProjectTableFilter({ projects }: { projects: ProjectProgress[] }
           <SelectItem value="testing">시운전</SelectItem>
           <SelectItem value="cod">운영</SelectItem>
         </Select>
-        <a
-          href="/api/export/projects"
-          download
-          className="ml-auto text-sm text-stone-500 underline underline-offset-2 hover:text-stone-700"
-        >
-          Excel 다운로드
-        </a>
+        <div className="ml-auto flex items-center gap-4">
+          <ColumnSettings />
+          <a
+            href="/api/export/projects"
+            download
+            className="text-sm text-stone-500 underline underline-offset-2 hover:text-stone-700"
+          >
+            Excel 다운로드
+          </a>
+        </div>
       </div>
-      <ProjectTable projects={filtered} />
+      <ProjectTable projects={filtered} visibleKeys={visibleKeys} />
     </div>
   )
 }
