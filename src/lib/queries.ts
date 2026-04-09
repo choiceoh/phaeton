@@ -8,6 +8,9 @@ import type {
   StaffLoadItem,
   ExpiringDocument,
   MyProjectMilestone,
+  PaginatedResult,
+  MonthlyMilestoneCount,
+  MonthlyCodData,
 } from '@/lib/types'
 
 export async function getSummaryStats(payload: Payload): Promise<SummaryStats> {
@@ -145,25 +148,144 @@ export async function getMyMilestones(
   return result.rows as unknown as MyProjectMilestone[]
 }
 
-export async function getProjectExportRows(payload: Payload): Promise<ProjectExportRow[]> {
+export async function getProjectExportRows(
+  payload: Payload,
+  filters?: { type?: string; status?: string; q?: string },
+): Promise<ProjectExportRow[]> {
   const db = payload.db.drizzle
+  const conditions: string[] = []
+  if (filters?.type) conditions.push(`p.type = '${filters.type.replace(/'/g, "''")}'`)
+  if (filters?.status) conditions.push(`p.status = '${filters.status.replace(/'/g, "''")}'`)
+  if (filters?.q) conditions.push(`p.name ILIKE '%${filters.q.replace(/'/g, "''")}%'`)
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
   const result = await db.execute(`
     SELECT
       p.code,
       p.name,
       p.type,
       p.status,
+      p.department,
+      p.capacity_kw,
       ROUND(
         100.0 * COUNT(pm.id) FILTER (WHERE pm.status = 'done')
         / NULLIF(COUNT(pm.id), 0), 1
       ) AS progress_pct,
+      COUNT(pm.id) AS total_milestones,
+      COUNT(pm.id) FILTER (WHERE pm.status = 'done') AS done_milestones,
+      MIN(pm.due_date) FILTER (
+        WHERE pm.status IN ('pending', 'active')
+      ) AS next_due,
       p.created_at,
       p.cod_target,
       p.epc_value
     FROM projects p
     LEFT JOIN project_milestones pm ON pm.project_id = p.id
+    ${where}
     GROUP BY p.id
     ORDER BY p.code
   `)
   return result.rows as unknown as ProjectExportRow[]
+}
+
+const SORT_COLUMNS: Record<string, string> = {
+  name: 'p.name',
+  capacity_kw: 'p.capacity_kw',
+  progress_pct: 'progress_pct',
+  cod_target: 'p.cod_target',
+}
+
+export async function getProjectProgressPaginated(
+  payload: Payload,
+  opts: {
+    page?: number
+    limit?: number
+    sort?: string
+    type?: string
+    status?: string
+    q?: string
+  },
+): Promise<PaginatedResult<ProjectProgress>> {
+  const db = payload.db.drizzle
+  const page = Math.max(1, opts.page || 1)
+  const limit = Math.min(100, Math.max(1, opts.limit || 20))
+  const offset = (page - 1) * limit
+
+  const conditions: string[] = []
+  if (opts.type) conditions.push(`p.type = '${opts.type.replace(/'/g, "''")}'`)
+  if (opts.status) conditions.push(`p.status = '${opts.status.replace(/'/g, "''")}'`)
+  if (opts.q) conditions.push(`p.name ILIKE '%${opts.q.replace(/'/g, "''")}%'`)
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+  let orderBy = 'progress_pct DESC NULLS LAST'
+  if (opts.sort) {
+    const desc = opts.sort.startsWith('-')
+    const key = desc ? opts.sort.slice(1) : opts.sort
+    const col = SORT_COLUMNS[key]
+    if (col) orderBy = `${col} ${desc ? 'DESC' : 'ASC'} NULLS LAST`
+  }
+
+  const [dataResult, countResult] = await Promise.all([
+    db.execute(`
+      SELECT
+        p.id, p.name, p.type, p.status, p.department, p.capacity_kw, p.cod_target,
+        COUNT(pm.id) AS total_milestones,
+        COUNT(pm.id) FILTER (WHERE pm.status = 'done') AS done_milestones,
+        ROUND(
+          100.0 * COUNT(pm.id) FILTER (WHERE pm.status = 'done')
+          / NULLIF(COUNT(pm.id), 0), 1
+        ) AS progress_pct,
+        MIN(pm.due_date) FILTER (
+          WHERE pm.status IN ('pending', 'active')
+        ) AS next_due
+      FROM projects p
+      LEFT JOIN project_milestones pm ON pm.project_id = p.id
+      ${where}
+      GROUP BY p.id
+      ORDER BY ${orderBy}
+      LIMIT ${limit} OFFSET ${offset}
+    `),
+    db.execute(`SELECT COUNT(*) AS cnt FROM projects p ${where}`),
+  ])
+
+  const totalDocs = Number((countResult.rows[0] as { cnt: string }).cnt)
+  return {
+    docs: dataResult.rows as unknown as ProjectProgress[],
+    totalDocs,
+    totalPages: Math.ceil(totalDocs / limit),
+    page,
+    limit,
+  }
+}
+
+export async function getMonthlyMilestoneTrends(
+  payload: Payload,
+): Promise<MonthlyMilestoneCount[]> {
+  const db = payload.db.drizzle
+  const result = await db.execute(`
+    SELECT
+      to_char(date_trunc('month', pm.actual_date), 'YYYY-MM') AS month,
+      COUNT(*) AS completed
+    FROM project_milestones pm
+    WHERE pm.status = 'done'
+      AND pm.actual_date >= CURRENT_DATE - INTERVAL '12 months'
+    GROUP BY date_trunc('month', pm.actual_date)
+    ORDER BY date_trunc('month', pm.actual_date)
+  `)
+  return result.rows as unknown as MonthlyMilestoneCount[]
+}
+
+export async function getMonthlyCodChart(payload: Payload): Promise<MonthlyCodData[]> {
+  const db = payload.db.drizzle
+  const result = await db.execute(`
+    SELECT
+      to_char(date_trunc('month', cod_target), 'YYYY-MM') AS month,
+      COUNT(*) AS project_count,
+      COALESCE(SUM(capacity_kw), 0) AS total_kw
+    FROM projects
+    WHERE cod_target IS NOT NULL
+    GROUP BY date_trunc('month', cod_target)
+    ORDER BY date_trunc('month', cod_target)
+  `)
+  return result.rows as unknown as MonthlyCodData[]
 }

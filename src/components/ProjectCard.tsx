@@ -3,7 +3,7 @@
 import { Card, Badge, ProgressBar, Text } from '@tremor/react'
 
 import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS, PROJECT_TYPE_COLORS } from '@/lib/constants'
-import { formatCodTarget } from '@/lib/format'
+import { fmtNum, formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
 export function ProjectCard({ project }: { project: ProjectProgress }) {
@@ -20,7 +20,7 @@ export function ProjectCard({ project }: { project: ProjectProgress }) {
       <div className="mb-3 flex items-center gap-2">
         <Badge color="gray">{PROJECT_STATUS_LABELS[project.status] || project.status}</Badge>
         {project.capacity_kw && (
-          <Text className="text-xs text-stone-500">{project.capacity_kw} kW</Text>
+          <Text className="text-xs text-stone-500">{fmtNum(project.capacity_kw)} kW</Text>
         )}
       </div>
       <ProgressBar value={progress} color={progress === 100 ? 'green' : 'neutral'} />
