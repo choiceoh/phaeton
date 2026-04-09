@@ -36,6 +36,7 @@ import {
   PROJECT_STATUS_LABELS,
   CATEGORY_LABELS,
 } from '@/lib/constants'
+import { fmtNum } from '@/lib/format'
 import type { MyProjectMilestone } from '@/lib/types'
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -163,7 +164,7 @@ function SortableMilestoneRow({
           )}
           {overdue > 0 && (
             <Badge color="red" size="xs">
-              {overdue}일 지연
+              {fmtNum(overdue)}일 지연
             </Badge>
           )}
           {m.due_date && <Text className="text-xs text-stone-400">마감: {m.due_date}</Text>}

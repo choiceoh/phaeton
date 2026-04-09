@@ -22,6 +22,8 @@ import {
 } from '@tremor/react'
 import { useState } from 'react'
 
+import { fmtNum } from '@/lib/format'
+
 interface StaffRow {
   id: number | string
   name: string
@@ -56,7 +58,7 @@ const columns: ColumnDef<StaffRow>[] = [
       return (
         <div className="flex items-center gap-2">
           <ProgressBar value={Math.min(alloc, 100)} color={color} className="w-24" />
-          <Badge color={color}>{alloc}%</Badge>
+          <Badge color={color}>{fmtNum(alloc)}%</Badge>
         </div>
       )
     },
@@ -65,6 +67,7 @@ const columns: ColumnDef<StaffRow>[] = [
     id: 'projects',
     accessorFn: (row) => Number(row.active_projects),
     header: '프로젝트 수',
+    cell: ({ row }) => fmtNum(row.original.active_projects),
   },
 ]
 

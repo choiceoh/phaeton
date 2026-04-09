@@ -16,7 +16,7 @@ import Link from 'next/link'
 
 import { WarmBadge } from '@/components/WarmBadge'
 import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/constants'
-import { formatCodTarget } from '@/lib/format'
+import { fmtNum, formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
 function SortIcon({ column, sort }: { column: string; sort: string }) {
@@ -59,7 +59,10 @@ const columns: ColumnDef<ProjectProgress>[] = [
     id: 'capacity_kw',
     accessorKey: 'capacity_kw',
     header: '용량(kW)',
-    cell: ({ row }) => row.original.capacity_kw ?? '-',
+    cell: ({ row }) =>
+      row.original.capacity_kw !== null && row.original.capacity_kw !== undefined
+        ? fmtNum(row.original.capacity_kw)
+        : '-',
   },
   {
     id: 'progress',
