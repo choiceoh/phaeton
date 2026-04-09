@@ -3,16 +3,23 @@
 import { Card, Badge, List, ListItem, Text } from '@tremor/react'
 import Link from 'next/link'
 
+import { CodChart } from '@/components/CodChart'
 import { DashboardCards } from '@/components/DashboardCards'
-import { fmtNum } from '@/lib/format'
+import { ExpiringDocsTimeline } from '@/components/ExpiringDocsTimeline'
 import { ProjectGrid } from '@/components/ProjectGrid'
+import { ProjectProgressChart } from '@/components/ProjectProgressChart'
+import { ProjectStatusDonut } from '@/components/ProjectStatusDonut'
+import { StaffLoadBar } from '@/components/StaffLoadBar'
 import { StaffTable } from '@/components/StaffTable'
+import { fmtNum } from '@/lib/format'
 import type {
   SummaryStats,
   ProjectProgress,
   OverdueMilestone,
   ExpiringDocument,
   StaffLoadItem,
+  MonthlyMilestoneCount,
+  MonthlyCodData,
 } from '@/lib/types'
 
 export interface DashboardData {
@@ -22,6 +29,8 @@ export interface DashboardData {
   expiring: ExpiringDocument[]
   overloadedStaff: StaffLoadItem[]
   staffLoad: StaffLoadItem[]
+  trends: MonthlyMilestoneCount[]
+  codData: MonthlyCodData[]
 }
 
 export function WidgetRenderer({ widgetId, data }: { widgetId: string; data: DashboardData }) {
@@ -43,6 +52,21 @@ export function WidgetRenderer({ widgetId, data }: { widgetId: string; data: Das
 
     case 'staff-table':
       return <StaffTable staff={data.staffLoad} />
+
+    case 'progress-chart':
+      return <ProjectProgressChart data={data.trends} />
+
+    case 'cod-chart':
+      return <CodChart data={data.codData} />
+
+    case 'status-donut':
+      return <ProjectStatusDonut projects={data.projects} />
+
+    case 'staff-load-chart':
+      return <StaffLoadBar staff={data.staffLoad} />
+
+    case 'expiring-calendar':
+      return <ExpiringDocsTimeline documents={data.expiring} />
 
     default:
       return (

@@ -2,7 +2,7 @@ import { differenceInCalendarDays, format, formatDistanceToNow, parseISO } from 
 import { ko } from 'date-fns/locale'
 
 export function fmtNum(v: number | string | null | undefined): string {
-  if (v == null) return '-'
+  if (v === null || v === undefined) return '-'
   return Number(v).toLocaleString('ko-KR')
 }
 

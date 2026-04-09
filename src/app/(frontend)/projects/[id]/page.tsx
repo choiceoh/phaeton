@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 
+import { ChatContextSetter } from '@/components/ChatContextSetter'
 import { ProjectDetailView } from '@/components/ProjectDetailView'
 
 import config from '@payload-config'
@@ -57,9 +58,18 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         : null,
   }))
 
+  const chatContext = [
+    `프로젝트: ${project.name} (${project.code})`,
+    `유형: ${project.type}, 상태: ${project.status}`,
+    `마일스톤: ${milestones.length}개 중 ${milestones.filter((m) => m.status === 'done').length}개 완료`,
+  ].join('\n')
+
   return (
+    <>
+    <ChatContextSetter context={chatContext} />
     <ProjectDetailView
       project={{
+        id,
         name: project.name,
         code: project.code,
         type: project.type,
@@ -87,5 +97,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         expiryDate: d.expiryDate ?? null,
       }))}
     />
+    </>
   )
 }

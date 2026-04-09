@@ -1,13 +1,6 @@
 'use client'
 
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  flexRender,
-  type SortingState,
-  type ColumnDef,
-} from '@tanstack/react-table'
+import { useReactTable, getCoreRowModel, flexRender, type ColumnDef } from '@tanstack/react-table'
 import {
   Card,
   ProgressBar,
@@ -20,20 +13,23 @@ import {
   Text,
 } from '@tremor/react'
 import Link from 'next/link'
-import { useState } from 'react'
 
 import { WarmBadge } from '@/components/WarmBadge'
 import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/constants'
 import { fmtNum, formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
-function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
-  if (!sorted) return <span className="ml-1 text-stone-300">↕</span>
-  return <span className="ml-1">{sorted === 'asc' ? '↑' : '↓'}</span>
+function SortIcon({ column, sort }: { column: string; sort: string }) {
+  const active = sort === column || sort === `-${column}`
+  if (!active) return <span className="ml-1 text-stone-300">{'\u2195'}</span>
+  return <span className="ml-1">{sort.startsWith('-') ? '\u2193' : '\u2191'}</span>
 }
+
+const SORTABLE_COLUMNS = new Set(['name', 'capacity_kw', 'progress', 'cod_target'])
 
 const columns: ColumnDef<ProjectProgress>[] = [
   {
+    id: 'name',
     accessorKey: 'name',
     header: '프로젝트명',
     cell: ({ row }) => (
@@ -51,31 +47,22 @@ const columns: ColumnDef<ProjectProgress>[] = [
     cell: ({ row }) => (
       <WarmBadge>{PROJECT_TYPE_LABELS[row.original.type] || row.original.type}</WarmBadge>
     ),
-    sortingFn: (a, b) => {
-      const la = PROJECT_TYPE_LABELS[a.original.type] || a.original.type
-      const lb = PROJECT_TYPE_LABELS[b.original.type] || b.original.type
-      return la.localeCompare(lb, 'ko')
-    },
   },
   {
     accessorKey: 'status',
     header: '상태',
     cell: ({ row }) => (
-      <WarmBadge>
-        {PROJECT_STATUS_LABELS[row.original.status] || row.original.status}
-      </WarmBadge>
+      <WarmBadge>{PROJECT_STATUS_LABELS[row.original.status] || row.original.status}</WarmBadge>
     ),
-    sortingFn: (a, b) => {
-      const la = PROJECT_STATUS_LABELS[a.original.status] || a.original.status
-      const lb = PROJECT_STATUS_LABELS[b.original.status] || b.original.status
-      return la.localeCompare(lb, 'ko')
-    },
   },
   {
+    id: 'capacity_kw',
     accessorKey: 'capacity_kw',
     header: '용량(kW)',
     cell: ({ row }) =>
-      row.original.capacity_kw != null ? fmtNum(row.original.capacity_kw) : '-',
+      row.original.capacity_kw !== null && row.original.capacity_kw !== undefined
+        ? fmtNum(row.original.capacity_kw)
+        : '-',
   },
   {
     id: 'progress',
@@ -98,30 +85,31 @@ const columns: ColumnDef<ProjectProgress>[] = [
   },
   {
     id: 'milestones',
-    accessorFn: (row) =>
-      Number(row.done_milestones) / (Number(row.total_milestones) || 1),
+    accessorFn: (row) => Number(row.done_milestones) / (Number(row.total_milestones) || 1),
     header: '마일스톤',
-    cell: ({ row }) =>
-      `${row.original.done_milestones}/${row.original.total_milestones}`,
+    cell: ({ row }) => `${row.original.done_milestones}/${row.original.total_milestones}`,
   },
   {
+    id: 'cod_target',
     accessorKey: 'cod_target',
     header: 'COD 목표',
-    cell: ({ row }) =>
-      row.original.cod_target ? formatCodTarget(row.original.cod_target) : '-',
+    cell: ({ row }) => (row.original.cod_target ? formatCodTarget(row.original.cod_target) : '-'),
   },
 ]
 
-export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
-  const [sorting, setSorting] = useState<SortingState>([])
-
+export function ProjectTable({
+  projects,
+  sort = '',
+  onSort,
+}: {
+  projects: ProjectProgress[]
+  sort?: string
+  onSort?: (col: string) => void
+}) {
   const table = useReactTable({
     data: projects,
     columns,
-    state: { sorting },
-    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
   })
 
   return (
@@ -131,16 +119,29 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
         <TableHead>
           {table.getHeaderGroups().map((hg) => (
             <TableRow key={hg.id}>
-              {hg.headers.map((header) => (
-                <TableHeaderCell
-                  key={header.id}
-                  className="cursor-pointer select-none"
-                  onClick={header.column.getToggleSortingHandler()}
-                >
-                  {flexRender(header.column.columnDef.header, header.getContext())}
-                  <SortIcon sorted={header.column.getIsSorted()} />
-                </TableHeaderCell>
-              ))}
+              {hg.headers.map((header) => {
+                const colId = header.column.id
+                const sortable = SORTABLE_COLUMNS.has(colId) && onSort
+                return (
+                  <TableHeaderCell
+                    key={header.id}
+                    className={sortable ? 'cursor-pointer select-none' : ''}
+                    onClick={
+                      sortable
+                        ? () => onSort(colId === 'progress' ? 'progress_pct' : colId)
+                        : undefined
+                    }
+                  >
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                    {sortable && (
+                      <SortIcon
+                        column={colId === 'progress' ? 'progress_pct' : colId}
+                        sort={sort}
+                      />
+                    )}
+                  </TableHeaderCell>
+                )
+              })}
             </TableRow>
           ))}
         </TableHead>

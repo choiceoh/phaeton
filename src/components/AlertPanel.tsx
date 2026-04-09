@@ -22,7 +22,9 @@ export function AlertPanel({
       <Card>
         <div className="mb-3 flex items-center gap-2">
           <Text className="font-medium">지연 마일스톤</Text>
-          {overdueMilestones.length > 0 && <Badge color="red">{fmtNum(overdueMilestones.length)}</Badge>}
+          {overdueMilestones.length > 0 && (
+            <Badge color="red">{fmtNum(overdueMilestones.length)}</Badge>
+          )}
         </div>
         {overdueMilestones.length > 0 ? (
           <List>
@@ -49,7 +51,9 @@ export function AlertPanel({
       <Card>
         <div className="mb-3 flex items-center gap-2">
           <Text className="font-medium">만료 임박 서류</Text>
-          {expiringDocuments.length > 0 && <Badge color="amber">{fmtNum(expiringDocuments.length)}</Badge>}
+          {expiringDocuments.length > 0 && (
+            <Badge color="amber">{fmtNum(expiringDocuments.length)}</Badge>
+          )}
         </div>
         {expiringDocuments.length > 0 ? (
           <List>
@@ -76,7 +80,9 @@ export function AlertPanel({
       <Card>
         <div className="mb-3 flex items-center gap-2">
           <Text className="font-medium">과할당 인력</Text>
-          {overloadedStaff.length > 0 && <Badge color="red">{fmtNum(overloadedStaff.length)}</Badge>}
+          {overloadedStaff.length > 0 && (
+            <Badge color="red">{fmtNum(overloadedStaff.length)}</Badge>
+          )}
         </div>
         {overloadedStaff.length > 0 ? (
           <List>

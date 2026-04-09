@@ -33,8 +33,8 @@ interface StaffRow {
 }
 
 function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
-  if (!sorted) return <span className="ml-1 text-stone-300">↕</span>
-  return <span className="ml-1">{sorted === 'asc' ? '↑' : '↓'}</span>
+  if (!sorted) return <span className="ml-1 text-stone-300">{'\u2195'}</span>
+  return <span className="ml-1">{sorted === 'asc' ? '\u2191' : '\u2193'}</span>
 }
 
 const columns: ColumnDef<StaffRow>[] = [

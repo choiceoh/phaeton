@@ -7,6 +7,8 @@ import {
   getOverdueMilestones,
   getExpiringDocuments,
   getStaffLoad,
+  getMonthlyMilestoneTrends,
+  getMonthlyCodChart,
 } from '@/lib/queries'
 
 import config from '@payload-config'
@@ -62,4 +64,22 @@ export const getCachedStaffLoad = unstable_cache(
   },
   ['dashboard-staff-load'],
   { revalidate: 300, tags: ['dashboard', 'staff'] },
+)
+
+export const getCachedMilestoneTrends = unstable_cache(
+  async () => {
+    const payload = await getPayload({ config })
+    return getMonthlyMilestoneTrends(payload)
+  },
+  ['dashboard-milestone-trends'],
+  { revalidate: 300, tags: ['dashboard', 'trends'] },
+)
+
+export const getCachedMonthlyCod = unstable_cache(
+  async () => {
+    const payload = await getPayload({ config })
+    return getMonthlyCodChart(payload)
+  },
+  ['dashboard-monthly-cod'],
+  { revalidate: 300, tags: ['dashboard', 'cod'] },
 )
