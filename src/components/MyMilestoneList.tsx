@@ -1,11 +1,28 @@
 'use client'
 
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
 import { Badge, Button, Card, Text } from '@tremor/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 
-import { advanceMilestone } from '@/app/(frontend)/my-projects/actions'
+import { advanceMilestone, reorderMilestones } from '@/app/(frontend)/my-projects/actions'
 import {
   MILESTONE_STATUS_LABELS,
   MILESTONE_STATUS_COLORS,
@@ -50,55 +67,158 @@ function groupByProject(milestones: MyProjectMilestone[]): ProjectGroup[] {
   return Array.from(map.values())
 }
 
-function MilestoneRow({ m }: { m: MyProjectMilestone }) {
+function SortableMilestoneRow({ m }: { m: MyProjectMilestone }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const canAdvance = m.milestone_status === 'pending' || m.milestone_status === 'active'
   const overdue = Number(m.days_overdue) || 0
 
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: m.milestone_id })
+
+  const style = {
+    transform: transform
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+      : undefined,
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
   function handleAdvance() {
     startTransition(async () => {
       const result = await advanceMilestone(m.milestone_id)
       if ('error' in result) {
-        alert(result.error)
+        toast.error(result.error)
         return
       }
+      toast.success(`${result.milestoneName} → ${result.newStatus === 'done' ? '완료' : '진행중'}`)
       router.refresh()
     })
   }
 
   return (
-    <div className="flex items-center justify-between border-b border-stone-100 py-2 last:border-0">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="text-sm font-medium">{m.milestone_name}</span>
-        <Badge color={MILESTONE_STATUS_COLORS[m.milestone_status] || 'gray'} size="xs">
-          {MILESTONE_STATUS_LABELS[m.milestone_status] || m.milestone_status}
-        </Badge>
-        {m.category && (
-          <Badge color="gray" size="xs">
-            {CATEGORY_LABELS[m.category] || m.category}
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <div
+        className="flex items-center justify-between border-b border-stone-100 py-2 last:border-0"
+      >
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="cursor-grab touch-none text-stone-300 hover:text-stone-500"
+            aria-label="드래그하여 순서 변경"
+            {...listeners}
+          >
+            ⠿
+          </button>
+          <span className="text-sm font-medium">{m.milestone_name}</span>
+          <Badge color={MILESTONE_STATUS_COLORS[m.milestone_status] || 'gray'} size="xs">
+            {MILESTONE_STATUS_LABELS[m.milestone_status] || m.milestone_status}
           </Badge>
+          {m.category && (
+            <Badge color="gray" size="xs">
+              {CATEGORY_LABELS[m.category] || m.category}
+            </Badge>
+          )}
+          {overdue > 0 && (
+            <Badge color="red" size="xs">
+              {overdue}일 지연
+            </Badge>
+          )}
+          {m.due_date && <Text className="text-xs text-stone-400">마감: {m.due_date}</Text>}
+        </div>
+        {canAdvance && (
+          <Button
+            size="xs"
+            variant="secondary"
+            color={m.milestone_status === 'active' ? 'green' : 'gray'}
+            onClick={handleAdvance}
+            loading={isPending}
+            disabled={isPending}
+          >
+            {ACTION_LABEL[m.milestone_status]}
+          </Button>
         )}
-        {overdue > 0 && (
-          <Badge color="red" size="xs">
-            {overdue}일 지연
-          </Badge>
-        )}
-        {m.due_date && <Text className="text-xs text-stone-400">마감: {m.due_date}</Text>}
       </div>
-      {canAdvance && (
-        <Button
-          size="xs"
-          variant="secondary"
-          color={m.milestone_status === 'active' ? 'green' : 'gray'}
-          onClick={handleAdvance}
-          loading={isPending}
-          disabled={isPending}
-        >
-          {ACTION_LABEL[m.milestone_status]}
-        </Button>
-      )}
     </div>
+  )
+}
+
+function ProjectGroupCard({ group }: { group: ProjectGroup }) {
+  const [milestones, setMilestones] = useState(group.milestones)
+  const done = milestones.filter((m) => m.milestone_status === 'done').length
+  const total = milestones.length
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = milestones.findIndex((m) => m.milestone_id === active.id)
+    const newIndex = milestones.findIndex((m) => m.milestone_id === over.id)
+    const reordered = arrayMove(milestones, oldIndex, newIndex)
+    setMilestones(reordered)
+
+    reorderMilestones(reordered.map((m) => m.milestone_id)).then((result) => {
+      if ('error' in result) {
+        toast.error(result.error)
+        setMilestones(milestones)
+      } else {
+        toast.success('순서가 변경되었습니다')
+      }
+    })
+  }
+
+  return (
+    <Card>
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/projects/${group.projectId}`}
+            className="text-base font-semibold hover:underline"
+          >
+            {group.projectName}
+          </Link>
+          <Badge color={PROJECT_TYPE_COLORS[group.projectType] || 'gray'} size="xs">
+            {PROJECT_TYPE_LABELS[group.projectType] || group.projectType}
+          </Badge>
+          <Badge color="gray" size="xs">
+            {PROJECT_STATUS_LABELS[group.projectStatus] || group.projectStatus}
+          </Badge>
+          {group.projectCode && (
+            <Text className="text-xs text-stone-400">{group.projectCode}</Text>
+          )}
+        </div>
+        <Text className="text-sm text-stone-500">
+          {done}/{total} 완료
+        </Text>
+      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={milestones.map((m) => m.milestone_id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {milestones.map((m) => (
+            <SortableMilestoneRow key={m.milestone_id} m={m} />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </Card>
   )
 }
 
@@ -111,40 +231,9 @@ export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone
 
   return (
     <div className="space-y-6">
-      {groups.map((g) => {
-        const done = g.milestones.filter((m) => m.milestone_status === 'done').length
-        const total = g.milestones.length
-
-        return (
-          <Card key={g.projectId}>
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={`/projects/${g.projectId}`}
-                  className="text-base font-semibold hover:underline"
-                >
-                  {g.projectName}
-                </Link>
-                <Badge color={PROJECT_TYPE_COLORS[g.projectType] || 'gray'} size="xs">
-                  {PROJECT_TYPE_LABELS[g.projectType] || g.projectType}
-                </Badge>
-                <Badge color="gray" size="xs">
-                  {PROJECT_STATUS_LABELS[g.projectStatus] || g.projectStatus}
-                </Badge>
-                {g.projectCode && <Text className="text-xs text-stone-400">{g.projectCode}</Text>}
-              </div>
-              <Text className="text-sm text-stone-500">
-                {done}/{total} 완료
-              </Text>
-            </div>
-            <div>
-              {g.milestones.map((m) => (
-                <MilestoneRow key={m.milestone_id} m={m} />
-              ))}
-            </div>
-          </Card>
-        )
-      })}
+      {groups.map((g) => (
+        <ProjectGroupCard key={g.projectId} group={g} />
+      ))}
     </div>
   )
 }

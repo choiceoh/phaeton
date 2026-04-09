@@ -1,6 +1,7 @@
 import { headers } from 'next/headers'
 import Link from 'next/link'
 import { getPayload } from 'payload'
+import { Toaster } from 'sonner'
 
 import ChatWidget from '@/components/ChatWidget'
 
@@ -90,6 +91,7 @@ export default async function FrontendLayout({ children }: { children: React.Rea
           </div>
         </nav>
         <main className="mx-auto max-w-7xl p-6">{children}</main>
+        <Toaster richColors position="top-right" />
         <ChatWidget />
       </body>
     </html>

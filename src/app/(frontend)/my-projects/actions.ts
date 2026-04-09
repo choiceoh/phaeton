@@ -74,3 +74,21 @@ export async function advanceMilestone(milestoneId: number) {
     milestoneName: milestone.name,
   }
 }
+
+export async function reorderMilestones(orderedIds: number[]) {
+  const payload = await getPayload({ config })
+  const { user } = await payload.auth({ headers: await headers() })
+  if (!user) return { error: '인증이 필요합니다.' }
+
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      payload.update({
+        collection: 'project-milestones',
+        id,
+        data: { seqOrder: index + 1 },
+      }),
+    ),
+  )
+
+  return { ok: true }
+}
