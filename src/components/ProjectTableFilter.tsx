@@ -48,7 +48,7 @@ export function ProjectTableFilter({ projects }: { projects: ProjectProgress[] }
         >
           <SelectItem value="all">전체 유형</SelectItem>
           <SelectItem value="solar">태양광</SelectItem>
-          <SelectItem value="wind">풍력</SelectItem>
+          <SelectItem value="rooftop">루프탑</SelectItem>
           <SelectItem value="ess">ESS</SelectItem>
           <SelectItem value="hybrid">하이브리드</SelectItem>
         </Select>

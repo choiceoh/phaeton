@@ -69,10 +69,10 @@ describe('copyMilestones', () => {
     )
   })
 
-  it('should copy wind templates for wind project', async () => {
-    const templates = [{ id: 'tmpl-w1', name: '풍황 계측', seqOrder: 1 }]
+  it('should copy rooftop templates for rooftop project', async () => {
+    const templates = [{ id: 'tmpl-r1', name: '건축물 구조검토', seqOrder: 1 }]
     const { args, payload } = buildArgs({
-      doc: { id: 'proj-2', type: 'wind' },
+      doc: { id: 'proj-2', type: 'rooftop' },
     })
     payload.find.mockResolvedValueOnce({ docs: templates })
 
@@ -80,7 +80,7 @@ describe('copyMilestones', () => {
 
     expect(payload.find).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { projectType: { equals: 'wind' } },
+        where: { projectType: { equals: 'rooftop' } },
       }),
     )
     expect(payload.create).toHaveBeenCalledTimes(1)

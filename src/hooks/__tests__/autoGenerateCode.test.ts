@@ -41,15 +41,15 @@ describe('autoGenerateCode', () => {
     expect(result.code).toBe('SL-2026-001')
   })
 
-  it('should generate WD-2026-001 for first wind project', async () => {
+  it('should generate RT-2026-001 for first rooftop project', async () => {
     const { args, payload } = buildArgs({
-      data: { type: 'wind' },
+      data: { type: 'rooftop' },
     })
     payload.find.mockResolvedValueOnce({ docs: [] })
 
     const result = await autoGenerateCode(args)
 
-    expect(result.code).toBe('WD-2026-001')
+    expect(result.code).toBe('RT-2026-001')
   })
 
   it('should generate ES-2026-001 for first ESS project', async () => {
@@ -89,15 +89,15 @@ describe('autoGenerateCode', () => {
 
   it('should pad code number to 3 digits', async () => {
     const { args, payload } = buildArgs({
-      data: { type: 'wind' },
+      data: { type: 'rooftop' },
     })
     payload.find.mockResolvedValueOnce({
-      docs: [{ code: 'WD-2026-005' }],
+      docs: [{ code: 'RT-2026-005' }],
     })
 
     const result = await autoGenerateCode(args)
 
-    expect(result.code).toBe('WD-2026-006')
+    expect(result.code).toBe('RT-2026-006')
   })
 
   it('should skip when operation is not create', async () => {
