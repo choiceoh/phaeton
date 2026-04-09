@@ -9,6 +9,14 @@ function d(days: number): string {
   return date.toISOString().split('T')[0]
 }
 
+type ProjectStatus =
+  | 'gen-permit'
+  | 'dev-permit'
+  | 'civil'
+  | 'structural-elec'
+  | 'inspection'
+  | 'pre-cod'
+
 export async function seed(payload: Payload) {
   // 이미 데이터가 있으면 스킵
   const existing = await payload.find({ collection: 'projects', limit: 1 })
@@ -22,161 +30,105 @@ export async function seed(payload: Payload) {
   // 1. 마일스톤 템플릿
   await seedMilestoneTemplates(payload)
 
-  // 2. 현장
-  const siteData = [
-    {
-      name: '영암 태양광단지',
-      address: '전남 영암군 삼호읍',
-      region: '전남',
-      landAreaM2: 150000,
-      landType: '답',
-    },
-    {
-      name: '해남 풍력단지',
-      address: '전남 해남군 송지면',
-      region: '전남',
-      landAreaM2: 300000,
-      landType: '임야',
-    },
-    {
-      name: '당진 ESS',
-      address: '충남 당진시 석문면',
-      region: '충남',
-      landAreaM2: 5000,
-      landType: '대',
-    },
-    {
-      name: '김제 태양광',
-      address: '전북 김제시 광활면',
-      region: '전북',
-      landAreaM2: 80000,
-      landType: '전',
-    },
-    {
-      name: '신안 태양광',
-      address: '전남 신안군 지도읍',
-      region: '전남',
-      landAreaM2: 200000,
-      landType: '답',
-    },
-    {
-      name: '태백 풍력',
-      address: '강원 태백시 혈동',
-      region: '강원',
-      landAreaM2: 500000,
-      landType: '임야',
-    },
-    {
-      name: '서산 루프탑',
-      address: '충남 서산시 대산읍',
-      region: '충남',
-      landAreaM2: 3000,
-      landType: '대',
-    },
-    {
-      name: '나주 ESS',
-      address: '전남 나주시 산포면',
-      region: '전남',
-      landAreaM2: 8000,
-      landType: '대',
-    },
-  ]
-
-  const sites: any[] = []
-  for (const s of siteData) {
-    const created = await payload.create({ collection: 'sites', data: s })
-    sites.push(created)
-  }
-
-  // 3. 프로젝트 (afterChange hook이 마일스톤 자동 생성)
-  const projectData = [
+  // 2. 프로젝트 (site는 group 필드로 인라인, afterChange hook이 마일스톤 자동 생성)
+  const projectData: {
+    name: string
+    code: string
+    type: 'solar' | 'wind' | 'ess' | 'hybrid'
+    capacityKw: number
+    status: ProjectStatus
+    client: string
+    epcValue: number
+    codTarget: string
+    site: { address: string; region: string; landAreaM2: number; landType: string }
+  }[] = [
     {
       name: '영암 100MW 태양광',
       code: 'SL-2024-001',
-      type: 'solar' as const,
+      type: 'solar',
       capacityKw: 100000,
-      siteIdx: 0,
-      status: 'construction' as const,
+      status: 'civil',
       client: '한국남부발전',
       epcValue: 120000000000,
       codTarget: d(90),
+      site: { address: '전남 영암군 삼호읍', region: '전남', landAreaM2: 150000, landType: '답' },
     },
     {
       name: '해남 20MW 풍력',
       code: 'WD-2025-001',
-      type: 'wind' as const,
+      type: 'wind',
       capacityKw: 20000,
-      siteIdx: 1,
-      status: 'permit' as const,
+      status: 'dev-permit',
       client: '한국서부발전',
       epcValue: 45000000000,
       codTarget: d(365),
+      site: { address: '전남 해남군 송지면', region: '전남', landAreaM2: 300000, landType: '임야' },
     },
     {
       name: '당진 50MWh ESS',
       code: 'ES-2025-001',
-      type: 'ess' as const,
+      type: 'ess',
       capacityKw: 50000,
-      siteIdx: 2,
-      status: 'construction' as const,
+      status: 'structural-elec',
       client: '한국중부발전',
       epcValue: 30000000000,
       codTarget: d(60),
+      site: { address: '충남 당진시 석문면', region: '충남', landAreaM2: 5000, landType: '대' },
     },
     {
       name: '김제 30MW 태양광',
       code: 'SL-2025-002',
-      type: 'solar' as const,
+      type: 'solar',
       capacityKw: 30000,
-      siteIdx: 3,
-      status: 'permit' as const,
+      status: 'dev-permit',
       client: '김제시',
       epcValue: 35000000000,
       codTarget: d(200),
+      site: { address: '전북 김제시 광활면', region: '전북', landAreaM2: 80000, landType: '전' },
     },
     {
       name: '신안 200MW 태양광',
       code: 'SL-2025-003',
-      type: 'solar' as const,
+      type: 'solar',
       capacityKw: 200000,
-      siteIdx: 4,
-      status: 'planning' as const,
+      status: 'gen-permit',
       client: '한국전력',
       epcValue: 250000000000,
       codTarget: d(540),
+      site: { address: '전남 신안군 지도읍', region: '전남', landAreaM2: 200000, landType: '답' },
     },
     {
       name: '태백 10MW 풍력',
       code: 'WD-2025-002',
-      type: 'wind' as const,
+      type: 'wind',
       capacityKw: 10000,
-      siteIdx: 5,
-      status: 'permit' as const,
+      status: 'gen-permit',
       client: '강원도청',
       epcValue: 25000000000,
       codTarget: d(300),
+      site: { address: '강원 태백시 혈동', region: '강원', landAreaM2: 500000, landType: '임야' },
     },
     {
       name: '서산 5MW 루프탑 태양광',
       code: 'SL-2025-004',
-      type: 'solar' as const,
+      type: 'solar',
       capacityKw: 5000,
-      siteIdx: 6,
-      status: 'construction' as const,
+      status: 'inspection',
       client: '대산석유화학',
       epcValue: 6000000000,
       codTarget: d(30),
+      site: { address: '충남 서산시 대산읍', region: '충남', landAreaM2: 3000, landType: '대' },
     },
     {
       name: '나주 100MWh ESS',
       code: 'ES-2025-002',
-      type: 'ess' as const,
+      type: 'ess',
       capacityKw: 100000,
-      siteIdx: 7,
-      status: 'planning' as const,
+      status: 'gen-permit',
       client: '한국남부발전',
       epcValue: 55000000000,
       codTarget: d(400),
+      site: { address: '전남 나주시 산포면', region: '전남', landAreaM2: 8000, landType: '대' },
     },
   ]
 
@@ -189,7 +141,7 @@ export async function seed(payload: Payload) {
         code: p.code,
         type: p.type,
         capacityKw: p.capacityKw,
-        site: sites[p.siteIdx].id,
+        site: p.site,
         status: p.status,
         client: p.client,
         epcValue: p.epcValue,
@@ -199,10 +151,10 @@ export async function seed(payload: Payload) {
     projects.push(created)
   }
 
-  // 4. 마일스톤 상태·날짜 업데이트
+  // 3. 마일스톤 상태·날짜 업데이트
   await updateMilestones(payload)
 
-  console.warn(`[Seed] 완료 — 현장 ${sites.length}개, 프로젝트 ${projects.length}개`)
+  console.warn(`[Seed] 완료 — 프로젝트 ${projects.length}개`)
 }
 
 export async function updateMilestones(payload: Payload) {
@@ -212,11 +164,12 @@ export async function updateMilestones(payload: Payload) {
   })
 
   const statusProfiles: Record<string, { doneRatio: number; activeCount: number }> = {
-    planning: { doneRatio: 0, activeCount: 1 },
-    permit: { doneRatio: 0.2, activeCount: 2 },
-    construction: { doneRatio: 0.6, activeCount: 2 },
-    testing: { doneRatio: 0.85, activeCount: 1 },
-    cod: { doneRatio: 1, activeCount: 0 },
+    'gen-permit': { doneRatio: 0, activeCount: 1 },
+    'dev-permit': { doneRatio: 0.2, activeCount: 2 },
+    'civil': { doneRatio: 0.4, activeCount: 2 },
+    'structural-elec': { doneRatio: 0.6, activeCount: 2 },
+    'inspection': { doneRatio: 0.85, activeCount: 1 },
+    'pre-cod': { doneRatio: 1, activeCount: 0 },
   }
 
   type MsStatus = 'pending' | 'active' | 'done' | 'blocked' | 'skipped'
@@ -229,7 +182,7 @@ export async function updateMilestones(payload: Payload) {
       limit: 100,
     })
 
-    const profile = statusProfiles[proj.status] || statusProfiles.planning
+    const profile = statusProfiles[proj.status as string] || statusProfiles['gen-permit']
     const total = milestones.docs.length
     const doneCount = Math.floor(total * profile.doneRatio)
     const activeCount = profile.activeCount
