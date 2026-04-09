@@ -76,7 +76,7 @@ export function AlertsView({
                 <TableCell>
                   <Link
                     href={`/projects/${m.project_id}`}
-                    className="text-blue-600 hover:underline"
+                    className="text-stone-700 underline underline-offset-2"
                   >
                     {m.project_name}
                   </Link>
@@ -89,7 +89,7 @@ export function AlertsView({
             ))}
             {overdue.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-gray-500">
+                <TableCell colSpan={4} className="text-center text-stone-500">
                   지연된 마일스톤이 없습니다
                 </TableCell>
               </TableRow>
@@ -120,7 +120,7 @@ export function AlertsView({
                 <TableCell>
                   <Link
                     href={`/projects/${d.project_id}`}
-                    className="text-blue-600 hover:underline"
+                    className="text-stone-700 underline underline-offset-2"
                   >
                     {d.project_name}
                   </Link>
@@ -136,7 +136,7 @@ export function AlertsView({
             ))}
             {expiring.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-gray-500">
+                <TableCell colSpan={5} className="text-center text-stone-500">
                   만료 임박 서류가 없습니다
                 </TableCell>
               </TableRow>
@@ -172,7 +172,7 @@ export function AlertsView({
             ))}
             {overloaded.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-gray-500">
+                <TableCell colSpan={4} className="text-center text-stone-500">
                   과할당 인력이 없습니다
                 </TableCell>
               </TableRow>
