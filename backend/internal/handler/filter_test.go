@@ -150,17 +150,17 @@ func TestParseSort(t *testing.T) {
 
 func TestParsePagination(t *testing.T) {
 	cases := []struct {
-		params               url.Values
-		wantPage, wantLimit  int
-		wantOffset           int
+		params              url.Values
+		wantPage, wantLimit int
+		wantOffset          int
 	}{
 		{url.Values{}, 1, 20, 0},
 		{url.Values{"page": []string{"3"}}, 3, 20, 40},
 		{url.Values{"limit": []string{"50"}}, 1, 50, 0},
 		{url.Values{"page": []string{"2"}, "limit": []string{"10"}}, 2, 10, 10},
-		{url.Values{"page": []string{"-1"}}, 1, 20, 0},      // negative page → default
-		{url.Values{"limit": []string{"1000"}}, 1, 20, 0},  // > max → default
-		{url.Values{"limit": []string{"abc"}}, 1, 20, 0},    // non-numeric → default
+		{url.Values{"page": []string{"-1"}}, 1, 20, 0},    // negative page → default
+		{url.Values{"limit": []string{"1000"}}, 1, 20, 0}, // > max → default
+		{url.Values{"limit": []string{"abc"}}, 1, 20, 0},  // non-numeric → default
 	}
 	for _, tc := range cases {
 		page, limit, offset := ParsePagination(tc.params)
