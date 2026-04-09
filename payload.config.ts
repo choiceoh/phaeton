@@ -12,6 +12,7 @@ import { buildConfig } from 'payload'
 
 import { DashboardConfigs } from './src/collections/DashboardConfigs.ts'
 import { MilestoneTemplates } from './src/collections/MilestoneTemplates.ts'
+import { Pages } from './src/collections/Pages.ts'
 import { ProjectDocuments } from './src/collections/ProjectDocuments.ts'
 import { ProjectMilestones } from './src/collections/ProjectMilestones.ts'
 import { Projects } from './src/collections/Projects.ts'
@@ -50,9 +51,10 @@ export default buildConfig({
       url: ({ data, collectionConfig }) => {
         const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
         if (collectionConfig?.slug === 'projects') return `${base}/projects/${data.id}`
+        if (collectionConfig?.slug === 'pages') return `${base}/p/${data.slug}`
         return `${base}/dashboard`
       },
-      collections: ['projects'],
+      collections: ['projects', 'pages'],
       globals: ['site-settings'],
     },
   },
@@ -70,6 +72,7 @@ export default buildConfig({
     StaffAssignments,
     ProjectDocuments,
     DashboardConfigs,
+    Pages,
   ],
 
   globals: [SiteSettings],

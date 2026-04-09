@@ -25,7 +25,7 @@ export default async function FrontendLayout({ children }: { children: React.Rea
   let user: { name?: string; role?: string } | null = null
   try {
     const result = await payload.auth({ headers: await headers() })
-    user = result.user
+    user = result.user as { name?: string; role?: string } | null
   } catch {
     // 개발 단계 — 인증 없이 접근 허용
   }
@@ -34,12 +34,32 @@ export default async function FrontendLayout({ children }: { children: React.Rea
   const nav = settings?.navigation
   const banner = settings?.banner
 
+  let dynamicPages: { href: string; label: string }[] = []
+  try {
+    const pages = await payload.find({
+      collection: 'pages' as any,
+      where: {
+        showInNav: { equals: true },
+        status: { equals: 'published' },
+      },
+      sort: 'navOrder',
+      limit: 20,
+    })
+    dynamicPages = pages.docs.map((p: any) => ({
+      href: `/p/${p.slug}`,
+      label: p.title,
+    }))
+  } catch {
+    // 컬렉션 미생성 시 무시
+  }
+
   const NAV = [
     { href: '/projects', label: nav?.projectsLabel || '프로젝트' },
     { href: '/my-projects', label: nav?.myProjectsLabel || '내 업무' },
     { href: '/dashboard', label: nav?.dashboardLabel || '대시보드' },
     { href: '/staff', label: nav?.staffLabel || '인력 현황' },
     { href: '/alerts', label: nav?.alertsLabel || '알림' },
+    ...dynamicPages,
   ]
 
   return (
