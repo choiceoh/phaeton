@@ -17,19 +17,21 @@ export const copyMilestones: CollectionAfterChangeHook = async ({ doc, operation
       limit: 100,
     })
 
-    for (const tmpl of templates.docs) {
-      await payload.create({
-        collection: 'project-milestones',
-        req,
-        data: {
-          project: doc.id,
-          template: tmpl.id,
-          name: tmpl.name,
-          seqOrder: tmpl.seqOrder,
-          status: 'pending',
-        },
-      })
-    }
+    await Promise.all(
+      templates.docs.map((tmpl) =>
+        payload.create({
+          collection: 'project-milestones',
+          req,
+          data: {
+            project: doc.id,
+            template: tmpl.id,
+            name: tmpl.name,
+            seqOrder: tmpl.seqOrder,
+            status: 'pending',
+          },
+        }),
+      ),
+    )
   }
 
   // hybrid: ESS 특화 마일스톤 추가
@@ -46,19 +48,21 @@ export const copyMilestones: CollectionAfterChangeHook = async ({ doc, operation
     })
 
     const seq = 100
-    for (const tmpl of essExtras.docs) {
-      await payload.create({
-        collection: 'project-milestones',
-        req,
-        data: {
-          project: doc.id,
-          template: tmpl.id,
-          name: tmpl.name,
-          seqOrder: seq + tmpl.seqOrder,
-          status: 'pending',
-        },
-      })
-    }
+    await Promise.all(
+      essExtras.docs.map((tmpl) =>
+        payload.create({
+          collection: 'project-milestones',
+          req,
+          data: {
+            project: doc.id,
+            template: tmpl.id,
+            name: tmpl.name,
+            seqOrder: seq + tmpl.seqOrder,
+            status: 'pending',
+          },
+        }),
+      ),
+    )
   }
 
   return doc

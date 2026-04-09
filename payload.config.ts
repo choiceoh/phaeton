@@ -26,6 +26,17 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 export default buildConfig({
+  onInit: async (payload) => {
+    const shouldSeed = process.env.NODE_ENV !== 'production' || process.env.SEED_DATA === 'true'
+    if (!shouldSeed) return
+
+    const users = await payload.find({ collection: 'users', limit: 0 })
+    if (users.totalDocs === 0) {
+      const { seed } = await import('./seed/index')
+      await seed(payload)
+    }
+  },
+
   admin: {
     user: Users.slug,
     meta: {

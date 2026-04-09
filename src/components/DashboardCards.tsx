@@ -14,7 +14,11 @@ interface SummaryStats {
 
 export function DashboardCards({ summary }: { summary: SummaryStats }) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-7">
+    <div
+      role="region"
+      aria-label="프로젝트 현황 요약"
+      className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-7"
+    >
       <Card>
         <Text>발전허가</Text>
         <Metric>{summary.gen_permit_count}</Metric>

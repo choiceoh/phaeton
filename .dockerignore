@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+!.env.example
+docs
+*.md
+!CLAUDE.md
+.claude
+vitest.config.ts
+src/hooks/__tests__

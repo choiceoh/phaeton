@@ -1,6 +1,5 @@
 import { headers } from 'next/headers'
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import ChatWidget from '@/components/ChatWidget'
@@ -23,8 +22,13 @@ export const metadata = {
 
 export default async function FrontendLayout({ children }: { children: React.ReactNode }) {
   const payload = await getPayload({ config })
-  const { user } = await payload.auth({ headers: await headers() })
-  if (!user) redirect('/admin/login')
+  let user: { name?: string; role?: string } | null = null
+  try {
+    const result = await payload.auth({ headers: await headers() })
+    user = result.user
+  } catch {
+    // 개발 단계 — 인증 없이 접근 허용
+  }
 
   const settings = await (payload as any).findGlobal({ slug: 'site-settings' })
   const nav = settings?.navigation
@@ -50,7 +54,10 @@ export default async function FrontendLayout({ children }: { children: React.Rea
             {banner.text}
           </div>
         )}
-        <nav className="flex items-center justify-between border-b border-stone-200 bg-ivory-50 px-6 py-3">
+        <nav
+          aria-label="메인 내비게이션"
+          className="flex items-center justify-between border-b border-stone-200 bg-ivory-50 px-6 py-3"
+        >
           <div className="flex items-center gap-6">
             <Link href="/projects" className="text-lg font-semibold">
               Phaeton
@@ -66,10 +73,18 @@ export default async function FrontendLayout({ children }: { children: React.Rea
             ))}
           </div>
           <div className="text-sm text-gray-500">
-            {user.name} ({user.role})
-            {['director', 'pm'].includes(user.role as string) && (
-              <Link href="/admin" className="ml-4 text-blue-600">
-                관리
+            {user ? (
+              <>
+                {user.name} ({user.role})
+                {['director', 'pm'].includes(user.role as string) && (
+                  <Link href="/admin" className="ml-4 text-blue-600">
+                    관리
+                  </Link>
+                )}
+              </>
+            ) : (
+              <Link href="/admin/login" className="text-blue-600">
+                로그인
               </Link>
             )}
           </div>

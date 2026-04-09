@@ -112,6 +112,7 @@ export default function ChatPanel({ onClose }: { onClose: () => void }) {
         <button
           onClick={onClose}
           className="text-lg leading-none text-gray-400 hover:text-gray-600"
+          aria-label="AI 어시스턴트 닫기"
         >
           &times;
         </button>

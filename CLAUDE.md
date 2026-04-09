@@ -70,6 +70,17 @@ const projects = await payload.find({ collection: 'projects' })
 `src/lib/ai/`의 `runPrompt()` 함수를 통해서만 호출. vLLM 직접 fetch 금지.
 새 AI 기능은 `src/lib/ai/prompts/`에 프롬프트 파일 추가 + `registerPrompt()`.
 
+## 보안 (개발 단계 — 미적용)
+
+현재 개발 및 미공개 단계이므로 아래 보안 항목은 **의도적으로 미적용** 상태:
+
+- 프론트엔드 로그인 강제 비활성화 (레이아웃에서 인증 없이 접근 허용)
+- `/api/phaeton/*` 라우트 인증 미적용
+- API Rate Limiting 없음
+- HTTPS 미적용 (로컬 개발)
+
+공개 배포 전 반드시 활성화할 것.
+
 ## 커밋 메시지
 
 ```
