@@ -1,25 +1,27 @@
 'use client'
 
+import Link from 'next/link'
+
 import {
+  Badge,
   Card,
   Metric,
-  Text,
-  Badge,
   ProgressBar,
   Table,
+  TableBody,
+  TableCell,
   TableHead,
   TableHeaderCell,
-  TableBody,
   TableRow,
-  TableCell,
+  Text,
 } from '@tremor/react'
 
 import { MilestoneTimeline } from '@/components/MilestoneTimeline'
 import {
-  PROJECT_STATUS_LABELS,
-  PROJECT_TYPE_LABELS,
-  PROJECT_TYPE_COLORS,
   DOC_TYPE_LABELS,
+  PROJECT_STATUS_LABELS,
+  PROJECT_TYPE_COLORS,
+  PROJECT_TYPE_LABELS,
 } from '@/lib/constants'
 import { formatCodTarget } from '@/lib/format'
 
@@ -52,6 +54,7 @@ interface DocumentItem {
 }
 
 interface ProjectData {
+  id: string
   name: string
   code: string
   type: string
@@ -89,6 +92,13 @@ export function ProjectDetailView({
               {PROJECT_TYPE_LABELS[project.type] || project.type}
             </Badge>
             <Badge color="gray">{PROJECT_STATUS_LABELS[project.status] || project.status}</Badge>
+            <Link
+              href={`/projects/${project.id}/edit`}
+              className="ml-2 rounded-md border border-gray-300 px-3 py-1 text-sm
+                text-gray-600 hover:bg-gray-50"
+            >
+              수정
+            </Link>
           </div>
         </div>
 

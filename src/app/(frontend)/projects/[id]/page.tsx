@@ -60,6 +60,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   return (
     <ProjectDetailView
       project={{
+        id: String(project.id),
         name: project.name,
         code: project.code,
         type: project.type,
