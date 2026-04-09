@@ -9,6 +9,9 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Init scripts only run on a *fresh* volume. If the volume already
+      # exists, use `make db-test` instead to create phaeton_test.
+      - ./db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U phaeton"]
       interval: 5s

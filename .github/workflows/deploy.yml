@@ -1,0 +1,48 @@
+name: deploy
+
+# Builds the SPA + Go binary on a self-hosted runner attached to the
+# DGX Spark machine, then restarts the phaeton systemd unit.
+#
+# Prerequisites (NOT created by this workflow — set up once by infra):
+#  - A self-hosted runner registered with the labels [self-hosted, dgx-spark]
+#  - /opt/phaeton/bin owned by the runner user
+#  - /etc/systemd/system/phaeton.service installed
+#  - sudoers rule allowing `systemctl restart phaeton` without a password
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, dgx-spark]
+    concurrency:
+      group: phaeton-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: build backend (embeds the SPA from step above)
+        run: |
+          cd backend
+          go build -o /opt/phaeton/bin/phaeton ./cmd/server
+
+      - name: restart phaeton service
+        run: sudo systemctl restart phaeton
