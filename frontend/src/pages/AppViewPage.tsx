@@ -10,7 +10,9 @@ import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
+import KanbanView from '@/components/works/views/KanbanView'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
   useCreateEntry,
@@ -63,6 +65,12 @@ export default function AppViewPage() {
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
 
+  // Detect whether a kanban view is possible (needs a select field).
+  const selectField = useMemo(
+    () => collection?.fields?.find((f) => f.field_type === 'select'),
+    [collection],
+  )
+
   // Build columns from collection.fields. Each column reads its value via the
   // field slug; relation columns prefer the expanded object's `name`/`title`.
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
@@ -110,6 +118,11 @@ export default function AppViewPage() {
   if (colError) return <ErrorState error={colErr} />
   if (!collection) return null
 
+  function handleEntryClick(entry: Record<string, unknown>) {
+    setEditEntry(entry)
+    setSheetOpen(true)
+  }
+
   function handleSubmit(data: Record<string, unknown>) {
     if (editEntry?.id) {
       updateEntry.mutate(
@@ -137,6 +150,8 @@ export default function AppViewPage() {
       onError: (err) => toast.error(formatError(err)),
     })
   }
+
+  const hasKanban = !!selectField
 
   return (
     <div>
@@ -166,21 +181,40 @@ export default function AppViewPage() {
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
       {list && (
-        <DataTable
-          columns={columns}
-          data={list.data}
-          total={list.total}
-          page={page}
-          limit={PAGE_SIZE}
-          onPageChange={setPage}
-          onSortChange={setSorting}
-          onRowClick={(row) => {
-            setEditEntry(row)
-            setSheetOpen(true)
-          }}
-          emptyTitle="아직 항목이 없습니다"
-          emptyDescription='"새 항목" 버튼을 눌러 첫 데이터를 입력하세요.'
-        />
+        <Tabs defaultValue="list">
+          {hasKanban && (
+            <TabsList className="mb-4">
+              <TabsTrigger value="list">목록</TabsTrigger>
+              <TabsTrigger value="kanban">칸반</TabsTrigger>
+            </TabsList>
+          )}
+
+          <TabsContent value="list" className="mt-0">
+            <DataTable
+              columns={columns}
+              data={list.data}
+              total={list.total}
+              page={page}
+              limit={PAGE_SIZE}
+              onPageChange={setPage}
+              onSortChange={setSorting}
+              onRowClick={handleEntryClick}
+              emptyTitle="아직 항목이 없습니다"
+              emptyDescription='"새 항목" 버튼을 눌러 첫 데이터를 입력하세요.'
+            />
+          </TabsContent>
+
+          {hasKanban && selectField && (
+            <TabsContent value="kanban" className="mt-0">
+              <KanbanView
+                groupField={selectField}
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onCardClick={handleEntryClick}
+              />
+            </TabsContent>
+          )}
+        </Tabs>
       )}
 
       <EntrySheet
