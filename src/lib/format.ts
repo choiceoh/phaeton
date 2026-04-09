@@ -1,15 +1,28 @@
+import { differenceInCalendarDays, format, formatDistanceToNow, parseISO } from 'date-fns'
+import { ko } from 'date-fns/locale'
+
 export function fmtNum(v: number | string | null | undefined): string {
   if (v == null) return '-'
   return Number(v).toLocaleString('ko-KR')
 }
 
 export function formatCodTarget(dateStr: string): string {
-  const date = new Date(dateStr)
-  const yy = String(date.getFullYear()).slice(2)
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  const daysLeft = Math.ceil((date.getTime() - Date.now()) / 86400000)
+  const date = parseISO(dateStr)
+  const formatted = format(date, 'yy/MM/dd')
+  const daysLeft = differenceInCalendarDays(date, new Date())
   const label =
     daysLeft > 0 ? `${daysLeft}일 남음` : daysLeft === 0 ? 'D-Day' : `${Math.abs(daysLeft)}일 초과`
-  return `${yy}/${mm}/${dd} ${label}`
+  return `${formatted} ${label}`
+}
+
+export function formatDate(dateStr: string, pattern = 'yyyy-MM-dd'): string {
+  return format(parseISO(dateStr), pattern, { locale: ko })
+}
+
+export function formatRelativeDate(dateStr: string): string {
+  return formatDistanceToNow(parseISO(dateStr), { addSuffix: true, locale: ko })
+}
+
+export function daysFromNow(dateStr: string): number {
+  return differenceInCalendarDays(parseISO(dateStr), new Date())
 }

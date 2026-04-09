@@ -28,6 +28,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1026.0",
     "@aws-sdk/lib-storage": "^3.1026.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
     "@payloadcms/db-postgres": "^3.81.0",
     "@payloadcms/email-nodemailer": "^3.81.0",
     "@payloadcms/live-preview-react": "^3.81.0",
@@ -37,8 +39,10 @@
     "@payloadcms/plugin-search": "^3.81.0",
     "@payloadcms/richtext-lexical": "^3.81.0",
     "@payloadcms/storage-s3": "^3.81.0",
+    "@tanstack/react-table": "^8.21.3",
     "@tremor/react": "^3.18.7",
     "autoprefixer": "^10.4.27",
+    "date-fns": "^4.1.0",
     "graphql": "^16.13.2",
     "next": "^16.2.2",
     "nodemailer": "^8.0.5",
@@ -48,6 +52,7 @@
     "react-dom": "^19.2.4",
     "react-grid-layout": "^2.2.3",
     "sharp": "^0.34.5",
+    "sonner": "^2.0.7",
     "tailwindcss": "^3.4.19"
   },
   "devDependencies": {
