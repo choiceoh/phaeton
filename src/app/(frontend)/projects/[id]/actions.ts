@@ -28,11 +28,12 @@ export async function uploadDocument(formData: FormData) {
   const expiryDate = formData.get('expiryDate') as string
   if (expiryDate) data.expiryDate = expiryDate
 
+  const createOpts = { collection: 'project-documents' as const, data }
+
   if (file && file.size > 0) {
     const buffer = Buffer.from(await file.arrayBuffer())
-    await payload.create({
-      collection: 'project-documents',
-      data,
+    await (payload.create as any)({
+      ...createOpts,
       file: {
         data: buffer,
         mimetype: file.type,
@@ -41,10 +42,7 @@ export async function uploadDocument(formData: FormData) {
       },
     })
   } else {
-    await payload.create({
-      collection: 'project-documents',
-      data,
-    })
+    await (payload.create as any)(createOpts)
   }
 
   return { ok: true }
