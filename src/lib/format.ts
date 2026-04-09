@@ -1,6 +1,11 @@
 import { differenceInCalendarDays, format, formatDistanceToNow, parseISO } from 'date-fns'
 import { ko } from 'date-fns/locale'
 
+export function fmtNum(v: number | string | null | undefined): string {
+  if (v == null) return '-'
+  return Number(v).toLocaleString('ko-KR')
+}
+
 export function formatCodTarget(dateStr: string): string {
   const date = parseISO(dateStr)
   const formatted = format(date, 'yy/MM/dd')

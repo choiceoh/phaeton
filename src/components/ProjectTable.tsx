@@ -24,7 +24,7 @@ import { useState } from 'react'
 
 import { WarmBadge } from '@/components/WarmBadge'
 import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/constants'
-import { formatCodTarget } from '@/lib/format'
+import { fmtNum, formatCodTarget } from '@/lib/format'
 import type { ProjectProgress } from '@/lib/types'
 
 function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
@@ -74,7 +74,8 @@ const columns: ColumnDef<ProjectProgress>[] = [
   {
     accessorKey: 'capacity_kw',
     header: '용량(kW)',
-    cell: ({ row }) => row.original.capacity_kw ?? '-',
+    cell: ({ row }) =>
+      row.original.capacity_kw != null ? fmtNum(row.original.capacity_kw) : '-',
   },
   {
     id: 'progress',

@@ -14,6 +14,7 @@ import {
 import Link from 'next/link'
 
 import { DOC_TYPE_LABELS } from '@/lib/constants'
+import { fmtNum } from '@/lib/format'
 
 interface OverdueItem {
   id: number | string
@@ -58,7 +59,7 @@ export function AlertsView({
       <Card>
         <div className="mb-4 flex items-center gap-2">
           <Text className="text-lg font-medium">지연 마일스톤</Text>
-          <Badge color="red">{overdue.length}</Badge>
+          <Badge color="red">{fmtNum(overdue.length)}</Badge>
         </div>
         <Table>
           <TableHead>
@@ -83,7 +84,7 @@ export function AlertsView({
                 </TableCell>
                 <TableCell>{m.due_date}</TableCell>
                 <TableCell>
-                  <Badge color="red">{m.days_overdue}일</Badge>
+                  <Badge color="red">{fmtNum(m.days_overdue)}일</Badge>
                 </TableCell>
               </TableRow>
             ))}
@@ -101,7 +102,7 @@ export function AlertsView({
       <Card>
         <div className="mb-4 flex items-center gap-2">
           <Text className="text-lg font-medium">만료 임박 서류</Text>
-          <Badge color="amber">{expiring.length}</Badge>
+          <Badge color="amber">{fmtNum(expiring.length)}</Badge>
         </div>
         <Table>
           <TableHead>
@@ -130,7 +131,7 @@ export function AlertsView({
                 </TableCell>
                 <TableCell>{d.expiry_date}</TableCell>
                 <TableCell>
-                  <Badge color="amber">{d.days_until_expiry}일</Badge>
+                  <Badge color="amber">{fmtNum(d.days_until_expiry)}일</Badge>
                 </TableCell>
               </TableRow>
             ))}
@@ -148,7 +149,7 @@ export function AlertsView({
       <Card>
         <div className="mb-4 flex items-center gap-2">
           <Text className="text-lg font-medium">과할당 인력</Text>
-          <Badge color="red">{overloaded.length}</Badge>
+          <Badge color="red">{fmtNum(overloaded.length)}</Badge>
         </div>
         <Table>
           <TableHead>
@@ -165,9 +166,9 @@ export function AlertsView({
                 <TableCell>{s.name}</TableCell>
                 <TableCell>{s.role || '-'}</TableCell>
                 <TableCell>
-                  <Badge color="red">{s.total_allocation}%</Badge>
+                  <Badge color="red">{fmtNum(s.total_allocation)}%</Badge>
                 </TableCell>
-                <TableCell>{s.active_projects}</TableCell>
+                <TableCell>{fmtNum(s.active_projects)}</TableCell>
               </TableRow>
             ))}
             {overloaded.length === 0 && (

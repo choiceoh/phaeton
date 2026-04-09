@@ -3,6 +3,7 @@
 import { Card, Badge, List, ListItem, Text } from '@tremor/react'
 import Link from 'next/link'
 
+import { fmtNum } from '@/lib/format'
 import type { OverdueMilestone, ExpiringDocument, StaffLoadItem } from '@/lib/types'
 
 interface AlertPanelProps {
@@ -21,7 +22,7 @@ export function AlertPanel({
       <Card>
         <div className="mb-3 flex items-center gap-2">
           <Text className="font-medium">지연 마일스톤</Text>
-          {overdueMilestones.length > 0 && <Badge color="red">{overdueMilestones.length}</Badge>}
+          {overdueMilestones.length > 0 && <Badge color="red">{fmtNum(overdueMilestones.length)}</Badge>}
         </div>
         {overdueMilestones.length > 0 ? (
           <List>
@@ -36,7 +37,7 @@ export function AlertPanel({
                     {m.project_name}
                   </Link>
                 </div>
-                <Badge color="red">{m.days_overdue}일 지연</Badge>
+                <Badge color="red">{fmtNum(m.days_overdue)}일 지연</Badge>
               </ListItem>
             ))}
           </List>
@@ -48,7 +49,7 @@ export function AlertPanel({
       <Card>
         <div className="mb-3 flex items-center gap-2">
           <Text className="font-medium">만료 임박 서류</Text>
-          {expiringDocuments.length > 0 && <Badge color="amber">{expiringDocuments.length}</Badge>}
+          {expiringDocuments.length > 0 && <Badge color="amber">{fmtNum(expiringDocuments.length)}</Badge>}
         </div>
         {expiringDocuments.length > 0 ? (
           <List>
@@ -63,7 +64,7 @@ export function AlertPanel({
                     {d.project_name}
                   </Link>
                 </div>
-                <Badge color="amber">{d.days_until_expiry}일 남음</Badge>
+                <Badge color="amber">{fmtNum(d.days_until_expiry)}일 남음</Badge>
               </ListItem>
             ))}
           </List>
@@ -75,7 +76,7 @@ export function AlertPanel({
       <Card>
         <div className="mb-3 flex items-center gap-2">
           <Text className="font-medium">과할당 인력</Text>
-          {overloadedStaff.length > 0 && <Badge color="red">{overloadedStaff.length}</Badge>}
+          {overloadedStaff.length > 0 && <Badge color="red">{fmtNum(overloadedStaff.length)}</Badge>}
         </div>
         {overloadedStaff.length > 0 ? (
           <List>
@@ -84,10 +85,10 @@ export function AlertPanel({
                 <div>
                   <Text className="text-sm font-medium">{s.name}</Text>
                   <Text className="text-xs text-gray-500">
-                    {s.role || '직무 미지정'} · {s.active_projects}개 프로젝트
+                    {s.role || '직무 미지정'} · {fmtNum(s.active_projects)}개 프로젝트
                   </Text>
                 </div>
-                <Badge color="red">{s.total_allocation}%</Badge>
+                <Badge color="red">{fmtNum(s.total_allocation)}%</Badge>
               </ListItem>
             ))}
           </List>
