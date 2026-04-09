@@ -22,6 +22,7 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
   return (
     <Card>
       <Table className="[&_td]:py-1.5 [&_th]:py-2">
+        <caption className="sr-only">프로젝트 진행 현황</caption>
         <TableHead>
           <TableRow>
             <TableHeaderCell>프로젝트명</TableHeaderCell>
@@ -61,6 +62,7 @@ export function ProjectTable({ projects }: { projects: ProjectProgress[] }) {
                       value={progress}
                       color={progress === 100 ? 'green' : 'blue'}
                       className="w-20"
+                      aria-label={`${p.name} 진행률 ${progress}%`}
                     />
                     <Text className="text-xs">{progress}%</Text>
                   </div>

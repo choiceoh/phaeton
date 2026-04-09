@@ -52,8 +52,8 @@ export function AlertsView({
   overloaded: StaffItem[]
 }) {
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">알림 센터</h1>
+    <div className="space-y-6" aria-live="polite">
+      <h2 className="text-2xl font-bold">알림 센터</h2>
 
       <Card>
         <div className="mb-4 flex items-center gap-2">
