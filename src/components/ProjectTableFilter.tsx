@@ -1,6 +1,6 @@
 'use client'
 
-import { Button, Select, SelectItem, TextInput } from '@tremor/react'
+import { Select, SelectItem, TextInput } from '@tremor/react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 
 import { ProjectTable } from '@/components/ProjectTable'
@@ -64,10 +64,12 @@ export function ProjectTableFilter({ projects }: { projects: ProjectProgress[] }
           <SelectItem value="testing">시운전</SelectItem>
           <SelectItem value="cod">운영</SelectItem>
         </Select>
-        <a href="/api/export/projects" download className="ml-auto">
-          <Button variant="secondary" size="sm">
-            Excel 다운로드
-          </Button>
+        <a
+          href="/api/export/projects"
+          download
+          className="ml-auto text-sm text-stone-500 underline underline-offset-2 hover:text-stone-700"
+        >
+          Excel 다운로드
         </a>
       </div>
       <ProjectTable projects={filtered} />
