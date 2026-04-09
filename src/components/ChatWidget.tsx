@@ -2,14 +2,16 @@
 
 import { useState } from 'react'
 
+import { useChatContext } from '@/components/ChatContext'
 import ChatPanel from '@/components/ChatPanel'
 
 export default function ChatWidget() {
   const [open, setOpen] = useState(false)
+  const { pageContext } = useChatContext()
 
   return (
     <>
-      {open && <ChatPanel onClose={() => setOpen(false)} />}
+      {open && <ChatPanel onClose={() => setOpen(false)} context={pageContext} />}
       <button
         onClick={() => setOpen((prev) => !prev)}
         className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-stone-700 text-lg text-white shadow-lg hover:bg-stone-800"

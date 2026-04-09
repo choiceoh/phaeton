@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 
+import { ChatContextSetter } from '@/components/ChatContextSetter'
 import { ProjectDetailView } from '@/components/ProjectDetailView'
 
 import config from '@payload-config'
@@ -57,35 +58,45 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         : null,
   }))
 
+  const chatContext = [
+    `프로젝트: ${project.name} (${project.code})`,
+    `유형: ${project.type}, 상태: ${project.status}`,
+    `마일스톤: ${milestones.length}개 중 ${milestones.filter((m) => m.status === 'done').length}개 완료`,
+  ].join('\n')
+
   return (
-    <ProjectDetailView
-      project={{
-        name: project.name,
-        code: project.code,
-        type: project.type,
-        status: project.status,
-        capacityKw: project.capacityKw ?? null,
-        codTarget: project.codTarget ?? null,
-        client: project.client ?? null,
-      }}
-      milestones={milestones}
-      assignments={assignmentsRes.docs.map((a) => ({
-        id: a.id,
-        staff:
-          typeof a.staff === 'object' && a.staff
-            ? { name: (a.staff as { name: string }).name }
-            : null,
-        roleOnProject: a.roleOnProject ?? null,
-        allocationPct: a.allocationPct ?? null,
-        startDate: a.startDate ?? null,
-        endDate: a.endDate ?? null,
-      }))}
-      documents={docsRes.docs.map((d) => ({
-        id: d.id,
-        title: d.title,
-        docType: d.docType,
-        expiryDate: d.expiryDate ?? null,
-      }))}
-    />
+    <>
+      <ChatContextSetter context={chatContext} />
+      <ProjectDetailView
+        project={{
+          id: String(project.id),
+          name: project.name,
+          code: project.code,
+          type: project.type,
+          status: project.status,
+          capacityKw: project.capacityKw ?? null,
+          codTarget: project.codTarget ?? null,
+          client: project.client ?? null,
+        }}
+        milestones={milestones}
+        assignments={assignmentsRes.docs.map((a) => ({
+          id: a.id,
+          staff:
+            typeof a.staff === 'object' && a.staff
+              ? { name: (a.staff as { name: string }).name }
+              : null,
+          roleOnProject: a.roleOnProject ?? null,
+          allocationPct: a.allocationPct ?? null,
+          startDate: a.startDate ?? null,
+          endDate: a.endDate ?? null,
+        }))}
+        documents={docsRes.docs.map((d) => ({
+          id: d.id,
+          title: d.title,
+          docType: d.docType,
+          expiryDate: d.expiryDate ?? null,
+        }))}
+      />
+    </>
   )
 }

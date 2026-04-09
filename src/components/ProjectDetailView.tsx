@@ -1,27 +1,30 @@
 'use client'
 
+import Link from 'next/link'
+
 import {
+  Badge,
   Card,
   Metric,
-  Text,
-  Badge,
   ProgressBar,
   Table,
+  TableBody,
+  TableCell,
   TableHead,
   TableHeaderCell,
-  TableBody,
   TableRow,
-  TableCell,
+  Text,
 } from '@tremor/react'
 
+import { DocumentUploadForm } from '@/components/DocumentUploadForm'
 import { MilestoneTimeline } from '@/components/MilestoneTimeline'
 import {
-  PROJECT_STATUS_LABELS,
-  PROJECT_TYPE_LABELS,
-  PROJECT_TYPE_COLORS,
   DOC_TYPE_LABELS,
+  PROJECT_STATUS_LABELS,
+  PROJECT_TYPE_COLORS,
+  PROJECT_TYPE_LABELS,
 } from '@/lib/constants'
-import { formatCodTarget } from '@/lib/format'
+import { fmtNum, formatCodTarget } from '@/lib/format'
 
 interface MilestoneItem {
   id: number | string
@@ -52,6 +55,7 @@ interface DocumentItem {
 }
 
 interface ProjectData {
+  id: string | number
   name: string
   code: string
   type: string
@@ -89,6 +93,13 @@ export function ProjectDetailView({
               {PROJECT_TYPE_LABELS[project.type] || project.type}
             </Badge>
             <Badge color="gray">{PROJECT_STATUS_LABELS[project.status] || project.status}</Badge>
+            <Link
+              href={`/projects/${project.id}/edit`}
+              className="ml-2 rounded-md border border-gray-300 px-3 py-1 text-sm
+                text-gray-600 hover:bg-gray-50"
+            >
+              수정
+            </Link>
           </div>
         </div>
 
@@ -96,7 +107,7 @@ export function ProjectDetailView({
           <div>
             <Text className="text-xs text-gray-500">설비용량</Text>
             <Metric className="text-lg">
-              {project.capacityKw ? `${project.capacityKw} kW` : '-'}
+              {project.capacityKw ? `${fmtNum(project.capacityKw)} kW` : '-'}
             </Metric>
           </div>
           <div>
@@ -148,7 +159,7 @@ export function ProjectDetailView({
                     <TableCell>{a.roleOnProject || '-'}</TableCell>
                     <TableCell>
                       <Badge color={Number(a.allocationPct) > 100 ? 'red' : 'gray'}>
-                        {a.allocationPct}%
+                        {fmtNum(a.allocationPct)}%
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs">
@@ -206,6 +217,7 @@ export function ProjectDetailView({
                 )}
               </TableBody>
             </Table>
+            <DocumentUploadForm projectId={String(project.id)} />
           </Card>
         </div>
       </div>

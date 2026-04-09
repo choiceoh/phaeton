@@ -1,8 +1,8 @@
 import { headers } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
-import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/constants'
+import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS, DEPARTMENT_LABELS } from '@/lib/constants'
 import { getProjectExportRows } from '@/lib/queries'
 
 import config from '@payload-config'
@@ -14,9 +14,14 @@ const CSV_HEADERS = [
   '프로젝트명',
   '유형',
   '단계',
+  '부서',
+  '용량(kW)',
   '진행률(%)',
+  '전체 마일스톤',
+  '완료 마일스톤',
+  '다음 마감일',
   '시작일',
-  '목표일',
+  'COD 목표일',
   'EPC금액(원)',
 ]
 
@@ -41,19 +46,24 @@ function formatNumber(value: number | null): string {
   return value.toLocaleString('ko-KR')
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const payload = await getPayload({ config })
 
-  // 인증 확인
   const headersList = await headers()
   const { user } = await payload.auth({ headers: headersList })
   if (!user) {
     return NextResponse.json({ error: '인증이 필요합니다' }, { status: 401 })
   }
 
-  const rows = await getProjectExportRows(payload)
+  const sp = req.nextUrl.searchParams
+  const filters = {
+    type: sp.get('type') || undefined,
+    status: sp.get('status') || undefined,
+    q: sp.get('q') || undefined,
+  }
 
-  // UTF-8 BOM for Korean characters in Excel
+  const rows = await getProjectExportRows(payload, filters)
+
   const BOM = '\uFEFF'
   const headerLine = CSV_HEADERS.map(escapeCSV).join(',')
   const dataLines = rows.map((row) =>
@@ -62,7 +72,12 @@ export async function GET() {
       escapeCSV(row.name || ''),
       escapeCSV(PROJECT_TYPE_LABELS[row.type] || row.type),
       escapeCSV(PROJECT_STATUS_LABELS[row.status] || row.status),
+      escapeCSV(row.department ? DEPARTMENT_LABELS[row.department] || row.department : ''),
+      row.capacity_kw !== null && row.capacity_kw !== undefined ? String(row.capacity_kw) : '',
       row.progress_pct !== null && row.progress_pct !== undefined ? String(row.progress_pct) : '0',
+      String(row.total_milestones || '0'),
+      String(row.done_milestones || '0'),
+      formatDate(row.next_due),
       formatDate(row.created_at),
       formatDate(row.cod_target),
       formatNumber(row.epc_value),

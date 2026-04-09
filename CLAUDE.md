@@ -13,6 +13,7 @@
 - `docs/05-SOLAR-DOMAIN.md` — 태양광 인허가 절차, 공사 단계, 관련 법규, 마일스톤 템플릿. 도메인 작업 시 필수
 - `docs/06-DESIGN-SYSTEM.md` — 색상, 상태 매핑, 톤앤매너. UI 작업 시 필수
 - `docs/07-LINT-RULES.md` — 포매팅, 네이밍, import 순서
+- `docs/08-TREMOR-TIPS.md` — Tremor 색상 오버라이드 삽질 기록. UI 수정 전 필수
 
 ## 스택 규칙
 
@@ -40,14 +41,14 @@
 
 ## 색상 규칙 (절대 준수)
 
-색상은 의미 기반으로만 사용. 장식용 색상 금지.
+색상은 의미 기반으로만 사용. 장식용 색상 금지. **아이보리 웜톤 단일 기조.**
 
-- 정상/완료: `green-500`
-- 진행중/정보: `blue-500`
-- 경고/주의: `amber-500`
-- 위험/지연: `red-500`
-- 비활성/대기: `gray-300`
-- 프로젝트 유형: 태양광=`amber`, 루프탑=`sky`, ESS=`emerald`, 하이브리드=`violet`
+- 페이지 배경: `bg-ivory-100`, 컴포넌트 배경: `bg-ivory-50`
+- 기본 텍스트: `text-stone-800`, 보조 텍스트: `text-stone-500`
+- 완료/정상: `green-400`, 경고: `amber-400`, 위험/지연: `red-400`
+- 진행중: `stone-600` (파란색 대신)
+- **금지:** `blue-*`, `sky-*`, `gray-*`(cool gray), `bg-white`
+- Tremor Badge/Button 사용 금지 → `WarmBadge` 또는 텍스트 링크 사용 (08-TREMOR-TIPS.md 참고)
 
 ## 상태 라벨 (한국어 고정)
 
