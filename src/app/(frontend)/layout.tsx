@@ -11,9 +11,9 @@ import './globals.css'
 export const dynamic = 'force-dynamic'
 
 const BANNER_STYLES = {
-  info: 'bg-blue-50 text-blue-800 border-blue-200',
+  info: 'bg-stone-100 text-stone-800 border-stone-300',
   warning: 'bg-amber-50 text-amber-800 border-amber-200',
-  urgent: 'bg-red-50 text-red-800 border-red-200',
+  urgent: 'bg-red-50 text-red-700 border-red-200',
 } as const
 
 export const metadata = {
@@ -66,24 +66,24 @@ export default async function FrontendLayout({ children }: { children: React.Rea
               <Link
                 key={n.href}
                 href={n.href}
-                className="text-sm text-gray-600 hover:text-gray-900"
+                className="text-sm text-stone-600 hover:text-stone-900"
               >
                 {n.label}
               </Link>
             ))}
           </div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-stone-500">
             {user ? (
               <>
                 {user.name} ({user.role})
                 {['director', 'pm'].includes(user.role as string) && (
-                  <Link href="/admin" className="ml-4 text-blue-600">
+                  <Link href="/admin" className="ml-4 text-stone-700 underline underline-offset-2">
                     관리
                   </Link>
                 )}
               </>
             ) : (
-              <Link href="/admin/login" className="text-blue-600">
+              <Link href="/admin/login" className="text-stone-700 underline underline-offset-2">
                 로그인
               </Link>
             )}

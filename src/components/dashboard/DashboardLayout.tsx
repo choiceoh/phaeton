@@ -149,20 +149,20 @@ export function DashboardLayout({ data, userId, savedConfig }: DashboardLayoutPr
             <>
               <button
                 onClick={() => setShowPalette(true)}
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
+                className="rounded-md border border-stone-300 bg-ivory-50 px-3 py-1.5 text-sm hover:bg-ivory-100"
               >
                 + 위젯 추가
               </button>
               <button
                 onClick={cancelEdit}
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
+                className="rounded-md border border-stone-300 bg-ivory-50 px-3 py-1.5 text-sm hover:bg-ivory-100"
               >
                 취소
               </button>
               <button
                 onClick={saveLayout}
                 disabled={!dirty}
-                className="rounded-md bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600 disabled:opacity-50"
+                className="rounded-md bg-stone-700 px-3 py-1.5 text-sm text-white hover:bg-stone-800 disabled:opacity-50"
               >
                 저장
               </button>
@@ -170,7 +170,7 @@ export function DashboardLayout({ data, userId, savedConfig }: DashboardLayoutPr
           ) : (
             <button
               onClick={() => setEditing(true)}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
+              className="rounded-md border border-stone-300 bg-ivory-50 px-3 py-1.5 text-sm hover:bg-ivory-100"
             >
               편집
             </button>
@@ -179,8 +179,8 @@ export function DashboardLayout({ data, userId, savedConfig }: DashboardLayoutPr
       </div>
 
       {editing && (
-        <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
-          <Text className="text-sm text-blue-700">
+        <div className="mb-3 rounded-md border border-stone-300 bg-stone-100 px-3 py-2">
+          <Text className="text-sm text-stone-700">
             위젯을 드래그하여 위치를 변경하고, 모서리를 끌어 크기를 조절하세요.
           </Text>
         </div>
@@ -210,13 +210,13 @@ export function DashboardLayout({ data, userId, savedConfig }: DashboardLayoutPr
           {widgets.map((wId) => (
             <div key={wId} className="group relative">
               {editing && (
-                <div className="widget-drag-handle absolute left-0 right-0 top-0 z-10 flex h-7 cursor-move items-center justify-between rounded-t-md border-b border-gray-200 bg-gray-100 px-2">
-                  <Text className="text-xs text-gray-500">
+                <div className="widget-drag-handle absolute left-0 right-0 top-0 z-10 flex h-7 cursor-move items-center justify-between rounded-t-md border-b border-stone-200 bg-stone-100 px-2">
+                  <Text className="text-xs text-stone-500">
                     {WIDGET_REGISTRY[wId]?.label || wId}
                   </Text>
                   <button
                     onClick={() => removeWidget(wId)}
-                    className="text-sm leading-none text-gray-400 hover:text-red-500"
+                    className="text-sm leading-none text-stone-400 hover:text-red-500"
                   >
                     &times;
                   </button>

@@ -17,11 +17,11 @@ interface MilestoneItem {
 }
 
 const NODE_BG: Record<string, string> = {
-  done: 'bg-green-500',
-  active: 'bg-blue-500',
-  pending: 'bg-gray-300',
-  blocked: 'bg-amber-500',
-  skipped: 'bg-gray-300',
+  done: 'bg-green-400',
+  active: 'bg-blue-400',
+  pending: 'bg-stone-300',
+  blocked: 'bg-amber-400',
+  skipped: 'bg-stone-300',
 }
 
 function getDaysOverdue(dueDate: string | null | undefined, status: string): number | null {
@@ -35,7 +35,7 @@ function getDaysOverdue(dueDate: string | null | undefined, status: string): num
 
 export function MilestoneTimeline({ milestones }: { milestones: MilestoneItem[] }) {
   if (milestones.length === 0) {
-    return <p className="text-sm text-gray-400">마일스톤이 없습니다.</p>
+    return <p className="text-sm text-stone-400">마일스톤이 없습니다.</p>
   }
 
   return (
@@ -50,9 +50,9 @@ export function MilestoneTimeline({ milestones }: { milestones: MilestoneItem[] 
           <div key={m.id} className="flex">
             <div className="mr-4 flex flex-col items-center">
               <div
-                className={`mt-1 h-3 w-3 shrink-0 rounded-full ${NODE_BG[m.status] || 'bg-gray-300'}`}
+                className={`mt-1 h-3 w-3 shrink-0 rounded-full ${NODE_BG[m.status] || 'bg-stone-300'}`}
               />
-              {!isLast && <div className="min-h-[2.5rem] w-0.5 flex-1 bg-gray-200" />}
+              {!isLast && <div className="min-h-[2.5rem] w-0.5 flex-1 bg-stone-200" />}
             </div>
             <div className="pb-5">
               <div className="flex flex-wrap items-center gap-2">
@@ -63,7 +63,7 @@ export function MilestoneTimeline({ milestones }: { milestones: MilestoneItem[] 
                 {category && <Badge color="gray">{CATEGORY_LABELS[category] || category}</Badge>}
                 {overdue && <Badge color="red">{overdue}일 지연</Badge>}
               </div>
-              <div className="mt-1 space-x-3 text-xs text-gray-500">
+              <div className="mt-1 space-x-3 text-xs text-stone-500">
                 {m.plannedDate && <span>계획: {m.plannedDate}</span>}
                 {m.actualDate && <span>실제: {m.actualDate}</span>}
                 {m.dueDate && <span>마감: {m.dueDate}</span>}

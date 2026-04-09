@@ -23,12 +23,12 @@ export function WidgetPalette({ activeWidgets, onAdd, onRemove, onClose }: Widge
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
-      <div className="h-full w-80 overflow-auto bg-white shadow-lg">
-        <div className="sticky top-0 flex items-center justify-between border-b bg-white px-4 py-3">
+      <div className="h-full w-80 overflow-auto bg-ivory-50 shadow-lg">
+        <div className="sticky top-0 flex items-center justify-between border-b bg-ivory-50 px-4 py-3">
           <Text className="text-lg font-semibold">위젯 추가</Text>
           <button
             onClick={onClose}
-            className="text-xl leading-none text-gray-400 hover:text-gray-600"
+            className="text-xl leading-none text-stone-400 hover:text-stone-600"
           >
             &times;
           </button>
@@ -37,7 +37,7 @@ export function WidgetPalette({ activeWidgets, onAdd, onRemove, onClose }: Widge
         <div className="space-y-6 p-4">
           {Object.entries(grouped).map(([cat, widgets]) => (
             <div key={cat}>
-              <Text className="mb-2 text-xs font-semibold uppercase text-gray-500">
+              <Text className="mb-2 text-xs font-semibold uppercase text-stone-500">
                 {CATEGORY_LABELS[cat] || cat}
               </Text>
               <div className="space-y-2">
@@ -47,7 +47,7 @@ export function WidgetPalette({ activeWidgets, onAdd, onRemove, onClose }: Widge
                     <Card
                       key={w.id}
                       className={`cursor-pointer transition-colors ${
-                        isActive ? 'border-blue-300 bg-blue-50' : 'hover:border-gray-300'
+                        isActive ? 'border-stone-400 bg-stone-100' : 'hover:border-stone-300'
                       }`}
                     >
                       <div
@@ -56,7 +56,7 @@ export function WidgetPalette({ activeWidgets, onAdd, onRemove, onClose }: Widge
                       >
                         <div>
                           <Text className="text-sm font-medium">{w.label}</Text>
-                          <Text className="text-xs text-gray-500">{w.description}</Text>
+                          <Text className="text-xs text-stone-500">{w.description}</Text>
                         </div>
                         <Badge color={isActive ? 'blue' : 'gray'}>
                           {isActive ? '활성' : '추가'}

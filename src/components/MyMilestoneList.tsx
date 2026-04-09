@@ -68,7 +68,7 @@ function MilestoneRow({ m }: { m: MyProjectMilestone }) {
   }
 
   return (
-    <div className="flex items-center justify-between border-b border-gray-100 py-2 last:border-0">
+    <div className="flex items-center justify-between border-b border-stone-100 py-2 last:border-0">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{m.milestone_name}</span>
         <Badge color={MILESTONE_STATUS_COLORS[m.milestone_status] || 'gray'} size="xs">
@@ -84,7 +84,7 @@ function MilestoneRow({ m }: { m: MyProjectMilestone }) {
             {overdue}일 지연
           </Badge>
         )}
-        {m.due_date && <Text className="text-xs text-gray-400">마감: {m.due_date}</Text>}
+        {m.due_date && <Text className="text-xs text-stone-400">마감: {m.due_date}</Text>}
       </div>
       {canAdvance && (
         <Button
@@ -106,7 +106,7 @@ export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone
   const groups = groupByProject(milestones)
 
   if (groups.length === 0) {
-    return <p className="py-12 text-center text-gray-500">현재 배치된 프로젝트가 없습니다.</p>
+    return <p className="py-12 text-center text-stone-500">현재 배치된 프로젝트가 없습니다.</p>
   }
 
   return (
@@ -131,9 +131,9 @@ export function MyMilestoneList({ milestones }: { milestones: MyProjectMilestone
                 <Badge color="gray" size="xs">
                   {PROJECT_STATUS_LABELS[g.projectStatus] || g.projectStatus}
                 </Badge>
-                {g.projectCode && <Text className="text-xs text-gray-400">{g.projectCode}</Text>}
+                {g.projectCode && <Text className="text-xs text-stone-400">{g.projectCode}</Text>}
               </div>
-              <Text className="text-sm text-gray-500">
+              <Text className="text-sm text-stone-500">
                 {done}/{total} 완료
               </Text>
             </div>
