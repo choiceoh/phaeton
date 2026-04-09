@@ -1,0 +1,40 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - gofmt
+    - goimports
+
+linters-settings:
+  errcheck:
+    check-blank: false
+    exclude-functions:
+      - (*github.com/jackc/pgx/v5.Tx).Rollback
+      - (*github.com/jackc/pgx/v5/pgxpool.Pool).QueryRow
+      - encoding/json.Encoder.Encode
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+      - shadow
+  goimports:
+    local-prefixes: phaeton
+
+issues:
+  exclude-rules:
+    # Tests can be more permissive
+    - path: _test\.go
+      linters:
+        - errcheck

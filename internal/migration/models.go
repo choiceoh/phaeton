@@ -18,11 +18,12 @@ const (
 type Operation string
 
 const (
-	OpCreateCollection Operation = "create_collection"
-	OpDropCollection   Operation = "drop_collection"
-	OpAddField         Operation = "add_field"
-	OpAlterField       Operation = "alter_field"
-	OpDropField        Operation = "drop_field"
+	OpCreateCollection     Operation = "create_collection"
+	OpUpdateCollectionMeta Operation = "update_collection_meta"
+	OpDropCollection       Operation = "drop_collection"
+	OpAddField             Operation = "add_field"
+	OpAlterField           Operation = "alter_field"
+	OpDropField            Operation = "drop_field"
 )
 
 // Migration is the persisted record in _history.schema_migrations.

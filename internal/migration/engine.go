@@ -141,6 +141,91 @@ func (e *Engine) applyRelationDDL(ctx context.Context, tx pgx.Tx, ownerSlug stri
 	return []string{fkUp}, nil
 }
 
+// ---------- Update Collection (meta-only) ----------
+
+// UpdateCollection changes label/description/icon/sort_order without DDL.
+// Recorded in migration history with empty DDL so the audit trail is complete.
+func (e *Engine) UpdateCollection(ctx context.Context, id string, req *schema.UpdateCollectionReq) (schema.Collection, error) {
+	before, err := e.store.GetCollection(ctx, id)
+	if err != nil {
+		return schema.Collection{}, err
+	}
+
+	tx, err := e.pool.Begin(ctx)
+	if err != nil {
+		return schema.Collection{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Apply the update via the store, but inside our own tx.
+	if err := updateCollectionTx(ctx, tx, id, req); err != nil {
+		return schema.Collection{}, err
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"before":  before,
+		"changes": req,
+	})
+	// Empty DDL — this is a metadata-only change.
+	if err := recordMigration(ctx, tx, id, OpUpdateCollectionMeta, payload, nil, nil, Safe); err != nil {
+		return schema.Collection{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return schema.Collection{}, fmt.Errorf("commit: %w", err)
+	}
+
+	if err := e.cache.ReloadCollection(ctx, id); err != nil {
+		log.Printf("cache reload after UpdateCollection: %v", err)
+	}
+	return e.store.GetCollection(ctx, id)
+}
+
+// updateCollectionTx applies meta-only updates inside an existing transaction.
+// (The store has its own UpdateCollection that runs against the pool — we need
+// the tx variant for atomic recording with the migration row.)
+func updateCollectionTx(ctx context.Context, tx pgx.Tx, id string, req *schema.UpdateCollectionReq) error {
+	uid := pgUUID(id)
+	sets := []string{}
+	args := []any{}
+	idx := 1
+
+	if req.Label != nil {
+		sets = append(sets, fmt.Sprintf("label = $%d", idx))
+		args = append(args, *req.Label)
+		idx++
+	}
+	if req.Description != nil {
+		sets = append(sets, fmt.Sprintf("description = $%d", idx))
+		args = append(args, nilStr(*req.Description))
+		idx++
+	}
+	if req.Icon != nil {
+		sets = append(sets, fmt.Sprintf("icon = $%d", idx))
+		args = append(args, nilStr(*req.Icon))
+		idx++
+	}
+	if req.SortOrder != nil {
+		sets = append(sets, fmt.Sprintf("sort_order = $%d", idx))
+		args = append(args, *req.SortOrder)
+		idx++
+	}
+	if len(sets) == 0 {
+		return nil
+	}
+	args = append(args, uid)
+	q := fmt.Sprintf("UPDATE _meta.collections SET %s, updated_at = now() WHERE id = $%d",
+		strings.Join(sets, ", "), idx)
+	tag, err := tx.Exec(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("update collection: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("collection %s: %w", id, schema.ErrNotFound)
+	}
+	return nil
+}
+
 // ---------- Drop Collection ----------
 
 // PreviewDropCollection returns the impact analysis without modifying anything.
@@ -435,7 +520,29 @@ func (e *Engine) DropField(ctx context.Context, fieldID string) error {
 	}
 	defer tx.Rollback(ctx)
 
-	ddlUp, ddlDown := GenerateDropColumn(col.Slug, f)
+	var ddlUp, ddlDown []string
+
+	// Many-to-many fields are backed by a junction table, not a column on the owner table.
+	// Drop the junction table instead of attempting a non-existent DROP COLUMN.
+	if f.Relation != nil && f.Relation.RelationType == schema.RelManyToMany {
+		junc := f.Relation.JunctionTable
+		if junc == "" {
+			target, ok := e.cache.CollectionByID(f.Relation.TargetCollectionID)
+			if !ok {
+				return fmt.Errorf("%w: junction target %s unknown", schema.ErrInvalidInput, f.Relation.TargetCollectionID)
+			}
+			junc = col.Slug + "_" + target.Slug + "_rel"
+		}
+		qJunc := quoteIdent("data", junc)
+		ddlUp = []string{fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", qJunc)}
+		// Rollback: re-create the junction table.
+		target, _ := e.cache.CollectionByID(f.Relation.TargetCollectionID)
+		jUp, _ := GenerateJunctionTable(col.Slug, target.Slug, junc)
+		ddlDown = []string{jUp}
+	} else {
+		ddlUp, ddlDown = GenerateDropColumn(col.Slug, f)
+	}
+
 	if err := execStmts(ctx, tx, ddlUp); err != nil {
 		return fmt.Errorf("exec drop column: %w", err)
 	}

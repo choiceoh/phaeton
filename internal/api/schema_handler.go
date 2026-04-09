@@ -31,7 +31,7 @@ func (h *SchemaHandler) GetCollection(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	col, err := h.store.GetCollection(r.Context(), id)
 	if err != nil {
-		handleErr(w, err)
+		handleErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, col)
@@ -46,7 +46,7 @@ func (h *SchemaHandler) CreateCollection(w http.ResponseWriter, r *http.Request)
 
 	col, err := h.engine.CreateCollection(r.Context(), &req)
 	if err != nil {
-		handleErr(w, err)
+		handleErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, col)
@@ -59,9 +59,9 @@ func (h *SchemaHandler) UpdateCollection(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	col, err := h.store.UpdateCollection(r.Context(), id, &req)
+	col, err := h.engine.UpdateCollection(r.Context(), id, &req)
 	if err != nil {
-		handleErr(w, err)
+		handleErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, col)
@@ -74,7 +74,7 @@ func (h *SchemaHandler) DeleteCollection(w http.ResponseWriter, r *http.Request)
 	if !confirmed {
 		preview, err := h.engine.PreviewDropCollection(r.Context(), id)
 		if err != nil {
-			handleErr(w, err)
+			handleErr(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -85,7 +85,7 @@ func (h *SchemaHandler) DeleteCollection(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.engine.DropCollection(r.Context(), id); err != nil {
-		handleErr(w, err)
+		handleErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -104,7 +104,7 @@ func (h *SchemaHandler) AddField(w http.ResponseWriter, r *http.Request) {
 	confirmed := r.URL.Query().Get("confirm") == "true"
 	field, preview, err := h.engine.AddField(r.Context(), collectionID, &req, confirmed)
 	if err != nil {
-		handleErr(w, err)
+		handleErr(w, r, err)
 		return
 	}
 	if preview != nil {
@@ -128,7 +128,7 @@ func (h *SchemaHandler) UpdateField(w http.ResponseWriter, r *http.Request) {
 	confirmed := r.URL.Query().Get("confirm") == "true"
 	preview, err := h.engine.AlterField(r.Context(), fieldID, &req, confirmed)
 	if err != nil {
-		handleErr(w, err)
+		handleErr(w, r, err)
 		return
 	}
 	if preview != nil {
@@ -141,7 +141,7 @@ func (h *SchemaHandler) UpdateField(w http.ResponseWriter, r *http.Request) {
 
 	field, err := h.store.GetField(r.Context(), fieldID)
 	if err != nil {
-		handleErr(w, err)
+		handleErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, field)
@@ -154,7 +154,7 @@ func (h *SchemaHandler) DeleteField(w http.ResponseWriter, r *http.Request) {
 	if !confirmed {
 		preview, err := h.engine.PreviewDropField(r.Context(), fieldID)
 		if err != nil {
-			handleErr(w, err)
+			handleErr(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -165,7 +165,7 @@ func (h *SchemaHandler) DeleteField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.engine.DropField(r.Context(), fieldID); err != nil {
-		handleErr(w, err)
+		handleErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -185,7 +185,7 @@ func (h *SchemaHandler) MigrationHistory(w http.ResponseWriter, r *http.Request)
 		migs, err = h.engine.FullHistory(r.Context())
 	}
 	if err != nil {
-		handleErr(w, err)
+		handleErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, migs)
@@ -194,7 +194,7 @@ func (h *SchemaHandler) MigrationHistory(w http.ResponseWriter, r *http.Request)
 func (h *SchemaHandler) RollbackMigration(w http.ResponseWriter, r *http.Request) {
 	migrationID := chi.URLParam(r, "migrationId")
 	if err := h.engine.Rollback(r.Context(), migrationID); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "rolled_back"})

@@ -16,7 +16,16 @@ var reservedParams = map[string]bool{
 
 // ParseFilters converts query params into a WHERE clause with parameterised args.
 // Only field slugs present in `fields` are accepted; unknown params are silently ignored.
+//
+// Equivalent to ParseFiltersWithPrefix(params, fields, "").
 func ParseFilters(params url.Values, fields []schema.Field) (where string, args []any, err error) {
+	return ParseFiltersWithPrefix(params, fields, "")
+}
+
+// ParseFiltersWithPrefix is the prefixed variant. When `prefix` is non-empty
+// (e.g. `"data"."projects"`), generated columns are qualified as
+// `prefix."col"` so they remain unambiguous in JOIN queries.
+func ParseFiltersWithPrefix(params url.Values, fields []schema.Field, prefix string) (where string, args []any, err error) {
 	valid := make(map[string]schema.FieldType, len(fields))
 	for _, f := range fields {
 		valid[f.Slug] = f.FieldType
@@ -39,7 +48,12 @@ func ParseFilters(params url.Values, fields []schema.Field) (where string, args 
 			return "", nil, fmt.Errorf("invalid filter format for %q: expected op:value", key)
 		}
 		op, operand := parts[0], parts[1]
-		qCol := fmt.Sprintf("%q", key) // quoted identifier
+		var qCol string
+		if prefix != "" {
+			qCol = fmt.Sprintf(`%s."%s"`, prefix, key)
+		} else {
+			qCol = fmt.Sprintf("%q", key)
+		}
 
 		switch op {
 		case "eq":
@@ -97,41 +111,87 @@ func ParseFilters(params url.Values, fields []schema.Field) (where string, args 
 	return where, args, nil
 }
 
-// ParseSort converts the "sort" query param into an ORDER BY clause.
+// ParseSort converts the "sort" query param into an ORDER BY clause for the
+// owning table only. For relation-aware sorting use ParseSortWithRelations.
+//
 // Format: "-field" for DESC, "field" for ASC. Multiple comma-separated.
 func ParseSort(param string, fields []schema.Field) string {
+	clause, _ := ParseSortWithRelations(param, fields, nil)
+	return clause
+}
+
+// SortJoin describes a single LEFT JOIN that has to be added to a query
+// because the sort spec referenced a relation field via dot notation.
+type SortJoin struct {
+	Alias       string // safe alias used in the SQL ("rel0", "rel1", ...)
+	TargetTable string // already-quoted "data"."subsidiaries"
+	OwnerColumn string // owning column slug (e.g. "subsidiary")
+}
+
+// ParseSortWithRelations supports dot-notation like "-subsidiary.name" by
+// generating LEFT JOIN clauses against the related table. The `cache` is used
+// to look up the target collection's slug; pass nil to disable relation sort.
+func ParseSortWithRelations(param string, fields []schema.Field, resolveRelation func(field schema.Field) (targetTable string, ok bool)) (orderBy string, joins []SortJoin) {
 	if param == "" {
-		return "ORDER BY created_at DESC"
+		return "ORDER BY created_at DESC", nil
 	}
 
-	valid := make(map[string]bool, len(fields))
+	bySlug := make(map[string]schema.Field, len(fields))
 	for _, f := range fields {
-		valid[f.Slug] = true
+		bySlug[f.Slug] = f
 	}
-	// Also allow system columns.
-	valid["created_at"] = true
-	valid["updated_at"] = true
-	valid["id"] = true
+	autoCols := map[string]bool{
+		"id": true, "created_at": true, "updated_at": true,
+	}
 
 	var parts []string
-	for _, s := range strings.Split(param, ",") {
-		s = strings.TrimSpace(s)
-		dir := "ASC"
-		col := s
-		if strings.HasPrefix(s, "-") {
-			dir = "DESC"
-			col = s[1:]
-		}
-		if !valid[col] {
+	joinIdx := 0
+	for _, raw := range strings.Split(param, ",") {
+		s := strings.TrimSpace(raw)
+		if s == "" {
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("%q %s", col, dir))
+		dir := "ASC"
+		expr := s
+		if strings.HasPrefix(s, "-") {
+			dir = "DESC"
+			expr = s[1:]
+		}
+
+		// Dot notation: <relation>.<target_field>
+		if dot := strings.IndexByte(expr, '.'); dot >= 0 && resolveRelation != nil {
+			ownerSlug := expr[:dot]
+			targetSlug := expr[dot+1:]
+			f, ok := bySlug[ownerSlug]
+			if !ok || f.FieldType != schema.FieldRelation {
+				continue
+			}
+			targetTable, ok := resolveRelation(f)
+			if !ok {
+				continue
+			}
+			alias := fmt.Sprintf("rel%d", joinIdx)
+			joinIdx++
+			joins = append(joins, SortJoin{
+				Alias:       alias,
+				TargetTable: targetTable,
+				OwnerColumn: ownerSlug,
+			})
+			parts = append(parts, fmt.Sprintf("%s.%q %s", alias, targetSlug, dir))
+			continue
+		}
+
+		// Plain column on the owner table.
+		if _, ok := bySlug[expr]; !ok && !autoCols[expr] {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%q %s", expr, dir))
 	}
 
 	if len(parts) == 0 {
-		return "ORDER BY created_at DESC"
+		return "ORDER BY created_at DESC", nil
 	}
-	return "ORDER BY " + strings.Join(parts, ", ")
+	return "ORDER BY " + strings.Join(parts, ", "), joins
 }
 
 // ParsePagination extracts page and limit from query params.

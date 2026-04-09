@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -103,6 +104,11 @@ func validateFieldIn(f *CreateFieldIn) error {
 	if f.FieldType == FieldRelation && f.Relation == nil {
 		return fmt.Errorf("%w: relation field requires relation config", ErrInvalidInput)
 	}
+	if f.FieldType == FieldSelect || f.FieldType == FieldMultiselect {
+		if err := validateSelectOptions(f.Options); err != nil {
+			return fmt.Errorf("field %q: %w", f.Slug, err)
+		}
+	}
 	if f.Relation != nil {
 		if f.Relation.TargetCollectionID == "" {
 			return fmt.Errorf("%w: relation.target_collection_id is required", ErrInvalidInput)
@@ -119,6 +125,45 @@ func validateFieldIn(f *CreateFieldIn) error {
 				return fmt.Errorf("%w: invalid on_delete %q", ErrInvalidInput, f.Relation.OnDelete)
 			}
 		}
+	}
+	return nil
+}
+
+// SelectOptions is the expected shape of `options` for select/multiselect fields.
+type SelectOptions struct {
+	Choices []string `json:"choices"`
+}
+
+// ExtractChoices returns the allowed choices from a raw JSON options payload,
+// or nil if none are set. Used by both validation and the Dynamic API.
+func ExtractChoices(raw json.RawMessage) ([]string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var opts SelectOptions
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		return nil, fmt.Errorf("options must be a JSON object with 'choices' array: %w", err)
+	}
+	return opts.Choices, nil
+}
+
+func validateSelectOptions(raw json.RawMessage) error {
+	choices, err := ExtractChoices(raw)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	if len(choices) == 0 {
+		return fmt.Errorf("%w: select field requires options.choices with at least one value", ErrInvalidInput)
+	}
+	seen := make(map[string]bool, len(choices))
+	for _, c := range choices {
+		if strings.TrimSpace(c) == "" {
+			return fmt.Errorf("%w: choice cannot be empty", ErrInvalidInput)
+		}
+		if seen[c] {
+			return fmt.Errorf("%w: duplicate choice %q", ErrInvalidInput, c)
+		}
+		seen[c] = true
 	}
 	return nil
 }

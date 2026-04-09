@@ -3,14 +3,16 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"phaeton/internal/schema"
 )
 
 type envelope struct {
-	Data  any    `json:"data,omitempty"`
-	Error string `json:"error,omitempty"`
+	Data      any    `json:"data,omitempty"`
+	Error     string `json:"error,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
 }
 
 type listEnvelope struct {
@@ -69,6 +71,39 @@ func errorStatus(err error) int {
 	}
 }
 
-func handleErr(w http.ResponseWriter, err error) {
-	writeError(w, errorStatus(err), err.Error())
+// publicMessage decides what to expose to the client. Domain errors (validation,
+// not-found, conflict) are user-facing and shown in full. Anything else is
+// considered internal and replaced with a generic message — the original error
+// is logged at error level for operators.
+func publicMessage(err error) string {
+	switch {
+	case errors.Is(err, schema.ErrNotFound),
+		errors.Is(err, schema.ErrConflict),
+		errors.Is(err, schema.ErrInvalidInput):
+		return err.Error()
+	default:
+		return "internal server error"
+	}
+}
+
+// handleErr is the central error response helper. It logs internal errors at
+// error level (with request context) and returns a sanitized message to the client.
+func handleErr(w http.ResponseWriter, r *http.Request, err error) {
+	status := errorStatus(err)
+	msg := publicMessage(err)
+
+	if status >= 500 {
+		// Log full details for operators; user sees only "internal server error".
+		Log(r).Error("internal error",
+			slog.String("error", err.Error()),
+			slog.Int("status", status),
+		)
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(envelope{
+		Error:     msg,
+		RequestID: RequestID(r),
+	})
 }

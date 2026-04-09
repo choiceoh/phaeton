@@ -38,39 +38,79 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := r.URL.Query()
-	where, args, err := ParseFilters(params, fields)
+	page, limit, offset := ParsePagination(params)
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+
+	// Resolve relation targets for dot-notation sorts (e.g. "-subsidiary.name").
+	resolveRel := func(f schema.Field) (string, bool) {
+		if f.Relation == nil {
+			return "", false
+		}
+		target, ok := h.cache.CollectionByID(f.Relation.TargetCollectionID)
+		if !ok {
+			return "", false
+		}
+		return fmt.Sprintf("%q.%q", "data", target.Slug), true
+	}
+	orderBy, sortJoins := ParseSortWithRelations(params.Get("sort"), fields, resolveRel)
+
+	// Filters: when sort joins are present, columns must be qualified to avoid
+	// ambiguous-column errors against the joined target tables.
+	var (
+		where string
+		args  []any
+		err   error
+	)
+	if len(sortJoins) > 0 {
+		where, args, err = ParseFiltersWithPrefix(params, fields, qTable)
+	} else {
+		where, args, err = ParseFilters(params, fields)
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	orderBy := ParseSort(params.Get("sort"), fields)
-	page, limit, offset := ParsePagination(params)
-
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-
-	// Count total.
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE deleted_at IS NULL %s", qTable, where)
+	// Count total. Sort joins are not needed for COUNT, but we use the same
+	// WHERE prefix to keep parameter ordering consistent.
+	deletedClause := "deleted_at IS NULL"
+	if len(sortJoins) > 0 {
+		deletedClause = fmt.Sprintf("%s.deleted_at IS NULL", qTable)
+	}
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s %s", qTable, deletedClause, where)
 	var total int64
 	if err := h.pool.QueryRow(r.Context(), countSQL, args...).Scan(&total); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 
-	// Fetch page.
-	selectCols := buildSelectCols(fields)
-	dataSQL := fmt.Sprintf("SELECT %s FROM %s WHERE deleted_at IS NULL %s %s LIMIT %d OFFSET %d",
-		selectCols, qTable, where, orderBy, limit, offset)
+	// Build optional LEFT JOINs for relation sorting.
+	joinClause := ""
+	for _, j := range sortJoins {
+		joinClause += fmt.Sprintf(" LEFT JOIN %s AS %s ON %s.%q = %s.id",
+			j.TargetTable, j.Alias, qTable, j.OwnerColumn, j.Alias,
+		)
+	}
+
+	// Fetch page. Qualify SELECT columns with the table name when joins are present.
+	var selectCols string
+	if joinClause != "" {
+		selectCols = qualifySelectCols(fields, qTable)
+	} else {
+		selectCols = buildSelectCols(fields)
+	}
+	dataSQL := fmt.Sprintf("SELECT %s FROM %s%s WHERE %s %s %s LIMIT %d OFFSET %d",
+		selectCols, qTable, joinClause, deletedClause, where, orderBy, limit, offset)
 
 	rows, err := h.pool.Query(r.Context(), dataSQL, args...)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 	records, err := collectRows(rows)
 	rows.Close()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 
@@ -101,13 +141,13 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), sql, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 	records, err := collectRows(rows)
 	rows.Close()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 	if len(records) == 0 {
@@ -141,8 +181,8 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateInput(body, fields, true); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if err := validatePayload(r.Context(), h.pool, h.cache, body, fields, true); err != nil {
+		handleErr(w, r, err)
 		return
 	}
 
@@ -173,23 +213,30 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	selectCols := buildSelectCols(fields)
 
-	sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
-		qTable,
-		strings.Join(colNames, ", "),
-		strings.Join(placeholders, ", "),
-		selectCols,
-	)
+	var sql string
+	if len(colNames) == 0 {
+		// No recognized fields in body — insert a row with all auto-defaults.
+		// PostgreSQL requires `DEFAULT VALUES` syntax for this; `() VALUES ()` is invalid.
+		sql = fmt.Sprintf("INSERT INTO %s DEFAULT VALUES RETURNING %s", qTable, selectCols)
+	} else {
+		sql = fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
+			qTable,
+			strings.Join(colNames, ", "),
+			strings.Join(placeholders, ", "),
+			selectCols,
+		)
+	}
 
 	rows, err := h.pool.Query(r.Context(), sql, args...)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 	defer rows.Close()
 
 	records, err := collectRows(rows)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 	if len(records) == 0 {
@@ -215,8 +262,8 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateInput(body, fields, false); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if err := validatePayload(r.Context(), h.pool, h.cache, body, fields, false); err != nil {
+		handleErr(w, r, err)
 		return
 	}
 
@@ -242,14 +289,14 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), sql, args...)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 	defer rows.Close()
 
 	records, err := collectRows(rows)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 	if len(records) == 0 {
@@ -257,6 +304,270 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, records[0])
+}
+
+// --- Aggregate ---
+
+// Aggregate runs simple GROUP BY queries for dashboard widgets.
+// Query params:
+//   group=field_slug   — required, must be a non-relation column on this collection
+//   fn=count|sum|avg|min|max — default: count
+//   field=field_slug   — required for sum/avg/min/max; ignored for count
+//   filter passthrough — same WHERE syntax as List
+//
+// Response: [{ "group": "<value>", "value": <number> }, ...]
+func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	col, fields, ok := h.resolveCollection(w, slug)
+	if !ok {
+		return
+	}
+
+	params := r.URL.Query()
+	groupSlug := params.Get("group")
+	if groupSlug == "" {
+		writeError(w, http.StatusBadRequest, "group parameter is required")
+		return
+	}
+
+	// Validate group column.
+	bySlug := make(map[string]schema.Field, len(fields))
+	for _, f := range fields {
+		bySlug[f.Slug] = f
+	}
+	groupField, ok := bySlug[groupSlug]
+	if !ok {
+		// Allow grouping by certain auto columns too.
+		if groupSlug != "created_at" && groupSlug != "deleted_at" {
+			handleErr(w, r, fmt.Errorf("%w: group field %q not found", schema.ErrInvalidInput, groupSlug))
+			return
+		}
+	}
+	if groupField.FieldType == schema.FieldRelation {
+		// Grouping by raw UUID is allowed but unusual; client should expand.
+	}
+
+	fn := strings.ToLower(params.Get("fn"))
+	if fn == "" {
+		fn = "count"
+	}
+
+	var aggExpr string
+	switch fn {
+	case "count":
+		aggExpr = "COUNT(*)"
+	case "sum", "avg", "min", "max":
+		fieldSlug := params.Get("field")
+		if fieldSlug == "" {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("%s requires field parameter", fn))
+			return
+		}
+		f, ok := bySlug[fieldSlug]
+		if !ok {
+			handleErr(w, r, fmt.Errorf("%w: field %q not found", schema.ErrInvalidInput, fieldSlug))
+			return
+		}
+		if f.FieldType != schema.FieldNumber && f.FieldType != schema.FieldInteger {
+			handleErr(w, r, fmt.Errorf("%w: %s requires numeric field, %s is %s",
+				schema.ErrInvalidInput, fn, fieldSlug, f.FieldType))
+			return
+		}
+		aggExpr = fmt.Sprintf("%s(%q)", strings.ToUpper(fn), fieldSlug)
+	default:
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown aggregation function %q", fn))
+		return
+	}
+
+	where, args, err := ParseFilters(params, fields)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qGroup := fmt.Sprintf("%q", groupSlug)
+
+	sql := fmt.Sprintf(
+		"SELECT %s AS group_key, %s AS agg_value FROM %s WHERE deleted_at IS NULL %s GROUP BY %s ORDER BY %s",
+		qGroup, aggExpr, qTable, where, qGroup, qGroup,
+	)
+
+	rows, err := h.pool.Query(r.Context(), sql, args...)
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	defer rows.Close()
+
+	type bucket struct {
+		Group any `json:"group"`
+		Value any `json:"value"`
+	}
+	var result []bucket
+	for rows.Next() {
+		vals, err := rows.Values()
+		if err != nil {
+			handleErr(w, r, err)
+			return
+		}
+		result = append(result, bucket{
+			Group: normalizeValue(vals[0]),
+			Value: normalizeValue(vals[1]),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// --- Bulk Create ---
+
+// BulkCreate inserts an array of records in a single transaction.
+// Returns 201 with the created rows, or 400/500 if any row fails (entire batch rolls back).
+func (h *DynHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	col, fields, ok := h.resolveCollection(w, slug)
+	if !ok {
+		return
+	}
+
+	var bodies []map[string]any
+	if err := readJSON(r, &bodies); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(bodies) == 0 {
+		writeError(w, http.StatusBadRequest, "empty bulk payload")
+		return
+	}
+	if len(bodies) > 1000 {
+		writeError(w, http.StatusBadRequest, "bulk payload too large (max 1000)")
+		return
+	}
+
+	// Validate every record up front before opening a tx.
+	for i, body := range bodies {
+		if err := validatePayload(r.Context(), h.pool, h.cache, body, fields, true); err != nil {
+			handleErr(w, r, fmt.Errorf("record[%d]: %w", i, err))
+			return
+		}
+	}
+
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	selectCols := buildSelectCols(fields)
+
+	created := make([]map[string]any, 0, len(bodies))
+	for i, body := range bodies {
+		colNames, placeholders, args := buildInsertColumns(body, fields)
+		var sql string
+		if len(colNames) == 0 {
+			sql = fmt.Sprintf("INSERT INTO %s DEFAULT VALUES RETURNING %s", qTable, selectCols)
+		} else {
+			sql = fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
+				qTable,
+				strings.Join(colNames, ", "),
+				strings.Join(placeholders, ", "),
+				selectCols,
+			)
+		}
+		rows, err := tx.Query(r.Context(), sql, args...)
+		if err != nil {
+			handleErr(w, r, fmt.Errorf("record[%d]: %w", i, err))
+			return
+		}
+		recs, err := collectRows(rows)
+		rows.Close()
+		if err != nil {
+			handleErr(w, r, fmt.Errorf("record[%d]: %w", i, err))
+			return
+		}
+		if len(recs) > 0 {
+			created = append(created, recs[0])
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, created)
+}
+
+// BulkDelete soft-deletes records by ID array.
+// Body: { "ids": ["uuid1", "uuid2", ...] }
+func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	col, _, ok := h.resolveCollection(w, slug)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		IDs []string `json:"ids"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(body.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "empty ids array")
+		return
+	}
+	if len(body.IDs) > 1000 {
+		writeError(w, http.StatusBadRequest, "too many ids (max 1000)")
+		return
+	}
+
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	args := make([]any, len(body.IDs))
+	placeholders := make([]string, len(body.IDs))
+	for i, id := range body.IDs {
+		args[i] = id
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+	sql := fmt.Sprintf(
+		"UPDATE %s SET deleted_at = now() WHERE id IN (%s) AND deleted_at IS NULL",
+		qTable, strings.Join(placeholders, ","),
+	)
+	tag, err := h.pool.Exec(r.Context(), sql, args...)
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"deleted": tag.RowsAffected(),
+	})
+}
+
+// buildInsertColumns extracts the column list for an INSERT from a body map,
+// returning quoted column names, $-placeholders, and the matching arg values.
+func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []string, placeholders []string, args []any) {
+	idx := 1
+	for _, f := range fields {
+		v, exists := body[f.Slug]
+		if !exists {
+			continue
+		}
+		cols = append(cols, fmt.Sprintf("%q", f.Slug))
+		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+		args = append(args, coerceValue(v, f.FieldType))
+		idx++
+	}
+	if cb, ok := body["created_by"]; ok {
+		cols = append(cols, `"created_by"`)
+		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+		args = append(args, cb)
+	}
+	return cols, placeholders, args
 }
 
 // --- Delete (soft) ---
@@ -274,7 +585,7 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	tag, err := h.pool.Exec(r.Context(), sql, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		handleErr(w, r, err)
 		return
 	}
 	if tag.RowsAffected() == 0 {
@@ -302,6 +613,20 @@ func buildSelectCols(fields []schema.Field) string {
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
 	}
 	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"deleted_at"`)
+	return strings.Join(cols, ", ")
+}
+
+// qualifySelectCols returns the same column list but each column qualified
+// with the given table prefix and aliased back to its bare name so the
+// row scanner sees the same field names.
+func qualifySelectCols(fields []schema.Field, prefix string) string {
+	cols := []string{fmt.Sprintf(`%s.%q AS %q`, prefix, "id", "id")}
+	for _, f := range fields {
+		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
+	}
+	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "deleted_at"} {
+		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, sysCol, sysCol))
+	}
 	return strings.Join(cols, ", ")
 }
 
@@ -348,17 +673,6 @@ func normalizeValue(v any) any {
 	default:
 		return val
 	}
-}
-
-// validateInput checks required fields and basic type constraints.
-func validateInput(body map[string]any, fields []schema.Field, isCreate bool) error {
-	for _, f := range fields {
-		v, exists := body[f.Slug]
-		if f.IsRequired && isCreate && (!exists || v == nil) {
-			return fmt.Errorf("field %q is required", f.Slug)
-		}
-	}
-	return nil
 }
 
 // expandRelations replaces UUID values in relation fields with the full target

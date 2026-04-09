@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -8,9 +9,13 @@ import (
 )
 
 // Mount registers all API routes on the given router.
-func Mount(r chi.Router, sh *SchemaHandler, dh *DynHandler) {
-	r.Use(middleware.Recoverer)
+// `logger` is the base slog.Logger that per-request loggers are derived from.
+func Mount(r chi.Router, logger *slog.Logger, sh *SchemaHandler, dh *DynHandler) {
 	r.Use(middleware.RealIP)
+	r.Use(middleware.Recoverer)
+	r.Use(withRequestID)
+	r.Use(withLogger(logger))
+	r.Use(withTimeout)
 
 	// Health check.
 	r.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -37,6 +42,9 @@ func Mount(r chi.Router, sh *SchemaHandler, dh *DynHandler) {
 	r.Route("/api/data", func(r chi.Router) {
 		r.Get("/{slug}", dh.List)
 		r.Post("/{slug}", dh.Create)
+		r.Get("/{slug}/aggregate", dh.Aggregate)
+		r.Post("/{slug}/bulk", dh.BulkCreate)
+		r.Post("/{slug}/bulk-delete", dh.BulkDelete)
 		r.Get("/{slug}/{id}", dh.Get)
 		r.Patch("/{slug}/{id}", dh.Update)
 		r.Delete("/{slug}/{id}", dh.Delete)
