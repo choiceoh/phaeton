@@ -87,6 +87,12 @@ export function ProjectTableFilter({ result }: { result: PaginatedResult<Project
         <div className="ml-auto flex items-center gap-4">
           <ColumnSettings />
           <a
+            href="/projects/new"
+            className="text-sm text-blue-600 underline underline-offset-2 hover:text-blue-800"
+          >
+            새 프로젝트
+          </a>
+          <a
             href={`/api/export/projects${exportQuery ? `?${exportQuery}` : ''}`}
             download
             className="text-sm text-stone-500 underline underline-offset-2 hover:text-stone-700"

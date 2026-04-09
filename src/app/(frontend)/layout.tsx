@@ -77,7 +77,9 @@ export default async function FrontendLayout({ children }: { children: React.Rea
           <div className="text-sm text-stone-500">
             {user ? (
               <>
-                {user.name} ({user.role})
+                <Link href="/profile" className="text-stone-600 hover:text-stone-900">
+                  {user.name} ({user.role})
+                </Link>
                 {['director', 'pm'].includes(user.role as string) && (
                   <Link href="/admin" className="ml-4 text-stone-700 underline underline-offset-2">
                     관리
