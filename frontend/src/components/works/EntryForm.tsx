@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { api } from '@/lib/api'
 import type { Field } from '@/lib/types'
 
 interface Props {
@@ -191,7 +192,7 @@ function FieldInput({
         />
       )
     case 'file':
-      return <Input type="file" onChange={(e) => onChange(e.target.files?.[0]?.name)} />
+      return <FileInput value={value as string | undefined} onChange={onChange} />
     case 'json':
       return (
         <Textarea
@@ -211,4 +212,45 @@ function FieldInput({
         <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} />
       )
   }
+}
+
+function FileInput({
+  value,
+  onChange,
+}: {
+  value: string | undefined
+  onChange: (v: unknown) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const result = await api.upload(file)
+      onChange(result.url)
+    } catch {
+      onChange(undefined)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <Input type="file" onChange={handleFile} disabled={uploading} />
+      {uploading && <p className="text-xs text-muted-foreground">업로드 중...</p>}
+      {value && !uploading && (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-primary underline"
+        >
+          {value.split('/').pop()}
+        </a>
+      )}
+    </div>
+  )
 }

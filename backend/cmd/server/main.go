@@ -176,11 +176,21 @@ func buildRouter(
 		r.Route("/api/data", func(r chi.Router) {
 			r.Get("/{slug}", dynH.List)
 			r.Post("/{slug}", dynH.Create)
+			r.Post("/{slug}/bulk", dynH.BulkCreate)
+			r.Delete("/{slug}/bulk", dynH.BulkDelete)
+			r.Get("/{slug}/aggregate", dynH.Aggregate)
 			r.Get("/{slug}/{id}", dynH.Get)
 			r.Patch("/{slug}/{id}", dynH.Update)
 			r.Delete("/{slug}/{id}", dynH.Delete)
 		})
+
+		// File upload.
+		r.Post("/api/upload", handler.Upload)
 	})
+
+	// Serve uploaded files (outside auth — files are accessed by URL).
+	r.Handle("/api/uploads/*", http.StripPrefix("/api/uploads/",
+		http.FileServer(http.Dir("uploads"))))
 
 	// SPA static files — catch-all for non-API routes.
 	serveSPA(r)
