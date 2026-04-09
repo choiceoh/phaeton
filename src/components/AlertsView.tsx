@@ -12,8 +12,10 @@ import {
   TableCell,
 } from '@tremor/react'
 import Link from 'next/link'
+import { useMemo, useState } from 'react'
 
 import { DOC_TYPE_LABELS } from '@/lib/constants'
+import { fmtNum } from '@/lib/format'
 
 interface OverdueItem {
   id: number | string
@@ -42,6 +44,49 @@ interface StaffItem {
   active_projects: number | string
 }
 
+type SortDir = 'asc' | 'desc'
+
+function useSortable<K extends string>(defaultKey: K, defaultDir: SortDir = 'desc') {
+  const [sortKey, setSortKey] = useState<K>(defaultKey)
+  const [sortDesc, setSortDesc] = useState(defaultDir === 'desc')
+
+  function toggle(key: K) {
+    if (sortKey === key) setSortDesc((d) => !d)
+    else {
+      setSortKey(key)
+      setSortDesc(true)
+    }
+  }
+
+  return { sortKey, sortDesc, toggle }
+}
+
+function SortHeader<K extends string>({
+  label,
+  column,
+  sortKey,
+  sortDesc,
+  onSort,
+}: {
+  label: string
+  column: K
+  sortKey: K
+  sortDesc: boolean
+  onSort: (k: K) => void
+}) {
+  const active = sortKey === column
+  const indicator = active ? (sortDesc ? ' \u2193' : ' \u2191') : ''
+  return (
+    <TableHeaderCell
+      className="cursor-pointer select-none hover:text-stone-900"
+      onClick={() => onSort(column)}
+    >
+      {label}
+      {indicator}
+    </TableHeaderCell>
+  )
+}
+
 export function AlertsView({
   overdue,
   expiring,
@@ -51,6 +96,45 @@ export function AlertsView({
   expiring: ExpiringItem[]
   overloaded: StaffItem[]
 }) {
+  const od = useSortable<'days_overdue' | 'due_date' | 'project_name'>('days_overdue')
+  const ex = useSortable<'days_until_expiry' | 'expiry_date' | 'project_name'>('days_until_expiry')
+
+  const sortedOverdue = useMemo(
+    () =>
+      [...overdue].sort((a, b) => {
+        if (od.sortKey === 'project_name') {
+          const cmp = a.project_name.localeCompare(b.project_name)
+          return od.sortDesc ? -cmp : cmp
+        }
+        const av =
+          od.sortKey === 'days_overdue' ? Number(a.days_overdue) : new Date(a.due_date).getTime()
+        const bv =
+          od.sortKey === 'days_overdue' ? Number(b.days_overdue) : new Date(b.due_date).getTime()
+        return od.sortDesc ? bv - av : av - bv
+      }),
+    [overdue, od.sortKey, od.sortDesc],
+  )
+
+  const sortedExpiring = useMemo(
+    () =>
+      [...expiring].sort((a, b) => {
+        if (ex.sortKey === 'project_name') {
+          const cmp = a.project_name.localeCompare(b.project_name)
+          return ex.sortDesc ? -cmp : cmp
+        }
+        const av =
+          ex.sortKey === 'days_until_expiry'
+            ? Number(a.days_until_expiry)
+            : new Date(a.expiry_date).getTime()
+        const bv =
+          ex.sortKey === 'days_until_expiry'
+            ? Number(b.days_until_expiry)
+            : new Date(b.expiry_date).getTime()
+        return ex.sortDesc ? bv - av : av - bv
+      }),
+    [expiring, ex.sortKey, ex.sortDesc],
+  )
+
   return (
     <div className="space-y-6" aria-live="polite">
       <h2 className="text-2xl font-bold">알림 센터</h2>
@@ -58,19 +142,37 @@ export function AlertsView({
       <Card>
         <div className="mb-4 flex items-center gap-2">
           <Text className="text-lg font-medium">지연 마일스톤</Text>
-          <Badge color="red">{overdue.length}</Badge>
+          <Badge color="red">{fmtNum(overdue.length)}</Badge>
         </div>
         <Table>
           <TableHead>
             <TableRow>
               <TableHeaderCell>마일스톤</TableHeaderCell>
-              <TableHeaderCell>프로젝트</TableHeaderCell>
-              <TableHeaderCell>마감일</TableHeaderCell>
-              <TableHeaderCell>지연</TableHeaderCell>
+              <SortHeader
+                label="프로젝트"
+                column="project_name"
+                sortKey={od.sortKey}
+                sortDesc={od.sortDesc}
+                onSort={od.toggle}
+              />
+              <SortHeader
+                label="마감일"
+                column="due_date"
+                sortKey={od.sortKey}
+                sortDesc={od.sortDesc}
+                onSort={od.toggle}
+              />
+              <SortHeader
+                label="지연"
+                column="days_overdue"
+                sortKey={od.sortKey}
+                sortDesc={od.sortDesc}
+                onSort={od.toggle}
+              />
             </TableRow>
           </TableHead>
           <TableBody>
-            {overdue.map((m) => (
+            {sortedOverdue.map((m) => (
               <TableRow key={m.id}>
                 <TableCell>{m.name}</TableCell>
                 <TableCell>
@@ -83,7 +185,7 @@ export function AlertsView({
                 </TableCell>
                 <TableCell>{m.due_date}</TableCell>
                 <TableCell>
-                  <Badge color="red">{m.days_overdue}일</Badge>
+                  <Badge color="red">{fmtNum(m.days_overdue)}일</Badge>
                 </TableCell>
               </TableRow>
             ))}
@@ -101,20 +203,38 @@ export function AlertsView({
       <Card>
         <div className="mb-4 flex items-center gap-2">
           <Text className="text-lg font-medium">만료 임박 서류</Text>
-          <Badge color="amber">{expiring.length}</Badge>
+          <Badge color="amber">{fmtNum(expiring.length)}</Badge>
         </div>
         <Table>
           <TableHead>
             <TableRow>
               <TableHeaderCell>서류명</TableHeaderCell>
-              <TableHeaderCell>프로젝트</TableHeaderCell>
+              <SortHeader
+                label="프로젝트"
+                column="project_name"
+                sortKey={ex.sortKey}
+                sortDesc={ex.sortDesc}
+                onSort={ex.toggle}
+              />
               <TableHeaderCell>유형</TableHeaderCell>
-              <TableHeaderCell>만료일</TableHeaderCell>
-              <TableHeaderCell>남은 일수</TableHeaderCell>
+              <SortHeader
+                label="만료일"
+                column="expiry_date"
+                sortKey={ex.sortKey}
+                sortDesc={ex.sortDesc}
+                onSort={ex.toggle}
+              />
+              <SortHeader
+                label="남은 일수"
+                column="days_until_expiry"
+                sortKey={ex.sortKey}
+                sortDesc={ex.sortDesc}
+                onSort={ex.toggle}
+              />
             </TableRow>
           </TableHead>
           <TableBody>
-            {expiring.map((d) => (
+            {sortedExpiring.map((d) => (
               <TableRow key={d.id}>
                 <TableCell>{d.title}</TableCell>
                 <TableCell>
@@ -130,7 +250,7 @@ export function AlertsView({
                 </TableCell>
                 <TableCell>{d.expiry_date}</TableCell>
                 <TableCell>
-                  <Badge color="amber">{d.days_until_expiry}일</Badge>
+                  <Badge color="amber">{fmtNum(d.days_until_expiry)}일</Badge>
                 </TableCell>
               </TableRow>
             ))}
@@ -148,7 +268,7 @@ export function AlertsView({
       <Card>
         <div className="mb-4 flex items-center gap-2">
           <Text className="text-lg font-medium">과할당 인력</Text>
-          <Badge color="red">{overloaded.length}</Badge>
+          <Badge color="red">{fmtNum(overloaded.length)}</Badge>
         </div>
         <Table>
           <TableHead>
@@ -165,9 +285,9 @@ export function AlertsView({
                 <TableCell>{s.name}</TableCell>
                 <TableCell>{s.role || '-'}</TableCell>
                 <TableCell>
-                  <Badge color="red">{s.total_allocation}%</Badge>
+                  <Badge color="red">{fmtNum(s.total_allocation)}%</Badge>
                 </TableCell>
-                <TableCell>{s.active_projects}</TableCell>
+                <TableCell>{fmtNum(s.active_projects)}</TableCell>
               </TableRow>
             ))}
             {overloaded.length === 0 && (
