@@ -12,7 +12,7 @@ export const MilestoneTemplates: CollectionConfig = {
       label: '프로젝트 유형',
       options: [
         { label: '태양광', value: 'solar' },
-        { label: '풍력', value: 'wind' },
+        { label: '루프탑', value: 'rooftop' },
         { label: 'ESS', value: 'ess' },
       ],
     },

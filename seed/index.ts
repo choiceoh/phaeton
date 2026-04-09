@@ -34,7 +34,7 @@ export async function seed(payload: Payload) {
   const projectData: {
     name: string
     code: string
-    type: 'solar' | 'wind' | 'ess' | 'hybrid'
+    type: 'solar' | 'rooftop' | 'ess' | 'hybrid'
     capacityKw: number
     status: ProjectStatus
     client: string
@@ -54,15 +54,15 @@ export async function seed(payload: Payload) {
       site: { address: '전남 영암군 삼호읍', region: '전남', landAreaM2: 150000, landType: '답' },
     },
     {
-      name: '해남 20MW 풍력',
-      code: 'WD-2025-001',
-      type: 'wind',
-      capacityKw: 20000,
+      name: '수원 3MW 루프탑',
+      code: 'RT-2025-001',
+      type: 'rooftop',
+      capacityKw: 3000,
       status: 'dev-permit',
       client: '한국서부발전',
       epcValue: 45000000000,
       codTarget: d(365),
-      site: { address: '전남 해남군 송지면', region: '전남', landAreaM2: 300000, landType: '임야' },
+      site: { address: '경기 수원시 권선구', region: '경기', landAreaM2: 15000, landType: '대' },
     },
     {
       name: '당진 50MWh ESS',
@@ -98,15 +98,15 @@ export async function seed(payload: Payload) {
       site: { address: '전남 신안군 지도읍', region: '전남', landAreaM2: 200000, landType: '답' },
     },
     {
-      name: '태백 10MW 풍력',
-      code: 'WD-2025-002',
-      type: 'wind',
-      capacityKw: 10000,
+      name: '인천 2MW 루프탑',
+      code: 'RT-2025-002',
+      type: 'rooftop',
+      capacityKw: 2000,
       status: 'gen-permit',
       client: '강원도청',
       epcValue: 25000000000,
       codTarget: d(300),
-      site: { address: '강원 태백시 혈동', region: '강원', landAreaM2: 500000, landType: '임야' },
+      site: { address: '인천 서구 가좌동', region: '인천', landAreaM2: 10000, landType: '대' },
     },
     {
       name: '서산 5MW 루프탑 태양광',

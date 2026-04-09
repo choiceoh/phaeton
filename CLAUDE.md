@@ -2,7 +2,7 @@
 
 ## 프로젝트
 
-에너지(태양광·풍력·ESS) 프로젝트 관리 ERP. Payload CMS 3.0 + Next.js 14 + PostgreSQL 16 + Tremor.
+에너지(태양광·루프탑·ESS) 프로젝트 관리 ERP. Payload CMS 3.0 + Next.js 14 + PostgreSQL 16 + Tremor.
 사용자 300명(입력 100, 열람 200), 외부 인터넷 접속, DGX Spark에서 구동.
 
 ## 필독 문서

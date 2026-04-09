@@ -4,7 +4,7 @@ import { autoGenerateCode } from '../hooks/autoGenerateCode.ts'
 import { calculateProgress } from '../hooks/calculateProgress.ts'
 import { copyMilestones } from '../hooks/copyMilestones.ts'
 
-const CODE_PATTERN = /^(SL|WD|ES|HB)-\d{4}-\d{3}$/
+const CODE_PATTERN = /^(SL|RT|ES|HB)-\d{4}-\d{3}$/
 
 export const Projects: CollectionConfig = {
   slug: 'projects',
@@ -38,7 +38,7 @@ export const Projects: CollectionConfig = {
                   required: true,
                   unique: true,
                   label: '프로젝트 코드',
-                  admin: { description: 'SL-2025-001, WD-2025-001, ES-2025-001, HB-2025-001' },
+                  admin: { description: 'SL-2025-001, RT-2025-001, ES-2025-001, HB-2025-001' },
                   validate: (value: unknown) => {
                     if (!value) return true
                     if (typeof value !== 'string') return '문자열이어야 합니다'
@@ -57,7 +57,7 @@ export const Projects: CollectionConfig = {
                   label: '사업 유형',
                   options: [
                     { label: '태양광', value: 'solar' },
-                    { label: '풍력', value: 'wind' },
+                    { label: '루프탑', value: 'rooftop' },
                     { label: 'ESS', value: 'ess' },
                     { label: '하이브리드', value: 'hybrid' },
                   ],
@@ -185,18 +185,18 @@ export const Projects: CollectionConfig = {
             },
             {
               type: 'collapsible',
-              label: '풍력 설비',
+              label: '루프탑 설비',
               admin: {
                 condition: (data: Record<string, any>) =>
-                  data.type === 'wind' || data.type === 'hybrid',
+                  data.type === 'rooftop' || data.type === 'hybrid',
               },
               fields: [
                 {
                   type: 'row',
                   fields: [
-                    { name: 'turbineCount', type: 'number', label: '터빈 수량' },
-                    { name: 'turbineModel', type: 'text', label: '터빈 모델' },
-                    { name: 'hubHeightM', type: 'number', label: '허브 높이 (m)' },
+                    { name: 'roofAreaM2', type: 'number', label: '지붕 면적 (m²)' },
+                    { name: 'buildingUsage', type: 'text', label: '건물 용도' },
+                    { name: 'structuralLoadKgM2', type: 'number', label: '허용 하중 (kg/m²)' },
                   ],
                 },
               ],

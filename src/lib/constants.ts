@@ -17,7 +17,7 @@ export const MILESTONE_STATUS_LABELS: Record<string, string> = {
 
 export const PROJECT_TYPE_LABELS: Record<string, string> = {
   solar: '태양광',
-  wind: '풍력',
+  rooftop: '루프탑',
   ess: 'ESS',
   hybrid: '하이브리드',
 }
@@ -32,7 +32,7 @@ export const MILESTONE_STATUS_COLORS: Record<string, string> = {
 
 export const PROJECT_TYPE_COLORS: Record<string, string> = {
   solar: 'amber',
-  wind: 'sky',
+  rooftop: 'sky',
   ess: 'emerald',
   hybrid: 'violet',
 }

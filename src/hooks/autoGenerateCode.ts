@@ -2,7 +2,7 @@ import type { CollectionBeforeValidateHook } from 'payload'
 
 const TYPE_PREFIX: Record<string, string> = {
   solar: 'SL',
-  wind: 'WD',
+  rooftop: 'RT',
   ess: 'ES',
   hybrid: 'HB',
 }
