@@ -28,6 +28,8 @@ export default function ViewTabs({ fields, entries, onEntryClick, onCardMove, pr
         is_required: false,
         is_unique: false,
         is_indexed: false,
+        width: 6,
+        height: 1,
         sort_order: 0,
         created_at: '',
         updated_at: '',

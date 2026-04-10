@@ -157,6 +157,22 @@ export interface SaveProcessReq {
   transitions: { from_index: number; to_index: number; label: string }[]
 }
 
+// --- Filter condition (frontend-only) ---
+
+export interface FilterCondition {
+  id: string
+  field: string // field slug
+  operator: string // eq, neq, gt, gte, lt, lte, like, in, is_null
+  value: string
+}
+
+// --- Aggregate response ---
+
+export interface AggregateResult {
+  group: string
+  value: number
+}
+
 // --- Views ---
 
 export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery'
