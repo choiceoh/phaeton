@@ -74,6 +74,7 @@ interface Props<T> {
   cellSaveState?: Map<string, 'saving' | 'saved'>
   emptyTitle?: string
   emptyDescription?: string
+  emptyAction?: React.ReactNode
   summaryRow?: Record<string, { label: string; value: string | number }>
   /** Current aggregate function per column slug (for footer dropdown). */
   summaryFn?: Record<string, string>
@@ -114,6 +115,7 @@ export function DataTable<T>({
   cellSaveState,
   emptyTitle = '데이터가 없습니다',
   emptyDescription,
+  emptyAction,
   summaryRow,
   summaryFn,
   onSummaryFnChange,
@@ -518,7 +520,7 @@ export function DataTable<T>({
             {visibleRows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length}>
-                  <EmptyState title={emptyTitle} description={emptyDescription} />
+                  <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />
                 </TableCell>
               </TableRow>
             ) : (

@@ -58,9 +58,23 @@ describe('ApiError', () => {
 })
 
 describe('formatError', () => {
-  it('formats ApiError', () => {
+  it('formats ApiError with meaningful message', () => {
     const err = new ApiError(404, 'NOT_FOUND', '찾을 수 없습니다')
     expect(formatError(err)).toBe('찾을 수 없습니다')
+  })
+
+  it('falls back to friendly message when message equals code', () => {
+    const err = new ApiError(404, 'NOT_FOUND', 'NOT_FOUND')
+    expect(formatError(err)).toBe('요청한 항목을 찾을 수 없습니다.')
+  })
+
+  it('falls back to friendly message for empty message', () => {
+    const err = new ApiError(500, 'INTERNAL', '')
+    expect(formatError(err)).toBe('서버에 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.')
+  })
+
+  it('formats network error', () => {
+    expect(formatError(new Error('Failed to fetch'))).toBe('네트워크 연결을 확인해 주세요.')
   })
 
   it('formats regular Error', () => {
