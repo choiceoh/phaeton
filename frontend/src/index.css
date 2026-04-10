@@ -123,11 +123,29 @@
     }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     }
   html {
     @apply font-sans;
     font-size: 17px;
     }
+
+  /* Refined scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.8 0 0);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.65 0 0);
+  }
 }
 
 /* Row highlight animation (CSV import) */
@@ -164,6 +182,38 @@
 }
 [role="tablist"] {
   scrollbar-width: none;
+}
+
+/* Skeleton shimmer wave */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    oklch(0.96 0 0) 40%,
+    var(--muted) 80%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Button press feedback */
+[data-slot="button"]:not(:disabled):active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease-out;
+}
+
+/* Drag cancel spring-back */
+@keyframes spring-back {
+  0% { transform: scale(0.95) translateY(-4px); opacity: 0.6; }
+  50% { transform: scale(1.02) translateY(1px); opacity: 0.9; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.animate-spring-back {
+  animation: spring-back 0.3s ease-out both;
 }
 
 /* ─── Transition & animation utilities ─── */
@@ -220,6 +270,7 @@
 /* Nav link hover underline */
 .nav-link {
   position: relative;
+  transition: color 0.15s ease-out;
 }
 .nav-link::after {
   content: '';
@@ -234,6 +285,13 @@
   transition: transform 0.2s ease-out;
 }
 .nav-link:hover::after {
+  transform: scaleX(1);
+}
+.nav-link.active {
+  color: oklch(0.145 0 0);
+  font-weight: 500;
+}
+.nav-link.active::after {
   transform: scaleX(1);
 }
 
@@ -316,6 +374,17 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Skeleton shimmer for premium loading feel */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, oklch(0.94 0 0) 0%, oklch(0.97 0 0) 40%, oklch(0.94 0 0) 80%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
 /* ── Print styles ── */
 @media print {
   /* Hide everything except the sheet content */
@@ -375,11 +444,18 @@
   .animate-slide-down,
   .animate-highlight-row,
   .animate-cell-saved,
-  .animate-check-fade {
+  .animate-check-fade,
+  .animate-spring-back {
+    animation: none !important;
+  }
+  .skeleton-shimmer {
     animation: none !important;
   }
   .dragging-source {
     transition: none !important;
+  }
+  [data-slot="button"]:active {
+    transform: none !important;
   }
   ::view-transition-old(root),
   ::view-transition-new(root) {

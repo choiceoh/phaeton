@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -39,6 +40,10 @@ interface Props {
   submitting?: boolean
   process?: Process
   slug?: string
+  /** When true, debounce-saves on every field change (edit mode). */
+  autosave?: boolean
+  /** Visual autosave state shown in the form footer. */
+  autosaveStatus?: 'idle' | 'saving' | 'saved'
 }
 
 // EntryForm renders a dynamic form built from a collection's fields.
@@ -56,9 +61,12 @@ export default function EntryForm({
   submitting,
   process,
   slug,
+  autosave,
+  autosaveStatus,
 }: Props) {
   const [data, setData] = useState<Record<string, unknown>>(initialData ?? {})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [validated, setValidated] = useState<Set<string>>(new Set())
   const [shakeKey, setShakeKey] = useState(0)
   const { data: currentUser } = useCurrentUser()
 
@@ -86,16 +94,31 @@ export default function EntryForm({
     return () => { if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current) }
   }, [firstTextFieldValue, firstTextField, isNew])
 
+  // Autosave: debounce submit when data changes (edit mode only).
+  const autosaveRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const initialRef = useRef(initialData)
+  useEffect(() => {
+    if (!autosave || isNew) return
+    // Skip if data hasn't changed from initial.
+    const changed = Object.keys(data).some((k) => data[k] !== initialRef.current?.[k])
+    if (!changed) return
+    if (autosaveRef.current) clearTimeout(autosaveRef.current)
+    autosaveRef.current = setTimeout(() => onSubmit(data), 1500)
+    return () => { if (autosaveRef.current) clearTimeout(autosaveRef.current) }
+  }, [data, autosave, isNew, onSubmit])
+
   function setValue(name: string, value: unknown) {
     setData((prev) => ({ ...prev, [name]: value }))
     if (errors[name]) setErrors((prev) => { const next = { ...prev }; delete next[name]; return next })
   }
 
   function handleBlur(field: Field) {
-    if (!field.is_required || isLayoutType(field.field_type)) return
     const val = data[field.slug]
-    if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+    const isEmpty = val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)
+    if (field.is_required && !isLayoutType(field.field_type) && isEmpty) {
       setErrors((prev) => ({ ...prev, [field.slug]: '필수 항목입니다' }))
+      setValidated((prev) => { const next = new Set(prev); next.delete(field.slug); return next })
+      return
     }
     // Number range validation
     if ((field.field_type === 'number' || field.field_type === 'integer') && val != null && val !== '') {
@@ -104,9 +127,16 @@ export default function EntryForm({
       const maxVal = field.options?.max as number | undefined
       if (minVal != null && num < minVal) {
         setErrors((prev) => ({ ...prev, [field.slug]: `최소 ${minVal} 이상이어야 합니다` }))
+        setValidated((prev) => { const next = new Set(prev); next.delete(field.slug); return next })
+        return
       } else if (maxVal != null && num > maxVal) {
         setErrors((prev) => ({ ...prev, [field.slug]: `최대 ${maxVal} 이하여야 합니다` }))
+        setValidated((prev) => { const next = new Set(prev); next.delete(field.slug); return next })
+        return
       }
+    }
+    if (!isEmpty) {
+      setValidated((prev) => new Set(prev).add(field.slug))
     }
   }
 
@@ -237,9 +267,14 @@ export default function EntryForm({
                   onBlur={() => handleBlur(field)}
                   autoFocus={field.slug === firstEditableSlug}
                 />
-                {errors[field.slug] && (
+                {errors[field.slug] ? (
                   <p key={shakeKey} className="mt-1 text-xs text-destructive animate-shake animate-fade-in">{errors[field.slug]}</p>
-                )}
+                ) : validated.has(field.slug) ? (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-emerald-600 animate-fade-in">
+                    <Check className="h-3 w-3" />
+                    확인됨
+                  </p>
+                ) : null}
               </div>
             </div>
           )
@@ -258,7 +293,17 @@ export default function EntryForm({
           ))}
         </div>
       )}
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="flex items-center justify-end gap-2 pt-2">
+        {autosave && autosaveStatus && autosaveStatus !== 'idle' && (
+          <span className="mr-auto text-xs text-muted-foreground animate-fade-in">
+            {autosaveStatus === 'saving' ? '저장 중...' : autosaveStatus === 'saved' ? (
+              <span className="flex items-center gap-1 text-emerald-600">
+                <Check className="h-3 w-3" />
+                저장됨
+              </span>
+            ) : null}
+          </span>
+        )}
         <Button type="button" variant="outline" onClick={onCancel}>
           취소
         </Button>

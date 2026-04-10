@@ -35,49 +35,53 @@ export default function RootLayout() {
 
   return (
     <AIAvailabilityProvider>
-      <div className="min-h-screen bg-stone-50">
-        <nav className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-3">
-          <div className="flex items-center gap-6">
-            <Link to="/" className="text-lg font-semibold text-stone-900" viewTransition>
+      <div className="min-h-screen bg-stone-50/80">
+        <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-stone-200/80 bg-white/95 px-6 py-2.5 backdrop-blur-sm">
+          <div className="flex items-center gap-1">
+            <Link to="/" className="mr-4 flex items-center gap-2 text-lg font-bold tracking-tight text-stone-900" viewTransition>
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-900 text-xs font-bold text-white">P</span>
               Phaeton
             </Link>
-            <NavLink to="/apps" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
-              업무
-            </NavLink>
-            <NavLink to="/dashboard" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
-              대시보드
-            </NavLink>
-            <NavLink to="/automations" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
-              자동화
-            </NavLink>
-            <NavLink to="/admin/org" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
-              조직도
-            </NavLink>
-            {(user.role === 'director' || user.role === 'pm') && (
-              <>
-                <NavLink to="/history" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
-                  이력
-                </NavLink>
-                <NavLink to="/admin/users" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
-                  사용자 관리
-                </NavLink>
-                <NavLink to="/settings" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
-                  설정
-                </NavLink>
-              </>
-            )}
+            <div className="flex items-center">
+              <NavLink to="/apps" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                업무
+              </NavLink>
+              <NavLink to="/dashboard" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                대시보드
+              </NavLink>
+              <NavLink to="/automations" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                자동화
+              </NavLink>
+              <NavLink to="/admin/org" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                조직도
+              </NavLink>
+              {(user.role === 'director' || user.role === 'pm') && (
+                <>
+                  <NavLink to="/history" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                    이력
+                  </NavLink>
+                  <NavLink to="/admin/users" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                    사용자 관리
+                  </NavLink>
+                  <NavLink to="/settings" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                    설정
+                  </NavLink>
+                </>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-3 text-sm text-stone-500">
+          <div className="flex items-center gap-1 text-sm text-stone-500">
             <NotificationBell />
-            <Link to="/profile" className="hover:text-stone-900">
-              {user.name} ({ROLE_LABELS[user.role] || user.role})
+            <Link to="/profile" className="rounded-md px-2 py-1 transition-colors hover:bg-stone-100 hover:text-stone-900">
+              {user.name}
+              <span className="ml-1 text-xs text-stone-400">({ROLE_LABELS[user.role] || user.role})</span>
             </Link>
             <Button variant="ghost" size="sm" onClick={() => logout.mutate()}>
               로그아웃
             </Button>
           </div>
         </nav>
-        <main className="mx-auto max-w-7xl p-6">
+        <main className="mx-auto max-w-7xl px-6 py-8">
           <Outlet />
         </main>
         <AIChatPanel />
