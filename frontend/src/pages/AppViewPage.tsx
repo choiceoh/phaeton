@@ -63,7 +63,7 @@ import {
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
-import { formatError } from '@/lib/api'
+import { ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { FilterCondition, SavedView } from '@/lib/types'
@@ -367,13 +367,25 @@ export default function AppViewPage() {
     [colVisStorageKey],
   )
 
+  // Helper: find _version for a row from the current list data.
+  const getRowVersion = useCallback(
+    (rowId: string): number | undefined => {
+      const row = list?.data?.find((r) => r.id === rowId)
+      return row?._version as number | undefined
+    },
+    [list],
+  )
+
   // Inline edit handler with cell-level visual feedback.
   const handleCellEdit = useCallback(
     (event: CellEditEvent) => {
       const cellKey = `${event.rowId}:${event.columnId}`
+      const body: Record<string, unknown> = { [event.columnId]: event.value }
+      const version = getRowVersion(event.rowId)
+      if (version != null) body._version = version
       setCellSaveState((prev) => new Map(prev).set(cellKey, 'saving'))
       updateEntry.mutate(
-        { id: event.rowId, body: { [event.columnId]: event.value } },
+        { id: event.rowId, body },
         {
           onSuccess: () => {
             setCellSaveState((prev) => new Map(prev).set(cellKey, 'saved'))
@@ -391,12 +403,17 @@ export default function AppViewPage() {
               next.delete(cellKey)
               return next
             })
-            toast.error(formatError(err))
+            if (err instanceof ApiError && err.isConflict()) {
+              toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
+              refetch()
+            } else {
+              toast.error(formatError(err))
+            }
           },
         },
       )
     },
-    [updateEntry],
+    [updateEntry, getRowVersion, refetch],
   )
 
   // Batch edit handler (for paste operations).
@@ -409,18 +426,26 @@ export default function AppViewPage() {
         existing[u.columnId] = u.value
         byRow.set(u.rowId, existing)
       }
-      const updates = Array.from(byRow.entries()).map(([id, fields]) => ({ id, fields }))
+      const updates = Array.from(byRow.entries()).map(([id, fields]) => {
+        const version = getRowVersion(id)
+        return { id, fields, _version: version }
+      })
       const toastId = toast.loading(`${updates.length}건 저장 중...`)
       batchUpdateEntry.mutate(updates, {
         onSuccess: () => {
           toast.success(`${updates.length}건 수정되었습니다`, { id: toastId })
         },
         onError: (err) => {
-          toast.error(formatError(err), { id: toastId })
+          if (err instanceof ApiError && err.isConflict()) {
+            toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.', { id: toastId })
+            refetch()
+          } else {
+            toast.error(formatError(err), { id: toastId })
+          }
         },
       })
     },
-    [batchUpdateEntry],
+    [batchUpdateEntry, getRowVersion, refetch],
   )
 
   // Search with debounce.
@@ -502,33 +527,62 @@ export default function AppViewPage() {
   }
 
   function handleGanttUpdate(entryId: string, updates: Record<string, unknown>) {
+    const version = getRowVersion(entryId)
+    if (version != null) updates._version = version
     updateEntry.mutate(
       { id: entryId, body: updates },
       {
         onSuccess: () => toast.success('일정이 변경되었습니다'),
-        onError: (err) => toast.error(formatError(err)),
+        onError: (err) => {
+          if (err instanceof ApiError && err.isConflict()) {
+            toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
+            refetch()
+          } else {
+            toast.error(formatError(err))
+          }
+        },
       },
     )
   }
 
   function handleCardMove(entryId: string, newValue: string) {
     if (!selectField) return
+    const body: Record<string, unknown> = { [selectField.slug]: newValue }
+    const version = getRowVersion(entryId)
+    if (version != null) body._version = version
     updateEntry.mutate(
-      { id: entryId, body: { [selectField.slug]: newValue } },
+      { id: entryId, body },
       {
         onSuccess: () => toast.success('이동되었습니다'),
-        onError: (err) => toast.error(formatError(err)),
+        onError: (err) => {
+          if (err instanceof ApiError && err.isConflict()) {
+            toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
+            refetch()
+          } else {
+            toast.error(formatError(err))
+          }
+        },
       },
     )
   }
 
   function handleSubmit(data: Record<string, unknown>) {
     if (editEntry?.id) {
+      const version = editEntry._version as number | undefined
+      if (version != null) data._version = version
       updateEntry.mutate(
         { id: String(editEntry.id), body: data },
         {
           onSuccess: () => toast.success('수정되었습니다'),
-          onError: (err) => toast.error(formatError(err)),
+          onError: (err) => {
+            if (err instanceof ApiError && err.isConflict()) {
+              toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
+              refetch()
+              setSheetOpen(false)
+            } else {
+              toast.error(formatError(err))
+            }
+          },
         },
       )
     } else {

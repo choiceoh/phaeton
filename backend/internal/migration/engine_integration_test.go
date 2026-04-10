@@ -251,9 +251,9 @@ func TestEngine_LayoutAndComputedFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Expected: id, amount, created_at, updated_at, created_by, updated_by, deleted_at = 7
-	if colCount != 7 {
-		t.Errorf("column count = %d, want 7 (no layout/formula columns)", colCount)
+	// Expected: id, amount, created_at, updated_at, created_by, updated_by, deleted_at, _version = 8
+	if colCount != 8 {
+		t.Errorf("column count = %d, want 8 (no layout/formula columns)", colCount)
 	}
 
 	// But cache should have all 3 fields.

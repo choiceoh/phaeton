@@ -376,7 +376,20 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sets := []string{`"updated_at" = now()`}
+	// Optimistic locking: extract _version from request body.
+	var reqVersion *int
+	if v, ok := body["_version"]; ok {
+		switch n := v.(type) {
+		case float64:
+			iv := int(n)
+			reqVersion = &iv
+		case int:
+			reqVersion = &n
+		}
+		delete(body, "_version")
+	}
+
+	sets := []string{`"updated_at" = now()`, `"_version" = "_version" + 1`}
 	args := []any{}
 	idx := 1
 
@@ -434,20 +447,30 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	args = append(args, id)
+	idIdx := idx
+	idx++
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
+
+	// Optimistic locking: add version check to WHERE clause.
+	versionClause := ""
+	if reqVersion != nil {
+		args = append(args, *reqVersion)
+		versionClause = fmt.Sprintf(` AND "_version" = $%d`, idx)
+		idx++
+	}
 
 	// RLS: viewers can only update their own rows.
 	rlsClause := ""
 	colRole := middleware.GetCollectionRole(r.Context())
 	if colRole == "viewer" {
-		idx++
 		args = append(args, user.UserID)
-		rlsClause = fmt.Sprintf(" AND created_by = $%d", len(args))
+		rlsClause = fmt.Sprintf(" AND created_by = $%d", idx)
+		idx++
 	}
 
-	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL%s RETURNING %s",
-		qTable, strings.Join(sets, ", "), idx, rlsClause, selectCols)
+	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL%s%s RETURNING %s",
+		qTable, strings.Join(sets, ", "), idIdx, versionClause, rlsClause, selectCols)
 
 	rows, err := h.pool.Query(r.Context(), sql, args...)
 	if err != nil {
@@ -462,6 +485,11 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(records) == 0 {
+		// Distinguish version conflict from genuine not-found.
+		if reqVersion != nil {
+			writeError(w, http.StatusConflict, "다른 사용자가 이미 이 레코드를 수정했습니다. 새로고침 후 다시 시도해 주세요.")
+			return
+		}
 		writeError(w, http.StatusNotFound, "record not found")
 		return
 	}
@@ -1040,8 +1068,9 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Updates []struct {
-			ID     string         `json:"id"`
-			Fields map[string]any `json:"fields"`
+			ID      string         `json:"id"`
+			Version *int           `json:"_version"`
+			Fields  map[string]any `json:"fields"`
 		} `json:"updates"`
 	}
 	if err := readJSON(r, &body); err != nil {
@@ -1090,7 +1119,7 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 	changes := make([]changeMeta, 0, len(body.Updates))
 
 	for i, u := range body.Updates {
-		sets := []string{`"updated_at" = now()`}
+		sets := []string{`"updated_at" = now()`, `"_version" = "_version" + 1`}
 		args := []any{}
 		idx := 1
 		for _, f := range fields {
@@ -1106,13 +1135,24 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 			idx++
 		}
 
-		if len(sets) == 1 {
+		if len(sets) == 2 { // only updated_at + _version increment
 			continue
 		}
 
 		args = append(args, u.ID)
-		sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL RETURNING %s",
-			qTable, strings.Join(sets, ", "), idx, selectCols)
+		idIdx := idx
+		idx++
+
+		// Optimistic locking.
+		versionClause := ""
+		if u.Version != nil {
+			args = append(args, *u.Version)
+			versionClause = fmt.Sprintf(` AND "_version" = $%d`, idx)
+			idx++
+		}
+
+		sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL%s RETURNING %s",
+			qTable, strings.Join(sets, ", "), idIdx, versionClause, selectCols)
 
 		rows, err := tx.Query(r.Context(), sql, args...)
 		if err != nil {
@@ -1123,6 +1163,11 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 		rows.Close()
 		if err != nil {
 			handleErr(w, r, fmt.Errorf("updates[%d]: %w", i, err))
+			return
+		}
+		if len(recs) == 0 && u.Version != nil {
+			writeError(w, http.StatusConflict,
+				fmt.Sprintf("updates[%d]: 다른 사용자가 이미 이 레코드를 수정했습니다. 새로고침 후 다시 시도해 주세요.", i))
 			return
 		}
 		if len(recs) > 0 {
@@ -1357,7 +1402,7 @@ func buildSelectCols(fields []schema.Field, hasStatus bool, opts *selectColOpts)
 		}
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
 	}
-	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`)
+	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`, `"_version"`)
 	if hasStatus {
 		cols = append(cols, `"_status"`)
 	}
@@ -1389,7 +1434,7 @@ func qualifySelectCols(fields []schema.Field, prefix string, hasStatus bool, opt
 		}
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
 	}
-	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "updated_by", "deleted_at"} {
+	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "updated_by", "deleted_at", "_version"} {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, sysCol, sysCol))
 	}
 	if hasStatus {
