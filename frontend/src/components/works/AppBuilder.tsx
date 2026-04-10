@@ -189,7 +189,7 @@ export default function AppBuilder() {
                 <Label>컬렉션 이름 (한글)</Label>
                 <Input value={label} onChange={(e) => handleLabelChange(e.target.value)} placeholder="인허가 체크리스트" />
               </div>
-              <div className="col-span-2 space-y-1">
+              <div className="col-span-1 space-y-1">
                 <Label>영문 ID</Label>
                 <div className="relative">
                   <Input
@@ -202,7 +202,7 @@ export default function AppBuilder() {
                   )}
                 </div>
               </div>
-              <div className="col-span-2 space-y-1">
+              <div className="col-span-3 space-y-1">
                 <Label>설명</Label>
                 <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="컬렉션 설명" />
               </div>
