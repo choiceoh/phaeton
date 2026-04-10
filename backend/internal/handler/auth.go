@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -74,7 +73,7 @@ func normalizeEmail(email string) string {
 }
 
 // Login handles POST /api/auth/login.
-func Login(pool *pgxpool.Pool, limiter *middleware.RateLimiter) http.HandlerFunc {
+func Login(pool *pgxpool.Pool, limiter *middleware.RateLimiter, jwtSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input LoginInput
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -138,7 +137,7 @@ func Login(pool *pgxpool.Pool, limiter *middleware.RateLimiter) http.HandlerFunc
 			limiter.Reset(ip)
 		}
 
-		tokenStr, err := generateToken(user)
+		tokenStr, err := generateToken(user, jwtSecret)
 		if err != nil {
 			slog.Error("login: token generation failed", "error", err)
 			apierr.Internal("failed to generate token").Write(w)
@@ -178,9 +177,10 @@ func Logout() http.HandlerFunc {
 }
 
 // Me handles GET /api/auth/me.
-func Me(pool *pgxpool.Pool) http.HandlerFunc {
+func Me(pool *pgxpool.Pool, authDisabled ...bool) http.HandlerFunc {
+	disabled := len(authDisabled) > 0 && authDisabled[0]
 	return func(w http.ResponseWriter, r *http.Request) {
-		if middleware.AuthDisabled() {
+		if disabled {
 			dev := middleware.DevUser
 			now := time.Now()
 			writeJSON(w, http.StatusOK, User{
@@ -669,12 +669,7 @@ func ChangePassword(pool *pgxpool.Pool) http.HandlerFunc {
 	}
 }
 
-func generateToken(user User) (string, error) {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "phaeton-dev-secret-change-in-production"
-	}
-
+func generateToken(user User, jwtSecret string) (string, error) {
 	claims := jwt.MapClaims{
 		"userId": user.ID,
 		"email":  user.Email,
@@ -689,7 +684,7 @@ func generateToken(user User) (string, error) {
 		claims["subsidiaryId"] = *user.SubsidiaryID
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(secret))
+	return token.SignedString([]byte(jwtSecret))
 }
 
 // clientIP extracts the client IP from the request.

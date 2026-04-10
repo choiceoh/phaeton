@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -53,8 +54,8 @@ func (h *DynHandler) SimilarRecords(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	qCol := fmt.Sprintf("%q", targetField.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
+	qCol := pgutil.QuoteIdent(targetField.Slug)
 
 	// Use pg_trgm similarity. Falls back to ILIKE if pg_trgm is not available.
 	query := fmt.Sprintf(

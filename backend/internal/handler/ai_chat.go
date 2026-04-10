@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/phaeton/backend/internal/ai"
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 )
 
 type aiChatRequest struct {
@@ -133,10 +134,10 @@ func (h *AIHandler) queryAppData(ctx context.Context, slug string, limit int, fi
 		if f.IsLayout {
 			continue
 		}
-		selectCols = append(selectCols, fmt.Sprintf("%q", f.Slug))
+		selectCols = append(selectCols, pgutil.QuoteIdent(f.Slug))
 	}
 
-	qTable := fmt.Sprintf(`"data".%q`, col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	where := "deleted_at IS NULL"
 	var args []any
 

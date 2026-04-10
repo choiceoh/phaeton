@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/choiceoh/phaeton/backend/internal/config"
 	"github.com/choiceoh/phaeton/backend/internal/db"
 	"github.com/choiceoh/phaeton/backend/internal/handler"
 	"github.com/choiceoh/phaeton/backend/internal/migration"
@@ -18,7 +19,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	pool, err := db.NewPool(ctx)
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal("config:", err)
+	}
+
+	pool, err := db.NewPool(ctx, cfg.DB, cfg.IsProd)
 	if err != nil {
 		log.Fatal("db:", err)
 	}

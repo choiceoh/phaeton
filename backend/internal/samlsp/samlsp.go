@@ -14,7 +14,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 
 	"github.com/crewjam/saml/samlsp"
 )
@@ -32,22 +31,6 @@ type Config struct {
 	KeyPath string
 	// IdPMetadataURL is the IdP metadata endpoint. Empty = SAML disabled.
 	IdPMetadataURL string
-}
-
-// ConfigFromEnv reads SAML config from environment variables.
-// Returns nil if SAML_IDP_METADATA_URL is not set (SAML disabled).
-func ConfigFromEnv() *Config {
-	idpURL := os.Getenv("SAML_IDP_METADATA_URL")
-	if idpURL == "" {
-		return nil
-	}
-	return &Config{
-		EntityID:       envOr("SAML_ENTITY_ID", "phaeton"),
-		RootURL:        envOr("SAML_ROOT_URL", "http://localhost:8080"),
-		CertPath:       envOr("SAML_CERT_PATH", "saml/sp.crt"),
-		KeyPath:        envOr("SAML_KEY_PATH", "saml/sp.key"),
-		IdPMetadataURL: idpURL,
-	}
 }
 
 // Middleware wraps the crewjam/saml middleware and provides hooks
@@ -126,11 +109,4 @@ func (m *Middleware) Handler() http.Handler {
 // to the IdP login page.
 func (m *Middleware) RequireAccount() func(http.Handler) http.Handler {
 	return m.inner.RequireAccount
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

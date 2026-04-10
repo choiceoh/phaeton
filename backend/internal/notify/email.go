@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/smtp"
-	"os"
 	"strings"
 )
 
@@ -17,26 +16,6 @@ type SMTPConfig struct {
 	Username string
 	Password string
 	From     string // e.g. "noreply@example.com"
-}
-
-// SMTPConfigFromEnv reads SMTP config from environment variables.
-// Returns nil if SMTP_HOST is not set (email disabled).
-func SMTPConfigFromEnv() *SMTPConfig {
-	host := os.Getenv("SMTP_HOST")
-	if host == "" {
-		return nil
-	}
-	port := os.Getenv("SMTP_PORT")
-	if port == "" {
-		port = "587"
-	}
-	return &SMTPConfig{
-		Host:     host,
-		Port:     port,
-		Username: os.Getenv("SMTP_USERNAME"),
-		Password: os.Getenv("SMTP_PASSWORD"),
-		From:     os.Getenv("SMTP_FROM"),
-	}
 }
 
 // EmailNotifier sends notifications via SMTP email.

@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -28,7 +29,7 @@ func (h *DynHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := r.URL.Query()
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 
 	where, args, err := ParseFilters(params, fields)
 	if err != nil {
@@ -249,7 +250,7 @@ func (h *DynHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	selectCols := buildSelectCols(fields, false, &selectColOpts{cache: h.cache})
 
 	user, _ := middleware.GetUser(r.Context())

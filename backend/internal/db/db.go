@@ -4,45 +4,44 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 
+	"github.com/choiceoh/phaeton/backend/internal/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NewPool creates a pool from $DATABASE_URL (or a localhost default).
-// Pool sizes are configurable via DB_MAX_CONNS / DB_MIN_CONNS.
-// In production (GO_ENV=production), sslmode is forced to "require" unless
-// already set to a stricter mode.
-func NewPool(ctx context.Context) (*pgxpool.Pool, error) {
-	dsn := os.Getenv("DATABASE_URL")
+// NewPool creates a pool from the provided config.
+// In production, sslmode is forced to "require" unless already set to a
+// stricter mode.
+func NewPool(ctx context.Context, dbCfg config.DBConfig, isProd bool) (*pgxpool.Pool, error) {
+	dsn := dbCfg.URL
 	if dsn == "" {
-		dsn = "postgres://phaeton:phaeton@localhost:5432/phaeton?sslmode=disable"
+		return nil, fmt.Errorf("database URL is required")
 	}
 
 	// Enforce SSL in production.
-	if os.Getenv("GO_ENV") == "production" {
+	if isProd {
 		dsn = enforceSSL(dsn)
 	}
 
-	return NewPoolFromDSN(ctx, dsn)
+	return NewPoolFromDSN(ctx, dsn, dbCfg.MaxConns, dbCfg.MinConns, dbCfg.StatementTimeoutMS)
 }
 
-// NewPoolFromDSN creates a pool from an explicit DSN. Useful for tests
-// that need to point at an isolated database.
-func NewPoolFromDSN(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+// NewPoolFromDSN creates a pool from an explicit DSN with the given pool
+// settings. Useful for tests that need to point at an isolated database.
+func NewPoolFromDSN(ctx context.Context, dsn string, maxConns, minConns, stmtTimeoutMS int) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse db config: %w", err)
 	}
 
-	cfg.MaxConns = int32(envInt("DB_MAX_CONNS", 50))
-	cfg.MinConns = int32(envInt("DB_MIN_CONNS", 5))
+	cfg.MaxConns = int32(maxConns)
+	cfg.MinConns = int32(minConns)
 
 	// statement_timeout: auto-kill queries exceeding this duration (ms).
-	// Default 30s — prevents runaway queries from holding connections.
-	if timeout := envInt("DB_STATEMENT_TIMEOUT_MS", 30000); timeout > 0 {
-		cfg.ConnConfig.RuntimeParams["statement_timeout"] = strconv.Itoa(timeout)
+	// Prevents runaway queries from holding connections.
+	if stmtTimeoutMS > 0 {
+		cfg.ConnConfig.RuntimeParams["statement_timeout"] = strconv.Itoa(stmtTimeoutMS)
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -75,14 +74,3 @@ func enforceSSL(dsn string) string {
 	return dsn
 }
 
-func envInt(key string, fallback int) int {
-	s := os.Getenv(key)
-	if s == "" {
-		return fallback
-	}
-	v, err := strconv.Atoi(s)
-	if err != nil {
-		return fallback
-	}
-	return v
-}

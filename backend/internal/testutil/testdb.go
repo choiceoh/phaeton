@@ -49,7 +49,7 @@ func SetupDB(t *testing.T) *pgxpool.Pool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pool, err := db.NewPoolFromDSN(ctx, dsn)
+	pool, err := db.NewPoolFromDSN(ctx, dsn, 10, 2, 30000)
 	if err != nil {
 		t.Skipf("skipping integration test: cannot connect to test DB: %v", err)
 	}

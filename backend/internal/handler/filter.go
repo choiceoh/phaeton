@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -112,7 +113,7 @@ func buildCondClause(cond FilterCondJSON, prefix string, argIdx int) (string, []
 	if prefix != "" {
 		qCol = fmt.Sprintf(`%s."%s"`, prefix, cond.Field)
 	} else {
-		qCol = fmt.Sprintf("%q", cond.Field)
+		qCol = pgutil.QuoteIdent(cond.Field)
 	}
 
 	switch cond.Operator {
@@ -226,7 +227,7 @@ func ParseFiltersWithPrefix(params url.Values, fields []schema.Field, prefix str
 		if prefix != "" {
 			qCol = fmt.Sprintf(`%s."%s"`, prefix, key)
 		} else {
-			qCol = fmt.Sprintf("%q", key)
+			qCol = pgutil.QuoteIdent(key)
 		}
 
 		switch op {
@@ -367,7 +368,7 @@ func ParseSortWithRelations(param string, fields []schema.Field, resolveRelation
 		if _, ok := bySlug[expr]; !ok && !autoCols[expr] {
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("%q %s", expr, dir))
+		parts = append(parts, fmt.Sprintf("%s %s", pgutil.QuoteIdent(expr), dir))
 	}
 
 	if len(parts) == 0 {

@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,17 +25,6 @@ import (
 type Config struct {
 	BaseURL string
 	APIKey  string
-}
-
-// ConfigFromEnv returns nil if Amaranth sync is not enabled.
-func ConfigFromEnv() *Config {
-	if os.Getenv("AMARANTH_SYNC_ENABLED") != "true" {
-		return nil
-	}
-	return &Config{
-		BaseURL: os.Getenv("AMARANTH_API_URL"),
-		APIKey:  os.Getenv("AMARANTH_API_KEY"),
-	}
 }
 
 // Source implements sync.Source for Amaranth10.

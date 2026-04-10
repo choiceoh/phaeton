@@ -72,7 +72,7 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	params := r.URL.Query()
 	page, limit, offset := ParsePagination(params)
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 
 	// Resolve relation targets for dot-notation sorts (e.g. "-subsidiary.name").
 	resolveRel := func(f schema.Field) (string, bool) {
@@ -83,7 +83,7 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return "", false
 		}
-		return fmt.Sprintf("%q.%q", "data", target.Slug), true
+		return pgutil.QuoteQualified("data", target.Slug), true
 	}
 	orderBy, sortJoins := ParseSortWithRelations(params.Get("sort"), fields, resolveRel)
 
@@ -220,7 +220,7 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	procEnabled := h.hasProcessEnabled(col.ID)
 	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 
@@ -336,7 +336,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		if !exists {
 			continue
 		}
-		colNames = append(colNames, fmt.Sprintf("%q", f.Slug))
+		colNames = append(colNames, pgutil.QuoteIdent(f.Slug))
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
 		args = append(args, coerceValue(v, f.FieldType))
 		idx++
@@ -359,7 +359,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 
 	var sql string
@@ -548,7 +548,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		if !exists {
 			continue
 		}
-		sets = append(sets, fmt.Sprintf("%q = $%d", f.Slug, idx))
+		sets = append(sets, fmt.Sprintf("%s = $%d", pgutil.QuoteIdent(f.Slug), idx))
 		args = append(args, coerceValue(v, f.FieldType))
 		idx++
 	}
@@ -566,7 +566,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Fetch current status.
-		qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+		qTable := pgutil.QuoteQualified("data", col.Slug)
 		var currentStatus *string
 		err := h.pool.QueryRow(r.Context(),
 			fmt.Sprintf(`SELECT "_status" FROM %s WHERE id = $1 AND deleted_at IS NULL`, qTable), id,
@@ -583,7 +583,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 			handleErr(w, r, err)
 			return
 		}
-		sets = append(sets, fmt.Sprintf("%q = $%d", "_status", idx))
+		sets = append(sets, fmt.Sprintf("%s = $%d", pgutil.QuoteIdent("_status"), idx))
 		args = append(args, newStatusStr)
 		idx++
 	}
@@ -591,7 +591,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	args = append(args, id)
 	idIdx := idx
 	idx++
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 
 	// Optimistic locking: add version check to WHERE clause.
@@ -745,7 +745,7 @@ func (h *DynHandler) Totals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := r.URL.Query()
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 
 	var (
 		where string
@@ -778,7 +778,7 @@ func (h *DynHandler) Totals(w http.ResponseWriter, r *http.Request) {
 	var selectParts []string
 	selectParts = append(selectParts, "COUNT(*) AS _count")
 	for _, f := range numFields {
-		q := fmt.Sprintf("%q", f.Slug)
+		q := pgutil.QuoteIdent(f.Slug)
 		selectParts = append(selectParts,
 			fmt.Sprintf("SUM(%s) AS %q", q, "sum_"+f.Slug),
 			fmt.Sprintf("AVG(%s) AS %q", q, "avg_"+f.Slug),
@@ -958,7 +958,7 @@ func runAggregate(ctx context.Context, pool *pgxpool.Pool, col schema.Collection
 			return nil, fmt.Errorf("%w: group field %q not found", schema.ErrInvalidInput, gs)
 		}
 		alias := fmt.Sprintf("g%d", i)
-		qCol := fmt.Sprintf("%q", gs)
+		qCol := pgutil.QuoteIdent(gs)
 		if interval != "" && (gs == "created_at" || gs == "updated_at" || gs == "deleted_at" ||
 			(isField && (bySlug[gs].FieldType == schema.FieldDate || bySlug[gs].FieldType == schema.FieldDatetime))) {
 			groupExprs = append(groupExprs, fmt.Sprintf("DATE_TRUNC('%s', %s) AS %s", interval, qCol, alias))
@@ -1017,7 +1017,7 @@ func runAggregate(ctx context.Context, pool *pgxpool.Pool, col schema.Collection
 		return nil, err
 	}
 
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 
 	var selectParts []string
 	selectParts = append(selectParts, groupExprs...)
@@ -1132,7 +1132,7 @@ func (h *DynHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	bulkProcEnabled := h.hasProcessEnabled(col.ID)
 	selectCols := buildSelectCols(fields, bulkProcEnabled, &selectColOpts{cache: h.cache})
 
@@ -1211,7 +1211,7 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	args := make([]any, len(body.IDs))
 	placeholders := make([]string, len(body.IDs))
 	for i, id := range body.IDs {
@@ -1255,7 +1255,7 @@ func buildInsertColumns(body map[string]any, fields []schema.Field, userID strin
 		if !exists {
 			continue
 		}
-		cols = append(cols, fmt.Sprintf("%q", f.Slug))
+		cols = append(cols, pgutil.QuoteIdent(f.Slug))
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
 		args = append(args, coerceValue(v, f.FieldType))
 		idx++
@@ -1316,7 +1316,7 @@ func (h *DynHandler) FormulaPreview(w http.ResponseWriter, r *http.Request) {
 	crossRefs := result.CrossRefs
 
 	// Fetch up to 5 sample rows to show computed values.
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	sampleSQL := fmt.Sprintf("SELECT (%s) AS result FROM %s WHERE deleted_at IS NULL LIMIT 5", sqlExpr, qTable)
 
 	rows, err := h.pool.Query(r.Context(), sampleSQL)
@@ -1402,7 +1402,7 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	procEnabled := h.hasProcessEnabled(col.ID)
 	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 	user, _ := middleware.GetUser(r.Context())
@@ -1427,7 +1427,7 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 			if !exists {
 				continue
 			}
-			sets = append(sets, fmt.Sprintf("%q = $%d", f.Slug, idx))
+			sets = append(sets, fmt.Sprintf("%s = $%d", pgutil.QuoteIdent(f.Slug), idx))
 			args = append(args, coerceValue(v, f.FieldType))
 			idx++
 		}
@@ -1507,7 +1507,7 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	user, _ := middleware.GetUser(r.Context())
 
 	// RLS: viewers can only delete their own rows.
@@ -1622,7 +1622,7 @@ func buildRLSClause(r *http.Request, col schema.Collection, args *[]any, prefix 
 func buildCustomRLSFilters(filters []schema.RLSFilter, user middleware.UserClaims, args *[]any, prefix string) string {
 	var clauses []string
 	for _, f := range filters {
-		col := fmt.Sprintf("%q", f.Field)
+		col := pgutil.QuoteIdent(f.Field)
 		if prefix != "" {
 			col = prefix + "." + col
 		}
@@ -1798,7 +1798,7 @@ func buildSelectCols(fields []schema.Field, hasStatus bool, opts *selectColOpts)
 		if f.IsManyToMany() {
 			continue
 		}
-		cols = append(cols, fmt.Sprintf("%q", f.Slug))
+		cols = append(cols, pgutil.QuoteIdent(f.Slug))
 	}
 	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`, `"_version"`)
 	if hasStatus {
@@ -1898,7 +1898,7 @@ func buildRelationResolver(fields []schema.Field, cache *schema.Cache) formula.R
 			return nil, fmt.Errorf("target collection not found for relation %q", relSlug)
 		}
 
-		targetTable := fmt.Sprintf("%q.%q", "data", targetCol.Slug)
+		targetTable := pgutil.QuoteQualified("data", targetCol.Slug)
 
 		// For reverse relations (SUMREL etc.), find the FK column on the target
 		// table that points back to this collection.
@@ -2040,7 +2040,7 @@ func (h *DynHandler) expandRelations(ctx context.Context, records []map[string]a
 			args[i] = id
 		}
 
-		qTargetTable := fmt.Sprintf("%q.%q", "data", targetCol.Slug)
+		qTargetTable := pgutil.QuoteQualified("data", targetCol.Slug)
 		sql := fmt.Sprintf(
 			"SELECT %s FROM %s WHERE id IN (%s) AND deleted_at IS NULL",
 			targetSelectCols, qTargetTable, strings.Join(placeholders, ","),
@@ -2160,7 +2160,7 @@ func (h *DynHandler) expandUserFields(ctx context.Context, records []map[string]
 
 // fetchRow loads a single record by ID. Used for pre-update comparisons.
 func (h *DynHandler) fetchRow(ctx context.Context, col schema.Collection, fields []schema.Field, id string) (map[string]any, error) {
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	selectCols := buildSelectCols(fields, false, &selectColOpts{cache: h.cache})
 	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1 AND deleted_at IS NULL", selectCols, qTable)
 	rows, err := h.pool.Query(ctx, sql, id)
@@ -2252,10 +2252,10 @@ func (h *DynHandler) syncM2MLinks(ctx context.Context, db querier, ownerSlug str
 		return fmt.Errorf("m2m: cannot resolve junction for field %q", f.Slug)
 	}
 
-	qTable := fmt.Sprintf("%q.%q", "data", junc)
+	qTable := pgutil.QuoteQualified("data", junc)
 
 	// Delete existing links.
-	delSQL := fmt.Sprintf("DELETE FROM %s WHERE %q = $1", qTable, ownerCol)
+	delSQL := fmt.Sprintf("DELETE FROM %s WHERE %s = $1", qTable, pgutil.QuoteIdent(ownerCol))
 	if _, err := db.Exec(ctx, delSQL, recordID); err != nil {
 		return fmt.Errorf("m2m delete: %w", err)
 	}
@@ -2271,8 +2271,8 @@ func (h *DynHandler) syncM2MLinks(ctx context.Context, db querier, ownerSlug str
 		args = append(args, tid)
 		vals = append(vals, fmt.Sprintf("($1, $%d)", i+2))
 	}
-	insSQL := fmt.Sprintf("INSERT INTO %s (%q, %q) VALUES %s ON CONFLICT DO NOTHING",
-		qTable, ownerCol, targetCol, strings.Join(vals, ", "))
+	insSQL := fmt.Sprintf("INSERT INTO %s (%s, %s) VALUES %s ON CONFLICT DO NOTHING",
+		qTable, pgutil.QuoteIdent(ownerCol), pgutil.QuoteIdent(targetCol), strings.Join(vals, ", "))
 	if _, err := db.Exec(ctx, insSQL, args...); err != nil {
 		return fmt.Errorf("m2m insert: %w", err)
 	}
@@ -2318,9 +2318,9 @@ func (h *DynHandler) loadM2MFields(ctx context.Context, records []map[string]any
 			args[i] = id
 		}
 
-		qTable := fmt.Sprintf("%q.%q", "data", junc)
-		sql := fmt.Sprintf("SELECT %q, %q FROM %s WHERE %q IN (%s)",
-			ownerCol, targetCol, qTable, ownerCol, strings.Join(placeholders, ","))
+		qTable := pgutil.QuoteQualified("data", junc)
+		sql := fmt.Sprintf("SELECT %s, %s FROM %s WHERE %s IN (%s)",
+			pgutil.QuoteIdent(ownerCol), pgutil.QuoteIdent(targetCol), qTable, pgutil.QuoteIdent(ownerCol), strings.Join(placeholders, ","))
 
 		rows, err := h.pool.Query(ctx, sql, args...)
 		if err != nil {
@@ -2395,7 +2395,7 @@ func (h *DynHandler) expandM2M(ctx context.Context, records []map[string]any, f 
 		args[i] = id
 	}
 
-	qTargetTable := fmt.Sprintf("%q.%q", "data", targetCol.Slug)
+	qTargetTable := pgutil.QuoteQualified("data", targetCol.Slug)
 	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id IN (%s) AND deleted_at IS NULL",
 		targetSelectCols, qTargetTable, strings.Join(placeholders, ","))
 

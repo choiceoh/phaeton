@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -142,8 +143,8 @@ func (h *DynHandler) CalendarView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build SQL: fetch entries where date range overlaps the grid.
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	endCol := fmt.Sprintf("%q", dateFieldSlug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
+	endCol := pgutil.QuoteIdent(dateFieldSlug)
 	if endDateField != nil {
 		endCol = fmt.Sprintf("COALESCE(%q, %q)", endDateFieldSlug, dateFieldSlug)
 	}
@@ -472,7 +473,7 @@ func (h *DynHandler) GanttView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch entries (no pagination, with safety cap).
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	where, args, err := parseCalendarFilters(params, fields)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -697,7 +698,7 @@ func (h *DynHandler) KanbanView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch entries (no pagination).
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 	where, args, err := parseCalendarFilters(params, fields)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

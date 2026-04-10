@@ -3,7 +3,6 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -13,9 +12,8 @@ import (
 // If unset, development defaults to http://localhost:5173 with a warning.
 // In production (GO_ENV=production), unset CORS_ORIGIN is an error and the
 // middleware refuses all cross-origin requests.
-func CORS() func(http.Handler) http.Handler {
-	raw := os.Getenv("CORS_ORIGIN")
-	isProd := os.Getenv("GO_ENV") == "production"
+func CORS(corsOrigin string, isProd bool) func(http.Handler) http.Handler {
+	raw := corsOrigin
 
 	var allowed []string
 	if raw == "" {

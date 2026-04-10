@@ -348,7 +348,7 @@ func checkRelationTarget(ctx context.Context, pool *pgxpool.Pool, cache *schema.
 	if !ok {
 		return fmt.Errorf("%w: relation target collection %s not found", schema.ErrInvalidInput, targetCollectionID)
 	}
-	qTable := fmt.Sprintf("%q.%q", "data", target.Slug)
+	qTable := pgutil.QuoteQualified("data", target.Slug)
 	var exists bool
 	err := pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM "+qTable+" WHERE id = $1 AND deleted_at IS NULL)",

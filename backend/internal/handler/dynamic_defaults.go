@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -50,11 +51,11 @@ func (h *DynHandler) GetDefaults(w http.ResponseWriter, r *http.Request) {
 
 	// Build a query that fetches mode (most frequent value) for select fields,
 	// and the most recent value for other field types.
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 
 	var selectParts []string
 	for _, f := range targets {
-		qCol := fmt.Sprintf("%q", f.Slug)
+		qCol := pgutil.QuoteIdent(f.Slug)
 		switch f.FieldType {
 		case schema.FieldSelect, schema.FieldMultiselect:
 			// mode() returns the most frequent value

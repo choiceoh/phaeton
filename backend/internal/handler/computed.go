@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -392,8 +393,8 @@ func batchFetchField(ctx context.Context, pool *pgxpool.Pool, tableSlug, fieldSl
 		args[i] = id
 	}
 
-	qTable := fmt.Sprintf("%q.%q", "data", tableSlug)
-	qCol := fmt.Sprintf("%q", fieldSlug)
+	qTable := pgutil.QuoteQualified("data", tableSlug)
+	qCol := pgutil.QuoteIdent(fieldSlug)
 	sql := fmt.Sprintf(
 		"SELECT id, %s FROM %s WHERE id IN (%s) AND deleted_at IS NULL",
 		qCol, qTable, strings.Join(placeholders, ","),
@@ -447,9 +448,9 @@ func batchRollup(
 		args[i] = id
 	}
 
-	qTable := fmt.Sprintf("%q.%q", "data", targetTableSlug)
-	qRelCol := fmt.Sprintf("%q", relationColSlug)
-	qValCol := fmt.Sprintf("%q", valueColSlug)
+	qTable := pgutil.QuoteQualified("data", targetTableSlug)
+	qRelCol := pgutil.QuoteIdent(relationColSlug)
+	qValCol := pgutil.QuoteIdent(valueColSlug)
 
 	var aggExpr string
 	switch fn {

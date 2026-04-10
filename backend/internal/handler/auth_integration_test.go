@@ -22,7 +22,7 @@ func setupAuthRouter(t *testing.T) *chi.Mux {
 
 	r := chi.NewRouter()
 	r.Use(handler.WithRequestID)
-	r.Post("/api/auth/login", handler.Login(pool, nil))
+	r.Post("/api/auth/login", handler.Login(pool, nil, "test-secret"))
 	r.Post("/api/auth/logout", handler.Logout())
 	r.Get("/api/auth/me", handler.Me(pool))
 	r.Post("/api/users", handler.CreateUser(pool))

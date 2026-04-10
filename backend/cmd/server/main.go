@@ -18,6 +18,7 @@ import (
 
 	"github.com/choiceoh/phaeton/backend/internal/ai"
 	"github.com/choiceoh/phaeton/backend/internal/automation"
+	"github.com/choiceoh/phaeton/backend/internal/config"
 	"github.com/choiceoh/phaeton/backend/internal/db"
 	"github.com/choiceoh/phaeton/backend/internal/events"
 	"github.com/choiceoh/phaeton/backend/internal/handler"
@@ -58,26 +59,26 @@ func main() {
 // 12. Router (chi with global + per-route middleware)
 // 13. HTTP server with graceful shutdown (lifecycle.RunWithSignals)
 func run() int {
+	// Load all configuration from environment (validates production requirements).
+	appCfg, err := config.Load()
+	if err != nil {
+		// Cannot use structured logger yet — it depends on config.
+		fmt.Fprintf(os.Stderr, "config: %v\n", err)
+		return 1
+	}
+
 	// Logging: JSON in production, console otherwise.
-	isProd := os.Getenv("GO_ENV") == "production"
 	var logHandler slog.Handler
-	if isProd {
+	if appCfg.IsProd {
 		logHandler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	} else {
-		color := os.Getenv("NO_COLOR") == ""
-		logHandler = logging.NewConsoleHandler(os.Stderr, slog.LevelInfo, color)
+		logHandler = logging.NewConsoleHandler(os.Stderr, slog.LevelInfo, !appCfg.NoColor)
 	}
 	logger := slog.New(logHandler)
 	slog.SetDefault(logger)
 
-	// In production, refuse to start without an explicit JWT secret.
-	if os.Getenv("GO_ENV") == "production" && os.Getenv("JWT_SECRET") == "" {
-		logger.Error("JWT_SECRET environment variable is required in production")
-		return 1
-	}
-
 	// Database pool.
-	pool, err := db.NewPool(context.Background())
+	pool, err := db.NewPool(context.Background(), appCfg.DB, appCfg.IsProd)
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
 		return 1
@@ -119,7 +120,7 @@ func run() int {
 	memberHandler := handler.NewMemberHandler(pool)
 
 	// AI client (local vLLM).
-	aiClient := ai.NewClient()
+	aiClient := ai.NewClient(appCfg.AI)
 	aiHandler := handler.NewAIHandler(aiClient, store, pool, cache)
 
 	// Charts handler.
@@ -165,10 +166,16 @@ func run() int {
 	loginLimiter := middleware.NewRateLimiter(5, 15*60*1000, 30*60*1000)
 	defer loginLimiter.Close()
 
-	// SAML SP (optional — enabled when SAML_IDP_METADATA_URL is set).
+	// SAML SP (optional).
 	var samlMiddleware *samlsp.Middleware
-	if cfg := samlsp.ConfigFromEnv(); cfg != nil {
-		sp, err := samlsp.New(cfg)
+	if appCfg.SAML != nil {
+		sp, err := samlsp.New(&samlsp.Config{
+			EntityID:       appCfg.SAML.EntityID,
+			RootURL:        appCfg.SAML.RootURL,
+			CertPath:       appCfg.SAML.CertPath,
+			KeyPath:        appCfg.SAML.KeyPath,
+			IdPMetadataURL: appCfg.SAML.IdPMetadataURL,
+		})
 		if err != nil {
 			logger.Error("SAML SP init failed", "error", err)
 			return 1
@@ -178,16 +185,26 @@ func run() int {
 
 	// Sync runner (Amaranth HR integration).
 	syncRunner := sync.NewRunner(6*time.Hour, logger)
-	if cfg := amaranth.ConfigFromEnv(); cfg != nil {
-		src := amaranth.NewSource(pool, cfg, logger)
+	if appCfg.Amaranth != nil {
+		src := amaranth.NewSource(pool, &amaranth.Config{
+			BaseURL: appCfg.Amaranth.BaseURL,
+			APIKey:  appCfg.Amaranth.APIKey,
+		}, logger)
 		syncRunner.Register(src)
 		logger.Info("amaranth sync registered")
 	}
 
-	// Email + Report handler (optional — enabled when SMTP env vars are set).
+	// Email + Report handler (optional).
 	var reportHandler *handler.ReportHandler
-	if smtpCfg := notify.SMTPConfigFromEnv(); smtpCfg != nil {
-		emailNotifier := notify.NewEmailNotifier(*smtpCfg, func(ctx context.Context, userID string) (string, error) {
+	if appCfg.SMTP != nil {
+		smtpCfg := notify.SMTPConfig{
+			Host:     appCfg.SMTP.Host,
+			Port:     appCfg.SMTP.Port,
+			Username: appCfg.SMTP.Username,
+			Password: appCfg.SMTP.Password,
+			From:     appCfg.SMTP.From,
+		}
+		emailNotifier := notify.NewEmailNotifier(smtpCfg, func(ctx context.Context, userID string) (string, error) {
 			var email string
 			err := pool.QueryRow(ctx, "SELECT email FROM auth.users WHERE id = $1", userID).Scan(&email)
 			return email, err
@@ -200,29 +217,34 @@ func run() int {
 
 	// Router.
 	r := buildRouter(routerConfig{
-		pool:         pool,
-		cache:        cache,
-		schemaH:      schemaHandler,
-		dynH:         dynHandler,
-		viewH:        viewHandler,
-		savedViewH:   savedViewHandler,
-		histH:        historyHandler,
-		memberH:      memberHandler,
-		commentH:     commentHandler,
-		notifH:       notifHandler,
-		aiH:          aiHandler,
-		autoH:        autoHandler,
-		chartH:       chartHandler,
-		templateH:    templateHandler,
-		sseH:         sseHandler,
-		reportH:      reportHandler,
-		logger:       logger,
-		loginLimiter: loginLimiter,
-		apiLimiter:   apiLimiter,
-		samlMW:       samlMiddleware,
+		pool:          pool,
+		cache:         cache,
+		schemaH:       schemaHandler,
+		dynH:          dynHandler,
+		viewH:         viewHandler,
+		savedViewH:    savedViewHandler,
+		histH:         historyHandler,
+		memberH:       memberHandler,
+		commentH:      commentHandler,
+		notifH:        notifHandler,
+		aiH:           aiHandler,
+		autoH:         autoHandler,
+		chartH:        chartHandler,
+		templateH:     templateHandler,
+		sseH:          sseHandler,
+		reportH:       reportHandler,
+		logger:        logger,
+		loginLimiter:  loginLimiter,
+		apiLimiter:    apiLimiter,
+		samlMW:        samlMiddleware,
+		jwtSecret:     appCfg.JWTSecret,
+		authDisabled:  appCfg.AuthDisabled,
+		corsOrigin:    appCfg.CORSOrigin,
+		isProd:        appCfg.IsProd,
+		webhookSecret: appCfg.WebhookSecret,
 	})
 
-	addr := envOr("ADDR", ":8080")
+	addr := appCfg.Addr
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           r,
@@ -248,15 +270,15 @@ func run() int {
 			Version: version,
 			Addr:    ln.Addr().String(),
 			DB:      "connected",
-		}, !isProd)
+		}, !appCfg.IsProd)
 
-		if middleware.AuthDisabled() {
+		if appCfg.AuthDisabled {
 			slog.Warn("AUTH_DISABLED=true — authentication is bypassed, all requests use dev user (director)")
 		}
 
 		go func() {
 			<-ctx.Done()
-			logging.PrintShutdown(os.Stderr, time.Since(startedAt), !isProd)
+			logging.PrintShutdown(os.Stderr, time.Since(startedAt), !appCfg.IsProd)
 
 			// Stop background workers before draining HTTP connections.
 			// syncRunner stops automatically via ctx cancellation.
@@ -280,26 +302,31 @@ func run() int {
 }
 
 type routerConfig struct {
-	pool         *pgxpool.Pool
-	cache        *schema.Cache
-	schemaH      *handler.SchemaHandler
-	dynH         *handler.DynHandler
-	viewH        *handler.ViewHandler
-	savedViewH   *handler.SavedViewHandler
-	histH        *handler.HistoryHandler
-	memberH      *handler.MemberHandler
-	commentH     *handler.CommentHandler
-	notifH       *handler.NotificationHandler
-	aiH          *handler.AIHandler
-	autoH        *handler.AutomationHandler
-	chartH       *handler.ChartHandler
-	templateH    *handler.TemplateHandler
-	sseH         *handler.SSEHandler
-	reportH      *handler.ReportHandler
-	logger       *slog.Logger
-	loginLimiter *middleware.RateLimiter
-	apiLimiter   *middleware.APILimiter
-	samlMW       *samlsp.Middleware
+	pool          *pgxpool.Pool
+	cache         *schema.Cache
+	schemaH       *handler.SchemaHandler
+	dynH          *handler.DynHandler
+	viewH         *handler.ViewHandler
+	savedViewH    *handler.SavedViewHandler
+	histH         *handler.HistoryHandler
+	memberH       *handler.MemberHandler
+	commentH      *handler.CommentHandler
+	notifH        *handler.NotificationHandler
+	aiH           *handler.AIHandler
+	autoH         *handler.AutomationHandler
+	chartH        *handler.ChartHandler
+	templateH     *handler.TemplateHandler
+	sseH          *handler.SSEHandler
+	reportH       *handler.ReportHandler
+	logger        *slog.Logger
+	loginLimiter  *middleware.RateLimiter
+	apiLimiter    *middleware.APILimiter
+	samlMW        *samlsp.Middleware
+	jwtSecret     string
+	authDisabled  bool
+	corsOrigin    string
+	isProd        bool
+	webhookSecret string
 }
 
 // buildRouter assembles the chi router with the following route groups:
@@ -321,7 +348,7 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(middleware.Logger(cfg.logger))
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(cfg.corsOrigin, cfg.isProd))
 	r.Use(chimw.Recoverer)
 
 	// Health — includes DB connectivity check.
@@ -342,11 +369,11 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 	})
 
 	// Auth (public).
-	r.Post("/api/auth/login", handler.Login(cfg.pool, cfg.loginLimiter))
+	r.Post("/api/auth/login", handler.Login(cfg.pool, cfg.loginLimiter, cfg.jwtSecret))
 	r.Post("/api/auth/logout", handler.Logout())
 
 	// Webhooks (public — HMAC-verified via WEBHOOK_SECRET).
-	webhookH := handler.NewWebhookHandler(cfg.pool)
+	webhookH := handler.NewWebhookHandler(cfg.pool, cfg.webhookSecret)
 	r.Post("/api/hooks/{topic}", webhookH.Receive)
 
 	// SAML SP endpoints (metadata + ACS).
@@ -356,11 +383,11 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 
 	// Protected routes.
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.RequireAuth())
+		r.Use(middleware.RequireAuth(cfg.jwtSecret, cfg.authDisabled))
 		r.Use(cfg.apiLimiter.Middleware())
 
 		// Current user.
-		r.Get("/api/auth/me", handler.Me(cfg.pool))
+		r.Get("/api/auth/me", handler.Me(cfg.pool, cfg.authDisabled))
 		r.Patch("/api/auth/me", handler.UpdateMe(cfg.pool))
 		r.Post("/api/auth/password", handler.ChangePassword(cfg.pool))
 
@@ -593,9 +620,3 @@ func writeIndex(w http.ResponseWriter, indexHTML []byte) {
 	w.Write(indexHTML)
 }
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
