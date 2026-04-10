@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatError } from '@/lib/api/errors'
 import {
   BarChart,
   Bar,
@@ -72,7 +73,7 @@ export default function DashboardPage() {
             toast.success('차트가 추가되었습니다')
             setChartPrompt('')
           },
-          onError: (err) => toast.error(String(err)),
+          onError: (err) => toast.error(formatError(err)),
         })
       },
     })

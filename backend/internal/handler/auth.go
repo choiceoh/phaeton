@@ -353,6 +353,8 @@ func ListUsers(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 		if err := rows.Err(); err != nil {
 			slog.Error("list users: rows iteration failed", "error", err)
+			apierr.Internal("list users failed").Write(w)
+			return
 		}
 		writeJSON(w, http.StatusOK, users)
 	}

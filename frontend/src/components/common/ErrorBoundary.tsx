@@ -21,9 +21,8 @@ export class ErrorBoundary extends Component<Props, State> {
     return { error }
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    // eslint-disable-next-line no-console
-    console.error('ErrorBoundary caught:', error, info)
+  componentDidCatch(_error: Error, _info: ErrorInfo) {
+    // Intentionally empty — error is captured via getDerivedStateFromError.
   }
 
   reset = () => this.setState({ error: null })

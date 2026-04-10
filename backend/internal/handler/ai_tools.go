@@ -101,6 +101,9 @@ func (h *AIHandler) resolveListUsers(ctx context.Context) (string, error) {
 		}
 		fmt.Fprintf(&sb, "- %s (id: %s, email: %s)\n", name, id, email)
 	}
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("list users: rows iteration: %w", err)
+	}
 	if sb.Len() == 0 {
 		return "사용자가 없습니다.", nil
 	}

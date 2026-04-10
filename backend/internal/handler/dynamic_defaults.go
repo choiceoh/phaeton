@@ -91,6 +91,10 @@ func (h *DynHandler) GetDefaults(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "defaults: rows iteration failed")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, defaults)
 }

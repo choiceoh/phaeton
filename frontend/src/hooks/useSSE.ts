@@ -54,7 +54,10 @@ export function useSSE() {
         let msg: SSEMessage
         try {
           msg = JSON.parse(e.data)
-        } catch {
+        } catch (parseErr) {
+          if (import.meta.env.DEV) {
+            console.warn('SSE: failed to parse message', e.data, parseErr)
+          }
           return
         }
 

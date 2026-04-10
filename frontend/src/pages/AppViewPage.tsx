@@ -318,9 +318,10 @@ export default function AppViewPage() {
 
       const serverField = totals?.[f.slug]
       const serverAgg = typeof serverField === 'object' && serverField !== null
+        && 'sum' in serverField && 'avg' in serverField
         ? serverField as { sum: number; avg: number; min: number; max: number }
         : null
-      const serverCount = totals?._count as number | undefined
+      const serverCount = typeof totals?._count === 'number' ? totals._count : undefined
 
       let displayValue: number | undefined
 

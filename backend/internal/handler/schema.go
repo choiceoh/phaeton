@@ -72,6 +72,10 @@ func (h *SchemaHandler) CollectionCounts(w http.ResponseWriter, r *http.Request)
 		}
 		result[slug] = cnt
 	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 

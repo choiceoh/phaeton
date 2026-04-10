@@ -404,6 +404,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		slugs = append(slugs, s)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("bootstrap: rows iteration: %w", err)
+	}
 	for _, slug := range slugs {
 		// Check if the data table actually exists before altering it.
 		var exists bool

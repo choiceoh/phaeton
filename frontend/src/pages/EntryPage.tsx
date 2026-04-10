@@ -85,7 +85,7 @@ export default function EntryPage() {
     initialData = entryData
   } else if (duplicateSource) {
     // Strip identity/system fields for duplicate
-    const { id, _version, created_at, updated_at, _created_by, _optimistic, _updated_at, _created_at, ...rest } = duplicateSource as EntryRow
+    const { id: _id, _version, created_at: _ca, updated_at: _ua, _created_by, _optimistic, _updated_at, _created_at, ...rest } = duplicateSource as EntryRow
     initialData = rest
   } else if (entryDefaults && Object.keys(entryDefaults).length > 0) {
     initialData = entryDefaults
