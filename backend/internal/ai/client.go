@@ -112,39 +112,9 @@ type chatRequest struct {
 	MaxTokens   int           `json:"max_tokens,omitempty"`
 }
 
-// chatMessage supports both plain text and multimodal content.
-// When Content is set, it's sent as a string; when Parts is set, it's sent as an array.
 type chatMessage struct {
-	Role    string        `json:"role"`
-	Content string        `json:"-"`
-	Parts   []contentPart `json:"-"`
-}
-
-// MarshalJSON handles the dual content format (string vs array).
-func (m chatMessage) MarshalJSON() ([]byte, error) {
-	if len(m.Parts) > 0 {
-		type alias struct {
-			Role    string        `json:"role"`
-			Content []contentPart `json:"content"`
-		}
-		return json.Marshal(alias{Role: m.Role, Content: m.Parts})
-	}
-	type alias struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-	return json.Marshal(alias{Role: m.Role, Content: m.Content})
-}
-
-// contentPart is a single part of a multimodal message.
-type contentPart struct {
-	Type     string    `json:"type"`
-	Text     string    `json:"text,omitempty"`
-	ImageURL *imageURL `json:"image_url,omitempty"`
-}
-
-type imageURL struct {
-	URL string `json:"url"`
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 type chatResponse struct {
@@ -167,34 +137,6 @@ func (c *Client) Complete(ctx context.Context, system, user string) (string, err
 		Messages: []chatMessage{
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
-		},
-		Temperature: 0.3,
-		MaxTokens:   4096,
-	}
-
-	return c.doRequest(ctx, body)
-}
-
-// CompleteWithImage sends a vision request with text + base64 PNG image.
-func (c *Client) CompleteWithImage(ctx context.Context, system, userText string, pngBase64 string) (string, error) {
-	model, err := c.resolveModel(ctx)
-	if err != nil {
-		return "", fmt.Errorf("resolve model: %w", err)
-	}
-
-	body := chatRequest{
-		Model: model,
-		Messages: []chatMessage{
-			{Role: "system", Content: system},
-			{
-				Role: "user",
-				Parts: []contentPart{
-					{Type: "text", Text: userText},
-					{Type: "image_url", ImageURL: &imageURL{
-						URL: "data:image/png;base64," + pngBase64,
-					}},
-				},
-			},
 		},
 		Temperature: 0.3,
 		MaxTokens:   4096,

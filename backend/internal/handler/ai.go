@@ -229,22 +229,6 @@ Review the schema below and improve it. Check for:
 - Keep what is already good, only fix what needs improvement.
 - All labels and descriptions must remain in Korean.`
 
-const visualCritiquePrompt = `You are looking at a screenshot of a form that was generated for a no-code business app platform.
-The user's original request and the current JSON schema are provided below.
-
-## Your Task
-Look at the screenshot carefully and evaluate the visual layout:
-1. Are fields grouped logically? Related fields should be near each other.
-2. Is the width distribution good? Short fields (dates, numbers) can be width 2-3 side by side. Long text fields should be width 6.
-3. Are section headers (label type) placed appropriately to divide the form into logical groups?
-4. Does the overall form look clean, professional, and easy to fill out?
-5. Is the field order intuitive? (identification first, then details, then status/meta at the end)
-
-## Rules
-- Output ONLY the improved JSON schema — no explanation, no markdown fences.
-- Keep what is already good, only fix layout/ordering issues you see in the screenshot.
-- All labels and descriptions must remain in Korean.`
-
 const slugPrompt = `You are a slug generator for a no-code business app platform.
 The user will provide a Korean name (label) for a collection or field.
 You must generate an English snake_case slug that represents the meaning.
@@ -293,7 +277,7 @@ func (h *AIHandler) GenerateSlug(w http.ResponseWriter, r *http.Request) {
 }
 
 // BuildCollection generates a collection schema from a natural-language description.
-// Flow: triage (questions?) → generate → text self-critique → visual screenshot critique.
+// Flow: triage (questions?) → generate → text self-critique.
 func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 	var req aiBuildRequest
 	if err := readJSON(r, &req); err != nil {
@@ -373,27 +357,6 @@ func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("ai build step 2 failed, using step 1 result", "error", err)
 	} else if refined, err := parseAndSanitize(raw2); err != nil {
 		slog.Warn("ai step 2 returned invalid JSON, using step 1 result", "error", err)
-	} else {
-		result = refined
-	}
-
-	// ── Step 3: Visual screenshot critique ──
-	slog.Info("ai build: step 3 - visual screenshot critique")
-	imgB64, err := renderFormScreenshotBase64(ctx, result)
-	if err != nil {
-		slog.Warn("ai build step 3 screenshot failed, using step 2 result", "error", err)
-		writeJSON(w, http.StatusOK, aiBuildEnvelope{Mode: "schema", Schema: &result})
-		return
-	}
-
-	schemaJSON, _ = json.MarshalIndent(result, "", "  ")
-	visualInput := fmt.Sprintf("사용자 요청: %s\n\n현재 스키마:\n%s", fullDescription, string(schemaJSON))
-
-	raw3, err := h.client.CompleteWithImage(ctx, visualCritiquePrompt, visualInput, imgB64)
-	if err != nil {
-		slog.Warn("ai build step 3 vision failed, using step 2 result", "error", err)
-	} else if refined, err := parseAndSanitize(raw3); err != nil {
-		slog.Warn("ai step 3 returned invalid JSON, using step 2 result", "error", err)
 	} else {
 		result = refined
 	}
