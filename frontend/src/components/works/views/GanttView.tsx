@@ -97,17 +97,19 @@ export default function GanttView({ slug, fields, filters, onEntryClick, onEntry
 
   const rows = data?.rows ?? []
   const rangeStart = data?.range ? parseDate(data.range.start) : addDays(new Date(), -7)
+  const rangeStartTime = rangeStart.getTime()
   const totalDays = data?.range?.totalDays ?? 37
   const monthHeaders = data?.months ?? []
 
   // Generate day columns
   const days = useMemo(() => {
+    const start = new Date(rangeStartTime)
     const result: Date[] = []
     for (let i = 0; i < totalDays; i++) {
-      result.push(addDays(rangeStart, i))
+      result.push(addDays(start, i))
     }
     return result
-  }, [rangeStart.getTime(), totalDays])
+  }, [rangeStartTime, totalDays])
 
   // Synchronized scrolling
   const leftBodyRef = useRef<HTMLDivElement>(null)
@@ -239,7 +241,7 @@ export default function GanttView({ slug, fields, filters, onEntryClick, onEntry
       map.set(row.id, { rowIdx, startIdx, endIdx })
     })
     return map
-  }, [rows, rangeStart.getTime()])
+  }, [rows, rangeStartTime])
 
   // Dependency lines
   const dependencies = useMemo(() => {

@@ -32,11 +32,11 @@ type calendarSpan struct {
 }
 
 type calendarWeek struct {
-	Start   string                        `json:"start"`
-	End     string                        `json:"end"`
-	Days    []string                      `json:"days"`
-	Spans   []calendarSpan                `json:"spans"`
-	Singles map[string][]map[string]any   `json:"singles"`
+	Start   string                      `json:"start"`
+	End     string                      `json:"end"`
+	Days    []string                    `json:"days"`
+	Spans   []calendarSpan              `json:"spans"`
+	Singles map[string][]map[string]any `json:"singles"`
 }
 
 type calendarResponse struct {
@@ -663,8 +663,8 @@ type kanbanColumn struct {
 }
 
 type kanbanResponse struct {
-	Columns      []kanbanColumn        `json:"columns"`
-	AllowedMoves map[string][]string   `json:"allowed_moves,omitempty"`
+	Columns      []kanbanColumn      `json:"columns"`
+	AllowedMoves map[string][]string `json:"allowed_moves,omitempty"`
 }
 
 func (h *DynHandler) KanbanView(w http.ResponseWriter, r *http.Request) {

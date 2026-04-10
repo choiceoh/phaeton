@@ -160,15 +160,16 @@ export default function KanbanView({
   })
 
   const columns: KanbanColumn[] = kanbanData?.columns ?? []
+  const serverAllowedMoves = kanbanData?.allowed_moves
 
   const allowedMoves = useMemo(() => {
-    if (!kanbanData?.allowed_moves) return undefined
+    if (!serverAllowedMoves) return undefined
     const map = new Map<string, Set<string>>()
-    for (const [from, tos] of Object.entries(kanbanData.allowed_moves)) {
+    for (const [from, tos] of Object.entries(serverAllowedMoves)) {
       map.set(from, new Set(tos))
     }
     return map
-  }, [kanbanData?.allowed_moves])
+  }, [serverAllowedMoves])
 
   const choices = columns.map((c) => c.value)
   const titleField = fields.find((f) => f.field_type === 'text')
