@@ -11,6 +11,26 @@ const LEFT_PANEL_WIDTH = 420
 const BAR_HEIGHT = 22
 const BAR_Y_OFFSET = (ROW_HEIGHT - BAR_HEIGHT) / 2
 
+// Distinct hue palette for assignee/status color coding
+const BAR_PALETTE = [
+  'hsl(221 83% 53%)',  // blue
+  'hsl(142 71% 45%)',  // green
+  'hsl(262 83% 58%)',  // violet
+  'hsl(25 95% 53%)',   // orange
+  'hsl(339 90% 51%)',  // rose
+  'hsl(174 72% 40%)',  // teal
+  'hsl(47 96% 53%)',   // amber
+  'hsl(199 89% 48%)',  // sky
+  'hsl(280 67% 44%)',  // purple
+  'hsl(12 76% 61%)',   // coral
+]
+
+function hashColor(key: string): string {
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = ((h << 5) - h + key.charCodeAt(i)) | 0
+  return BAR_PALETTE[Math.abs(h) % BAR_PALETTE.length]
+}
+
 interface Props {
   fields: Field[]
   entries: Record<string, unknown>[]
@@ -78,6 +98,11 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
     [fields],
   )
 
+  const statusField = useMemo(
+    () => fields.find((f) => f.field_type === 'select'),
+    [fields],
+  )
+
   const relationField = useMemo(
     () => fields.find((f) => f.field_type === 'relation'),
     [fields],
@@ -111,6 +136,12 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
         }
       }
 
+      const status = statusField ? String(entry[statusField.slug] ?? '') : ''
+      // Color by assignee if available, else by status, else default
+      const colorKey = (typeof user === 'object' && user !== null
+        ? String((user as Record<string, unknown>).name ?? '')
+        : user ? String(user) : '') || status
+
       return {
         id: String(entry.id),
         entry,
@@ -125,9 +156,11 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
               : '',
         progress,
         dependencyIds,
+        status,
+        color: colorKey ? hashColor(colorKey) : BAR_PALETTE[0],
       }
     })
-  }, [entries, startDateField, endDateField, titleField, userField, progressField, relationField])
+  }, [entries, startDateField, endDateField, titleField, userField, progressField, relationField, statusField])
 
   // Calculate date range
   const { rangeStart, totalDays } = useMemo(() => {
@@ -370,6 +403,8 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
     return {
       left: startIdx * DAY_WIDTH + 2,
       width: Math.max((endIdx - startIdx + 1) * DAY_WIDTH - 4, 8),
+      startLabel: formatDateStr(sDate),
+      endLabel: formatDateStr(eDate),
     }
   }
 
@@ -570,11 +605,15 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
               if (!pos) return null
               const barTop = rowIdx * ROW_HEIGHT + BAR_Y_OFFSET
               const isDragging = dragState?.rowId === row.id
+              const barColor = row.color
 
               return (
                 <div
                   key={row.id}
                   className="absolute rounded group"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${row.title} ${pos.startLabel} ~ ${pos.endLabel}`}
                   style={{
                     left: pos.left,
                     top: barTop,
@@ -582,10 +621,36 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
                     height: BAR_HEIGHT,
                     opacity: isDragging ? 0.8 : 1,
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onEntryClick(row.entry)
+                    }
+                    if (!onEntryUpdate || !row.startDate || !row.endDate) return
+                    const shift = e.shiftKey ? 7 : 1
+                    if (e.key === 'ArrowLeft') {
+                      e.preventDefault()
+                      const ns = formatDateStr(addDays(parseDate(row.startDate), -shift))
+                      const ne = formatDateStr(addDays(parseDate(row.endDate), -shift))
+                      onEntryUpdate(row.id, {
+                        [startDateField!.slug]: ns,
+                        ...(endDateField && endDateField.id !== startDateField!.id ? { [endDateField.slug]: ne } : {}),
+                      })
+                    } else if (e.key === 'ArrowRight') {
+                      e.preventDefault()
+                      const ns = formatDateStr(addDays(parseDate(row.startDate), shift))
+                      const ne = formatDateStr(addDays(parseDate(row.endDate), shift))
+                      onEntryUpdate(row.id, {
+                        [startDateField!.slug]: ns,
+                        ...(endDateField && endDateField.id !== startDateField!.id ? { [endDateField.slug]: ne } : {}),
+                      })
+                    }
+                  }}
                 >
                   {/* Bar background */}
                   <div
-                    className="absolute inset-0 rounded bg-primary/20 cursor-grab active:cursor-grabbing"
+                    className="absolute inset-0 rounded cursor-grab active:cursor-grabbing"
+                    style={{ backgroundColor: `color-mix(in srgb, ${barColor} 25%, transparent)` }}
                     onMouseDown={(e) =>
                       onEntryUpdate &&
                       row.startDate &&
@@ -600,11 +665,12 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
                     {/* Progress fill */}
                     {row.progress !== null && row.progress > 0 && (
                       <div
-                        className={`absolute inset-y-0 left-0 bg-primary/50 ${
+                        className={`absolute inset-y-0 left-0 ${
                           row.progress >= 100 ? 'rounded' : 'rounded-l'
                         }`}
                         style={{
                           width: `${Math.min(100, row.progress)}%`,
+                          backgroundColor: `color-mix(in srgb, ${barColor} 55%, transparent)`,
                         }}
                       />
                     )}
@@ -614,11 +680,19 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
                     </span>
                   </div>
 
+                  {/* Drag date tooltip */}
+                  {isDragging && dragState.dayDelta !== 0 && (
+                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-foreground px-2 py-0.5 text-[10px] text-background shadow z-20">
+                      {pos.startLabel} ~ {pos.endLabel}
+                    </div>
+                  )}
+
                   {/* Resize handles */}
                   {onEntryUpdate && row.startDate && row.endDate && (
                     <>
                       <div
-                        className="absolute left-0 top-0 w-2 h-full cursor-col-resize opacity-0 group-hover:opacity-100 hover:bg-primary/40 rounded-l"
+                        className="absolute left-0 top-0 w-2 h-full cursor-col-resize opacity-0 group-hover:opacity-100 rounded-l"
+                        style={{ backgroundColor: `color-mix(in srgb, ${barColor} 45%, transparent)` }}
                         onMouseDown={(e) =>
                           handleMouseDown(
                             e,
@@ -630,7 +704,8 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
                         }
                       />
                       <div
-                        className="absolute right-0 top-0 w-2 h-full cursor-col-resize opacity-0 group-hover:opacity-100 hover:bg-primary/40 rounded-r"
+                        className="absolute right-0 top-0 w-2 h-full cursor-col-resize opacity-0 group-hover:opacity-100 rounded-r"
+                        style={{ backgroundColor: `color-mix(in srgb, ${barColor} 45%, transparent)` }}
                         onMouseDown={(e) =>
                           handleMouseDown(
                             e,
@@ -665,7 +740,7 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
                     <path
                       d="M0,0 L6,3 L0,6 Z"
                       fill="currentColor"
-                      className="text-muted-foreground"
+                      className="text-foreground/60"
                     />
                   </marker>
                 </defs>
@@ -678,7 +753,7 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="1.5"
-                      className="text-muted-foreground/50"
+                      className="text-foreground/60"
                       markerEnd="url(#gantt-arrow)"
                     />
                   )

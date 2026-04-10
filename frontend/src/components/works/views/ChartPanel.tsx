@@ -18,9 +18,9 @@ import { useAggregate } from '@/hooks/useEntries'
 import type { Field } from '@/lib/types'
 
 const COLORS = [
-  '#1f2937', '#374151', '#4b5563', '#6b7280',
-  '#9ca3af', '#d1d5db', '#111827', '#334155',
-  '#475569', '#64748b', '#94a3b8', '#cbd5e1',
+  '#3b82f6', '#22c55e', '#a855f7', '#f97316',
+  '#ec4899', '#14b8a6', '#eab308', '#06b6d4',
+  '#8b5cf6', '#ef4444', '#84cc16', '#f59e0b',
 ]
 
 interface ChartPanelProps {
@@ -87,11 +87,18 @@ export default function ChartPanel({ slug, fields, totalRecords }: ChartPanelPro
         )}
       </button>
 
-      {expanded && (
-        <div className="grid grid-cols-1 gap-4 border-t px-4 pb-4 pt-3 md:grid-cols-2">
+      <div
+        className="grid grid-cols-1 gap-4 border-t px-4 md:grid-cols-2 overflow-hidden transition-all duration-200"
+        style={{
+          maxHeight: expanded ? 300 : 0,
+          paddingTop: expanded ? 12 : 0,
+          paddingBottom: expanded ? 16 : 0,
+          opacity: expanded ? 1 : 0,
+        }}
+      >
           {/* Bar chart */}
           {barData.length > 0 && (
-            <div>
+            <div role="img" aria-label={`${barLabel} 막대 차트`}>
               <div className="mb-2 text-xs font-medium text-muted-foreground">
                 {barLabel}
               </div>
@@ -129,7 +136,7 @@ export default function ChartPanel({ slug, fields, totalRecords }: ChartPanelPro
 
           {/* Pie chart */}
           {pieData.length > 0 && (
-            <div>
+            <div role="img" aria-label={`${selectField?.label} 분포 원형 차트`}>
               <div className="mb-2 text-xs font-medium text-muted-foreground">
                 {selectField?.label} 분포
               </div>
@@ -142,10 +149,13 @@ export default function ChartPanel({ slug, fields, totalRecords }: ChartPanelPro
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
+                    minAngle={3}
                     strokeWidth={1}
                     stroke="#fff"
                     label={({ name, percent }: { name?: string; percent?: number }) =>
-                      `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`
+                      (percent ?? 0) < 0.05
+                        ? ''
+                        : `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`
                     }
                     labelLine={false}
                   >
@@ -170,7 +180,6 @@ export default function ChartPanel({ slug, fields, totalRecords }: ChartPanelPro
             </div>
           )}
         </div>
-      )}
     </div>
   )
 }
