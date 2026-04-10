@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -127,7 +128,7 @@ export default function TemplateGallery() {
                 onClick={handleUseTemplate}
                 disabled={createCollection.isPending}
               >
-                {createCollection.isPending ? '생성 중...' : '이 템플릿 사용'}
+                {createCollection.isPending ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />생성 중...</> : '이 템플릿 사용'}
               </Button>
             </DialogFooter>
           </DialogContent>

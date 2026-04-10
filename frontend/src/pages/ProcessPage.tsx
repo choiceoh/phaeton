@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
 
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
@@ -363,7 +364,7 @@ export default function ProcessPage() {
         {/* Action buttons */}
         <div className="flex items-center gap-2 border-t pt-4">
           <Button onClick={handleSave} disabled={saveProcess.isPending}>
-            {saveProcess.isPending ? '저장 중...' : '저장'}
+            {saveProcess.isPending ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />저장 중...</> : '저장'}
           </Button>
           <Button variant="outline" onClick={() => refetch()}>
             취소
