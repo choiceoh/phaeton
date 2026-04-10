@@ -336,6 +336,7 @@ func buildRouter(
 		r.Post("/api/ai/build-collection", aiH.BuildCollection)
 		r.Post("/api/ai/chat", aiH.Chat)
 		r.Post("/api/ai/generate-slug", aiH.GenerateSlug)
+		r.Post("/api/ai/build-automation/{id}", aiH.BuildAutomation)
 
 		// Notifications
 		r.Get("/api/notifications", notifH.List)
