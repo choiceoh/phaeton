@@ -97,9 +97,9 @@ export default function AppSettingsPage() {
 
       <div className="space-y-6">
         {canManage && (
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">기본 정보</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Card className="p-4">
+              <h2 className="mb-3 text-sm font-semibold">기본 정보</h2>
               <div className="flex items-center gap-3">
                 <div>
                   <Label>아이콘</Label>
@@ -115,35 +115,31 @@ export default function AppSettingsPage() {
                 </div>
               </div>
             </Card>
-          </section>
-        )}
 
-        {canManage && (
-          <section>
-            <h2 className="text-lg font-semibold">프로세스</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              항목의 상태 흐름(워크플로우)을 정의합니다.
-            </p>
-            <Link to={`/apps/${collection.id}/process`}>
-              <Button variant="outline" size="sm" className="mt-2">
-                프로세스 설정
-              </Button>
-            </Link>
-          </section>
-        )}
+            <Card className="p-4">
+              <h2 className="mb-1 text-sm font-semibold">프로세스</h2>
+              <p className="text-sm text-muted-foreground">
+                항목의 상태 흐름(워크플로우)을 정의합니다.
+              </p>
+              <Link to={`/apps/${collection.id}/process`}>
+                <Button variant="outline" size="sm" className="mt-3">
+                  프로세스 설정
+                </Button>
+              </Link>
+            </Card>
 
-        {canManage && (
-          <section>
-            <h2 className="text-lg font-semibold">자동화</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              데이터 생성/수정/삭제 시 자동으로 알림 발송, 항목 업데이트, 외부 연결을 실행합니다.
-            </p>
-            <Link to={`/apps/${collection.id}/automations`}>
-              <Button variant="outline" size="sm" className="mt-2">
-                자동화 설정
-              </Button>
-            </Link>
-          </section>
+            <Card className="p-4">
+              <h2 className="mb-1 text-sm font-semibold">자동화</h2>
+              <p className="text-sm text-muted-foreground">
+                데이터 변경 시 자동 알림, 항목 업데이트, 외부 연결을 실행합니다.
+              </p>
+              <Link to={`/apps/${collection.id}/automations`}>
+                <Button variant="outline" size="sm" className="mt-3">
+                  자동화 설정
+                </Button>
+              </Link>
+            </Card>
+          </div>
         )}
 
         {canManage && (
