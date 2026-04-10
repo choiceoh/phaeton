@@ -159,7 +159,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     <div>
       <h3 className="mb-2 text-sm font-medium text-foreground/70">입력화면 미리보기</h3>
       <div
-        className="rounded-lg border bg-muted/50 p-4"
+        className="rounded-lg border bg-background p-4"
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes('application/palette-field')) {
             e.preventDefault()
