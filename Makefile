@@ -1,4 +1,9 @@
-.PHONY: dev dev-api dev-ui build clean db db-stop lint lint-go lint-ui test test-go test-ui fmt
+.PHONY: dev dev-api dev-ui build clean db db-stop lint lint-go lint-ui test test-go test-ui fmt up down
+
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
 
 # 개발
 dev: dev-api dev-ui
@@ -22,7 +27,17 @@ build-api:
 clean:
 	rm -rf bin/ backend/cmd/server/static/assets
 
-# DB
+# Docker — 전체 스택 (DB + App)
+up:
+	docker compose up --build -d
+
+down:
+	docker compose down
+
+logs:
+	docker compose logs -f app
+
+# DB만 (로컬 개발용)
 db:
 	docker compose up -d db
 
