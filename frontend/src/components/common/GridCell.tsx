@@ -32,6 +32,7 @@ export default function GridCell({
   onDoubleClick,
 }: GridCellProps) {
   const [editValue, setEditValue] = useState('')
+  const [saved, setSaved] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -49,6 +50,8 @@ export default function GridCell({
     const newValue = editValue === '' ? null : editValue
     if (String(rawValue ?? '') !== String(newValue ?? '')) {
       onSave(newValue)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 800)
     }
     onEditCancel()
   }
@@ -82,6 +85,7 @@ export default function GridCell({
         'min-h-[28px] px-1 -mx-1 rounded-sm cursor-cell',
         isActive && 'ring-2 ring-primary ring-inset',
         isSelected && !isActive && 'bg-primary/10',
+        saved && 'animate-cell-saved',
       )}
       onClick={(e) => {
         e.stopPropagation()

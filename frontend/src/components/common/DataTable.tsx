@@ -71,6 +71,8 @@ interface Props<T> {
   emptyDescription?: string
   summaryRow?: Record<string, { label: string; value: string | number }>
   toolbar?: React.ReactNode
+  /** Number of top rows to highlight (e.g. after CSV import). */
+  highlightRows?: number
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -93,6 +95,7 @@ export function DataTable<T>({
   emptyDescription,
   summaryRow,
   toolbar,
+  highlightRows = 0,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -385,7 +388,7 @@ export function DataTable<T>({
               visibleRows.map((row, rowIdx) => (
                 <TableRow
                   key={row.id}
-                  className={onRowClick && !onCellEdit ? 'cursor-pointer' : ''}
+                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''}`}
                   onClick={() => {
                     // Only trigger row click if no cell is active (user clicking outside grid cells).
                     if (!grid.activeCell && onRowClick) {
