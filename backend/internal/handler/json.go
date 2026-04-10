@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/choiceoh/phaeton/backend/internal/infra/apierr"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -46,9 +47,29 @@ func writeList(w http.ResponseWriter, data any, total int64, page, limit int) {
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(envelope{Error: msg})
+	code := statusToCode(status)
+	apierr.New(status, code, msg).Write(w)
+}
+
+func statusToCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return apierr.CodeBadRequest
+	case http.StatusUnauthorized:
+		return apierr.CodeUnauthorized
+	case http.StatusForbidden:
+		return apierr.CodeForbidden
+	case http.StatusNotFound:
+		return apierr.CodeNotFound
+	case http.StatusConflict:
+		return apierr.CodeConflict
+	case http.StatusUnprocessableEntity:
+		return apierr.CodeValidation
+	case http.StatusTooManyRequests:
+		return apierr.CodeTooManyRequests
+	default:
+		return apierr.CodeInternal
+	}
 }
 
 func readJSON(r *http.Request, dst any) error {
@@ -100,10 +121,5 @@ func handleErr(w http.ResponseWriter, r *http.Request, err error) {
 		)
 	}
 
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(envelope{
-		Error:     msg,
-		RequestID: RequestID(r),
-	})
+	apierr.New(status, statusToCode(status), msg).Write(w)
 }
