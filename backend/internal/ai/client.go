@@ -152,11 +152,63 @@ type chatRequest struct {
 	Tools       []Tool        `json:"tools,omitempty"`
 }
 
+// contentPart is a single part of a multimodal message (OpenAI vision format).
+type contentPart struct {
+	Type     string    `json:"type"`               // "text" or "image_url"
+	Text     string    `json:"text,omitempty"`      // for type=text
+	ImageURL *imageURL `json:"image_url,omitempty"` // for type=image_url
+}
+
+type imageURL struct {
+	URL string `json:"url"`
+}
+
+// chatMessage supports both plain text and multimodal content.
+// When Images is non-empty, Content is serialized as an array of content parts.
 type chatMessage struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content"`
+	Role       string     `json:"-"`
+	Content    string     `json:"-"`
+	Images     []string   `json:"-"` // image URLs (data: or http:)
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
+}
+
+func (m chatMessage) MarshalJSON() ([]byte, error) {
+	type alias struct {
+		Role       string          `json:"role"`
+		Content    json.RawMessage `json:"content"`
+		ToolCalls  []ToolCall      `json:"tool_calls,omitempty"`
+		ToolCallID string          `json:"tool_call_id,omitempty"`
+	}
+
+	a := alias{
+		Role:       m.Role,
+		ToolCalls:  m.ToolCalls,
+		ToolCallID: m.ToolCallID,
+	}
+
+	if len(m.Images) > 0 {
+		parts := []contentPart{{Type: "text", Text: m.Content}}
+		for _, img := range m.Images {
+			parts = append(parts, contentPart{
+				Type:     "image_url",
+				ImageURL: &imageURL{URL: img},
+			})
+		}
+		b, err := json.Marshal(parts)
+		if err != nil {
+			return nil, err
+		}
+		a.Content = b
+	} else {
+		b, err := json.Marshal(m.Content)
+		if err != nil {
+			return nil, err
+		}
+		a.Content = b
+	}
+
+	return json.Marshal(a)
 }
 
 type chatResponse struct {
@@ -220,8 +272,9 @@ func (c *Client) Complete(ctx context.Context, system, user string) (string, err
 
 // ChatMessage is the exported type for multi-turn conversation history.
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string   `json:"role"`
+	Content string   `json:"content"`
+	Images  []string `json:"images,omitempty"` // image URLs for multimodal messages
 }
 
 // CompleteChat sends a multi-turn chat request with history and returns the assistant reply.
@@ -235,7 +288,7 @@ func (c *Client) CompleteChat(ctx context.Context, system string, history []Chat
 		{Role: "system", Content: system},
 	}
 	for _, h := range history {
-		msgs = append(msgs, chatMessage{Role: h.Role, Content: h.Content})
+		msgs = append(msgs, chatMessage{Role: h.Role, Content: h.Content, Images: h.Images})
 	}
 	msgs = append(msgs, chatMessage{Role: "user", Content: userMsg})
 
@@ -250,7 +303,7 @@ func (c *Client) CompleteChat(ctx context.Context, system string, history []Chat
 
 // CompleteWithTools sends a chat request with tool definitions and automatically
 // resolves tool calls using the provided resolver (max 3 rounds).
-func (c *Client) CompleteWithTools(ctx context.Context, system string, history []ChatMessage, userMsg string, tools []Tool, resolve ToolResolver) (string, error) {
+func (c *Client) CompleteWithTools(ctx context.Context, system string, history []ChatMessage, userMsg string, tools []Tool, resolve ToolResolver, images ...string) (string, error) {
 	model, err := c.resolveModel(ctx)
 	if err != nil {
 		return "", fmt.Errorf("resolve model: %w", err)
@@ -260,9 +313,9 @@ func (c *Client) CompleteWithTools(ctx context.Context, system string, history [
 		{Role: "system", Content: system},
 	}
 	for _, h := range history {
-		msgs = append(msgs, chatMessage{Role: h.Role, Content: h.Content})
+		msgs = append(msgs, chatMessage{Role: h.Role, Content: h.Content, Images: h.Images})
 	}
-	msgs = append(msgs, chatMessage{Role: "user", Content: userMsg})
+	msgs = append(msgs, chatMessage{Role: "user", Content: userMsg, Images: images})
 
 	const maxRounds = 3
 	for range maxRounds {
