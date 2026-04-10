@@ -155,6 +155,17 @@ export default function AppViewPage() {
     setSheetOpen(true)
   }
 
+  function handleCardMove(entryId: string, newValue: string) {
+    if (!selectField) return
+    updateEntry.mutate(
+      { id: entryId, body: { [selectField.slug]: newValue } },
+      {
+        onSuccess: () => toast.success('이동되었습니다'),
+        onError: (err) => toast.error(formatError(err)),
+      },
+    )
+  }
+
   function handleSubmit(data: Record<string, unknown>) {
     if (editEntry?.id) {
       updateEntry.mutate(
@@ -243,6 +254,7 @@ export default function AppViewPage() {
                 fields={collection.fields ?? []}
                 entries={list.data}
                 onCardClick={handleEntryClick}
+                onCardMove={handleCardMove}
               />
             </TabsContent>
           )}

@@ -8,10 +8,11 @@ interface Props {
   fields: Field[]
   entries: Record<string, unknown>[]
   onEntryClick: (entry: Record<string, unknown>) => void
+  onCardMove?: (entryId: string, newValue: string) => void
   process?: Process
 }
 
-export default function ViewTabs({ fields, entries, onEntryClick, process }: Props) {
+export default function ViewTabs({ fields, entries, onEntryClick, onCardMove, process }: Props) {
   const selectField = fields.find((f) => f.field_type === 'select')
   const hasKanban = !!selectField
   const hasProcessKanban = process?.is_enabled && (process.statuses?.length ?? 0) > 0
@@ -53,6 +54,7 @@ export default function ViewTabs({ fields, entries, onEntryClick, process }: Pro
             fields={fields}
             entries={entries}
             onCardClick={onEntryClick}
+            onCardMove={onCardMove}
           />
         </TabsContent>
       )}
@@ -63,6 +65,7 @@ export default function ViewTabs({ fields, entries, onEntryClick, process }: Pro
             fields={fields}
             entries={entries}
             onCardClick={onEntryClick}
+            onCardMove={onCardMove}
           />
         </TabsContent>
       )}

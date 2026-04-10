@@ -74,13 +74,14 @@ func run() int {
 	// Schema & dynamic handlers (PR #53 — built-in dynamic handler).
 	schemaHandler := handler.NewSchemaHandler(store, cache, migEngine)
 	dynHandler := handler.NewDynHandler(pool, cache)
+	viewHandler := handler.NewViewHandler(store)
 
 	// Login rate limiter: 5 failures / 15 minutes → 30 minute lockout.
 	loginLimiter := middleware.NewRateLimiter(5, 15*60*1000, 30*60*1000)
 	defer loginLimiter.Close()
 
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, logger, loginLimiter)
+	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, logger, loginLimiter)
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -126,6 +127,7 @@ func buildRouter(
 	pool *pgxpool.Pool,
 	schemaH *handler.SchemaHandler,
 	dynH *handler.DynHandler,
+	viewH *handler.ViewHandler,
 	logger *slog.Logger,
 	loginLimiter *middleware.RateLimiter,
 ) *chi.Mux {
@@ -180,6 +182,12 @@ func buildRouter(
 
 				r.Post("/migrations/rollback/{migrationId}", schemaH.RollbackMigration)
 			})
+
+			// Views: read/write for all authenticated users.
+			r.Get("/collections/{id}/views", viewH.ListViews)
+			r.Post("/collections/{id}/views", viewH.CreateView)
+			r.Patch("/views/{viewId}", viewH.UpdateView)
+			r.Delete("/views/{viewId}", viewH.DeleteView)
 		})
 
 		// Dynamic API — auto-generated CRUD for data tables.
@@ -200,13 +208,11 @@ func buildRouter(
 			})
 		})
 
-		// File upload.
+		// File upload & download (authenticated).
 		r.Post("/api/upload", handler.Upload)
+		r.Handle("/api/uploads/*", http.StripPrefix("/api/uploads/",
+			http.FileServer(http.Dir("uploads"))))
 	})
-
-	// Serve uploaded files (outside auth — files are accessed by URL).
-	r.Handle("/api/uploads/*", http.StripPrefix("/api/uploads/",
-		http.FileServer(http.Dir("uploads"))))
 
 	// SPA static files — catch-all for non-API routes.
 	serveSPA(r)
