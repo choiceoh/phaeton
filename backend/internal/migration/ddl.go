@@ -72,6 +72,7 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 		"created_by UUID",
 		"updated_by UUID",
 		"deleted_at TIMESTAMPTZ",
+		"_version INTEGER NOT NULL DEFAULT 1",
 	)
 
 	// Create sequences for autonumber fields before the table.

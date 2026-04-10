@@ -343,5 +343,38 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 	}
 
+	// Add _version column to all existing dynamic data tables.
+	rows, err := tx.Query(ctx, `SELECT slug FROM _meta.collections`)
+	if err != nil {
+		return fmt.Errorf("bootstrap: list collections: %w", err)
+	}
+	var slugs []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			rows.Close()
+			return fmt.Errorf("bootstrap: scan slug: %w", err)
+		}
+		slugs = append(slugs, s)
+	}
+	rows.Close()
+	for _, slug := range slugs {
+		// Check if the data table actually exists before altering it.
+		var exists bool
+		if err := tx.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'data' AND table_name = $1)`,
+			slug,
+		).Scan(&exists); err != nil {
+			return fmt.Errorf("bootstrap: check table %s: %w", slug, err)
+		}
+		if !exists {
+			continue
+		}
+		stmt := fmt.Sprintf(`ALTER TABLE "data".%q ADD COLUMN IF NOT EXISTS _version INTEGER NOT NULL DEFAULT 1`, slug)
+		if _, err := tx.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("bootstrap: add _version to %s: %w", slug, err)
+		}
+	}
+
 	return tx.Commit(ctx)
 }
