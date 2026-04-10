@@ -10,13 +10,14 @@ import (
 
 // Error codes
 const (
-	CodeBadRequest   = "BAD_REQUEST"
-	CodeUnauthorized = "UNAUTHORIZED"
-	CodeForbidden    = "FORBIDDEN"
-	CodeNotFound     = "NOT_FOUND"
-	CodeConflict     = "CONFLICT"
-	CodeValidation   = "VALIDATION_FAILED"
-	CodeInternal     = "INTERNAL_ERROR"
+	CodeBadRequest      = "BAD_REQUEST"
+	CodeUnauthorized    = "UNAUTHORIZED"
+	CodeForbidden       = "FORBIDDEN"
+	CodeNotFound        = "NOT_FOUND"
+	CodeConflict        = "CONFLICT"
+	CodeValidation      = "VALIDATION_FAILED"
+	CodeTooManyRequests = "TOO_MANY_REQUESTS"
+	CodeInternal        = "INTERNAL_ERROR"
 )
 
 // Error is a structured API error with code, message, HTTP status, and context.
@@ -98,6 +99,10 @@ func Conflict(msg string) *Error {
 
 func Validation(msg string) *Error {
 	return New(http.StatusUnprocessableEntity, CodeValidation, msg)
+}
+
+func TooManyRequests(msg string) *Error {
+	return New(http.StatusTooManyRequests, CodeTooManyRequests, msg)
 }
 
 func Internal(msg string) *Error {

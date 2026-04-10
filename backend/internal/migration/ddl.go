@@ -90,6 +90,42 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 		}
 	}
 
+	// Full-text search: add _tsv column + GIN index + auto-update trigger
+	// for all text/textarea fields.
+	var tsvFields []string
+	for _, f := range fields {
+		if f.FieldType == schema.FieldText || f.FieldType == schema.FieldTextarea {
+			tsvFields = append(tsvFields, f.Slug)
+		}
+	}
+	if len(tsvFields) > 0 {
+		up = append(up,
+			fmt.Sprintf("ALTER TABLE %s ADD COLUMN _tsv TSVECTOR", qTable),
+		)
+		up = append(up,
+			fmt.Sprintf("CREATE INDEX %s ON %s USING GIN (_tsv)",
+				quoteIdentSingle(fmt.Sprintf("idx_%s_tsv", col.Slug)), qTable),
+		)
+		// Build coalesce expressions for the trigger function.
+		var coalesces []string
+		for _, slug := range tsvFields {
+			coalesces = append(coalesces, fmt.Sprintf("coalesce(NEW.%s, '')", quoteIdentSingle(slug)))
+		}
+		trigFunc := fmt.Sprintf("tsvupd_%s", col.Slug)
+		trigName := fmt.Sprintf("trg_%s_tsv", col.Slug)
+
+		up = append(up,
+			fmt.Sprintf(`CREATE OR REPLACE FUNCTION %s() RETURNS trigger AS $$ BEGIN NEW._tsv := to_tsvector('simple', %s); RETURN NEW; END $$ LANGUAGE plpgsql`,
+				quoteIdent("data", trigFunc),
+				strings.Join(coalesces, " || ' ' || "),
+			),
+		)
+		up = append(up,
+			fmt.Sprintf("CREATE TRIGGER %s BEFORE INSERT OR UPDATE ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
+				quoteIdentSingle(trigName), qTable, quoteIdent("data", trigFunc)),
+		)
+	}
+
 	down = []string{fmt.Sprintf("DROP TABLE IF EXISTS %s", qTable)}
 	return up, down
 }

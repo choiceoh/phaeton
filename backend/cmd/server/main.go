@@ -93,6 +93,27 @@ func run() int {
 	aiClient := ai.NewClient()
 	aiHandler := handler.NewAIHandler(aiClient, store)
 
+	// Charts handler.
+	chartHandler := handler.NewChartHandler(store)
+
+	// SSE real-time events.
+	sseBroker := events.NewBroker()
+	sseHandler := handler.NewSSEHandler(sseBroker)
+	// Forward bus events to SSE broker.
+	bus.Subscribe(func(_ context.Context, ev events.Event) {
+		sseBroker.Broadcast(events.SSEMessage{
+			Type:         string(ev.Type),
+			CollectionID: ev.CollectionID,
+			RecordID:     ev.RecordID,
+			ActorUserID:  ev.ActorUserID,
+			ActorName:    ev.ActorName,
+		})
+	})
+
+	// API rate limiter: 60 req/s per user, burst of 120.
+	apiLimiter := middleware.NewAPILimiter(60, 120)
+	defer apiLimiter.Close()
+
 	// Notification subscriber.
 	commentHandler := handler.NewCommentHandler(pool, cache, bus)
 	notifHandler := handler.NewNotificationHandler(pool)
@@ -128,7 +149,7 @@ func run() int {
 	}
 
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, savedViewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, autoHandler, logger, loginLimiter, samlMiddleware)
+	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, savedViewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, autoHandler, chartHandler, sseHandler, logger, loginLimiter, apiLimiter, samlMiddleware)
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -185,8 +206,11 @@ func buildRouter(
 	notifH *handler.NotificationHandler,
 	aiH *handler.AIHandler,
 	autoH *handler.AutomationHandler,
+	chartH *handler.ChartHandler,
+	sseH *handler.SSEHandler,
 	logger *slog.Logger,
 	loginLimiter *middleware.RateLimiter,
+	apiLimiter *middleware.APILimiter,
 	samlMW *samlsp.Middleware,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -220,6 +244,7 @@ func buildRouter(
 	// Protected routes.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth())
+		r.Use(apiLimiter.Middleware())
 
 		// Current user.
 		r.Get("/api/auth/me", handler.Me(pool))
@@ -294,6 +319,12 @@ func buildRouter(
 				r.Delete("/automations/{automationId}", autoH.Delete)
 				r.Get("/automations/{automationId}/runs", autoH.ListRuns)
 			})
+
+			// Charts
+			r.Get("/collections/{id}/charts", chartH.List)
+			r.Post("/collections/{id}/charts", chartH.Create)
+			r.Patch("/charts/{chartId}", chartH.Update)
+			r.Delete("/charts/{chartId}", chartH.Delete)
 		})
 
 		// Dynamic API — auto-generated CRUD for data tables.
@@ -343,6 +374,9 @@ func buildRouter(
 		r.Get("/api/notifications/unread-count", notifH.UnreadCount)
 		r.Patch("/api/notifications/{id}/read", notifH.MarkRead)
 		r.Post("/api/notifications/read-all", notifH.MarkAllRead)
+
+		// SSE real-time events
+		r.Get("/api/events", sseH.Stream)
 	})
 
 	// SPA static files — catch-all for non-API routes.
