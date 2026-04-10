@@ -9,7 +9,14 @@
 ## 필독 문서
 
 - `docs/08-PHAETON-V2-DESIGN.md` — 전체 설계, 아키텍처, 데이터 모델
+- `docs/09-DATA-ENGINE-GUIDE.md` — Data Engine CRUD/쿼리 구현 가이드
 - `docs/10-COMPETITIVE-ANALYSIS.md` — 경쟁 분석 및 구현 로드맵 (다우오피스 Works + Airtable/NocoDB/AppSheet/Monday/ClickUp)
+
+### 참고 문서
+
+- `docs/05-SOLAR-DOMAIN.md` — 태양광 발전사업 인허가/공사 도메인 가이드
+- `docs/06-DESIGN-SYSTEM.md` — 디자인 시스템 (색상, 타이포, 컴포넌트 규칙)
+- `docs/07-LINT-RULES.md` — 린트 및 코드 스타일 규칙 (Prettier, ESLint)
 
 ## 스택
 
@@ -22,23 +29,49 @@
 
 ```
 backend/
-  cmd/server/main.go         진입점 + SPA 서빙
-  cmd/seed/main.go            시드 스크립트
+  cmd/server/main.go           진입점 + SPA 서빙
+  cmd/seed/main.go             시드 스크립트
   internal/
-    engine/                   Schema Engine (DDL) + Data Engine (CRUD)
-    handler/                  HTTP 핸들러 (auth, apps, fields, entries, views)
-    middleware/               JWT, CORS, 로깅, 레이트리미터, origin, secpath
-    model/                    Go 구조체
-    db/                       pgx 풀 + goose 마이그레이션
-    infra/                    로깅, API 에러, 메트릭스, httpretry, 워커풀, shortid, cfgwatch
-  pkg/                        atomicfile, httputil, jsonutil
+    ai/                        AI 클라이언트 (vLLM 연동)
+    automation/                자동화 규칙 엔진
+    db/                        pgx 풀 + goose 마이그레이션
+    events/                    SSE 이벤트 브로커
+    formula/                   수식 필드 파서/평가
+    handler/                   HTTP 핸들러 (auth, apps, fields, entries, views, ai, automation, charts, webhook 등)
+    infra/                     로깅, API 에러, 메트릭스, httpretry, 워커풀, shortid, cfgwatch, lifecycle
+    middleware/                JWT, CORS, 로깅, 레이트리미터, origin, secpath, RBAC, collection_access, apilimit
+    migration/                 DDL 마이그레이션 엔진
+    notify/                    알림 시스템
+    pgutil/                    PostgreSQL 유틸
+    samlsp/                    SAML SSO
+    schema/                    Schema Engine — 앱 스토어, 뷰 스토어, 프로세스, 캐시, 유효성 검증
+    seed/                      시드 데이터
+    sync/                      동기화 유틸
+    testutil/                  테스트 헬퍼
+  pkg/                         atomicfile, httputil, jsonutil
 frontend/
   src/
-    pages/                    AppListPage, AppBuilderPage, AppViewPage, LoginPage
-    components/works/         AppCard, AppBuilder, FieldPalette, FieldPreview, FieldProperties, EntryForm, EntrySheet
-    components/works/views/   ListView, KanbanView, ViewTabs
-    components/ui/            shadcn 컴포넌트
-    lib/                      api.ts, types.ts, constants.ts
+    pages/                     AppListPage, AppBuilderPage, AppViewPage, AppSettingsPage,
+                               AutomationsPage, DashboardPage, GlobalAutomationsPage,
+                               GlobalDashboardPage, InterfaceDesignerPage, LoginPage,
+                               MigrationHistoryPage, OrgChartPage, ProcessPage, ProfilePage,
+                               SettingsPage, UsersPage, NotFoundPage
+    components/works/          AppCard, AppBuilder, FieldPalette, FieldPreview, FieldProperties,
+                               EntryForm, EntrySheet, FilterBuilder, FilterChips, FormPreview,
+                               FormulaEditor, SortPanel, TemplateGallery, PreviewDialog,
+                               SchedulePicker, AIBuildDialog, AIAutomationDialog
+    components/works/views/    ListView, KanbanView, CalendarView, GalleryView, GanttView,
+                               ChartPanel, ViewTabs
+    components/common/         AIChatPanel, ConfirmDialog, DataTable, EmptyState, ErrorBoundary,
+                               ErrorState, Form, GridCell, LoadingState, NotificationBell,
+                               OfflineBanner, PageHeader, RelationCombobox, RoleGate, UserCombobox
+    components/ui/             shadcn 컴포넌트
+    hooks/                     useAuth, useEntries, useViews, useAI, useAIChat, useAutomations,
+                               useCollections, useComments, useHistory, useMembers, useNotifications,
+                               useProcess, useSavedViews, useUnsavedChanges 등
+    lib/                       types.ts, constants.ts, formatCell.ts, queryKeys.ts, queryClient.ts,
+                               clipboard.ts, utils.ts, templates.ts
+    lib/api/                   client.ts, errors.ts, index.ts
 ```
 
 ## 디자인 철학
