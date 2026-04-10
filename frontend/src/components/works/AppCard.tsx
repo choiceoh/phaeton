@@ -50,27 +50,35 @@ export default function AppCard({ collection, count }: { collection: Collection,
 
   return (
     <Link to={`/apps/${collection.id}`}>
-      <Card className="p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <Card className="group p-4 shadow-premium transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-premium-hover">
         <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-muted-foreground transition-colors duration-300 group-hover:bg-foreground group-hover:text-white">
               <AppIcon name={collection.icon} className="h-4.5 w-4.5" />
             </div>
-            <h3 className="font-semibold tracking-tight">{collection.label}</h3>
+            <h3 className="font-semibold tracking-tight text-foreground">{collection.label}</h3>
           </div>
           <div className="flex items-center gap-1.5">
             {collection.is_system && <Badge variant="secondary">시스템</Badge>}
           </div>
         </div>
         {collection.description && (
-          <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground">{collection.description}</p>
+          <p className="mt-2.5 line-clamp-2 break-words text-sm leading-relaxed text-muted-foreground">{collection.description}</p>
         )}
-        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="mt-3.5 flex items-center gap-3 text-xs text-muted-foreground/80">
           <span>{collection.fields?.length || 0}개 {TERM.field}</span>
           {count != null && (
-            <span>{count.toLocaleString('ko')}건 {TERM.record}</span>
+            <>
+              <span className="h-0.5 w-0.5 rounded-full bg-current opacity-40" />
+              <span>{count.toLocaleString('ko')}건 {TERM.record}</span>
+            </>
           )}
-          {timeSince && <span>최근 {timeSince}</span>}
+          {timeSince && (
+            <>
+              <span className="h-0.5 w-0.5 rounded-full bg-current opacity-40" />
+              <span>최근 {timeSince}</span>
+            </>
+          )}
         </div>
       </Card>
     </Link>

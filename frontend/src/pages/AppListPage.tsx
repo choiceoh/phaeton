@@ -165,13 +165,13 @@ function OnboardingStep({
   description: string
 }) {
   return (
-    <div className="flex flex-col items-center gap-2.5 rounded-xl border border-stone-200/80 bg-white p-5 text-center shadow-sm">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-stone-500">
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-border/60 bg-white p-6 text-center shadow-premium transition-all duration-300 hover:-translate-y-0.5 hover:shadow-premium-hover">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-muted-foreground">
         {icon}
       </div>
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-stone-400">STEP {step}</div>
-      <h4 className="text-sm font-medium text-stone-800">{title}</h4>
-      <p className="text-xs leading-relaxed text-stone-500">{description}</p>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/60">STEP {step}</div>
+      <h4 className="text-sm font-medium text-foreground">{title}</h4>
+      <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
     </div>
   )
 }
