@@ -14,8 +14,10 @@ import {
   FIELD_TYPE_LABELS,
   HEIGHT_OPTIONS,
   isLayoutType,
+  NUMBER_DISPLAY_TYPES,
   ON_DELETE_OPTIONS,
   RELATION_TYPE_LABELS,
+  TEXT_DISPLAY_TYPES,
   VALIDATION_OPTIONS,
   WIDTH_OPTIONS,
 } from '@/lib/constants'
@@ -264,6 +266,49 @@ export default function FieldProperties({ field, collections, onChange }: Props)
         </>
       )}
 
+      {/* ── 표시 형식 (for number/integer) ── */}
+      {isNumeric && (
+        <>
+          <section className="space-y-2">
+            <Label className="text-xs font-semibold text-muted-foreground">표시 형식</Label>
+            <Select
+              value={(opts.display_type as string) || 'plain'}
+              onValueChange={(v) => updateOption('display_type', v === 'plain' ? undefined : v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {NUMBER_DISPLAY_TYPES.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {opts.display_type === 'currency' && (
+              <Input
+                value={(opts.currency_code as string) || 'KRW'}
+                onChange={(e) => updateOption('currency_code', e.target.value.toUpperCase())}
+                placeholder="KRW"
+                maxLength={3}
+              />
+            )}
+            {opts.display_type === 'rating' && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">최대 별점</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={(opts.max_rating as number) || 5}
+                  onChange={(e) => updateOption('max_rating', Number(e.target.value) || 5)}
+                />
+              </div>
+            )}
+          </section>
+          <Separator />
+        </>
+      )}
+
       {/* ── 최소/최대 값 (for number/integer) ── */}
       {isNumeric && (
         <>
@@ -416,6 +461,33 @@ export default function FieldProperties({ field, collections, onChange }: Props)
       </section>
 
       <Separator />
+
+      {/* ── 표시 형식 (for text) ── */}
+      {field.field_type === 'text' && (
+        <>
+          <section className="space-y-2">
+            <Label className="text-xs font-semibold text-muted-foreground">표시 형식</Label>
+            <Select
+              value={(opts.display_type as string) || 'plain'}
+              onValueChange={(v) => {
+                const dt = v === 'plain' ? undefined : v
+                const validation = dt && dt !== 'plain' ? dt : opts.validation
+                onChange({ ...field!, options: { ...opts, display_type: dt, validation } })
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TEXT_DISPLAY_TYPES.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </section>
+          <Separator />
+        </>
+      )}
 
       {/* ── 입력값 유효성 체크 (text only) ── */}
       {isText && (
