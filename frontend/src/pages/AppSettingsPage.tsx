@@ -139,13 +139,13 @@ export default function AppSettingsPage() {
   return (
     <div>
       <PageHeader
-        title={`${collection.label} 설정`}
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label, href: `/apps/${collection.id}` },
+          { label: '설정' },
+        ]}
+        title="설정"
         description={`/${collection.slug} 컬렉션의 필드 및 메타데이터`}
-        actions={
-          <Button variant="outline" onClick={() => navigate(`/apps/${collection.id}`)}>
-            돌아가기
-          </Button>
-        }
       />
 
       <div className="space-y-6">

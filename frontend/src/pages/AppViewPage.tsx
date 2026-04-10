@@ -745,6 +745,10 @@ export default function AppViewPage() {
   return (
     <div>
       <PageHeader
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label },
+        ]}
         title={collection.label}
         description={collection.description}
         actions={

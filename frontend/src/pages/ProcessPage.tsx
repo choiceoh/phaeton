@@ -175,12 +175,13 @@ export default function ProcessPage() {
   return (
     <div>
       <PageHeader
-        title={`${collection.label} > 프로세스 관리`}
-        actions={
-          <Link to={`/apps/${collection.id}/settings`}>
-            <Button variant="outline">관리 홈으로 이동</Button>
-          </Link>
-        }
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label, href: `/apps/${collection.id}` },
+          { label: '설정', href: `/apps/${collection.id}/settings` },
+          { label: '프로세스' },
+        ]}
+        title="프로세스 관리"
       />
 
       <div className="space-y-6">
