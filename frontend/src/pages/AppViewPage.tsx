@@ -6,6 +6,7 @@ import {
   BarChart3,
   Calendar,
   Download,
+  FileText,
   Filter,
   GanttChart,
   LayoutGrid,
@@ -35,6 +36,7 @@ import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import CalendarView from '@/components/works/views/CalendarView'
 import ChartPanel from '@/components/works/views/ChartPanel'
 import GalleryView from '@/components/works/views/GalleryView'
+import FormView from '@/components/works/views/FormView'
 import GanttView from '@/components/works/views/GanttView'
 import KanbanView from '@/components/works/views/KanbanView'
 import { Badge } from '@/components/ui/badge'
@@ -718,6 +720,33 @@ export default function AppViewPage() {
     )
   }
 
+  function handleFormViewSubmit(data: Record<string, unknown>, entryId?: string) {
+    if (entryId) {
+      const entry = list?.data.find((e) => String(e.id) === entryId)
+      const version = entry?._version as number | undefined
+      if (version != null) data._version = version
+      updateEntry.mutate(
+        { id: entryId, body: data },
+        {
+          onSuccess: () => toast.success('수정되었습니다'),
+          onError: (err) => {
+            if (err instanceof ApiError && err.isConflict()) {
+              toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
+              refetch()
+            } else {
+              toast.error(formatError(err))
+            }
+          },
+        },
+      )
+    } else {
+      createEntry.mutate(data, {
+        onSuccess: () => toast.success('생성되었습니다'),
+        onError: (err) => toast.error(formatError(err)),
+      })
+    }
+  }
+
   function handleCardMove(entryId: string, newValue: string) {
     if (!selectField) return
     const body: Record<string, unknown> = { [selectField.slug]: newValue }
@@ -1189,31 +1218,33 @@ export default function AppViewPage() {
 
       {list && (
         <Tabs defaultValue="list">
-          {(hasKanban || hasProcessKanban || hasCalendar || hasGallery || hasGantt) && (
-            <TabsList className="mb-4 max-w-full overflow-x-auto">
-              <TabsTrigger value="list">목록</TabsTrigger>
-              {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}
-              {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
-              {hasCalendar && (
-                <TabsTrigger value="calendar" className="gap-1">
-                  <Calendar className="h-3.5 w-3.5" />
-                  캘린더
-                </TabsTrigger>
-              )}
-              {hasGallery && (
-                <TabsTrigger value="gallery" className="gap-1">
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  갤러리
-                </TabsTrigger>
-              )}
-              {hasGantt && (
-                <TabsTrigger value="gantt" className="gap-1">
-                  <GanttChart className="h-3.5 w-3.5" />
-                  간트
-                </TabsTrigger>
-              )}
-            </TabsList>
-          )}
+          <TabsList className="mb-4 max-w-full overflow-x-auto">
+            <TabsTrigger value="list">목록</TabsTrigger>
+            {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}
+            {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
+            {hasCalendar && (
+              <TabsTrigger value="calendar" className="gap-1">
+                <Calendar className="h-3.5 w-3.5" />
+                캘린더
+              </TabsTrigger>
+            )}
+            {hasGallery && (
+              <TabsTrigger value="gallery" className="gap-1">
+                <LayoutGrid className="h-3.5 w-3.5" />
+                갤러리
+              </TabsTrigger>
+            )}
+            {hasGantt && (
+              <TabsTrigger value="gantt" className="gap-1">
+                <GanttChart className="h-3.5 w-3.5" />
+                간트
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="form" className="gap-1">
+              <FileText className="h-3.5 w-3.5" />
+              폼
+            </TabsTrigger>
+          </TabsList>
 
           <TabsContent value="list" className="mt-0">
             {selectedRowIds.size > 0 && (
@@ -1327,6 +1358,20 @@ export default function AppViewPage() {
               />
             </TabsContent>
           )}
+
+          <TabsContent value="form" className="mt-0">
+            <FormView
+              fields={collection.fields ?? []}
+              entries={list.data}
+              onEntryClick={handleEntryClick}
+              onEntrySubmit={handleFormViewSubmit}
+              onEntryDelete={(id) => setDeleteId(id)}
+              submitting={createEntry.isPending || updateEntry.isPending}
+              process={process}
+              slug={collection.slug}
+              total={list.total}
+            />
+          </TabsContent>
         </Tabs>
       )}
 
