@@ -27,6 +27,9 @@ type Client struct {
 // modelCacheTTL controls how long the auto-detected model name is cached.
 const modelCacheTTL = 30 * time.Second
 
+// healthTimeout is the timeout for the lightweight health probe.
+const healthTimeout = 3 * time.Second
+
 func NewClient() *Client {
 	base := os.Getenv("AI_BASE_URL")
 	if base == "" {
@@ -102,6 +105,32 @@ func (c *Client) resolveModel(ctx context.Context) (string, error) {
 	c.cachedModel = detected
 	c.cachedModelAt = time.Now()
 	return detected, nil
+}
+
+// Healthy returns true when the vLLM server is reachable and serving at least one model.
+func (c *Client) Healthy(ctx context.Context) bool {
+	ctx, cancel := context.WithTimeout(ctx, healthTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/models", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	var models modelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&models); err != nil {
+		return false
+	}
+	return len(models.Data) > 0
 }
 
 // chatRequest is the OpenAI-compatible chat completion request.

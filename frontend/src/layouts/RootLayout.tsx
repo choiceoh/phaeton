@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 
 import AIChatPanel from '@/components/common/AIChatPanel'
+import { AIAvailabilityProvider } from '@/contexts/AIAvailabilityContext'
 import LoadingState from '@/components/common/LoadingState'
 import NotificationBell from '@/components/common/NotificationBell'
 import { Button } from '@/components/ui/button'
@@ -28,43 +29,45 @@ export default function RootLayout() {
   if (!user) return null // useEffect will redirect
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <nav className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-3">
-        <div className="flex items-center gap-6">
-          <Link to="/" className="text-lg font-semibold text-stone-900">
-            Phaeton
-          </Link>
-          <Link to="/apps" className="text-sm text-stone-600 hover:text-stone-900">
-            컬렉션
-          </Link>
-          <Link to="/admin/org" className="text-sm text-stone-600 hover:text-stone-900">
-            조직도
-          </Link>
-          {(user.role === 'director' || user.role === 'pm') && (
-            <>
-              <Link to="/history" className="text-sm text-stone-600 hover:text-stone-900">
-                이력
-              </Link>
-              <Link to="/admin/users" className="text-sm text-stone-600 hover:text-stone-900">
-                사용자 관리
-              </Link>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-3 text-sm text-stone-500">
-          <NotificationBell />
-          <Link to="/profile" className="hover:text-stone-900">
-            {user.name} ({ROLE_LABELS[user.role] || user.role})
-          </Link>
-          <Button variant="ghost" size="sm" onClick={() => logout.mutate()}>
-            로그아웃
-          </Button>
-        </div>
-      </nav>
-      <main className="mx-auto max-w-7xl p-6">
-        <Outlet />
-      </main>
-      <AIChatPanel />
-    </div>
+    <AIAvailabilityProvider>
+      <div className="min-h-screen bg-stone-50">
+        <nav className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-3">
+          <div className="flex items-center gap-6">
+            <Link to="/" className="text-lg font-semibold text-stone-900">
+              Phaeton
+            </Link>
+            <Link to="/apps" className="text-sm text-stone-600 hover:text-stone-900">
+              컬렉션
+            </Link>
+            <Link to="/admin/org" className="text-sm text-stone-600 hover:text-stone-900">
+              조직도
+            </Link>
+            {(user.role === 'director' || user.role === 'pm') && (
+              <>
+                <Link to="/history" className="text-sm text-stone-600 hover:text-stone-900">
+                  이력
+                </Link>
+                <Link to="/admin/users" className="text-sm text-stone-600 hover:text-stone-900">
+                  사용자 관리
+                </Link>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-sm text-stone-500">
+            <NotificationBell />
+            <Link to="/profile" className="hover:text-stone-900">
+              {user.name} ({ROLE_LABELS[user.role] || user.role})
+            </Link>
+            <Button variant="ghost" size="sm" onClick={() => logout.mutate()}>
+              로그아웃
+            </Button>
+          </div>
+        </nav>
+        <main className="mx-auto max-w-7xl p-6">
+          <Outlet />
+        </main>
+        <AIChatPanel />
+      </div>
+    </AIAvailabilityProvider>
   )
 }

@@ -15,6 +15,9 @@ type contextKey string
 
 const userContextKey contextKey = "user"
 
+// ExportedUserContextKey is the context key for tests that need to inject a user.
+var ExportedUserContextKey = userContextKey
+
 // UserClaims holds JWT claims for the authenticated user.
 type UserClaims struct {
 	UserID       string `json:"userId"`

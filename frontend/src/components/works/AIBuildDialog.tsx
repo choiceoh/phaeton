@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import {
   useAIBuildCollection,
   type AIBuildQuestion,
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function AIBuildDialog({ onApply }: Props) {
+  const aiAvailable = useAIAvailable()
   const [open, setOpen] = useState(false)
   const [description, setDescription] = useState('')
   const [result, setResult] = useState<AIBuildResult | null>(null)
@@ -100,6 +102,8 @@ export default function AIBuildDialog({ onApply }: Props) {
   const allAnswered = questions
     ? questions.every((q) => answers[q.id]?.trim())
     : false
+
+  if (!aiAvailable) return null
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

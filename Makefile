@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-ui build clean db db-stop lint lint-go lint-ui test test-go test-ui fmt up down
+.PHONY: dev dev-api dev-ui build clean db db-stop lint lint-go lint-ui test test-go test-ui test-integration fmt up down
 
 ifneq (,$(wildcard .env))
 include .env
@@ -60,7 +60,10 @@ lint-ui:
 test: test-go test-ui
 
 test-go:
-	cd backend && go test ./...
+	cd backend && go test -short ./...
+
+test-integration:
+	cd backend && go test -p 1 -count=1 ./...
 
 test-ui:
 	cd frontend && npm run test

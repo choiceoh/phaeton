@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 import { useCollections, useCreateCollection } from '@/hooks/useCollections'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import type { AIBuildResult } from '@/hooks/useAI'
 import { useAIGenerateSlug } from '@/hooks/useAI'
 import { formatError } from '@/lib/api'
@@ -30,6 +31,7 @@ export default function AppBuilder() {
 
   const { data: collections = [] } = useCollections()
   const createCollection = useCreateCollection()
+  const aiAvailable = useAIAvailable()
   const generateSlug = useAIGenerateSlug()
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -52,7 +54,7 @@ export default function AppBuilder() {
 
   function handleLabelChange(value: string) {
     setLabel(value)
-    if (!slugManual && value.trim()) {
+    if (!slugManual && value.trim() && aiAvailable) {
       requestSlug(value.trim())
     }
     if (!slugManual && !value.trim()) {
@@ -187,7 +189,7 @@ export default function AppBuilder() {
                 <Label>컬렉션 이름 (한글)</Label>
                 <Input value={label} onChange={(e) => handleLabelChange(e.target.value)} placeholder="인허가 체크리스트" />
               </div>
-              <div className="col-span-2 space-y-1">
+              <div className="col-span-1 space-y-1">
                 <Label>영문 ID</Label>
                 <div className="relative">
                   <Input
@@ -200,7 +202,7 @@ export default function AppBuilder() {
                   )}
                 </div>
               </div>
-              <div className="col-span-2 space-y-1">
+              <div className="col-span-3 space-y-1">
                 <Label>설명</Label>
                 <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="컬렉션 설명" />
               </div>
