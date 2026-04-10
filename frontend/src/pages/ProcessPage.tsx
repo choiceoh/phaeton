@@ -187,6 +187,22 @@ export default function ProcessPage() {
         title="프로세스 관리"
       />
 
+      {/* Action buttons */}
+      <div className="mb-6 flex items-center gap-2">
+        <Button onClick={handleSave} disabled={saveProcess.isPending}>
+          {saveProcess.isPending ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />저장 중...</> : '저장'}
+        </Button>
+        <Button variant="outline" onClick={() => refetch()}>
+          취소
+        </Button>
+        <Link to={`/apps/${collection.id}/settings`}>
+          <Button variant="outline">관리 홈으로 이동</Button>
+        </Link>
+        <Button variant="outline" onClick={() => navigate(`/apps/${collection.id}`)}>
+          해당 앱으로 이동
+        </Button>
+      </div>
+
       <div className="space-y-6">
         {/* Toggle */}
         <label className="flex items-center gap-2 text-sm">
@@ -297,21 +313,6 @@ export default function ProcessPage() {
           </>
         )}
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 border-t pt-4">
-          <Button onClick={handleSave} disabled={saveProcess.isPending}>
-            {saveProcess.isPending ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />저장 중...</> : '저장'}
-          </Button>
-          <Button variant="outline" onClick={() => refetch()}>
-            취소
-          </Button>
-          <Link to={`/apps/${collection.id}/settings`}>
-            <Button variant="outline">관리 홈으로 이동</Button>
-          </Link>
-          <Button variant="outline" onClick={() => navigate(`/apps/${collection.id}`)}>
-            해당 앱으로 이동
-          </Button>
-        </div>
       </div>
 
       <ConfirmDialog
