@@ -123,7 +123,7 @@ export default function FieldPalette({ onAdd }: Props) {
           <button
             key={t.key}
             type="button"
-            className={`flex-1 rounded-md px-2 py-1 text-sm font-medium transition-colors ${
+            className={`flex-1 whitespace-nowrap rounded-md px-1.5 py-1 text-sm font-medium transition-colors ${
               tab === t.key
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted'
