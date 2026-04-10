@@ -153,6 +153,12 @@ Option rules per type:
    - 거래처/고객 management needs 업체명, 사업자번호, 대표자, 연락처, 주소
    - 재고/자산 tracking needs 품목명, 수량, 단가, 금액(formula), 위치
    - 일정/프로젝트 management needs 제목, 시작일, 종료일, 진행률(number percent), 담당자
+6. **태양광 발전사업 도메인** (이 플랫폼의 주요 사용 분야):
+   - 인허가 관리: 발전사업허가→개발행위허가→농지/산지전용→환경영향평가→공사계획인가→사용전검사→계통연계→COD
+   - 인허가 앱에는 허가종류(select), 신청일/접수일/허가일(date), 관할기관(text), 처리상태(select: 준비중/신청/보완요청/허가/반려), 담당자(user), 비고(textarea)
+   - 프로젝트 관리 앱에는 사업명, 용량(number, kW), 사업단계(select: 기획/인허가/시공/시운전/운영), 위치, EPC업체, 착공일/준공예정일, 사업비(currency)
+   - 주요 용어: RPS, REC, SMP, PPA, COD, EPC, 계통연계, 출력제어, 영농형 태양광
+   - 규모별 차이를 인지: 1MW 미만(소규모), 1~100MW(중규모), 100MW 이상(대규모)
 
 ## Example — "출장 신청서"
 {"slug":"business_trip_request","label":"출장 신청서","description":"임직원 출장 신청 및 승인 관리","fields":[{"slug":"request_no","label":"신청번호","field_type":"autonumber","is_required":false,"width":3,"height":1,"options":{"prefix":"BT-","start":1}},{"slug":"status","label":"처리상태","field_type":"select","is_required":true,"width":3,"height":1,"options":{"choices":["신청","검토중","승인","반려"]}},{"slug":"requester","label":"신청자","field_type":"user","is_required":true,"width":3,"height":1,"options":{}},{"slug":"department","label":"부서","field_type":"text","is_required":true,"width":3,"height":1,"options":{}},{"slug":"destination","label":"출장지","field_type":"text","is_required":true,"width":6,"height":1,"options":{}},{"slug":"start_date","label":"출장 시작일","field_type":"date","is_required":true,"width":3,"height":1,"options":{}},{"slug":"end_date","label":"출장 종료일","field_type":"date","is_required":true,"width":3,"height":1,"options":{}},{"slug":"purpose","label":"출장 목적","field_type":"textarea","is_required":true,"width":6,"height":2,"options":{}},{"slug":"estimated_cost","label":"예상 경비","field_type":"number","is_required":false,"width":3,"height":1,"options":{"display_type":"currency","currency_code":"KRW"}},{"slug":"transport","label":"교통수단","field_type":"select","is_required":false,"width":3,"height":1,"options":{"choices":["자가용","KTX","항공","버스","기타"]}},{"slug":"remarks","label":"비고","field_type":"textarea","is_required":false,"width":6,"height":2,"options":{}}]}`
@@ -190,6 +196,9 @@ If you need clarification:
 - "고객 관리" → {"mode": "proceed"} (standard CRM fields)
 - "재고 현황판" → {"mode": "proceed"} (inventory tracking is clear)
 - "회의실 예약" → {"mode": "proceed"} (booking system fields are obvious)
+- "인허가 체크리스트" → {"mode": "proceed"} (solar permit tracking — well-known domain)
+- "태양광 프로젝트 관리" → {"mode": "proceed"} (solar project management is clear)
+- "발전사업허가 신청 관리" → {"mode": "proceed"} (specific permit type)
 - "관리" → questions (what are you managing?)
 - "우리팀 업무" → questions (too vague, need scope)
 - "인사" → questions (recruitment? payroll? records?)
