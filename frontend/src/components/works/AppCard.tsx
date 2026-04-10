@@ -1,22 +1,48 @@
+import {
+  Clipboard, FileText, Wrench, Calendar, BarChart3, CheckSquare,
+  Users, ShoppingCart, Mail, Building2, FolderOpen, Briefcase,
+  BookOpen, Globe, Heart, Star, Zap, Shield, Bell, Tag,
+  Layers, Package, Truck, CreditCard, Settings, Database,
+} from 'lucide-react'
 import { Link } from 'react-router'
 
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
-import { useCollectionCount } from '@/hooks/useEntries'
 import { TERM } from '@/lib/constants'
 import type { Collection } from '@/lib/types'
 
-const ICONS: Record<string, string> = {
-  clipboard: '📋',
-  document: '📄',
-  tool: '🔧',
-  calendar: '📅',
-  chart: '📊',
-  check: '✅',
+export const APP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  clipboard: Clipboard,
+  document: FileText,
+  tool: Wrench,
+  calendar: Calendar,
+  chart: BarChart3,
+  check: CheckSquare,
+  users: Users,
+  cart: ShoppingCart,
+  mail: Mail,
+  building: Building2,
+  folder: FolderOpen,
+  briefcase: Briefcase,
+  book: BookOpen,
+  globe: Globe,
+  heart: Heart,
+  star: Star,
+  zap: Zap,
+  shield: Shield,
+  bell: Bell,
+  tag: Tag,
+  layers: Layers,
+  package: Package,
+  truck: Truck,
+  card: CreditCard,
+  settings: Settings,
+  database: Database,
 }
 
-export default function AppCard({ collection }: { collection: Collection }) {
-  const { data: count } = useCollectionCount(collection.slug)
+export const DEFAULT_ICON = 'clipboard'
+
+export default function AppCard({ collection, count }: { collection: Collection, count?: number }) {
 
   // How long ago the collection was last updated.
   const updatedAt = collection.updated_at ? new Date(collection.updated_at) : null
@@ -27,7 +53,9 @@ export default function AppCard({ collection }: { collection: Collection }) {
       <Card className="p-4 transition-all duration-200 hover:bg-accent hover:-translate-y-0.5 hover:shadow-md">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xl">{ICONS[collection.icon || ''] || '📋'}</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <AppIcon name={collection.icon} className="h-4 w-4" />
+            </div>
             <h3 className="font-semibold">{collection.label}</h3>
           </div>
           <div className="flex items-center gap-1.5">
@@ -39,7 +67,7 @@ export default function AppCard({ collection }: { collection: Collection }) {
         )}
         <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
           <span>{collection.fields?.length || 0}개 {TERM.field}</span>
-          {count !== undefined && (
+          {count != null && (
             <span>{count.toLocaleString('ko')}건 {TERM.record}</span>
           )}
           {timeSince && <span>최근 {timeSince}</span>}
@@ -47,6 +75,11 @@ export default function AppCard({ collection }: { collection: Collection }) {
       </Card>
     </Link>
   )
+}
+
+export function AppIcon({ name, className }: { name?: string, className?: string }) {
+  const Icon = APP_ICONS[name || DEFAULT_ICON] || APP_ICONS[DEFAULT_ICON]
+  return <Icon className={className} />
 }
 
 function formatTimeSince(date: Date): string {
