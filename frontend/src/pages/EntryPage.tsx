@@ -22,8 +22,9 @@ import {
   useUpdateEntry,
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
+import { useConflictAwareUpdate } from '@/hooks/useConflictAwareUpdate'
 import { useRetryToast } from '@/hooks/useRetryToast'
-import { ApiError, formatError } from '@/lib/api'
+import { formatError } from '@/lib/api'
 import { TERM } from '@/lib/constants'
 import type { EntryRow } from '@/lib/types'
 
@@ -56,6 +57,7 @@ export default function EntryPage() {
   const updateEntry = useUpdateEntry(slug ?? '')
   const deleteEntry = useDeleteEntry(slug ?? '')
   const retryToast = useRetryToast()
+  const onConflictError = useConflictAwareUpdate(refetchEntry)
 
   // Autosave state
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
@@ -109,12 +111,7 @@ export default function EntryPage() {
           },
           onError: (err) => {
             setAutosaveStatus('idle')
-            if (err instanceof ApiError && err.isConflict()) {
-              toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
-              refetchEntry()
-            } else {
-              retryToast(err, () => handleSubmit(data))
-            }
+            onConflictError(err, () => retryToast(err, () => handleSubmit(data)))
           },
         },
       )
