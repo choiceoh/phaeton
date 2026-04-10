@@ -85,6 +85,7 @@ export default function AppViewPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importedCount, setImportedCount] = useState(0)
+  const [newEntryId, setNewEntryId] = useState<string | null>(null)
 
   // Filter state
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
@@ -779,7 +780,14 @@ export default function AppViewPage() {
       )
     } else {
       createEntry.mutate(data, {
-        onSuccess: () => toast.success('생성되었습니다'),
+        onSuccess: (result) => {
+          toast.success('생성되었습니다')
+          const id = (result as Record<string, unknown>)?.id
+          if (id) {
+            setNewEntryId(String(id))
+            setTimeout(() => setNewEntryId(null), 500)
+          }
+        },
         onError: (err) => toast.error(formatError(err)),
       })
     }
@@ -1255,6 +1263,7 @@ export default function AppViewPage() {
               initialColumnVisibility={initialColumnVisibility}
               onColumnVisibilityChange={handleColumnVisibilityChange}
               highlightRows={importedCount}
+              newRowId={newEntryId}
               selectable
               selectedRowIds={selectedRowIds}
               onSelectionChange={setSelectedRowIds}
