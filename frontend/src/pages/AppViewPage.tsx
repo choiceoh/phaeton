@@ -14,6 +14,7 @@ import {
   Search,
   Upload,
   X,
+  Ellipsis,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
@@ -36,6 +37,12 @@ import KanbanView from '@/components/works/views/KanbanView'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Popover,
   PopoverContent,
@@ -521,7 +528,7 @@ export default function AppViewPage() {
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Search bar */}
+      {/* ── Group 1: 데이터 조회 (검색·필터·정렬) ── */}
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -544,7 +551,6 @@ export default function AppViewPage() {
         )}
       </div>
 
-      {/* Filter popover */}
       <Popover>
         <PopoverTrigger
           className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
@@ -583,7 +589,6 @@ export default function AppViewPage() {
         </PopoverContent>
       </Popover>
 
-      {/* Sort popover */}
       <Popover>
         <PopoverTrigger
           className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
@@ -619,28 +624,44 @@ export default function AppViewPage() {
         </PopoverContent>
       </Popover>
 
-      {/* CSV Export */}
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 gap-1"
-        onClick={handleCsvExport}
-      >
-        <Download className="h-3.5 w-3.5" />
-        내보내기
-      </Button>
+      {/* ── Group 2: 데이터 입출력 + 프로세스 ── */}
+      <div className="flex items-center gap-2 border-l pl-3 ml-1">
+        {process?.is_enabled && (
+          <Button
+            variant={processVisible ? 'default' : 'outline'}
+            size="sm"
+            className="h-8 gap-1"
+            onClick={() => setProcessVisible(!processVisible)}
+          >
+            {processVisible ? (
+              <Power className="h-3.5 w-3.5" />
+            ) : (
+              <PowerOff className="h-3.5 w-3.5" />
+            )}
+            프로세스
+          </Button>
+        )}
 
-      {/* CSV Import */}
-      <RoleGate roles={['director', 'pm', 'engineer']}>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Upload className="h-3.5 w-3.5" />
-          가져오기
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
+          >
+            <Ellipsis className="h-3.5 w-3.5" />
+            더보기
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={handleCsvExport}>
+              <Download className="h-3.5 w-3.5 mr-2" />
+              내보내기
+            </DropdownMenuItem>
+            <RoleGate roles={['director', 'pm', 'engineer']}>
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-3.5 w-3.5 mr-2" />
+                가져오기
+              </DropdownMenuItem>
+            </RoleGate>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <input
           ref={fileInputRef}
           type="file"
@@ -648,96 +669,82 @@ export default function AppViewPage() {
           className="hidden"
           onChange={handleImportCSV}
         />
-      </RoleGate>
+      </div>
 
-      {/* Process ON/OFF toggle */}
-      {process?.is_enabled && (
-        <Button
-          variant={processVisible ? 'default' : 'outline'}
-          size="sm"
-          className="h-8 gap-1"
-          onClick={() => setProcessVisible(!processVisible)}
-        >
-          {processVisible ? (
-            <Power className="h-3.5 w-3.5" />
-          ) : (
-            <PowerOff className="h-3.5 w-3.5" />
-          )}
-          프로세스
-        </Button>
-      )}
-
-      {/* Saved views chips */}
-      {savedViews && savedViews.length > 0 && (
-        <div className="flex items-center gap-1 border-l pl-2 ml-1">
-          <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
-          {savedViews.map((v) => (
-            <Badge
-              key={v.id}
-              variant={activeView?.id === v.id ? 'default' : 'outline'}
-              className="cursor-pointer gap-1 text-xs"
-              onClick={() => {
-                if (activeView?.id === v.id) {
-                  clearView()
-                } else {
-                  applyView(v)
-                }
-              }}
-            >
-              {v.name}
-              {activeView?.id === v.id && (
-                <button
-                  type="button"
-                  className="ml-0.5 hover:text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    deleteSavedView.mutate(v.id, {
-                      onSuccess: () => {
-                        toast.success('뷰가 삭제되었습니다')
-                        clearView()
-                      },
-                      onError: (err) => toast.error(formatError(err)),
-                    })
+      {/* ── Group 3: 뷰 관리 ── */}
+      {((savedViews && savedViews.length > 0) || filterConditions.length > 0 || sortItems.length > 0) && (
+        <div className="flex items-center gap-1.5 border-l pl-3 ml-1">
+          {savedViews && savedViews.length > 0 && (
+            <>
+              <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
+              {savedViews.map((v) => (
+                <Badge
+                  key={v.id}
+                  variant={activeView?.id === v.id ? 'default' : 'outline'}
+                  className="cursor-pointer gap-1 text-xs"
+                  onClick={() => {
+                    if (activeView?.id === v.id) {
+                      clearView()
+                    } else {
+                      applyView(v)
+                    }
                   }}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </Badge>
-          ))}
-        </div>
-      )}
+                  {v.name}
+                  {activeView?.id === v.id && (
+                    <button
+                      type="button"
+                      className="ml-0.5 hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteSavedView.mutate(v.id, {
+                          onSuccess: () => {
+                            toast.success('뷰가 삭제되었습니다')
+                            clearView()
+                          },
+                          onError: (err) => toast.error(formatError(err)),
+                        })
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </Badge>
+              ))}
+            </>
+          )}
 
-      {/* Save current filter/sort as view */}
-      {(filterConditions.length > 0 || sortItems.length > 0) && !savingView && (
-        <Popover>
-          <PopoverTrigger
-            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
-          >
-            <BookmarkPlus className="h-3.5 w-3.5" />
-            뷰 저장
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-64 p-3">
-            <div className="space-y-2">
-              <div className="text-sm font-medium">현재 필터/정렬을 뷰로 저장</div>
-              <Input
-                className="h-8"
-                placeholder="뷰 이름"
-                value={newViewName}
-                onChange={(e) => setNewViewName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveView()}
-              />
-              <Button
-                size="sm"
-                className="w-full"
-                disabled={!newViewName.trim() || createSavedView.isPending}
-                onClick={handleSaveView}
+          {(filterConditions.length > 0 || sortItems.length > 0) && !savingView && (
+            <Popover>
+              <PopoverTrigger
+                className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
               >
-                {createSavedView.isPending ? '저장 중...' : '저장'}
-              </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+                <BookmarkPlus className="h-3.5 w-3.5" />
+                뷰 저장
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-64 p-3">
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">현재 필터/정렬을 뷰로 저장</div>
+                  <Input
+                    className="h-8"
+                    placeholder="뷰 이름"
+                    value={newViewName}
+                    onChange={(e) => setNewViewName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveView()}
+                  />
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={!newViewName.trim() || createSavedView.isPending}
+                    onClick={handleSaveView}
+                  >
+                    {createSavedView.isPending ? '저장 중...' : '저장'}
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
       )}
     </div>
   )
