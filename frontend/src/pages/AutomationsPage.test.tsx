@@ -27,7 +27,7 @@ afterEach(() => {
 const collection: Collection = {
   id: 'c1',
   slug: 'tasks',
-  label: '업무 관리',
+  label: '앱 관리',
   is_system: false,
   process_enabled: false,
   sort_order: 0,

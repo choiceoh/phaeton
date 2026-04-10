@@ -75,7 +75,7 @@ export default function AppSettingsPage() {
       { id: collection!.id, confirm: true },
       {
         onSuccess: () => {
-          toast.success('업무가 삭제되었습니다')
+          toast.success('앱이 삭제되었습니다')
           navigate('/apps')
         },
         onError: (err) => toast.error(formatError(err)),
@@ -87,12 +87,12 @@ export default function AppSettingsPage() {
     <div>
       <PageHeader
         breadcrumb={[
-          { label: '업무 목록', href: '/apps' },
+          { label: '앱 목록', href: '/apps' },
           { label: collection.label, href: `/apps/${collection.id}` },
           { label: '설정' },
         ]}
         title="설정"
-        description={`/${collection.slug} 업무의 항목 및 설정`}
+        description={`/${collection.slug} 앱의 항목 및 설정`}
       />
 
       <div className="space-y-6">
@@ -280,7 +280,7 @@ export default function AppSettingsPage() {
           <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
             <h2 className="text-base font-semibold text-destructive">위험 영역</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              업무를 삭제하면 모든 항목과 변경 이력이 제거됩니다. 되돌리기 전에는
+              앱을 삭제하면 모든 항목과 변경 이력이 제거됩니다. 되돌리기 전에는
               데이터가 영구히 사라집니다.
             </p>
             <Button
@@ -289,7 +289,7 @@ export default function AppSettingsPage() {
               className="mt-3"
               onClick={() => setConfirmDeleteCollection(true)}
             >
-              업무 삭제
+              앱 삭제
             </Button>
           </section>
         )}
@@ -298,8 +298,8 @@ export default function AppSettingsPage() {
       <ConfirmDialog
         open={confirmDeleteCollection}
         onOpenChange={setConfirmDeleteCollection}
-        title="업무를 삭제하시겠습니까?"
-        description={`"${collection.label}" 업무와 모든 데이터가 영구 삭제됩니다.`}
+        title="앱을 삭제하시겠습니까?"
+        description={`"${collection.label}" 앱과 모든 데이터가 영구 삭제됩니다.`}
         variant="destructive"
         confirmLabel="삭제"
         onConfirm={handleDeleteCollection}

@@ -31,7 +31,7 @@ export default function GlobalDashboardPage() {
           icon={<BarChart3 className="h-10 w-10" />}
           action={
             <Link to="/apps/new">
-              <Button>새 업무 만들기</Button>
+              <Button>새 앱 만들기</Button>
             </Link>
           }
         />

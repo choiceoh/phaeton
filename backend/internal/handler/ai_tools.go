@@ -15,7 +15,7 @@ var workspaceTools = []ai.Tool{
 		Type: "function",
 		Function: ai.ToolFunction{
 			Name:        "list_collections",
-			Description: "워크스페이스의 모든 업무(앱) 목록을 이름과 slug로 조회합니다",
+			Description: "워크스페이스의 모든 앱 목록을 이름과 slug로 조회합니다",
 			Parameters:  json.RawMessage(`{"type":"object","properties":{},"required":[]}`),
 		},
 	},
@@ -23,7 +23,7 @@ var workspaceTools = []ai.Tool{
 		Type: "function",
 		Function: ai.ToolFunction{
 			Name:        "get_collection_fields",
-			Description: "특정 업무(앱)의 항목 상세 정보를 조회합니다. slug로 지정합니다.",
+			Description: "특정 앱의 항목 상세 정보를 조회합니다. slug로 지정합니다.",
 			Parameters: json.RawMessage(`{
 				"type":"object",
 				"properties":{

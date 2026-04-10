@@ -499,7 +499,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	procEnabled := h.hasProcessEnabled(col.ID)
 	if newStatus, ok := body["_status"]; ok && newStatus != nil {
 		if !procEnabled {
-			writeError(w, http.StatusBadRequest, "이 업무에는 프로세스가 활성화되지 않았습니다")
+			writeError(w, http.StatusBadRequest, "이 앱에는 프로세스가 활성화되지 않았습니다")
 			return
 		}
 		newStatusStr, ok := newStatus.(string)
@@ -1639,7 +1639,7 @@ func (h *DynHandler) initialStatusName(collectionID string) string {
 func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus, userRole, userID string) error {
 	p, ok := h.cache.ProcessByCollectionID(collectionID)
 	if !ok || !p.IsEnabled {
-		return fmt.Errorf("%w: 이 업무에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
+		return fmt.Errorf("%w: 이 앱에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
 	}
 
 	// Build status ID lookup.

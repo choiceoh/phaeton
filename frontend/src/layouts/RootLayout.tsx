@@ -54,7 +54,7 @@ export default function RootLayout() {
             </Link>
             <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto">
               <NavLink to="/apps" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                업무
+                앱
               </NavLink>
               <NavLink to="/dashboard" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 대시보드

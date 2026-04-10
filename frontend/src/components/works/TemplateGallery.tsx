@@ -37,7 +37,7 @@ export default function TemplateGallery() {
     if (!preview) return
     createCollection.mutate(preview.collection, {
       onSuccess: (created) => {
-        toast.success(`${created.label} 업무가 생성되었습니다`)
+        toast.success(`${created.label} 앱이 생성되었습니다`)
         navigate(`/apps/${created.id}`)
       },
       onError: (err) => {

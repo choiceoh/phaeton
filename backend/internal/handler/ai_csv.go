@@ -57,7 +57,7 @@ func (h *AIHandler) MapCSVColumns(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	resolve := h.newToolResolver(ctx)
 
-	userMsg := "대상 업무 slug: " + collectionSlug + "\n\nCSV 헤더:\n"
+	userMsg := "대상 앱 slug: " + collectionSlug + "\n\nCSV 헤더:\n"
 	for _, h := range req.Headers {
 		userMsg += "- " + h + "\n"
 	}

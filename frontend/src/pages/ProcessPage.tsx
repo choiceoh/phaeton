@@ -183,7 +183,7 @@ export default function ProcessPage() {
     <div>
       <PageHeader
         breadcrumb={[
-          { label: '업무 목록', href: '/apps' },
+          { label: '앱 목록', href: '/apps' },
           { label: collection.label, href: `/apps/${collection.id}` },
           { label: '설정', href: `/apps/${collection.id}/settings` },
           { label: '프로세스' },

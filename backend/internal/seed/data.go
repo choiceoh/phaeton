@@ -101,7 +101,7 @@ func SeedData(ctx context.Context, pool *pgxpool.Pool, store *schema.Store, cach
 		}
 	}
 
-	// ── 6. 업무 요청 레코드 ──
+	// ── 6. 앱 요청 레코드 ──
 	if _, ok := cache.CollectionBySlug("requests"); ok {
 		_, err = seedRecords(ctx, pool, "requests", userID, []map[string]any{
 			{"title": "영암 현장 인터넷 설치", "category": "it", "priority": "high", "status": "in_progress", "requester": "김태양", "description": "영암 1단지 현장 사무소에 인터넷 회선 설치 필요", "due_date": "2026-04-15"},
@@ -349,7 +349,7 @@ func seedAutomations(ctx context.Context, pool *pgxpool.Pool, cache *schema.Cach
 					config: jsonRaw(map[string]any{
 						"recipient": "record_creator",
 						"title":     "긴급 요청 접수",
-						"body":      "긴급 우선순위 업무 요청이 등록되었습니다. 즉시 확인해주세요.",
+						"body":      "긴급 우선순위 요청이 등록되었습니다. 즉시 확인해주세요.",
 					}),
 				},
 			},
@@ -370,7 +370,7 @@ func seedAutomations(ctx context.Context, pool *pgxpool.Pool, cache *schema.Cach
 					config: jsonRaw(map[string]any{
 						"recipient": "record_creator",
 						"title":     "요청 처리 완료",
-						"body":      "요청하신 업무가 처리 완료되었습니다.",
+						"body":      "요청하신 건이 처리 완료되었습니다.",
 					}),
 				},
 			},

@@ -68,7 +68,7 @@ export default function CommandPalette() {
         <CommandSeparator />
 
         <CommandGroup heading="페이지">
-          <CommandItem value="앱 목록 업무" onSelect={() => go('/apps')}>
+          <CommandItem value="앱 목록" onSelect={() => go('/apps')}>
             <LayoutGrid className="mr-2 h-4 w-4" />
             앱 목록
           </CommandItem>

@@ -1,17 +1,17 @@
 import type { FieldType } from './types'
 
-// -- 용어 한국어화 (테이블→업무, 필드→항목, 레코드→데이터) --
+// -- 용어 한국어화 (테이블→앱, 필드→항목, 레코드→데이터) --
 export const TERM = {
-  collection: '업무',
-  collections: '업무 목록',
+  collection: '앱',
+  collections: '앱 목록',
   field: '항목',
   fields: '항목',
   record: '데이터',
   records: '데이터',
-  newCollection: '새 업무 만들기',
+  newCollection: '새 앱 만들기',
   newRecord: '새 데이터',
-  noCollections: '아직 업무가 없습니다',
-  noCollectionsDesc: '새 업무를 만들어 데이터 관리를 시작하세요.',
+  noCollections: '아직 앱이 없습니다',
+  noCollectionsDesc: '새 앱을 만들어 데이터 관리를 시작하세요.',
   noRecords: '아직 데이터가 없습니다',
   noRecordsDesc: '"새 데이터" 버튼을 눌러 첫 데이터를 입력하세요.',
 } as const

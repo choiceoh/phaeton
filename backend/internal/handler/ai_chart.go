@@ -80,7 +80,7 @@ func (h *AIHandler) BuildChart(w http.ResponseWriter, r *http.Request) {
 	if cols, err := h.store.ListCollections(ctx); err == nil {
 		for _, c := range cols {
 			if c.ID == collectionID {
-				userMsg = "대상 업무: " + c.Label + " (slug: " + c.Slug + ")\n\n" + req.Description
+				userMsg = "대상 앱: " + c.Label + " (slug: " + c.Slug + ")\n\n" + req.Description
 				break
 			}
 		}

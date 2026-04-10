@@ -12,7 +12,7 @@ import (
 // --- extractJSON tests ---
 
 func TestExtractJSON_Plain(t *testing.T) {
-	input := `{"slug":"tasks","label":"업무"}`
+	input := `{"slug":"tasks","label":"앱"}`
 	got := extractJSON(input)
 	if got != input {
 		t.Errorf("expected plain JSON returned as-is, got %q", got)
@@ -59,7 +59,7 @@ func TestExtractJSON_NestedObjects(t *testing.T) {
 // --- sanitizeSlug tests ---
 
 func TestSanitizeSlug_Korean(t *testing.T) {
-	got := sanitizeSlug("업무_관리")
+	got := sanitizeSlug("앱_관리")
 	// Korean chars are replaced; should start with letter
 	if len(got) == 0 || got[0] < 'a' || got[0] > 'z' {
 		t.Errorf("slug should start with letter, got %q", got)
@@ -277,7 +277,7 @@ func TestBuildCollection_VLLMDown(t *testing.T) {
 	h := &AIHandler{client: client}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/ai/build-collection",
-		strings.NewReader(`{"description":"업무 관리 앱","answers":{"q1":"answer"}}`))
+		strings.NewReader(`{"description":"앱 관리","answers":{"q1":"answer"}}`))
 	r.Header.Set("Content-Type", "application/json")
 
 	h.BuildCollection(w, r)

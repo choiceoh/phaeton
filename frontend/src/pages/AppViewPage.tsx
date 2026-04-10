@@ -1309,7 +1309,7 @@ export default function AppViewPage() {
     <div>
       <PageHeader
         breadcrumb={[
-          { label: '업무 목록', href: '/apps' },
+          { label: '앱 목록', href: '/apps' },
           { label: collection.label },
         ]}
         title={collection.label}

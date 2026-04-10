@@ -194,7 +194,7 @@ export default function InterfaceDesignerPage() {
     <div>
       <PageHeader
         breadcrumb={[
-          { label: '업무 목록', href: '/apps' },
+          { label: '앱 목록', href: '/apps' },
           { label: collection.label, href: `/apps/${collection.id}` },
           { label: '인터페이스' },
         ]}

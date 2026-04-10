@@ -82,7 +82,7 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         breadcrumb={[
-          { label: '업무 목록', href: '/apps' },
+          { label: '앱 목록', href: '/apps' },
           { label: collection.label, href: `/apps/${collection.id}` },
           { label: '대시보드' },
         ]}

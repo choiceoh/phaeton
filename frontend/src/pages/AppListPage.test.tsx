@@ -40,7 +40,7 @@ const collections: Collection[] = [
     created_at: '2024-01-01', updated_at: '2024-01-01',
   },
   {
-    id: 'c2', slug: 'tasks', label: '업무 관리', description: '업무를 관리합니다',
+    id: 'c2', slug: 'tasks', label: '앱 관리', description: '앱을 관리합니다',
     is_system: false, process_enabled: false, sort_order: 1, access_config: {},
     created_at: '2024-01-02', updated_at: '2024-01-02',
   },
@@ -72,7 +72,7 @@ describe('AppListPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('인허가')).toBeInTheDocument()
-      expect(screen.getByText('업무 관리')).toBeInTheDocument()
+      expect(screen.getByText('앱 관리')).toBeInTheDocument()
     })
   })
 
@@ -103,11 +103,11 @@ describe('AppListPage', () => {
       expect(screen.getByText('인허가')).toBeInTheDocument()
     })
 
-    const searchInput = screen.getByPlaceholderText('업무 검색…')
+    const searchInput = screen.getByPlaceholderText('앱 검색…')
     await user.type(searchInput, '인허가')
 
     expect(screen.getByText('인허가')).toBeInTheDocument()
-    expect(screen.queryByText('업무 관리')).not.toBeInTheDocument()
+    expect(screen.queryByText('앱 관리')).not.toBeInTheDocument()
   })
 
   it('shows no results message when search has no matches', async () => {
@@ -119,11 +119,11 @@ describe('AppListPage', () => {
       expect(screen.getByText('인허가')).toBeInTheDocument()
     })
 
-    const searchInput = screen.getByPlaceholderText('업무 검색…')
+    const searchInput = screen.getByPlaceholderText('앱 검색…')
     await user.type(searchInput, '존재하지않는앱')
 
     await waitFor(() => {
-      expect(screen.getByText(/에 해당하는 업무가 없습니다/)).toBeInTheDocument()
+      expect(screen.getByText(/에 해당하는 앱이 없습니다/)).toBeInTheDocument()
     })
   })
 

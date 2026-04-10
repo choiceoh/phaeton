@@ -36,7 +36,7 @@ export default function AppListPage() {
     <div>
       <PageHeader
         title={TERM.collections}
-        description="업무 앱을 만들고 데이터를 관리하세요"
+        description="앱을 만들고 데이터를 관리하세요"
         actions={
           <>
             <Link to="/apps/relationships">
@@ -96,8 +96,8 @@ export default function AppListPage() {
               <OnboardingStep
                 icon={<Layers className="h-5 w-5" />}
                 step="1"
-                title="업무 정의"
-                description="관리할 업무를 만들고 필요한 항목을 설정하세요."
+                title="앱 정의"
+                description="관리할 앱을 만들고 필요한 항목을 설정하세요."
               />
               <OnboardingStep
                 icon={<MousePointerClick className="h-5 w-5" />}
@@ -122,7 +122,7 @@ export default function AppListPage() {
           <div className="relative mb-4 max-w-xs">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="업무 검색…"
+              placeholder="앱 검색…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8"
@@ -131,7 +131,7 @@ export default function AppListPage() {
 
           {filtered.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              '{search}'에 해당하는 업무가 없습니다
+              '{search}'에 해당하는 앱이 없습니다
             </p>
           ) : (
             <div className="grid justify-center gap-4 grid-cols-[repeat(auto-fill,minmax(280px,340px))]">
