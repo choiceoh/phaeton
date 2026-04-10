@@ -28,8 +28,9 @@ const (
 	FieldFile        FieldType = "file"
 	FieldJSON        FieldType = "json"
 
-	FieldAutonumber FieldType = "autonumber"
-	FieldTable      FieldType = "table" // Inline repeating table stored as JSONB.
+	FieldAutonumber   FieldType = "autonumber"
+	FieldTable        FieldType = "table"       // Inline repeating table stored as JSONB.
+	FieldSpreadsheet  FieldType = "spreadsheet" // Excel-like spreadsheet stored as JSONB.
 
 	// Computed types — stored in _meta.fields but produce no DB column.
 	// Values are calculated at read time from other fields/relations.
@@ -47,7 +48,7 @@ var validFieldTypes = map[FieldType]bool{
 	FieldText: true, FieldTextarea: true, FieldNumber: true, FieldInteger: true,
 	FieldBoolean: true, FieldDate: true, FieldDatetime: true, FieldTime: true,
 	FieldSelect: true, FieldMultiselect: true, FieldRelation: true,
-	FieldFile: true, FieldJSON: true, FieldUser: true, FieldAutonumber: true, FieldTable: true,
+	FieldFile: true, FieldJSON: true, FieldUser: true, FieldAutonumber: true, FieldTable: true, FieldSpreadsheet: true,
 	FieldFormula: true, FieldLookup: true, FieldRollup: true,
 	FieldLabel: true, FieldLine: true, FieldSpacer: true,
 }

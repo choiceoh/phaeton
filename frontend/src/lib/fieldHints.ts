@@ -28,4 +28,5 @@ export const FIELD_HINTS: Partial<Record<FieldType, FieldHint>> = {
   line: { description: '구분선 삽입', example: '영역을 시각적으로 구분' },
   spacer: { description: '여백 추가', example: '항목 간 간격 조정' },
   table: { description: '인라인 테이블', example: '예: 품목 목록, 일정표' },
+  spreadsheet: { description: '엑셀 스프레드시트', example: '예: 견적서, 정산표' },
 }

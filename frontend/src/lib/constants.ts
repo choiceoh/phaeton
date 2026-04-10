@@ -36,6 +36,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   lookup: '참조값',
   rollup: '요약 계산',
   table: '테이블',
+  spreadsheet: '스프레드시트',
   label: '제목 표시',
   line: '구분선',
   spacer: '여백',

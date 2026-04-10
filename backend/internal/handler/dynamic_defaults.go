@@ -36,7 +36,7 @@ func (h *DynHandler) GetDefaults(w http.ResponseWriter, r *http.Request) {
 		}
 		switch f.FieldType {
 		case schema.FieldText, schema.FieldTextarea,
-			schema.FieldFile, schema.FieldJSON, schema.FieldTable,
+			schema.FieldFile, schema.FieldJSON, schema.FieldTable, schema.FieldSpreadsheet,
 			schema.FieldAutonumber:
 			continue
 		}

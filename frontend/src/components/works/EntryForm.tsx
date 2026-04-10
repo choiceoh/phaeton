@@ -640,6 +640,8 @@ function FieldInput({
       return <FileInput value={value as string | undefined} onChange={onChange} />
     case 'table':
       return <TableAreaInput field={field} value={value} onChange={onChange} />
+    case 'spreadsheet':
+      return <SpreadsheetInput field={field} value={value} onChange={onChange} />
     case 'json':
       return (
         <Textarea
@@ -779,6 +781,210 @@ function TableAreaInput({
       <Button type="button" variant="outline" size="sm" onClick={addRow}>
         + 행 추가
       </Button>
+    </div>
+  )
+}
+
+// -- SpreadsheetInput: Excel-like inline spreadsheet within the form --
+
+interface SpreadsheetCol {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'select'
+  choices?: string[]
+}
+
+function SpreadsheetInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: Field
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const subColumns: SpreadsheetCol[] = (field.options?.sub_columns as SpreadsheetCol[]) || [
+    { key: 'col1', label: 'A', type: 'text' },
+    { key: 'col2', label: 'B', type: 'text' },
+    { key: 'col3', label: 'C', type: 'text' },
+  ]
+  const initialRows = (field.options?.initial_rows as number) || 5
+  const rows = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
+
+  // ensure minimum rows
+  const displayRows = rows.length >= initialRows
+    ? rows
+    : [...rows, ...Array.from({ length: initialRows - rows.length }, () => {
+        const empty: Record<string, unknown> = {}
+        for (const col of subColumns) empty[col.key] = col.type === 'number' ? null : ''
+        return empty
+      })]
+
+  const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null)
+  const tableRef = useRef<HTMLTableElement>(null)
+
+  function emitChange(nextRows: Record<string, unknown>[]) {
+    // trim trailing empty rows
+    let end = nextRows.length
+    while (end > 0) {
+      const row = nextRows[end - 1]
+      const isEmpty = subColumns.every((c) => {
+        const v = row[c.key]
+        return v === null || v === undefined || v === ''
+      })
+      if (!isEmpty) break
+      end--
+    }
+    onChange(nextRows.slice(0, Math.max(end, 0)))
+  }
+
+  function updateCell(rowIdx: number, colKey: string, val: unknown) {
+    const next = displayRows.map((r, i) => (i === rowIdx ? { ...r, [colKey]: val } : { ...r }))
+    emitChange(next)
+  }
+
+  function addRow() {
+    const empty: Record<string, unknown> = {}
+    for (const col of subColumns) empty[col.key] = col.type === 'number' ? null : ''
+    const next = [...displayRows, empty]
+    emitChange(next)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent, rowIdx: number, colIdx: number) {
+    const maxRow = displayRows.length - 1
+    const maxCol = subColumns.length - 1
+    let nextRow = rowIdx
+    let nextCol = colIdx
+
+    switch (e.key) {
+      case 'Tab':
+        e.preventDefault()
+        if (e.shiftKey) {
+          if (colIdx > 0) nextCol = colIdx - 1
+          else if (rowIdx > 0) { nextRow = rowIdx - 1; nextCol = maxCol }
+        } else {
+          if (colIdx < maxCol) nextCol = colIdx + 1
+          else if (rowIdx < maxRow) { nextRow = rowIdx + 1; nextCol = 0 }
+          else { addRow(); nextRow = rowIdx + 1; nextCol = 0 }
+        }
+        break
+      case 'Enter':
+        e.preventDefault()
+        if (rowIdx < maxRow) nextRow = rowIdx + 1
+        else { addRow(); nextRow = rowIdx + 1 }
+        break
+      case 'ArrowUp':
+        if (rowIdx > 0) nextRow = rowIdx - 1
+        break
+      case 'ArrowDown':
+        if (rowIdx < maxRow) nextRow = rowIdx + 1
+        break
+      default:
+        return
+    }
+
+    setActiveCell({ row: nextRow, col: nextCol })
+    // focus the target input
+    requestAnimationFrame(() => {
+      const input = tableRef.current?.querySelector(
+        `[data-cell="${nextRow}-${nextCol}"]`,
+      ) as HTMLInputElement | null
+      input?.focus()
+    })
+  }
+
+  // column letter label (A, B, C, ...)
+  function colLetter(idx: number) {
+    return String.fromCharCode(65 + (idx % 26))
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="rounded-md border overflow-auto max-h-80">
+        <table ref={tableRef} className="w-full text-sm border-collapse">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-muted/70">
+              <th className="px-1.5 py-1 text-center text-[10px] font-medium text-muted-foreground w-10 border-r border-b" />
+              {subColumns.map((col, ci) => (
+                <th
+                  key={col.key}
+                  className="px-2 py-1 text-center text-xs font-medium text-muted-foreground border-r border-b min-w-[100px]"
+                >
+                  <span className="text-[10px] text-muted-foreground/60 mr-1">{colLetter(ci)}</span>
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.map((row, ri) => (
+              <tr key={ri} className="group">
+                <td className="px-1.5 py-0 text-center text-[10px] text-muted-foreground border-r bg-muted/30 select-none">
+                  {ri + 1}
+                </td>
+                {subColumns.map((col, ci) => {
+                  const isActive = activeCell?.row === ri && activeCell?.col === ci
+                  return (
+                    <td
+                      key={col.key}
+                      className={`p-0 border-r border-b ${isActive ? 'ring-2 ring-primary ring-inset' : ''}`}
+                      onClick={() => {
+                        setActiveCell({ row: ri, col: ci })
+                        const input = tableRef.current?.querySelector(
+                          `[data-cell="${ri}-${ci}"]`,
+                        ) as HTMLInputElement | null
+                        input?.focus()
+                      }}
+                    >
+                      {col.type === 'select' ? (
+                        <select
+                          data-cell={`${ri}-${ci}`}
+                          className="h-7 w-full bg-transparent px-1.5 text-sm outline-none border-0"
+                          value={(row[col.key] as string) || ''}
+                          onChange={(e) => updateCell(ri, col.key, e.target.value)}
+                          onFocus={() => setActiveCell({ row: ri, col: ci })}
+                          onKeyDown={(e) => handleKeyDown(e, ri, ci)}
+                        >
+                          <option value="" />
+                          {(col.choices || []).map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          data-cell={`${ri}-${ci}`}
+                          type={col.type === 'number' ? 'number' : 'text'}
+                          className="h-7 w-full bg-transparent px-1.5 text-sm outline-none border-0"
+                          value={row[col.key] != null ? String(row[col.key]) : ''}
+                          onChange={(e) =>
+                            updateCell(
+                              ri,
+                              col.key,
+                              col.type === 'number'
+                                ? e.target.value === '' ? null : Number(e.target.value)
+                                : e.target.value,
+                            )
+                          }
+                          onFocus={() => setActiveCell({ row: ri, col: ci })}
+                          onKeyDown={(e) => handleKeyDown(e, ri, ci)}
+                        />
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={addRow}>
+          + 행 추가
+        </Button>
+        <span className="text-[10px] text-muted-foreground">
+          {displayRows.length}행 × {subColumns.length}열
+        </span>
+      </div>
     </div>
   )
 }
