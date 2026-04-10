@@ -16,6 +16,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/choiceoh/phaeton/backend/internal/ai"
 	"github.com/choiceoh/phaeton/backend/internal/db"
 	"github.com/choiceoh/phaeton/backend/internal/events"
 	"github.com/choiceoh/phaeton/backend/internal/handler"
@@ -80,6 +81,10 @@ func run() int {
 	historyHandler := handler.NewHistoryHandler(pool, cache)
 	memberHandler := handler.NewMemberHandler(pool)
 
+	// AI client (local vLLM).
+	aiClient := ai.NewClient()
+	aiHandler := handler.NewAIHandler(aiClient)
+
 	// Event bus + notification subscriber.
 	bus := events.NewBus()
 	commentHandler := handler.NewCommentHandler(pool, cache, bus)
@@ -102,7 +107,7 @@ func run() int {
 	}
 
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, historyHandler, memberHandler, commentHandler, notifHandler, logger, loginLimiter, samlMiddleware)
+	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, logger, loginLimiter, samlMiddleware)
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -153,6 +158,7 @@ func buildRouter(
 	memberH *handler.MemberHandler,
 	commentH *handler.CommentHandler,
 	notifH *handler.NotificationHandler,
+	aiH *handler.AIHandler,
 	logger *slog.Logger,
 	loginLimiter *middleware.RateLimiter,
 	samlMW *samlsp.Middleware,
@@ -280,6 +286,9 @@ func buildRouter(
 		r.Post("/api/upload", handler.Upload)
 		r.Handle("/api/uploads/*", http.StripPrefix("/api/uploads/",
 			http.FileServer(http.Dir("uploads"))))
+
+		// AI endpoints.
+		r.Post("/api/ai/build-collection", aiH.BuildCollection)
 
 		// Notifications
 		r.Get("/api/notifications", notifH.List)
