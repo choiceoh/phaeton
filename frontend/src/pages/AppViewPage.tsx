@@ -65,6 +65,7 @@ import {
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
+import { useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { api, ApiError, formatError } from '@/lib/api'
@@ -115,6 +116,7 @@ export default function AppViewPage() {
   const { data: collection, isLoading: colLoading, isError: colError, error: colErr } =
     useCollection(appId)
   const { data: process } = useProcess(appId)
+  const { data: currentUser } = useCurrentUser()
 
   // Show toast when automation runs are detected.
   useAutomationRunToasts(collection?.id)
@@ -644,6 +646,52 @@ export default function AppViewPage() {
   const hasCalendar = !!dateField
   const hasGallery = !!fileField
   const hasGantt = dateFields.length >= 1
+  const hasProcessKanban = process?.is_enabled && (process.statuses?.length ?? 0) > 0
+
+  // Build synthetic field for process status kanban
+  const processGroupField = useMemo(() => {
+    if (!hasProcessKanban || !process) return undefined
+    return {
+      id: '_status',
+      collection_id: '',
+      slug: '_status',
+      label: '상태',
+      field_type: 'select' as const,
+      is_required: false,
+      is_unique: false,
+      is_indexed: false,
+      width: 6,
+      height: 1,
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+      options: {
+        choices: process.statuses.map((s) => s.name),
+      },
+    }
+  }, [hasProcessKanban, process])
+
+  // Build allowedMoves map for process kanban based on transitions + user role
+  const processAllowedMoves = useMemo(() => {
+    if (!process?.is_enabled || !process.transitions?.length || !process.statuses?.length) return undefined
+    const userRole = currentUser?.role
+    const statusById = new Map(process.statuses.map((s) => [s.id, s.name]))
+    const moves = new Map<string, Set<string>>()
+    // Initialize all statuses with empty sets
+    for (const s of process.statuses) {
+      moves.set(s.name, new Set())
+    }
+    for (const t of process.transitions) {
+      // Check role permission
+      if (t.allowed_roles.length > 0 && (!userRole || !t.allowed_roles.includes(userRole))) continue
+      const fromName = statusById.get(t.from_status_id)
+      const toName = statusById.get(t.to_status_id)
+      if (fromName && toName) {
+        moves.get(fromName)!.add(toName)
+      }
+    }
+    return moves
+  }, [process, currentUser])
 
   function handleEntryClick(entry: Record<string, unknown>) {
     setEditEntry(entry)
@@ -678,6 +726,26 @@ export default function AppViewPage() {
       { id: entryId, body },
       {
         onSuccess: () => toast.success('이동되었습니다'),
+        onError: (err) => {
+          if (err instanceof ApiError && err.isConflict()) {
+            toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
+            refetch()
+          } else {
+            toast.error(formatError(err))
+          }
+        },
+      },
+    )
+  }
+
+  function handleProcessCardMove(entryId: string, newValue: string) {
+    const body: Record<string, unknown> = { _status: newValue }
+    const version = getRowVersion(entryId)
+    if (version != null) body._version = version
+    updateEntry.mutate(
+      { id: entryId, body },
+      {
+        onSuccess: () => toast.success('상태가 변경되었습니다'),
         onError: (err) => {
           if (err instanceof ApiError && err.isConflict()) {
             toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
@@ -1113,9 +1181,10 @@ export default function AppViewPage() {
 
       {list && (
         <Tabs defaultValue="list">
-          {(hasKanban || hasCalendar || hasGallery || hasGantt) && (
+          {(hasKanban || hasProcessKanban || hasCalendar || hasGallery || hasGantt) && (
             <TabsList className="mb-4 max-w-full overflow-x-auto">
               <TabsTrigger value="list">목록</TabsTrigger>
+              {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}
               {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
               {hasCalendar && (
                 <TabsTrigger value="calendar" className="gap-1">
@@ -1191,6 +1260,19 @@ export default function AppViewPage() {
               onSelectionChange={setSelectedRowIds}
             />
           </TabsContent>
+
+          {hasProcessKanban && processGroupField && (
+            <TabsContent value="status-kanban" className="mt-0">
+              <KanbanView
+                groupField={processGroupField}
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onCardClick={handleEntryClick}
+                onCardMove={handleProcessCardMove}
+                allowedMoves={processAllowedMoves}
+              />
+            </TabsContent>
+          )}
 
           {hasKanban && selectField && (
             <TabsContent value="kanban" className="mt-0">
