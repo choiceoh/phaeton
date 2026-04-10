@@ -119,6 +119,23 @@ export default function EntryForm({
               </div>
             )
           }
+          // Formula fields: show computed value as read-only.
+          if (field.field_type === 'formula') {
+            const span = field.width || 6
+            const smSpan: Record<number, string> = {
+              1: 'sm:col-span-1', 2: 'sm:col-span-2', 3: 'sm:col-span-3',
+              4: 'sm:col-span-4', 5: 'sm:col-span-5', 6: 'sm:col-span-6',
+            }
+            const val = data[field.slug]
+            return (
+              <div key={field.id} className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'}`}>
+                <Label className="text-muted-foreground">{field.label} (수식)</Label>
+                <div className="mt-1 rounded-md bg-muted px-3 py-2 text-sm">
+                  {val != null ? String(val) : '-'}
+                </div>
+              </div>
+            )
+          }
           const span = field.width || 6
           const smSpan: Record<number, string> = {
             1: 'sm:col-span-1', 2: 'sm:col-span-2', 3: 'sm:col-span-3',
