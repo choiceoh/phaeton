@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 
 import RelationCombobox from '@/components/common/RelationCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
+import { useCurrentUser } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -45,6 +46,7 @@ export default function EntryForm({
   process,
 }: Props) {
   const [data, setData] = useState<Record<string, unknown>>(initialData ?? {})
+  const { data: currentUser } = useCurrentUser()
 
   function setValue(name: string, value: unknown) {
     setData((prev) => ({ ...prev, [name]: value }))
@@ -56,14 +58,20 @@ export default function EntryForm({
   }
 
   // Process status transitions (only when editing an existing entry).
+  // Filter by the current user's role when allowed_roles is specified.
   const currentStatus = initialData?._status as string | undefined
   const availableTransitions = (() => {
     if (!process?.is_enabled || !currentStatus || !initialData?.id || !process.statuses?.length) return []
     const statusByName = new Map(process.statuses.map((s) => [s.name, s]))
     const currentStatusObj = statusByName.get(currentStatus)
     if (!currentStatusObj) return []
+    const userRole = currentUser?.role
     return process.transitions
-      .filter((t) => t.from_status_id === currentStatusObj.id)
+      .filter((t) => {
+        if (t.from_status_id !== currentStatusObj.id) return false
+        if (t.allowed_roles.length > 0 && userRole && !t.allowed_roles.includes(userRole)) return false
+        return true
+      })
       .map((t) => {
         const target = process.statuses.find((s) => s.id === t.to_status_id)
         return { label: t.label, targetName: target?.name ?? '', targetColor: target?.color ?? '#6b7280' }
