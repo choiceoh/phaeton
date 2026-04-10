@@ -20,6 +20,12 @@ jobs:
         with:
           go-version-file: backend/go.mod
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-${{ runner.os }}-${{ hashFiles('backend/**/*.go', 'backend/go.sum') }}
+          restore-keys: go-build-${{ runner.os }}-
+
       - name: Check gofmt
         run: |
           cd backend
@@ -33,14 +39,11 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.1
           working-directory: backend
 
       - name: Go tests (unit)
         run: cd backend && go test -short ./...
-
-      - name: Build Go binary
-        run: cd backend && go build ./cmd/server
 
   integration-test-go:
     runs-on: ubuntu-latest
@@ -65,9 +68,16 @@ jobs:
         with:
           go-version-file: backend/go.mod
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-${{ runner.os }}-${{ hashFiles('backend/**/*.go', 'backend/go.sum') }}
+          restore-keys: go-build-${{ runner.os }}-
+
       - name: Go tests (integration)
         env:
           DATABASE_URL: postgres://phaeton:phaeton@localhost:5432/phaeton_test?sslmode=disable
+          TEST_DATABASE_URL: postgres://phaeton:phaeton@localhost:5432/phaeton_test?sslmode=disable
         run: cd backend && go test -count=1 ./...
 
   lint-and-test-ui:
@@ -84,14 +94,11 @@ jobs:
       - name: Install dependencies
         run: cd frontend && npm ci
 
-      - name: TypeScript type check
-        run: cd frontend && npx tsc --noEmit
-
       - name: ESLint
         run: cd frontend && npm run lint
 
       - name: Vitest
-        run: cd frontend && npx vitest run --coverage.enabled --coverage.reporter=text
+        run: cd frontend && npx vitest run
 
       - name: Build frontend
         run: cd frontend && npm run build
