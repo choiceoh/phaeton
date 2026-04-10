@@ -151,9 +151,12 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	// Optional relation expansion.
 	if expand := params.Get("expand"); expand != "" {
-		if err := h.expandRelations(r.Context(), records, fields, expand); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
+		expand = resolveAutoExpand(expand, fields)
+		if expand != "" {
+			if err := h.expandRelations(r.Context(), records, fields, expand); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 		}
 	}
 
@@ -165,6 +168,11 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	// Load M:N links.
 	h.loadM2MFields(r.Context(), records, fields, col.Slug)
+
+	// Optional display formatting.
+	if params.Get("format") == "display" {
+		applyDisplayFormat(records, fields)
+	}
 
 	writeList(w, records, total, page, limit)
 }
@@ -213,9 +221,12 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Optional relation expansion.
 	if expand := r.URL.Query().Get("expand"); expand != "" {
-		if err := h.expandRelations(r.Context(), records, fields, expand); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
+		expand = resolveAutoExpand(expand, fields)
+		if expand != "" {
+			if err := h.expandRelations(r.Context(), records, fields, expand); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 		}
 	}
 
@@ -227,6 +238,11 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Load M:N links.
 	h.loadM2MFields(r.Context(), records, fields, col.Slug)
+
+	// Optional display formatting.
+	if r.URL.Query().Get("format") == "display" {
+		applyDisplayFormat(records, fields)
+	}
 
 	writeJSON(w, http.StatusOK, records[0])
 }

@@ -14,6 +14,38 @@ vi.mock('@/hooks/useAuth', () => ({
   useCurrentUser: () => ({ data: { id: 'u1', role: 'director', name: 'Admin' } }),
 }))
 
+// Mock useAvailableTransitions to return data based on the collectionId/status.
+// collectionId="c1" → normal transitions; collectionId="c1-restricted" → empty (simulates pm-only).
+vi.mock('@/hooks/useEntries', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return {
+    ...actual,
+    useAvailableTransitions: (collectionId?: string, status?: string) => {
+      if (!collectionId) return { data: undefined }
+      if (collectionId === 'c1-restricted') {
+        return { data: { transitions: [], allowed_moves: {} } }
+      }
+      if (status === '접수') {
+        return {
+          data: {
+            transitions: [{ id: 't1', label: '처리 시작', to_status: '처리중', to_color: '#f59e0b' }],
+            allowed_moves: {},
+          },
+        }
+      }
+      if (status === '처리중') {
+        return {
+          data: {
+            transitions: [{ id: 't2', label: '완료 처리', to_status: '완료', to_color: '#10b981' }],
+            allowed_moves: {},
+          },
+        }
+      }
+      return { data: undefined }
+    },
+  }
+})
+
 // Mock RelationCombobox / UserCombobox to avoid deep dependency chains.
 vi.mock('@/components/common/RelationCombobox', () => ({
   default: ({ value, onChange }: { value?: string; onChange: (v: unknown) => void }) => (
@@ -313,6 +345,7 @@ describe('EntryForm', () => {
         fields: [makeField({ slug: 'title', label: '제목', field_type: 'text' })],
         initialData: { id: 'entry1', _status: '접수' },
         process,
+        collectionId: 'c1',
       })
 
       expect(screen.getByText('접수')).toBeInTheDocument()
@@ -325,6 +358,7 @@ describe('EntryForm', () => {
         fields: [makeField({ slug: 'title', label: '제목', field_type: 'text' })],
         initialData: { id: 'entry1', _status: '접수' },
         process,
+        collectionId: 'c1',
       })
 
       await user.click(screen.getByText(/처리 시작/))
@@ -336,7 +370,7 @@ describe('EntryForm', () => {
     })
 
     it('hides transitions for unauthorized roles', () => {
-      // useCurrentUser returns director, but transition requires pm only
+      // useCurrentUser returns director, but server returns empty transitions for restricted collection.
       renderForm({
         fields: [makeField({ slug: 'title', label: '제목', field_type: 'text' })],
         initialData: { id: 'entry1', _status: '처리중' },
@@ -346,6 +380,7 @@ describe('EntryForm', () => {
             { id: 't2', process_id: 'p1', from_status_id: 's2', to_status_id: 's3', label: '완료 처리', allowed_roles: ['pm'] },
           ],
         },
+        collectionId: 'c1-restricted',
       })
 
       expect(screen.queryByText(/완료 처리/)).not.toBeInTheDocument()

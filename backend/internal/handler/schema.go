@@ -3,6 +3,9 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -272,4 +275,304 @@ func (h *SchemaHandler) RollbackMigration(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "rolled_back"})
+}
+
+// ---------------------------------------------------------------------------
+// Global Calendar  GET /api/calendar/events
+// ---------------------------------------------------------------------------
+
+type globalCalendarEvent struct {
+	ID              string `json:"id"`
+	Label           string `json:"label"`
+	Date            string `json:"date"`
+	EndDate         string `json:"endDate,omitempty"`
+	CollectionID    string `json:"collectionId"`
+	CollectionLabel string `json:"collectionLabel"`
+	CollectionSlug  string `json:"collectionSlug"`
+	CollectionIcon  string `json:"collectionIcon,omitempty"`
+}
+
+func (h *SchemaHandler) GlobalCalendarEvents(w http.ResponseWriter, r *http.Request) {
+	params := r.URL.Query()
+	yearStr := params.Get("year")
+	monthStr := params.Get("month")
+
+	year, err := strconv.Atoi(yearStr)
+	if err != nil || year < 1970 || year > 2100 {
+		writeError(w, http.StatusBadRequest, "invalid year")
+		return
+	}
+	month, err := strconv.Atoi(monthStr)
+	if err != nil || month < 1 || month > 12 {
+		writeError(w, http.StatusBadRequest, "invalid month (1-12)")
+		return
+	}
+
+	user, _ := middleware.GetUser(r.Context())
+
+	monthStart := fmt.Sprintf("%04d-%02d-01", year, month)
+	lastDay := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	monthEnd := fmt.Sprintf("%04d-%02d-%02d", year, month, lastDay)
+
+	cols := h.cache.Collections()
+	var events []globalCalendarEvent
+
+	// Query each eligible collection (using the cache to avoid N+1 on schema,
+	// but still one query per collection for data — a UNION ALL would require
+	// dynamic column selection which is impractical with varying schemas).
+	for _, col := range cols {
+		if !col.AccessConfig.AllowsRole("entry_view", user.Role) {
+			continue
+		}
+
+		fields := h.cache.Fields(col.ID)
+		var dateField *schema.Field
+		var endDateField *schema.Field
+		var titleField *schema.Field
+
+		for i := range fields {
+			f := &fields[i]
+			if f.FieldType == schema.FieldDate || f.FieldType == schema.FieldDatetime {
+				if dateField == nil {
+					dateField = f
+				} else if endDateField == nil {
+					endDateField = f
+				}
+			}
+			if f.FieldType == schema.FieldText && titleField == nil {
+				titleField = f
+			}
+		}
+		if dateField == nil {
+			continue
+		}
+
+		qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+
+		// Build select columns.
+		selCols := []string{"id", fmt.Sprintf("%q", dateField.Slug)}
+		if endDateField != nil {
+			selCols = append(selCols, fmt.Sprintf("%q", endDateField.Slug))
+		}
+		if titleField != nil {
+			selCols = append(selCols, fmt.Sprintf("%q", titleField.Slug))
+		}
+
+		sql := fmt.Sprintf(
+			"SELECT %s FROM %s WHERE deleted_at IS NULL AND %q >= $1 AND %q <= $2 ORDER BY %q ASC LIMIT 500",
+			strings.Join(selCols, ", "), qTable,
+			dateField.Slug, dateField.Slug,
+			dateField.Slug,
+		)
+
+		rows, err := h.pool.Query(r.Context(), sql, monthStart, monthEnd)
+		if err != nil {
+			// Skip collections we can't query (permission, deleted table, etc.)
+			continue
+		}
+		records, err := collectRows(rows)
+		rows.Close()
+		if err != nil {
+			continue
+		}
+
+		for _, rec := range records {
+			dateStr := toDateStrGo(rec[dateField.Slug])
+			if dateStr == "" {
+				continue
+			}
+
+			endStr := ""
+			if endDateField != nil {
+				if e := toDateStrGo(rec[endDateField.Slug]); e != "" && e > dateStr {
+					endStr = e
+				}
+			}
+
+			label := "(무제)"
+			if titleField != nil {
+				if v := rec[titleField.Slug]; v != nil {
+					label = fmt.Sprintf("%v", v)
+				}
+			}
+
+			events = append(events, globalCalendarEvent{
+				ID:              fmt.Sprintf("%v", rec["id"]),
+				Label:           label,
+				Date:            dateStr,
+				EndDate:         endStr,
+				CollectionID:    col.ID,
+				CollectionLabel: col.Label,
+				CollectionSlug:  col.Slug,
+				CollectionIcon:  col.Icon,
+			})
+		}
+	}
+
+	if events == nil {
+		events = []globalCalendarEvent{}
+	}
+	writeJSON(w, http.StatusOK, events)
+}
+
+// ---------------------------------------------------------------------------
+// Relationship Graph  GET /api/schema/relationship-graph
+// ---------------------------------------------------------------------------
+
+type graphNode struct {
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Icon       string `json:"icon,omitempty"`
+	FieldCount int    `json:"fieldCount"`
+}
+
+type graphEdge struct {
+	ID           string `json:"id"`
+	SourceID     string `json:"sourceId"`
+	TargetID     string `json:"targetId"`
+	Label        string `json:"label"`
+	RelationType string `json:"relationType"`
+}
+
+type graphResponse struct {
+	Nodes []graphNode `json:"nodes"`
+	Edges []graphEdge `json:"edges"`
+}
+
+func (h *SchemaHandler) RelationshipGraph(w http.ResponseWriter, r *http.Request) {
+	cols := h.cache.Collections()
+
+	var nodes []graphNode
+	var edges []graphEdge
+
+	for _, col := range cols {
+		fields := h.cache.Fields(col.ID)
+
+		// Count non-layout fields.
+		fieldCount := 0
+		for _, f := range fields {
+			if !f.FieldType.IsLayout() {
+				fieldCount++
+			}
+		}
+		nodes = append(nodes, graphNode{
+			ID:         col.ID,
+			Label:      col.Label,
+			Icon:       col.Icon,
+			FieldCount: fieldCount,
+		})
+
+		// Build edges from relation fields.
+		for _, f := range fields {
+			if f.FieldType != schema.FieldRelation || f.Relation == nil {
+				continue
+			}
+			edges = append(edges, graphEdge{
+				ID:           f.ID,
+				SourceID:     col.ID,
+				TargetID:     f.Relation.TargetCollectionID,
+				Label:        f.Label,
+				RelationType: string(f.Relation.RelationType),
+			})
+		}
+	}
+
+	if nodes == nil {
+		nodes = []graphNode{}
+	}
+	if edges == nil {
+		edges = []graphEdge{}
+	}
+
+	writeJSON(w, http.StatusOK, graphResponse{Nodes: nodes, Edges: edges})
+}
+
+// ---------------------------------------------------------------------------
+// Available Transitions  GET /api/schema/collections/{id}/process/transitions
+// ---------------------------------------------------------------------------
+
+type availableTransition struct {
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	ToStatus string `json:"to_status"`
+	ToColor  string `json:"to_color"`
+}
+
+type transitionsResponse struct {
+	Transitions  []availableTransition `json:"transitions"`
+	AllowedMoves map[string][]string   `json:"allowed_moves"`
+}
+
+func (h *SchemaHandler) AvailableTransitions(w http.ResponseWriter, r *http.Request) {
+	collectionID := chi.URLParam(r, "id")
+	proc, ok := h.cache.ProcessByCollectionID(collectionID)
+	if !ok || !proc.IsEnabled {
+		writeJSON(w, http.StatusOK, transitionsResponse{
+			Transitions:  []availableTransition{},
+			AllowedMoves: map[string][]string{},
+		})
+		return
+	}
+
+	user, _ := middleware.GetUser(r.Context())
+	statusParam := r.URL.Query().Get("status")
+
+	// Build status lookups.
+	idToStatus := make(map[string]schema.ProcessStatus, len(proc.Statuses))
+	nameToStatus := make(map[string]schema.ProcessStatus, len(proc.Statuses))
+	for _, s := range proc.Statuses {
+		idToStatus[s.ID] = s
+		nameToStatus[s.Name] = s
+	}
+
+	// If a specific status is requested, filter transitions from that status.
+	var transitions []availableTransition
+	if statusParam != "" {
+		// Find current status by name or ID.
+		var currentStatus *schema.ProcessStatus
+		if s, ok := nameToStatus[statusParam]; ok {
+			currentStatus = &s
+		} else if s, ok := idToStatus[statusParam]; ok {
+			currentStatus = &s
+		}
+
+		if currentStatus != nil {
+			for _, t := range proc.Transitions {
+				if t.FromStatusID != currentStatus.ID {
+					continue
+				}
+				// Check role permission.
+				if len(t.AllowedRoles) > 0 {
+					allowed := false
+					for _, role := range t.AllowedRoles {
+						if role == user.Role {
+							allowed = true
+							break
+						}
+					}
+					if !allowed {
+						continue
+					}
+				}
+				toStatus := idToStatus[t.ToStatusID]
+				transitions = append(transitions, availableTransition{
+					ID:       t.ID,
+					Label:    t.Label,
+					ToStatus: toStatus.Name,
+					ToColor:  toStatus.Color,
+				})
+			}
+		}
+	}
+	if transitions == nil {
+		transitions = []availableTransition{}
+	}
+
+	// Build full allowed_moves map (for Kanban).
+	allowedMoves := buildAllowedMoves(proc, user.Role)
+
+	writeJSON(w, http.StatusOK, transitionsResponse{
+		Transitions:  transitions,
+		AllowedMoves: allowedMoves,
+	})
 }

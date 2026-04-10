@@ -13,29 +13,23 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { useEffect, useMemo, useState } from 'react'
 
-import { Ban, LayoutGrid, Plus } from 'lucide-react'
+import { Ban, LayoutGrid, Loader2, Plus } from 'lucide-react'
 
 import EmptyState from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { useKanbanView, type KanbanColumn } from '@/hooks/useEntries'
 import type { Field } from '@/lib/types'
 
 interface Props {
+  slug: string
   groupField: Field
   fields: Field[]
-  entries: Record<string, unknown>[]
+  filters?: Record<string, string>
   onCardClick: (entry: Record<string, unknown>) => void
   onCardMove?: (entryId: string, newValue: string) => void
-  /** Map of "fromValue" → Set of allowed "toValue" for permission control */
-  allowedMoves?: Map<string, Set<string>>
   onAddEntry?: () => void
-}
-
-interface KanbanColumn {
-  label: string
-  value: string
-  entries: Record<string, unknown>[]
 }
 
 function SortableCard({
@@ -152,15 +146,32 @@ function DroppableColumn({
 }
 
 export default function KanbanView({
+  slug,
   groupField,
   fields,
-  entries,
+  filters,
   onCardClick,
   onCardMove,
-  allowedMoves,
   onAddEntry,
 }: Props) {
-  const choices = (groupField.options?.choices as string[]) || []
+  const { data: kanbanData, isLoading } = useKanbanView(slug, {
+    groupField: groupField.slug,
+    filters,
+  })
+
+  const columns: KanbanColumn[] = useMemo(() => kanbanData?.columns ?? [], [kanbanData?.columns])
+  const serverAllowedMoves = kanbanData?.allowed_moves
+
+  const allowedMoves = useMemo(() => {
+    if (!serverAllowedMoves) return undefined
+    const map = new Map<string, Set<string>>()
+    for (const [from, tos] of Object.entries(serverAllowedMoves)) {
+      map.set(from, new Set(tos))
+    }
+    return map
+  }, [serverAllowedMoves])
+
+  const choices = columns.map((c) => c.value)
   const titleField = fields.find((f) => f.field_type === 'text')
   const [activeEntry, setActiveEntry] = useState<Record<string, unknown> | null>(null)
   const [droppedId, setDroppedId] = useState<string | null>(null)
@@ -183,19 +194,6 @@ export default function KanbanView({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   )
-
-  const columns: KanbanColumn[] = choices.map((value) => ({
-    label: value,
-    value,
-    entries: entries.filter((e) => e[groupField.slug] === value),
-  }))
-
-  // Uncategorized column.
-  const known = new Set(choices)
-  const uncategorized = entries.filter((e) => !known.has(e[groupField.slug] as string))
-  if (uncategorized.length > 0) {
-    columns.push({ label: '미분류', value: '__none__', entries: uncategorized })
-  }
 
   // Compute which columns are allowed/blocked during drag
   const columnDropStates = useMemo(() => {
@@ -288,7 +286,16 @@ export default function KanbanView({
     onCardMove(activeId, toCol === '__none__' ? '' : toCol)
   }
 
-  if (entries.length === 0) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  const totalEntries = columns.reduce((sum, c) => sum + c.entries.length, 0)
+  if (totalEntries === 0) {
     return (
       <EmptyState
         icon={<LayoutGrid className="h-10 w-10" />}

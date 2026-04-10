@@ -332,3 +332,240 @@ export function useSimilarRecords(slug: string | undefined, query: string, field
     staleTime: 30_000,
   })
 }
+
+// ---------------------------------------------------------------------------
+// View-specific endpoints (server-computed)
+// ---------------------------------------------------------------------------
+
+export interface CalendarSpan {
+  entry: Record<string, unknown>
+  label: string
+  startCol: number
+  colSpan: number
+  track: number
+  isStart: boolean
+  isEnd: boolean
+}
+
+export interface CalendarWeek {
+  start: string
+  end: string
+  days: string[]
+  spans: CalendarSpan[]
+  singles: Record<string, Record<string, unknown>[]>
+}
+
+export interface CalendarViewResult {
+  year: number
+  month: number
+  weeks: CalendarWeek[]
+}
+
+export function useCalendarView(
+  slug: string | undefined,
+  params: {
+    year: number
+    month: number
+    dateField: string
+    endDateField?: string
+    filters?: Record<string, string>
+  },
+) {
+  const search = new URLSearchParams()
+  search.set('year', String(params.year))
+  search.set('month', String(params.month))
+  search.set('date_field', params.dateField)
+  if (params.endDateField) search.set('end_date_field', params.endDateField)
+  if (params.filters) {
+    for (const [key, value] of Object.entries(params.filters)) {
+      if (value) search.set(key, value)
+    }
+  }
+
+  return useQuery({
+    queryKey: [...queryKeys.entries.all, slug, 'calendar', params],
+    queryFn: () =>
+      api.get<CalendarViewResult>(`/data/${slug}/calendar?${search.toString()}`),
+    enabled: !!slug && !!params.dateField,
+    staleTime: 30_000,
+  })
+}
+
+export interface GanttRow {
+  id: string
+  title: string
+  startDate: string
+  endDate: string
+  progress: number | null
+  colorKey: string
+  dependencies: string[]
+  user?: string
+  status?: string
+}
+
+export interface GanttMonth {
+  label: string
+  startIndex: number
+  span: number
+}
+
+export interface GanttViewResult {
+  rows: GanttRow[]
+  range: { start: string; end: string; totalDays: number }
+  months: GanttMonth[]
+}
+
+export function useGanttView(
+  slug: string | undefined,
+  params: {
+    startField: string
+    endField?: string
+    filters?: Record<string, string>
+  },
+) {
+  const search = new URLSearchParams()
+  search.set('start_field', params.startField)
+  if (params.endField) search.set('end_field', params.endField)
+  if (params.filters) {
+    for (const [key, value] of Object.entries(params.filters)) {
+      if (value) search.set(key, value)
+    }
+  }
+
+  return useQuery({
+    queryKey: [...queryKeys.entries.all, slug, 'gantt', params],
+    queryFn: () =>
+      api.get<GanttViewResult>(`/data/${slug}/gantt?${search.toString()}`),
+    enabled: !!slug && !!params.startField,
+    staleTime: 30_000,
+  })
+}
+
+export interface KanbanColumn {
+  value: string
+  label: string
+  color?: string
+  entries: Record<string, unknown>[]
+}
+
+export interface KanbanViewResult {
+  columns: KanbanColumn[]
+  allowed_moves?: Record<string, string[]>
+}
+
+export function useKanbanView(
+  slug: string | undefined,
+  params: {
+    groupField: string
+    filters?: Record<string, string>
+  },
+) {
+  const search = new URLSearchParams()
+  search.set('group_field', params.groupField)
+  if (params.filters) {
+    for (const [key, value] of Object.entries(params.filters)) {
+      if (value) search.set(key, value)
+    }
+  }
+
+  return useQuery({
+    queryKey: [...queryKeys.entries.all, slug, 'kanban', params],
+    queryFn: () =>
+      api.get<KanbanViewResult>(`/data/${slug}/kanban?${search.toString()}`),
+    enabled: !!slug && !!params.groupField,
+    staleTime: 30_000,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Global Calendar (cross-collection)
+// ---------------------------------------------------------------------------
+
+export interface GlobalCalendarEvent {
+  id: string
+  label: string
+  date: string
+  endDate?: string
+  collectionId: string
+  collectionLabel: string
+  collectionSlug: string
+  collectionIcon?: string
+}
+
+export function useGlobalCalendarEvents(year: number, month: number) {
+  return useQuery({
+    queryKey: ['globalCalendar', year, month],
+    queryFn: () =>
+      api.get<GlobalCalendarEvent[]>(
+        `/calendar/events?year=${year}&month=${month}`,
+      ),
+    staleTime: 30_000,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Relationship Graph
+// ---------------------------------------------------------------------------
+
+export interface GraphNode {
+  id: string
+  label: string
+  icon?: string
+  fieldCount: number
+}
+
+export interface GraphEdge {
+  id: string
+  sourceId: string
+  targetId: string
+  label: string
+  relationType: string
+}
+
+export interface RelationshipGraphResult {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+export function useRelationshipGraphAPI() {
+  return useQuery({
+    queryKey: ['relationshipGraph'],
+    queryFn: () => api.get<RelationshipGraphResult>('/schema/relationship-graph'),
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Available Transitions
+// ---------------------------------------------------------------------------
+
+export interface AvailableTransition {
+  id: string
+  label: string
+  to_status: string
+  to_color: string
+}
+
+export interface TransitionsResult {
+  transitions: AvailableTransition[]
+  allowed_moves: Record<string, string[]>
+}
+
+export function useAvailableTransitions(
+  collectionId: string | undefined,
+  status?: string,
+) {
+  const search = new URLSearchParams()
+  if (status) search.set('status', status)
+  const qs = search.toString()
+
+  return useQuery({
+    queryKey: ['transitions', collectionId, status],
+    queryFn: () =>
+      api.get<TransitionsResult>(
+        `/schema/collections/${collectionId}/process/transitions${qs ? `?${qs}` : ''}`,
+      ),
+    enabled: !!collectionId,
+    staleTime: 30_000,
+  })
+}
