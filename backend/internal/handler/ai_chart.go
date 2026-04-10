@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -57,6 +58,9 @@ Return a JSON object with these fields:
 
 // BuildChart generates a chart configuration from a natural language description.
 func (h *AIHandler) BuildChart(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 120*time.Second)
+	defer cancel()
+
 	collectionID := chi.URLParam(r, "id")
 
 	var req aiChartRequest

@@ -9,6 +9,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   DndContext,
   type DragEndEvent,
@@ -454,6 +455,26 @@ export function DataTable<T>({
     [table],
   )
 
+  // Virtual scrolling — only activate when row count exceeds threshold.
+  const ROW_HEIGHT = 41
+  const VIRTUAL_THRESHOLD = 40
+  const useVirtual = visibleRows.length > VIRTUAL_THRESHOLD
+  const tableBodyRef = useRef<HTMLTableSectionElement>(null)
+
+  const rowVirtualizer = useVirtualizer({
+    count: visibleRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+    enabled: useVirtual,
+  })
+
+  // Scroll active cell into view when navigating via keyboard.
+  useEffect(() => {
+    if (!useVirtual || !grid.activeCell) return
+    rowVirtualizer.scrollToIndex(grid.activeCell.row, { align: 'auto' })
+  }, [useVirtual, grid.activeCell, rowVirtualizer])
+
   return (
     <div className="space-y-3">
       {/* Toolbar */}
@@ -512,7 +533,7 @@ export function DataTable<T>({
           scrollRef.current = el
           ;(grid.containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
         }}
-        className="rounded-lg border border-stone-200/80 bg-white shadow-sm overflow-auto focus:outline-none"
+        className={`rounded-lg border border-stone-200/80 bg-white shadow-sm overflow-auto focus:outline-none ${useVirtual ? 'max-h-[calc(100vh-280px)]' : ''}`}
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
@@ -588,7 +609,11 @@ export function DataTable<T>({
             ))}
             </DndContext>
           </TableHeader>
-          <TableBody role="rowgroup">
+          <TableBody
+            ref={tableBodyRef}
+            role="rowgroup"
+            style={useVirtual ? { height: rowVirtualizer.getTotalSize(), position: 'relative' } : undefined}
+          >
             {visibleRows.length === 0 ? (
               <TableRow role="row">
                 <TableCell role="gridcell" colSpan={columns.length}>
@@ -596,7 +621,9 @@ export function DataTable<T>({
                 </TableCell>
               </TableRow>
             ) : (
-              visibleRows.map((row, rowIdx) => {
+              (useVirtual ? rowVirtualizer.getVirtualItems() : visibleRows.map((_, i) => ({ index: i, start: 0, size: ROW_HEIGHT }))).map((virtualItem) => {
+                const rowIdx = virtualItem.index
+                const row = visibleRows[rowIdx]
                 const rowId = String((row.original as Record<string, unknown>).id ?? row.id)
                 const isNewRow = newRowId != null && rowId === newRowId
                 return (
@@ -605,6 +632,14 @@ export function DataTable<T>({
                   role="row"
                   aria-rowindex={(page - 1) * limit + rowIdx + 2}
                   className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as Record<string, unknown>)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
+                  style={useVirtual ? {
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${virtualItem.size}px`,
+                    transform: `translateY(${virtualItem.start}px)`,
+                  } : undefined}
                   onClick={() => {
                     // Only trigger row click if no cell is active (user clicking outside grid cells).
                     if (!grid.activeCell && onRowClick) {

@@ -22,7 +22,7 @@ import {
   Ellipsis,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -44,7 +44,6 @@ import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import BulkEditPanel from '@/components/works/BulkEditPanel'
 import CSVImportPreview from '@/components/works/CSVImportPreview'
-import EntrySheet from '@/components/works/EntrySheet'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
@@ -80,7 +79,6 @@ import {
   useDeleteEntry,
   useEntries,
   useTotals,
-  useEntryDefaults,
   useUpdateEntry,
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
@@ -108,6 +106,7 @@ function removeCondFromGroup(group: FilterGroup, condId: string): FilterGroup {
 
 export default function AppViewPage() {
   const { appId } = useParams()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = searchParams.get('tab') || 'list'
   const setActiveTab = useCallback((tab: string | number) => {
@@ -121,13 +120,9 @@ export default function AppViewPage() {
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(DEFAULT_LIMIT)
   const [sorting, setSorting] = useState<SortingState>([])
-  const [sheetOpen, setSheetOpen] = useState(false)
-  const [editEntry, setEditEntry] = useState<Record<string, unknown> | undefined>()
-  const [duplicateData, setDuplicateData] = useState<Record<string, unknown> | undefined>()
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importedCount, setImportedCount] = useState(0)
-  const [newEntryId, setNewEntryId] = useState<string | null>(null)
   const [hotkeyHelpOpen, setHotkeyHelpOpen] = useState(false)
 
   // Filter state — uses FilterGroup for AND/OR support
@@ -239,7 +234,7 @@ export default function AppViewPage() {
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
-  const { data: entryDefaults } = useEntryDefaults(collection?.slug)
+
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
@@ -269,7 +264,7 @@ export default function AppViewPage() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   useHotkeys([
     { key: '?', handler: () => setHotkeyHelpOpen(true) },
-    { key: 'mod+n', handler: () => { setEditEntry(undefined); setSheetOpen(true) } },
+    { key: 'mod+n', handler: () => navigate(`/apps/${appId}/entries/new`) },
     { key: 'mod+f', handler: () => searchInputRef.current?.focus() },
   ])
 
@@ -750,16 +745,11 @@ export default function AppViewPage() {
   const hasProcessKanban = process?.is_enabled && (process.statuses?.length ?? 0) > 0
 
   function handleEntryClick(entry: Record<string, unknown>) {
-    setEditEntry(entry)
-    setSheetOpen(true)
+    navigate(`/apps/${appId}/entries/${entry.id}`)
   }
 
   function handleEntryClickById(entryId: string) {
-    const entry = list?.data.find((e) => String(e.id) === entryId)
-    if (entry) {
-      setEditEntry(entry)
-      setSheetOpen(true)
-    }
+    navigate(`/apps/${appId}/entries/${entryId}`)
   }
 
   function handleGanttUpdate(entryId: string, updates: Record<string, unknown>) {
@@ -861,48 +851,6 @@ export default function AppViewPage() {
     )
   }
 
-  function handleSubmit(data: Record<string, unknown>) {
-    if (editEntry?.id) {
-      const version = editEntry._version as number | undefined
-      if (version != null) data._version = version
-      updateEntry.mutate(
-        { id: String(editEntry.id), body: data },
-        {
-          onSuccess: () => toast.success('수정되었습니다'),
-          onError: (err) => {
-            if (err instanceof ApiError && err.isConflict()) {
-              toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
-              refetch()
-              setSheetOpen(false)
-            } else {
-              retryToast(err, () => handleSubmit(data))
-            }
-          },
-        },
-      )
-    } else {
-      createEntry.mutate(data, {
-        onSuccess: (result) => {
-          toast.success('생성되었습니다')
-          const id = (result as Record<string, unknown>)?.id
-          if (id) {
-            setNewEntryId(String(id))
-            setTimeout(() => setNewEntryId(null), 500)
-          }
-        },
-        onError: (err) => retryToast(err, () => handleSubmit(data)),
-      })
-    }
-  }
-
-  function handleDuplicate(data: Record<string, unknown>) {
-    setSheetOpen(false)
-    setTimeout(() => {
-      setDuplicateData(data)
-      setEditEntry(undefined)
-      setSheetOpen(true)
-    }, 200)
-  }
 
   function handleDelete() {
     if (!deleteId) return
@@ -1378,12 +1326,7 @@ export default function AppViewPage() {
                 <Button variant="outline">설정</Button>
               </Link>
             )}
-            <Button
-              onClick={() => {
-                setEditEntry(undefined)
-                setSheetOpen(true)
-              }}
-            >
+            <Button onClick={() => navigate(`/apps/${appId}/entries/new`)}>
               {TERM.newRecord}
             </Button>
           </>
@@ -1546,7 +1489,7 @@ export default function AppViewPage() {
                     필터 초기화
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={() => { setEditEntry(undefined); setSheetOpen(true) }}>
+                  <Button size="sm" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
                     {TERM.newRecord}
                   </Button>
                 )
@@ -1558,7 +1501,7 @@ export default function AppViewPage() {
               initialColumnVisibility={initialColumnVisibility}
               onColumnVisibilityChange={handleColumnVisibilityChange}
               highlightRows={importedCount}
-              newRowId={newEntryId}
+              newRowId={null}
               selectable
               selectedRowIds={selectedRowIds}
               onSelectionChange={setSelectedRowIds}
@@ -1577,7 +1520,7 @@ export default function AppViewPage() {
                 filters={filters}
                 onCardClick={handleEntryClick}
                 onCardMove={handleProcessCardMove}
-                onAddEntry={() => { setEditEntry(undefined); setSheetOpen(true) }}
+                onAddEntry={() => navigate(`/apps/${appId}/entries/new`)}
               />
             </TabsContent>
           )}
@@ -1591,7 +1534,7 @@ export default function AppViewPage() {
                 filters={filters}
                 onCardClick={handleEntryClick}
                 onCardMove={handleCardMove}
-                onAddEntry={() => { setEditEntry(undefined); setSheetOpen(true) }}
+                onAddEntry={() => navigate(`/apps/${appId}/entries/new`)}
               />
             </TabsContent>
           )}
@@ -1606,9 +1549,11 @@ export default function AppViewPage() {
                 onEntryClick={handleEntryClick}
                 onEntryUpdate={handleGanttUpdate}
                 onCreateEntry={(prefill) => {
-                  setEditEntry(undefined)
-                  setDuplicateData(prefill)
-                  setSheetOpen(true)
+                  const params = new URLSearchParams()
+                  for (const [k, v] of Object.entries(prefill)) {
+                    if (v != null) params.set(k, String(v))
+                  }
+                  navigate(`/apps/${appId}/entries/new?${params.toString()}`)
                 }}
               />
             </TabsContent>
@@ -1653,19 +1598,6 @@ export default function AppViewPage() {
         </Tabs>
       )}
 
-      <EntrySheet
-        open={sheetOpen}
-        onClose={() => { setSheetOpen(false); setDuplicateData(undefined) }}
-        fields={collection.fields ?? []}
-        slug={collection.slug}
-        collectionId={collection.id}
-        initialData={editEntry ?? duplicateData ?? (entryDefaults && Object.keys(entryDefaults).length > 0 ? entryDefaults : undefined)}
-        onSubmit={handleSubmit}
-        submitting={createEntry.isPending || updateEntry.isPending}
-        title={editEntry ? `${TERM.record} 편집` : duplicateData ? '항목 복제' : TERM.newRecord}
-        process={process}
-        onDuplicate={handleDuplicate}
-      />
 
       <CSVImportPreview
         open={csvPreviewOpen}

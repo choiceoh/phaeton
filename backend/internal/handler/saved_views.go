@@ -32,7 +32,20 @@ func (h *SavedViewHandler) ListSavedViews(w http.ResponseWriter, r *http.Request
 	if views == nil {
 		views = []schema.SavedView{}
 	}
-	writeJSON(w, http.StatusOK, views)
+
+	// Apply pagination.
+	total := int64(len(views))
+	page, limit, offset := ParsePagination(r.URL.Query())
+	if offset >= len(views) {
+		views = []schema.SavedView{}
+	} else {
+		end := offset + limit
+		if end > len(views) {
+			end = len(views)
+		}
+		views = views[offset:end]
+	}
+	writeList(w, views, total, page, limit)
 }
 
 // CreateSavedView creates a new saved view for a collection.

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/phaeton/backend/internal/ai"
 )
@@ -47,6 +48,9 @@ Do NOT guess app names or fields — always use the tools to look up real data.
 
 // Chat handles conversational Q&A about the platform.
 func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 120*time.Second)
+	defer cancel()
+
 	var req aiChatRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

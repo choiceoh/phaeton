@@ -1,6 +1,7 @@
-import { GanttChart, Loader2 } from 'lucide-react'
+import { GanttChart, Loader2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { Button } from '@/components/ui/button'
 import EmptyState from '@/components/common/EmptyState'
 import { useGanttView, type GanttRow } from '@/hooks/useEntries'
 import type { Field } from '@/lib/types'
@@ -8,9 +9,23 @@ import type { Field } from '@/lib/types'
 const DAY_WIDTH = 36
 const ROW_HEIGHT = 36
 const HEADER_HEIGHT = 52
-const LEFT_PANEL_WIDTH = 420
 const BAR_HEIGHT = 22
 const BAR_Y_OFFSET = (ROW_HEIGHT - BAR_HEIGHT) / 2
+
+function useResponsivePanel() {
+  const [width, setWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1280,
+  )
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  if (width < 640) return { panelWidth: 0, defaultCollapsed: true }
+  if (width < 1024) return { panelWidth: 220, defaultCollapsed: false }
+  return { panelWidth: 420, defaultCollapsed: false }
+}
 
 // Distinct hue palette for assignee/status color coding
 const BAR_PALETTE = [
@@ -63,6 +78,11 @@ function diffDays(a: Date, b: Date): number {
 }
 
 export default function GanttView({ slug, fields, filters, onEntryClick, onEntryUpdate }: Props) {
+  const { panelWidth, defaultCollapsed } = useResponsivePanel()
+  const [panelCollapsed, setPanelCollapsed] = useState(defaultCollapsed)
+  const effectivePanelWidth = panelCollapsed ? 0 : panelWidth
+  const isCompact = panelWidth <= 220
+
   // Detect date fields for drag updates
   const dateFields = useMemo(
     () => fields.filter((f) => f.field_type === 'date' || f.field_type === 'datetime'),
@@ -330,35 +350,51 @@ export default function GanttView({ slug, fields, filters, onEntryClick, onEntry
 
   return (
     <div
-      className="flex rounded-md border overflow-hidden"
+      className="flex rounded-md border overflow-hidden relative"
       style={{ height: 'calc(100vh - 320px)', minHeight: 400 }}
     >
+      {/* Panel toggle button */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute top-1 left-1 z-20 h-7 w-7 p-0"
+        onClick={() => setPanelCollapsed((v) => !v)}
+        title={panelCollapsed ? '목록 패널 열기' : '목록 패널 닫기'}
+      >
+        {panelCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+      </Button>
+
       {/* Left panel */}
+      {!panelCollapsed && effectivePanelWidth > 0 && (
       <div
-        className="flex flex-col flex-shrink-0 border-r"
-        style={{ width: LEFT_PANEL_WIDTH }}
+        className="flex flex-col flex-shrink-0 border-r transition-[width] duration-200"
+        style={{ width: effectivePanelWidth }}
       >
         {/* Left header */}
         <div
           className="flex border-b bg-muted/30"
           style={{ height: HEADER_HEIGHT, minHeight: HEADER_HEIGHT }}
         >
-          <div className="flex-1 px-3 flex items-center text-xs font-medium">제목</div>
-          <div className="w-[80px] px-2 flex items-center text-xs font-medium border-l">
-            시작일
-          </div>
-          <div className="w-[80px] px-2 flex items-center text-xs font-medium border-l">
-            종료일
-          </div>
-          {userField && (
-            <div className="w-[64px] px-2 flex items-center text-xs font-medium border-l">
-              담당자
-            </div>
-          )}
-          {progressField && (
-            <div className="w-[56px] px-2 flex items-center text-xs font-medium border-l">
-              진행률
-            </div>
+          <div className="flex-1 px-3 pl-9 flex items-center text-xs font-medium">제목</div>
+          {!isCompact && (
+            <>
+              <div className="w-[80px] px-2 flex items-center text-xs font-medium border-l">
+                시작일
+              </div>
+              <div className="w-[80px] px-2 flex items-center text-xs font-medium border-l">
+                종료일
+              </div>
+              {userField && (
+                <div className="w-[64px] px-2 flex items-center text-xs font-medium border-l">
+                  담당자
+                </div>
+              )}
+              {progressField && (
+                <div className="w-[56px] px-2 flex items-center text-xs font-medium border-l">
+                  진행률
+                </div>
+              )}
+            </>
           )}
         </div>
         {/* Left body */}
@@ -378,46 +414,51 @@ export default function GanttView({ slug, fields, filters, onEntryClick, onEntry
               <div className="flex-1 px-3 flex items-center text-sm truncate">
                 {row.title}
               </div>
-              <div className="w-[80px] px-2 flex items-center text-xs text-muted-foreground border-l">
-                {row.startDate
-                  ? `${parseDate(row.startDate).getMonth() + 1}/${parseDate(row.startDate).getDate()}`
-                  : '-'}
-              </div>
-              <div className="w-[80px] px-2 flex items-center text-xs text-muted-foreground border-l">
-                {row.endDate
-                  ? `${parseDate(row.endDate).getMonth() + 1}/${parseDate(row.endDate).getDate()}`
-                  : '-'}
-              </div>
-              {userField && (
-                <div className="w-[64px] px-2 flex items-center text-xs text-muted-foreground border-l truncate">
-                  {row.user || '-'}
-                </div>
-              )}
-              {progressField && (
-                <div className="w-[56px] px-2 flex items-center text-xs border-l">
-                  {row.progress !== null ? (
-                    <div className="flex items-center gap-1 w-full">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-primary"
-                          style={{
-                            width: `${Math.min(100, Math.max(0, row.progress))}%`,
-                          }}
-                        />
-                      </div>
-                      <span className="text-[10px] text-muted-foreground">
-                        {row.progress}%
-                      </span>
+              {!isCompact && (
+                <>
+                  <div className="w-[80px] px-2 flex items-center text-xs text-muted-foreground border-l">
+                    {row.startDate
+                      ? `${parseDate(row.startDate).getMonth() + 1}/${parseDate(row.startDate).getDate()}`
+                      : '-'}
+                  </div>
+                  <div className="w-[80px] px-2 flex items-center text-xs text-muted-foreground border-l">
+                    {row.endDate
+                      ? `${parseDate(row.endDate).getMonth() + 1}/${parseDate(row.endDate).getDate()}`
+                      : '-'}
+                  </div>
+                  {userField && (
+                    <div className="w-[64px] px-2 flex items-center text-xs text-muted-foreground border-l truncate">
+                      {row.user || '-'}
                     </div>
-                  ) : (
-                    '-'
                   )}
-                </div>
+                  {progressField && (
+                    <div className="w-[56px] px-2 flex items-center text-xs border-l">
+                      {row.progress !== null ? (
+                        <div className="flex items-center gap-1 w-full">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary"
+                              style={{
+                                width: `${Math.min(100, Math.max(0, row.progress))}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">
+                            {row.progress}%
+                          </span>
+                        </div>
+                      ) : (
+                        '-'
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ))}
         </div>
       </div>
+      )}
 
       {/* Right panel - timeline */}
       <div

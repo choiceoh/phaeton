@@ -33,16 +33,27 @@ func NewMemberHandler(pool *pgxpool.Pool) *MemberHandler {
 	return &MemberHandler{pool: pool}
 }
 
-// List returns all members of a collection.
+// List returns members of a collection with pagination.
 func (h *MemberHandler) List(w http.ResponseWriter, r *http.Request) {
 	collectionID := chi.URLParam(r, "id")
+	page, limit, offset := ParsePagination(r.URL.Query())
+
+	var total int64
+	if err := h.pool.QueryRow(r.Context(),
+		`SELECT COUNT(*) FROM _meta.collection_members WHERE collection_id = $1`,
+		collectionID,
+	).Scan(&total); err != nil {
+		handleErr(w, r, err)
+		return
+	}
 
 	rows, err := h.pool.Query(r.Context(), `
 		SELECT m.id, m.collection_id, m.user_id, u.name, u.email, m.role, m.created_at
 		FROM _meta.collection_members m
 		JOIN auth.users u ON u.id = m.user_id
 		WHERE m.collection_id = $1
-		ORDER BY m.created_at`, collectionID)
+		ORDER BY m.created_at DESC
+		LIMIT $2 OFFSET $3`, collectionID, limit, offset)
 	if err != nil {
 		handleErr(w, r, err)
 		return
@@ -67,7 +78,7 @@ func (h *MemberHandler) List(w http.ResponseWriter, r *http.Request) {
 		handleErr(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, members)
+	writeList(w, members, total, page, limit)
 }
 
 // Add adds a user as a member of a collection.
@@ -98,6 +109,19 @@ func (h *MemberHandler) Add(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Role != "owner" && body.Role != "editor" && body.Role != "viewer" {
 		writeError(w, http.StatusBadRequest, "role must be owner, editor, or viewer")
+		return
+	}
+
+	// Verify user exists before adding as member.
+	var userExists bool
+	if err := h.pool.QueryRow(r.Context(),
+		`SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = $1)`, body.UserID,
+	).Scan(&userExists); err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	if !userExists {
+		writeError(w, http.StatusBadRequest, "user not found")
 		return
 	}
 

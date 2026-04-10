@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -38,6 +39,9 @@ Return a JSON object mapping CSV headers to field slugs:
 
 // MapCSVColumns maps CSV headers to collection field slugs using AI.
 func (h *AIHandler) MapCSVColumns(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 120*time.Second)
+	defer cancel()
+
 	collectionSlug := chi.URLParam(r, "slug")
 
 	var req aiCSVMapRequest

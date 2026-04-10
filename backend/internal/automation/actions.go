@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,10 +14,20 @@ import (
 )
 
 func (e *Engine) executeActions(ctx context.Context, a Automation, ev events.Event) error {
+	var errs []string
 	for _, action := range a.Actions {
 		if err := e.executeAction(ctx, action, ev); err != nil {
-			return fmt.Errorf("action %s (%s): %w", action.ID, action.ActionType, err)
+			slog.Error("automation: action failed",
+				"automation_id", a.ID,
+				"action_id", action.ID,
+				"action_type", action.ActionType,
+				"error", err,
+			)
+			errs = append(errs, fmt.Sprintf("action %s (%s): %s", action.ID, action.ActionType, err))
 		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("%d action(s) failed: %s", len(errs), strings.Join(errs, "; "))
 	}
 	return nil
 }

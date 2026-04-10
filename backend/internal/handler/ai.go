@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -260,6 +261,9 @@ func (h *AIHandler) GenerateSlug(w http.ResponseWriter, r *http.Request) {
 // BuildCollection generates a collection schema from a natural-language description.
 // Flow: triage (questions?) → generate → text self-critique.
 func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 120*time.Second)
+	defer cancel()
+
 	var req aiBuildRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

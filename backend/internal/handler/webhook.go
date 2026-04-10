@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -112,9 +111,10 @@ func (h *WebhookHandler) Receive(w http.ResponseWriter, r *http.Request) {
 
 	if err := fn(json.RawMessage(body)); err != nil {
 		slog.Error("webhook: handler failed", "topic", topic, "error", err)
-		// Mark as processed (with failure noted in logs).
+		// Mark as processed with error message.
 		h.pool.Exec(r.Context(),
-			`UPDATE _meta.webhook_events SET processed = TRUE WHERE id = $1`, evt.ID)
+			`UPDATE _meta.webhook_events SET processed = TRUE, error_message = $2 WHERE id = $1`,
+			evt.ID, err.Error())
 		apierr.Internal("webhook processing failed").Write(w)
 		return
 	}
@@ -129,15 +129,7 @@ func (h *WebhookHandler) Receive(w http.ResponseWriter, r *http.Request) {
 
 // List returns paginated webhook events (GET /api/webhooks).
 func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit < 1 || limit > 100 {
-		limit = 50
-	}
-	offset := (page - 1) * limit
+	page, limit, offset := ParsePagination(r.URL.Query())
 
 	topicFilter := r.URL.Query().Get("topic")
 
