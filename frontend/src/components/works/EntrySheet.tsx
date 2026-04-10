@@ -90,7 +90,7 @@ export default function EntrySheet({
               </TabsContent>
               <TabsContent value="comments" className="mt-4">
                 <div className="space-y-3">
-                  {commentsData && commentsData.data.length > 0 ? (
+                  {commentsData?.data?.length ? (
                     commentsData.data.map((c) => (
                       <div key={c.id} className="rounded-md border p-3 text-sm">
                         <div className="flex items-center justify-between">
@@ -139,7 +139,7 @@ export default function EntrySheet({
                 </div>
               </TabsContent>
               <TabsContent value="history" className="mt-4">
-                {historyData && historyData.data.length > 0 ? (
+                {historyData?.data?.length ? (
                   <div className="space-y-3">
                     {historyData.data.map((change) => (
                       <div key={change.id} className="rounded-md border p-3 text-sm">

@@ -42,7 +42,7 @@ export default function NotificationBell() {
           )}
         </div>
         <div className="max-h-80 overflow-y-auto">
-          {notifData && notifData.data.length > 0 ? (
+          {notifData?.data?.length ? (
             notifData.data.map((n) => (
               <button
                 key={n.id}
