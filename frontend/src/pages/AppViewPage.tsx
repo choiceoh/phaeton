@@ -1,6 +1,7 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
 import {
   ArrowDownUp,
+  BarChart3,
   Calendar,
   Download,
   Filter,
@@ -23,6 +24,7 @@ import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
+import ChartPanel from '@/components/works/views/ChartPanel'
 import KanbanView from '@/components/works/views/KanbanView'
 import CalendarView from '@/components/works/views/CalendarView'
 import { Badge } from '@/components/ui/badge'
@@ -564,6 +566,12 @@ export default function AppViewPage() {
         description={collection.description}
         actions={
           <>
+            <Link to={`/apps/${collection.id}/dashboard`}>
+              <Button variant="outline" className="gap-1">
+                <BarChart3 className="h-4 w-4" />
+                대시보드
+              </Button>
+            </Link>
             <RoleGate roles={['director', 'pm']}>
               <Link to={`/apps/${collection.id}/settings`}>
                 <Button variant="outline">설정</Button>
@@ -671,6 +679,12 @@ export default function AppViewPage() {
           </Button>
         </div>
       )}
+
+      <ChartPanel
+        slug={collection.slug}
+        fields={collection.fields ?? []}
+        totalRecords={list?.total ?? 0}
+      />
 
       {entriesLoading && !list && <LoadingState />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
