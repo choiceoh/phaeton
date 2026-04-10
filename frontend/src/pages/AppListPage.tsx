@@ -7,7 +7,6 @@ import EmptyState from '@/components/common/EmptyState'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
-import RoleGate from '@/components/common/RoleGate'
 import TemplateGallery from '@/components/works/TemplateGallery'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,21 +45,19 @@ export default function AppListPage() {
                 관계도
               </Button>
             </Link>
-            <RoleGate roles={['director', 'pm']}>
-              <Button
-                variant={showTemplates ? 'secondary' : 'outline'}
-                onClick={() => setShowTemplates(!showTemplates)}
-                className="gap-1"
-              >
-                템플릿
-                {showTemplates
-                  ? <ChevronUp className="h-3.5 w-3.5" />
-                  : <ChevronDown className="h-3.5 w-3.5" />}
-              </Button>
-              <Link to="/apps/new">
-                <Button>{TERM.newCollection}</Button>
-              </Link>
-            </RoleGate>
+            <Button
+              variant={showTemplates ? 'secondary' : 'outline'}
+              onClick={() => setShowTemplates(!showTemplates)}
+              className="gap-1"
+            >
+              템플릿
+              {showTemplates
+                ? <ChevronUp className="h-3.5 w-3.5" />
+                : <ChevronDown className="h-3.5 w-3.5" />}
+            </Button>
+            <Link to="/apps/new">
+              <Button>{TERM.newCollection}</Button>
+            </Link>
           </>
         }
       />
@@ -85,11 +82,9 @@ export default function AppListPage() {
             description={TERM.noCollectionsDesc}
             icon={<Layers className="h-10 w-10" />}
             action={
-              <RoleGate roles={['director', 'pm']}>
-                <Link to="/apps/new">
-                  <Button>{TERM.newCollection}</Button>
-                </Link>
-              </RoleGate>
+              <Link to="/apps/new">
+                <Button>{TERM.newCollection}</Button>
+              </Link>
             }
           />
           {/* Onboarding guide */}

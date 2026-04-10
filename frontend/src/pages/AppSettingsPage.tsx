@@ -6,7 +6,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
-import RoleGate from '@/components/common/RoleGate'
+import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
 import IconPicker from '@/components/works/IconPicker'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,8 @@ export default function AppSettingsPage() {
   const { data: members } = useMembers(appId)
   const addMember = useAddMember(appId ?? '')
   const removeMember = useRemoveMember(appId ?? '')
+  const { data: currentUser } = useCurrentUser()
+  const canManage = canManageCollection(currentUser, collection?.created_by)
 
   const [newMemberUserId, setNewMemberUserId] = useState('')
   const [newMemberRole, setNewMemberRole] = useState('viewer')
@@ -150,7 +152,7 @@ export default function AppSettingsPage() {
       />
 
       <div className="space-y-6">
-        <RoleGate roles={['director', 'pm']}>
+        {canManage && (
           <section>
             <h2 className="mb-3 text-lg font-semibold">기본 정보</h2>
             <Card className="p-4">
@@ -170,16 +172,16 @@ export default function AppSettingsPage() {
               </div>
             </Card>
           </section>
-        </RoleGate>
+        )}
 
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold">항목 ({collection.fields?.length ?? 0})</h2>
-            <RoleGate roles={['director', 'pm']}>
+            {canManage && (
               <Button size="sm" onClick={() => setNewFieldOpen(!newFieldOpen)}>
                 {newFieldOpen ? '취소' : '+ 항목 추가'}
               </Button>
-            </RoleGate>
+            )}
           </div>
 
           {newFieldOpen && (
@@ -271,7 +273,7 @@ export default function AppSettingsPage() {
                   {f.is_unique && <Badge variant="outline">고유</Badge>}
                   {f.is_indexed && <Badge variant="outline">인덱스</Badge>}
                 </div>
-                <RoleGate roles={['director']}>
+                {canManage && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -279,13 +281,13 @@ export default function AppSettingsPage() {
                   >
                     삭제
                   </Button>
-                </RoleGate>
+                )}
               </Card>
             ))}
           </div>
         </section>
 
-        <RoleGate roles={['director', 'pm']}>
+        {canManage && (
           <section>
             <h2 className="text-lg font-semibold">프로세스</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -297,9 +299,9 @@ export default function AppSettingsPage() {
               </Button>
             </Link>
           </section>
-        </RoleGate>
+        )}
 
-        <RoleGate roles={['director', 'pm']}>
+        {canManage && (
           <section>
             <h2 className="text-lg font-semibold">자동화</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -311,9 +313,9 @@ export default function AppSettingsPage() {
               </Button>
             </Link>
           </section>
-        </RoleGate>
+        )}
 
-        <RoleGate roles={['director']}>
+        {canManage && (
           <section>
             <h2 className="mb-3 text-lg font-semibold">멤버 ({members?.length ?? 0})</h2>
             <div className="space-y-2">
@@ -382,9 +384,9 @@ export default function AppSettingsPage() {
               </div>
             </Card>
           </section>
-        </RoleGate>
+        )}
 
-        <RoleGate roles={['director']}>
+        {canManage && (
           <section>
             <h2 className="mb-1 text-lg font-semibold">데이터 열람 범위</h2>
             <p className="mb-3 text-sm text-muted-foreground">
@@ -441,9 +443,9 @@ export default function AppSettingsPage() {
               />
             )}
           </section>
-        </RoleGate>
+        )}
 
-        <RoleGate roles={['director']}>
+        {canManage && (
           <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
             <h2 className="text-base font-semibold text-destructive">위험 영역</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -459,7 +461,7 @@ export default function AppSettingsPage() {
               업무 삭제
             </Button>
           </section>
-        </RoleGate>
+        )}
       </div>
 
       <ConfirmDialog
