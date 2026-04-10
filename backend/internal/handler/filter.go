@@ -14,29 +14,30 @@ var reservedParams = map[string]bool{
 	"sort": true, "page": true, "limit": true, "confirm": true, "expand": true, "q": true,
 }
 
-// BuildSearchClause generates an ILIKE-based full-text search condition across
-// all text/textarea fields. Returns empty string and nil args if q is empty.
+// BuildSearchClause generates a full-text search condition using the _tsv
+// tsvector column (GIN-indexed). Returns empty string and nil args if q is
+// empty or the collection has no text/textarea fields.
 func BuildSearchClause(q string, fields []schema.Field, prefix string, argStart int) (clause string, args []any) {
 	if q == "" {
 		return "", nil
 	}
-	var conditions []string
+	hasText := false
 	for _, f := range fields {
-		if f.FieldType != schema.FieldText && f.FieldType != schema.FieldTextarea {
-			continue
+		if f.FieldType == schema.FieldText || f.FieldType == schema.FieldTextarea {
+			hasText = true
+			break
 		}
-		var qCol string
-		if prefix != "" {
-			qCol = fmt.Sprintf(`%s."%s"`, prefix, f.Slug)
-		} else {
-			qCol = fmt.Sprintf("%q", f.Slug)
-		}
-		conditions = append(conditions, fmt.Sprintf("%s ILIKE $%d", qCol, argStart))
 	}
-	if len(conditions) == 0 {
+	if !hasText {
 		return "", nil
 	}
-	return "AND (" + strings.Join(conditions, " OR ") + ")", []any{"%" + q + "%"}
+	var col string
+	if prefix != "" {
+		col = fmt.Sprintf(`%s."_tsv"`, prefix)
+	} else {
+		col = `"_tsv"`
+	}
+	return fmt.Sprintf("AND %s @@ plainto_tsquery('simple', $%d)", col, argStart), []any{q}
 }
 
 // ParseFilters converts query params into a WHERE clause with parameterised args.
