@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { type BatchCellEditEvent, type CellEditEvent, type FieldMeta, DataTable } from '@/components/common/DataTable'
+import { DataTable } from '@/components/common/DataTable'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
@@ -148,9 +148,6 @@ export default function AppViewPage() {
 
   // Process toggle (frontend-only)
   const [processVisible, setProcessVisible] = useState(true)
-
-  // Cell save state for visual feedback (key = "rowId:columnId")
-  const [cellSaveState, setCellSaveState] = useState<Map<string, 'saving' | 'saved' | 'error'>>(new Map())
 
   // Saved views state
   const [activeView, setActiveView] = useState<SavedView | null>(null)
@@ -271,11 +268,6 @@ export default function AppViewPage() {
   ])
 
   // Formula fields are read-only in the grid.
-  const formulaReadonlyCols = useMemo(
-    () => collection?.fields?.filter((f) => f.field_type === 'formula').map((f) => f.slug) ?? [],
-    [collection],
-  )
-
   // Numeric fields for summary row.
   const numericFields = useMemo(
     () =>
@@ -459,16 +451,6 @@ export default function AppViewPage() {
     return cols
   }, [collection, process, processVisible])
 
-  // Build fieldMeta map for type-specific inline editors.
-  const fieldMeta = useMemo<Record<string, FieldMeta>>(() => {
-    if (!collection?.fields) return {}
-    const meta: Record<string, FieldMeta> = {}
-    for (const f of collection.fields) {
-      meta[f.slug] = { fieldType: f.field_type, options: f.options }
-    }
-    return meta
-  }, [collection?.fields])
-
   // Default: hide columns beyond the first 8 data fields, restored from localStorage if available.
   const colVisStorageKey = appId ? `phaeton:colvis:${appId}` : null
   const initialColumnVisibility = useMemo<Record<string, boolean>>(() => {
@@ -505,98 +487,6 @@ export default function AppViewPage() {
     [list],
   )
 
-  // Inline edit handler with cell-level visual feedback + undo.
-  const handleCellEdit = useCallback(
-    (event: CellEditEvent) => {
-      const cellKey = `${event.rowId}:${event.columnId}`
-      const body: Record<string, unknown> = { [event.columnId]: event.value }
-      const version = getRowVersion(event.rowId)
-      if (version != null) body._version = version
-
-      // Capture old value for undo.
-      const oldValue = list?.data?.find((r) => String(r.id) === event.rowId)?.[event.columnId]
-
-      setCellSaveState((prev) => new Map(prev).set(cellKey, 'saving'))
-      updateEntry.mutate(
-        { id: event.rowId, body },
-        {
-          onSuccess: () => {
-            setCellSaveState((prev) => new Map(prev).set(cellKey, 'saved'))
-            setTimeout(() => {
-              setCellSaveState((prev) => {
-                const next = new Map(prev)
-                next.delete(cellKey)
-                return next
-              })
-            }, 1500)
-            // Offer undo only when old value differs.
-            if (oldValue !== event.value) {
-              undoToast.push(
-                '수정되었습니다',
-                () => {
-                  const undoBody: Record<string, unknown> = { [event.columnId]: oldValue }
-                  updateEntry.mutate({ id: event.rowId, body: undoBody })
-                },
-                () => {
-                  const redoBody: Record<string, unknown> = { [event.columnId]: event.value }
-                  updateEntry.mutate({ id: event.rowId, body: redoBody })
-                },
-              )
-            }
-          },
-          onError: (err) => {
-            setCellSaveState((prev) => new Map(prev).set(cellKey, 'error'))
-            setTimeout(() => {
-              setCellSaveState((prev) => {
-                const next = new Map(prev)
-                next.delete(cellKey)
-                return next
-              })
-            }, 3000)
-            if (err instanceof ApiError && err.isConflict()) {
-              toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
-              refetch()
-            } else {
-              toast.error(formatError(err))
-            }
-          },
-        },
-      )
-    },
-    [updateEntry, getRowVersion, refetch, list, undoToast],
-  )
-
-  // Batch edit handler (for paste operations).
-  const handleBatchCellEdit = useCallback(
-    (event: BatchCellEditEvent) => {
-      // Group updates by rowId.
-      const byRow = new Map<string, Record<string, unknown>>()
-      for (const u of event.updates) {
-        const existing = byRow.get(u.rowId) ?? {}
-        existing[u.columnId] = u.value
-        byRow.set(u.rowId, existing)
-      }
-      const updates = Array.from(byRow.entries()).map(([id, fields]) => {
-        const version = getRowVersion(id)
-        return { id, fields, _version: version }
-      })
-      const toastId = toast.loading(`${updates.length}건 저장 중...`)
-      batchUpdateEntry.mutate(updates, {
-        onSuccess: () => {
-          toast.success(`${updates.length}건 수정되었습니다`, { id: toastId })
-        },
-        onError: (err) => {
-          if (err instanceof ApiError && err.isConflict()) {
-            toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.', { id: toastId })
-            refetch()
-          } else {
-            toast.error(formatError(err), { id: toastId })
-          }
-        },
-      })
-    },
-    [batchUpdateEntry, getRowVersion, refetch],
-  )
 
   // Search with debounce.
   function handleSearchInput(value: string) {
@@ -1475,11 +1365,6 @@ export default function AppViewPage() {
               onLimitChange={setLimit}
               onSortChange={handleHeaderSortChange}
               onRowClick={handleEntryClick}
-              onCellEdit={handleCellEdit}
-              onBatchCellEdit={handleBatchCellEdit}
-              readonlyColumns={formulaReadonlyCols}
-              cellSaveState={cellSaveState}
-              fieldMeta={fieldMeta}
               emptyTitle={searchText || hasActiveFilters ? '검색 결과가 없습니다' : TERM.noRecords}
               emptyDescription={searchText || hasActiveFilters ? '검색어 또는 필터 조건을 변경해 보세요.' : TERM.noRecordsDesc}
               emptyVariant={searchText || hasActiveFilters ? 'no-results' : 'empty'}

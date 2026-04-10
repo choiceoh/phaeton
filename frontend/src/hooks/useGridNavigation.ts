@@ -31,10 +31,6 @@ export function isCellInRange(row: number, col: number, range: SelectionRange | 
 interface UseGridNavigationOptions {
   rowCount: number
   colCount: number
-  onEditStart?: (row: number, col: number) => void
-  onEditCommit?: () => void
-  onEditCancel?: () => void
-  isEditing: boolean
   /** Column indices that should be skipped during navigation (e.g. _actions) */
   skipColumns?: number[]
 }
@@ -42,10 +38,6 @@ interface UseGridNavigationOptions {
 export function useGridNavigation({
   rowCount,
   colCount,
-  onEditStart,
-  onEditCommit,
-  onEditCancel,
-  isEditing,
   skipColumns = [],
 }: UseGridNavigationOptions) {
   const [activeCell, setActiveCell] = useState<CellPosition | null>(null)
@@ -93,23 +85,6 @@ export function useGridNavigation({
       const { row, col } = activeCell
       const shift = e.shiftKey
 
-      // When editing, only handle Escape / Enter / Tab.
-      if (isEditing) {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          onEditCancel?.()
-        } else if (e.key === 'Enter') {
-          e.preventDefault()
-          onEditCommit?.()
-          moveTo(row + 1, col, false)
-        } else if (e.key === 'Tab') {
-          e.preventDefault()
-          onEditCommit?.()
-          moveTo(row, nextCol(col, shift ? -1 : 1), false)
-        }
-        return
-      }
-
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault()
@@ -137,20 +112,12 @@ export function useGridNavigation({
           break
         case 'Enter':
           e.preventDefault()
-          if (shift) {
-            moveTo(row - 1, col, false)
-          } else {
-            onEditStart?.(row, col)
-          }
+          moveTo(shift ? row - 1 : row + 1, col, false)
           break
         case 'Escape':
           e.preventDefault()
           setActiveCell(null)
           setSelection(null)
-          break
-        case 'F2':
-          e.preventDefault()
-          onEditStart?.(row, col)
           break
         case 'Home':
           e.preventDefault()
@@ -160,16 +127,9 @@ export function useGridNavigation({
           e.preventDefault()
           moveTo(row, colCount - 1, shift)
           break
-        default:
-          // Typing a printable character starts editing.
-          if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            onEditStart?.(row, col)
-            // Don't prevent default — let the character go through to the input.
-          }
-          break
       }
     },
-    [activeCell, isEditing, moveTo, nextCol, colCount, onEditStart, onEditCommit, onEditCancel],
+    [activeCell, moveTo, nextCol, colCount],
   )
 
   const handleCellClick = useCallback(

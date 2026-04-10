@@ -37,7 +37,6 @@ import {
   Settings2,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -58,29 +57,13 @@ import {
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
-import { buildPasteUpdates, copyToClipboard, parseTSV } from '@/lib/clipboard'
+import { copyToClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
 
 import { Checkbox } from '@/components/ui/checkbox'
 
 import EmptyState from './EmptyState'
-import GridCell from './GridCell'
-import type { EntryRow, FieldType } from '@/lib/types'
-
-export interface FieldMeta {
-  fieldType: FieldType
-  options?: Record<string, unknown>
-}
-
-export interface CellEditEvent {
-  rowId: string
-  columnId: string
-  value: unknown
-}
-
-export interface BatchCellEditEvent {
-  updates: { rowId: string; columnId: string; value: unknown }[]
-}
+import type { EntryRow } from '@/lib/types'
 
 interface Props<T> {
   columns: ColumnDef<T, unknown>[]
@@ -92,12 +75,6 @@ interface Props<T> {
   onLimitChange?: (limit: number) => void
   onSortChange?: (sort: SortingState) => void
   onRowClick?: (row: T) => void
-  onCellEdit?: (event: CellEditEvent) => void
-  onBatchCellEdit?: (event: BatchCellEditEvent) => void
-  /** Column IDs that are not editable (system columns, actions, etc.) */
-  readonlyColumns?: string[]
-  /** Per-cell save state for visual feedback (key = "rowId:columnId") */
-  cellSaveState?: Map<string, 'saving' | 'saved' | 'error'>
   emptyTitle?: string
   emptyDescription?: string
   emptyAction?: React.ReactNode
@@ -115,8 +92,6 @@ interface Props<T> {
   highlightRows?: number
   /** ID of a newly created row to animate entrance. */
   newRowId?: string | null
-  /** Field metadata per column ID for type-specific inline editors. */
-  fieldMeta?: Record<string, FieldMeta>
   /** Enable row selection with checkboxes */
   selectable?: boolean
   /** Currently selected row IDs (controlled) */
@@ -138,10 +113,6 @@ export function DataTable<T>({
   onLimitChange,
   onSortChange,
   onRowClick,
-  onCellEdit,
-  onBatchCellEdit,
-  readonlyColumns,
-  cellSaveState,
   emptyTitle = '데이터가 없습니다',
   emptyDescription,
   emptyAction,
@@ -152,7 +123,6 @@ export function DataTable<T>({
   toolbar,
   initialColumnVisibility,
   onColumnVisibilityChange: onColumnVisibilityChangeProp,
-  fieldMeta,
   highlightRows = 0,
   newRowId,
   selectable,
@@ -268,24 +238,7 @@ export function DataTable<T>({
   const visibleCols = table.getVisibleFlatColumns()
   const colIds = useMemo(() => visibleCols.map((c) => c.id), [visibleCols])
 
-  const readonlySet = useMemo(() => {
-    const s = new Set(readonlyColumns ?? [])
-    // System columns are always readonly.
-    for (const id of colIds) {
-      if (id.startsWith('_') || id === 'created_at') s.add(id)
-    }
-    return s
-  }, [readonlyColumns, colIds])
-
-  const editableSet = useMemo(() => {
-    const s = new Set<string>()
-    for (const id of colIds) {
-      if (!readonlySet.has(id)) s.add(id)
-    }
-    return s
-  }, [colIds, readonlySet])
-
-  // Skip indices for non-editable action columns during tab navigation.
+  // Skip indices for action columns during tab navigation.
   const skipColIndices = useMemo(() => {
     const skip: number[] = []
     colIds.forEach((id, i) => {
@@ -294,45 +247,18 @@ export function DataTable<T>({
     return skip
   }, [colIds])
 
-  const [editingCell, setEditingCell] = useState<{ row: number; col: number } | null>(null)
-  const isEditing = editingCell !== null
-
-  const handleEditStart = useCallback(
-    (row: number, col: number) => {
-      const colId = colIds[col]
-      if (!colId || readonlySet.has(colId)) return
-      if (!onCellEdit) return
-      setEditingCell({ row, col })
-    },
-    [colIds, readonlySet, onCellEdit],
-  )
-
-  const handleEditCommit = useCallback(() => {
-    // Commit is handled by GridCell's blur/Enter.
-    setEditingCell(null)
-  }, [])
-
-  const handleEditCancel = useCallback(() => {
-    setEditingCell(null)
-  }, [])
-
   const grid = useGridNavigation({
     rowCount: visibleRows.length,
     colCount: colIds.length,
-    onEditStart: handleEditStart,
-    onEditCommit: handleEditCommit,
-    onEditCancel: handleEditCancel,
-    isEditing,
     skipColumns: skipColIndices,
   })
 
-  // Clipboard: copy / paste.
+  // Clipboard: copy.
   const handleClipboard = useCallback(
     async (e: React.KeyboardEvent) => {
       if (!grid.activeCell) return
       const isCtrl = e.ctrlKey || e.metaKey
 
-      // Copy.
       if (isCtrl && e.key === 'c') {
         const range = grid.selection ?? {
           startRow: grid.activeCell.row,
@@ -342,42 +268,9 @@ export function DataTable<T>({
         }
         e.preventDefault()
         await copyToClipboard(data as EntryRow[], colIds, range)
-        return
-      }
-
-      // Paste.
-      if (isCtrl && e.key === 'v' && (onCellEdit || onBatchCellEdit)) {
-        e.preventDefault()
-        try {
-          const text = await navigator.clipboard.readText()
-          const parsed = parseTSV(text)
-          if (parsed.length === 0) return
-
-          const updates = buildPasteUpdates(
-            parsed,
-            data as EntryRow[],
-            colIds,
-            grid.activeCell.row,
-            grid.activeCell.col,
-            editableSet,
-          )
-
-          if (updates.length === 0) return
-
-          if (onBatchCellEdit && updates.length > 1) {
-            onBatchCellEdit({ updates })
-          } else {
-            // Fall back to individual edits.
-            for (const u of updates) {
-              onCellEdit?.({ rowId: u.rowId, columnId: u.columnId, value: u.value })
-            }
-          }
-        } catch {
-          toast.error('클립보드 접근이 거부되었습니다. 브라우저 설정을 확인하세요.')
-        }
       }
     },
-    [grid.activeCell, grid.selection, data, colIds, editableSet, onCellEdit, onBatchCellEdit],
+    [grid.activeCell, grid.selection, data, colIds],
   )
 
   // Header right-click context menu state.
@@ -423,7 +316,6 @@ export function DataTable<T>({
       prevDataRef.current = data
       grid.setActiveCell(null)
       grid.setSelection(null)
-      setEditingCell(null)
     }
   }, [data])
 
@@ -635,7 +527,7 @@ export function DataTable<T>({
                   key={row.id}
                   role="row"
                   aria-rowindex={(page - 1) * limit + rowIdx + 2}
-                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
+                  className={`${onRowClick ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
                   style={useVirtual ? {
                     position: 'absolute',
                     top: 0,
@@ -644,20 +536,12 @@ export function DataTable<T>({
                     height: `${virtualItem.size}px`,
                     transform: `translateY(${virtualItem.start}px)`,
                   } : undefined}
-                  onClick={() => {
-                    // Only trigger row click if no cell is active (user clicking outside grid cells).
-                    if (!grid.activeCell && onRowClick) {
-                      onRowClick(row.original)
-                    }
-                  }}
+                  onClick={() => onRowClick?.(row.original)}
                 >
                   {row.getVisibleCells().map((cell, colIdx) => {
                     const isPinned = cell.column.getIsPinned()
                     const isActive = grid.activeCell?.row === rowIdx && grid.activeCell?.col === colIdx
                     const isSelected = isCellInRange(rowIdx, colIdx, grid.selection)
-                    const isCellEditing = editingCell?.row === rowIdx && editingCell?.col === colIdx
-                    const colId = cell.column.id
-                    const editable = !!onCellEdit && editableSet.has(colId)
                     const pinnedLeftCols = columnPinning.left ?? []
                     const isLastPinnedLeftCell = isPinned === 'left' && colIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
 
@@ -675,13 +559,11 @@ export function DataTable<T>({
                     const edgeLeft = inSel && colIdx === selNorm.c1
                     const edgeRight = inSel && colIdx === selNorm.c2
 
-                    const meta = fieldMeta?.[colId]
-
                     return (
                       <TableCell
                         key={cell.id}
                         role="gridcell"
-                        className={`${isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-border' : ''} relative ${edgeTop ? 'border-t-2 border-t-primary' : ''} ${edgeBottom ? 'border-b-2 border-b-primary' : ''} ${edgeLeft ? 'border-l-2 border-l-primary' : ''} ${edgeRight ? 'border-r-2 border-r-primary' : ''}`}
+                        className={`${isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-border' : ''} relative ${isActive ? 'ring-2 ring-primary ring-inset' : ''} ${edgeTop ? 'border-t-2 border-t-primary' : ''} ${edgeBottom ? 'border-b-2 border-b-primary' : ''} ${edgeLeft ? 'border-l-2 border-l-primary' : ''} ${edgeRight ? 'border-r-2 border-r-primary' : ''}`}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
@@ -689,42 +571,12 @@ export function DataTable<T>({
                           right: isPinned === 'right' ? cell.column.getAfter('right') : undefined,
                           zIndex: isPinned ? 1 : undefined,
                         }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          grid.handleCellClick(rowIdx, colIdx, e)
+                        }}
                       >
-                        {onCellEdit ? (() => {
-                          const cellRowId = String((row.original as EntryRow).id ?? row.id)
-                          const cellKey = `${cellRowId}:${colId}`
-                          const saveState = cellSaveState?.get(cellKey)
-                          return (
-                          <GridCell
-                            rawValue={(row.original as EntryRow)[colId]}
-                            columnId={colId}
-                            rowId={cellRowId}
-                            isActive={isActive}
-                            isSelected={isSelected}
-                            isEditing={isCellEditing}
-                            editable={editable}
-                            saving={saveState === 'saving'}
-                            saved={saveState === 'saved'}
-                            error={saveState === 'error'}
-                            fieldType={meta?.fieldType}
-                            fieldOptions={meta?.options}
-                            onSave={(value) => {
-                              onCellEdit({
-                                rowId: cellRowId,
-                                columnId: colId,
-                                value,
-                              })
-                            }}
-                            onEditStart={() => handleEditStart(rowIdx, colIdx)}
-                            onEditCancel={handleEditCancel}
-                            onClick={(e) => grid.handleCellClick(rowIdx, colIdx, e)}
-                            onDoubleClick={() => handleEditStart(rowIdx, colIdx)}
-                          >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </GridCell>
-                          )})() : (
-                          flexRender(cell.column.columnDef.cell, cell.getContext())
-                        )}
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     )
                   })}
