@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -16,6 +15,12 @@ type aiAutomationRequest struct {
 
 const automationSystemPrompt = `You are an automation designer for Phaeton, a no-code business app platform used by a Korean company.
 The user will describe what automation they want. You must generate an automation rule as JSON.
+
+## Tools
+You have tools to look up the target collection's fields. ALWAYS call get_collection_fields first
+to know the exact field slugs before generating the automation.
+- list_collections: 워크스페이스의 앱 목록 조회
+- get_collection_fields: 특정 앱의 필드 상세 조회 (slug 필요)
 
 ## Automation Concepts
 An automation has: trigger → conditions (optional) → actions.
@@ -106,11 +111,20 @@ func (h *AIHandler) BuildAutomation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	resolve := h.newToolResolver(ctx)
 
-	// Build system prompt with collection context (fields, statuses).
-	prompt := h.buildAutomationPrompt(r, collectionID)
+	// Resolve collection ID → slug/label so the AI can call get_collection_fields.
+	userMsg := req.Description
+	if cols, err := h.store.ListCollections(ctx); err == nil {
+		for _, c := range cols {
+			if c.ID == collectionID {
+				userMsg = "대상 컬렉션: " + c.Label + " (slug: " + c.Slug + ")\n\n" + req.Description
+				break
+			}
+		}
+	}
 
-	raw, err := h.client.Complete(ctx, prompt, req.Description)
+	raw, err := h.client.CompleteWithTools(ctx, automationSystemPrompt, nil, userMsg, workspaceTools, resolve)
 	if err != nil {
 		slog.Error("ai build-automation failed", "error", err)
 		writeError(w, http.StatusBadGateway, "AI 서버 요청에 실패했습니다")
@@ -126,71 +140,4 @@ func (h *AIHandler) BuildAutomation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
-}
-
-// buildAutomationPrompt includes collection fields and process statuses in the prompt.
-func (h *AIHandler) buildAutomationPrompt(r *http.Request, collectionID string) string {
-	if h.store == nil {
-		return automationSystemPrompt
-	}
-	col, err := h.store.GetCollection(r.Context(), collectionID)
-	if err != nil {
-		slog.Warn("ai automation: failed to get collection", "error", err)
-		return automationSystemPrompt
-	}
-
-	var sb strings.Builder
-	sb.WriteString(automationSystemPrompt)
-
-	sb.WriteString(fmt.Sprintf("\n\n## Target Collection: %s (%s)\n", col.Label, col.Slug))
-	if col.Description != "" {
-		sb.WriteString(fmt.Sprintf("설명: %s\n", col.Description))
-	}
-
-	if len(col.Fields) > 0 {
-		sb.WriteString("\n### Available Fields\n")
-		sb.WriteString("Use these exact field_slug values in conditions and update_field actions:\n")
-		for _, f := range col.Fields {
-			if f.IsLayout {
-				continue
-			}
-			opts := ""
-			if len(f.Options) > 0 && string(f.Options) != "null" {
-				opts = fmt.Sprintf(" options=%s", string(f.Options))
-			}
-			sb.WriteString(fmt.Sprintf("- %s (slug: \"%s\", type: %s)%s\n", f.Label, f.Slug, f.FieldType, opts))
-		}
-	}
-
-	// Check for select fields with choices (useful for conditions).
-	for _, f := range col.Fields {
-		if (f.FieldType == "select" || f.FieldType == "multiselect") && len(f.Options) > 0 {
-			var optMap map[string]interface{}
-			if json.Unmarshal(f.Options, &optMap) == nil {
-				if choices, ok := optMap["choices"]; ok {
-					sb.WriteString(fmt.Sprintf("\n%s의 선택지: %v\n", f.Label, choices))
-				}
-			}
-		}
-	}
-
-	// Check for user-type fields (useful for notification field_ref).
-	var userFields []string
-	for _, f := range col.Fields {
-		if string(f.FieldType) == "user" {
-			userFields = append(userFields, fmt.Sprintf("%s(slug: \"%s\")", f.Label, f.Slug))
-		}
-	}
-	if len(userFields) > 0 {
-		sb.WriteString(fmt.Sprintf("\n### User Fields (for notification field_ref)\n%s\n", strings.Join(userFields, ", ")))
-	}
-
-	// Include process statuses if available.
-	if col.ProcessEnabled {
-		sb.WriteString("\n### Process is ENABLED — status_change trigger is available\n")
-		sb.WriteString("Note: The exact status names depend on the process configuration. ")
-		sb.WriteString("If the user mentions specific statuses, use those names in trigger_config.\n")
-	}
-
-	return sb.String()
 }

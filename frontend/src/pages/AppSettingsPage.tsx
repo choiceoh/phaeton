@@ -139,13 +139,13 @@ export default function AppSettingsPage() {
   return (
     <div>
       <PageHeader
-        title={`${collection.label} 설정`}
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label, href: `/apps/${collection.id}` },
+          { label: '설정' },
+        ]}
+        title="설정"
         description={`/${collection.slug} 컬렉션의 필드 및 메타데이터`}
-        actions={
-          <Button variant="outline" onClick={() => navigate(`/apps/${collection.id}`)}>
-            돌아가기
-          </Button>
-        }
       />
 
       <div className="space-y-6">
@@ -161,7 +161,7 @@ export default function AppSettingsPage() {
 
           {newFieldOpen && (
             <Card className="mb-4 p-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label>영문 ID</Label>
                   <Input
