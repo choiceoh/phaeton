@@ -356,6 +356,51 @@ export interface FilterCondition {
   value: string
 }
 
+export type FilterLogic = 'and' | 'or'
+
+export interface FilterGroup {
+  id: string
+  logic: FilterLogic
+  conditions: FilterCondition[]
+  groups: FilterGroup[]
+}
+
+/** Create an empty root filter group */
+export function emptyFilterGroup(): FilterGroup {
+  return { id: 'root', logic: 'and', conditions: [], groups: [] }
+}
+
+/** Check if a filter group has any conditions (flat or nested) */
+export function isFilterGroupEmpty(group: FilterGroup): boolean {
+  return group.conditions.length === 0 && group.groups.every(isFilterGroupEmpty)
+}
+
+/** Flatten a FilterGroup into a flat list of conditions (for display in chips) */
+export function flattenFilterGroup(group: FilterGroup): FilterCondition[] {
+  const result: FilterCondition[] = [...group.conditions]
+  for (const sub of group.groups) {
+    result.push(...flattenFilterGroup(sub))
+  }
+  return result
+}
+
+/** Serialize a FilterGroup to JSON for the _filter query param */
+export function serializeFilterGroup(group: FilterGroup): string | undefined {
+  if (isFilterGroupEmpty(group)) return undefined
+  function strip(g: FilterGroup): unknown {
+    return {
+      logic: g.logic,
+      conditions: g.conditions.map((c) => ({
+        field: c.field,
+        operator: c.operator,
+        value: c.value,
+      })),
+      groups: g.groups.filter((sg) => !isFilterGroupEmpty(sg)).map(strip),
+    }
+  }
+  return JSON.stringify(strip(group))
+}
+
 // --- Aggregate response ---
 
 export interface AggregateResult {
@@ -466,7 +511,7 @@ export interface SavedView {
   id: string
   collection_id: string
   name: string
-  filter_config: Record<string, string>
+  filter_config: Record<string, unknown>
   sort_config: string
   visible_fields?: string[]
   is_default: boolean
@@ -478,7 +523,7 @@ export interface SavedView {
 
 export interface CreateSavedViewReq {
   name: string
-  filter_config?: Record<string, string>
+  filter_config?: Record<string, unknown>
   sort_config?: string
   visible_fields?: string[]
   is_default?: boolean
@@ -487,7 +532,7 @@ export interface CreateSavedViewReq {
 
 export interface UpdateSavedViewReq {
   name?: string
-  filter_config?: Record<string, string>
+  filter_config?: Record<string, unknown>
   sort_config?: string
   visible_fields?: string[]
   is_default?: boolean

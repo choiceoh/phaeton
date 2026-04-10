@@ -1,14 +1,38 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/choiceoh/phaeton/backend/internal/infra/apierr"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
+
+// withDeadline returns a new request with the given timeout applied to its context.
+// The caller must call the returned cancel function when done.
+func withDeadline(r *http.Request, d time.Duration) (*http.Request, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(r.Context(), d)
+	return r.WithContext(ctx), cancel
+}
+
+// isTimeout returns true if the error is a context deadline exceeded.
+func isTimeout(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded)
+}
+
+// handleTimeout writes a 504 Gateway Timeout if the error is a context deadline exceeded.
+// Returns true if it handled the error, false otherwise.
+func handleTimeout(w http.ResponseWriter, r *http.Request, err error) bool {
+	if isTimeout(err) {
+		apierr.New(http.StatusGatewayTimeout, "TIMEOUT", "request timed out").Write(w)
+		return true
+	}
+	return false
+}
 
 type envelope struct {
 	Data      any    `json:"data,omitempty"`
@@ -109,7 +133,17 @@ func publicMessage(err error) string {
 
 // handleErr is the central error response helper. It logs internal errors at
 // error level (with request context) and returns a sanitized message to the client.
+// If err is already an *apierr.Error, its status/code/context are preserved.
 func handleErr(w http.ResponseWriter, r *http.Request, err error) {
+	var ae *apierr.Error
+	if errors.As(err, &ae) {
+		if ae.Status >= 500 {
+			Log(r).Error("internal error", ae.LogAttrs()...)
+		}
+		ae.Write(w)
+		return
+	}
+
 	status := errorStatus(err)
 	msg := publicMessage(err)
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { LogOut, Settings, User } from 'lucide-react'
+import { LogOut, Network, Settings, User } from 'lucide-react'
 
 import AIChatPanel from '@/components/common/AIChatPanel'
 import CommandPalette from '@/components/common/CommandPalette'
@@ -65,9 +65,6 @@ export default function RootLayout() {
               <NavLink to="/automations" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 자동화
               </NavLink>
-              <NavLink to="/admin/org" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                조직도
-              </NavLink>
               <NavLink to="/ai" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 AI
               </NavLink>
@@ -88,6 +85,14 @@ export default function RootLayout() {
           </div>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <NotificationBell />
+            <button
+              type="button"
+              onClick={() => navigate('/admin/org')}
+              className={`rounded-md p-1.5 transition-colors hover:bg-accent ${pathname.startsWith('/admin/org') ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              title="조직도"
+            >
+              <Network className="h-4.5 w-4.5" />
+            </button>
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent focus-visible:outline-none">
                 <Avatar className="h-7 w-7">
@@ -98,10 +103,12 @@ export default function RootLayout() {
                 <span className="text-sm font-medium text-foreground">{user.name}</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel className="font-normal">
-                  <p className="text-sm font-medium">{user.name}</p>
-                  <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role] ?? user.role}</p>
-                </DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="font-normal">
+                    <p className="text-sm font-medium">{user.name}</p>
+                    <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role] ?? user.role}</p>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
                   <DropdownMenuItem onClick={() => navigate('/profile')}>

@@ -9,7 +9,7 @@ endif
 dev: dev-api dev-ui
 
 dev-api:
-	cd backend && go run ./cmd/server
+	cd backend && AUTH_DISABLED=true go run ./cmd/server
 
 dev-ui:
 	cd frontend && npm run dev

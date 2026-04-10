@@ -12,6 +12,8 @@ export interface EntryListParams {
   sort?: string // e.g. "-created_at" or "name,-due_date"
   expand?: string // comma-separated relation field slugs
   filters?: Record<string, string> // { status: "eq:active", capacity: "gte:100" }
+  /** JSON-serialized FilterGroup for AND/OR filter groups */
+  _filter?: string
 }
 
 export interface EntryListResult {
@@ -28,7 +30,9 @@ function buildQueryString(params: EntryListParams): string {
   if (params.limit) search.set('limit', String(params.limit))
   if (params.sort) search.set('sort', params.sort)
   if (params.expand) search.set('expand', params.expand)
-  if (params.filters) {
+  if (params._filter) {
+    search.set('_filter', params._filter)
+  } else if (params.filters) {
     for (const [key, value] of Object.entries(params.filters)) {
       if (value) search.set(key, value)
     }

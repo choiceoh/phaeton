@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -48,6 +49,9 @@ to know the exact field slugs before generating the formula.
 // BuildFormula generates a formula expression from a natural language description.
 // The {slug} URL param is the collection slug (consistent with the formula-preview endpoint).
 func (h *AIHandler) BuildFormula(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 120*time.Second)
+	defer cancel()
+
 	collectionSlug := chi.URLParam(r, "slug")
 
 	var req aiFormulaRequest

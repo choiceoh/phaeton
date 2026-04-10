@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -194,6 +195,14 @@ func UpdateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// Prevent circular parent chain (A→B→C→A).
+		if input.ParentID != nil && *input.ParentID != "" {
+			if err := detectCircularDepartment(r.Context(), pool, id, *input.ParentID); err != nil {
+				apierr.BadRequest(err.Error()).Write(w)
+				return
+			}
+		}
+
 		// Build dynamic SET clause.
 		sets := []string{}
 		args := []any{}
@@ -272,6 +281,31 @@ func UpdateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 	}
+}
+
+// detectCircularDepartment walks up the parent chain from newParentID and
+// returns an error if it reaches targetID, indicating a circular reference.
+func detectCircularDepartment(ctx context.Context, pool *pgxpool.Pool, targetID, newParentID string) error {
+	visited := map[string]bool{targetID: true}
+	current := newParentID
+	for i := 0; i < 100; i++ { // depth limit
+		if visited[current] {
+			return fmt.Errorf("circular department reference detected")
+		}
+		visited[current] = true
+		var parentID *string
+		err := pool.QueryRow(ctx,
+			`SELECT parent_id FROM auth.departments WHERE id = $1`, current,
+		).Scan(&parentID)
+		if err != nil {
+			return nil // parent not found — chain ends
+		}
+		if parentID == nil || *parentID == "" {
+			return nil // reached root
+		}
+		current = *parentID
+	}
+	return fmt.Errorf("department hierarchy too deep")
 }
 
 // DeleteDepartment handles DELETE /api/departments/{id} (director only).
