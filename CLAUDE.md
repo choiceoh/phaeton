@@ -84,6 +84,27 @@ make dev-ui      # Vite dev (:5173, /api → :8080 프록시)
 make build       # 프론트 빌드 → Go 서버 static/에 출력
 ```
 
+## 서버 배포 (Docker)
+
+DB와 앱 서버 모두 Docker Compose로 운영. DB 볼륨은 `practical-neumann_pgdata` (외부 볼륨)에 데이터가 있으므로 **절대 삭제하지 말 것**.
+
+```bash
+# 앱만 최신 코드로 재배포 (DB 유지, app만 리빌드)
+make db                                      # DB 컨테이너만 기동 (이미 실행 중이면 생략)
+docker compose up --build -d app             # app 이미지 재빌드 + 재시작
+
+# 전체 스택 (DB + App) 기동
+docker compose up --build -d
+
+# 로그 확인
+docker compose logs -f app
+```
+
+**주의사항:**
+- `docker compose down -v` 금지 — 볼륨이 삭제되어 DB 데이터 유실
+- DB 컨테이너를 새로 만들 때 기존 볼륨(`practical-neumann_pgdata`)을 연결해야 인증이 통과됨
+- app 컨테이너만 교체할 때는 `docker compose up --build -d app` (DB 무중단)
+
 ## 커밋 메시지
 
 ```
