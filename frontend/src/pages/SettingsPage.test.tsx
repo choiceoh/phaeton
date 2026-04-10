@@ -24,7 +24,7 @@ const directorUser = {
 
 const viewerUser = {
   id: 'u2', name: 'Viewer', email: 'viewer@test.com', role: 'viewer',
-  is_active: true,
+  phone: '', is_active: true,
 }
 
 function setupMocks(user = directorUser) {
