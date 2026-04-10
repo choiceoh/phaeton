@@ -44,55 +44,6 @@ export function toTSV(matrix: unknown[][]): string {
     .join('\n')
 }
 
-// Parse TSV string from clipboard into 2D array.
-export function parseTSV(tsv: string): string[][] {
-  const rows: string[][] = []
-  let current = ''
-  let inQuote = false
-  let row: string[] = []
-
-  for (let i = 0; i < tsv.length; i++) {
-    const ch = tsv[i]
-
-    if (inQuote) {
-      if (ch === '"') {
-        if (i + 1 < tsv.length && tsv[i + 1] === '"') {
-          current += '"'
-          i++
-        } else {
-          inQuote = false
-        }
-      } else {
-        current += ch
-      }
-    } else {
-      if (ch === '"') {
-        inQuote = true
-      } else if (ch === '\t') {
-        row.push(current)
-        current = ''
-      } else if (ch === '\n') {
-        row.push(current)
-        current = ''
-        rows.push(row)
-        row = []
-      } else if (ch === '\r') {
-        // skip \r, handle \r\n
-      } else {
-        current += ch
-      }
-    }
-  }
-
-  // Last cell / row.
-  row.push(current)
-  if (row.length > 1 || row[0] !== '') {
-    rows.push(row)
-  }
-
-  return rows
-}
-
 // Copy selection to clipboard.
 export async function copyToClipboard(
   data: Record<string, unknown>[],
@@ -104,38 +55,3 @@ export async function copyToClipboard(
   await navigator.clipboard.writeText(tsv)
 }
 
-export interface PasteUpdate {
-  rowId: string
-  columnId: string
-  value: string | null
-}
-
-// Build updates from pasted TSV, starting at the given cell position.
-export function buildPasteUpdates(
-  parsed: string[][],
-  data: Record<string, unknown>[],
-  columnIds: string[],
-  startRow: number,
-  startCol: number,
-  editableColumns: Set<string>,
-): PasteUpdate[] {
-  const updates: PasteUpdate[] = []
-
-  for (let r = 0; r < parsed.length; r++) {
-    const dataRow = data[startRow + r]
-    if (!dataRow) break
-    const rowId = String(dataRow.id ?? '')
-    if (!rowId) continue
-
-    for (let c = 0; c < parsed[r].length; c++) {
-      const colIdx = startCol + c
-      const colId = columnIds[colIdx]
-      if (!colId || !editableColumns.has(colId)) continue
-
-      const value = parsed[r][c]
-      updates.push({ rowId, columnId: colId, value: value === '' ? null : value })
-    }
-  }
-
-  return updates
-}
