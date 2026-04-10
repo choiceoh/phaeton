@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 import { useCollections, useCreateCollection } from '@/hooks/useCollections'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import type { AIBuildResult } from '@/hooks/useAI'
 import { useAIGenerateSlug } from '@/hooks/useAI'
 import { formatError } from '@/lib/api'
@@ -30,6 +31,7 @@ export default function AppBuilder() {
 
   const { data: collections = [] } = useCollections()
   const createCollection = useCreateCollection()
+  const aiAvailable = useAIAvailable()
   const generateSlug = useAIGenerateSlug()
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -52,7 +54,7 @@ export default function AppBuilder() {
 
   function handleLabelChange(value: string) {
     setLabel(value)
-    if (!slugManual && value.trim()) {
+    if (!slugManual && value.trim() && aiAvailable) {
       requestSlug(value.trim())
     }
     if (!slugManual && !value.trim()) {

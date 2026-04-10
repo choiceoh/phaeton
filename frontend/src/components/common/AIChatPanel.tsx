@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, MessageCircle, Send, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { useAIChat, type ChatMessage } from '@/hooks/useAIChat'
 
 export default function AIChatPanel() {
+  const aiAvailable = useAIAvailable()
+
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -66,6 +69,8 @@ export default function AIChatPanel() {
       handleSend()
     }
   }
+
+  if (!aiAvailable) return null
 
   return (
     <>
