@@ -320,13 +320,13 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 		r.Patch("/api/users/{id}", handler.UpdateUser(cfg.pool))
 
 		// Subsidiaries.
-		r.Get("/api/subsidiaries", handler.ListSubsidiaries(pool))
-		r.Get("/api/subsidiaries/{id}", handler.GetSubsidiary(pool))
+		r.Get("/api/subsidiaries", handler.ListSubsidiaries(cfg.pool))
+		r.Get("/api/subsidiaries/{id}", handler.GetSubsidiary(cfg.pool))
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRole("director"))
-			r.Post("/api/subsidiaries", handler.CreateSubsidiary(pool))
-			r.Patch("/api/subsidiaries/{id}", handler.UpdateSubsidiary(pool))
-			r.Delete("/api/subsidiaries/{id}", handler.DeleteSubsidiary(pool))
+			r.Post("/api/subsidiaries", handler.CreateSubsidiary(cfg.pool))
+			r.Patch("/api/subsidiaries/{id}", handler.UpdateSubsidiary(cfg.pool))
+			r.Delete("/api/subsidiaries/{id}", handler.DeleteSubsidiary(cfg.pool))
 		})
 
 		// Departments.
