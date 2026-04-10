@@ -26,12 +26,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /phaeton ./cmd/server
 # ── Stage 3: Minimal runtime ────────────────────────────────
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk add --no-cache ca-certificates tzdata chromium \
     && echo 'hosts: files dns' > /etc/nsswitch.conf
 RUN adduser -D -h /app phaeton
 
 WORKDIR /app
 COPY --from=backend /phaeton ./phaeton
+
+ENV CHROME_PATH=/usr/bin/chromium-browser
 
 USER phaeton
 

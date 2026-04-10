@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Loader2, Sparkles } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,8 +12,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { useAIBuildCollection, type AIBuildResult } from '@/hooks/useAI'
+import {
+  useAIBuildCollection,
+  type AIBuildQuestion,
+  type AIBuildResult,
+} from '@/hooks/useAI'
 import { FIELD_TYPE_LABELS } from '@/lib/constants'
 import type { FieldType } from '@/lib/types'
 
@@ -24,39 +30,80 @@ export default function AIBuildDialog({ onApply }: Props) {
   const [open, setOpen] = useState(false)
   const [description, setDescription] = useState('')
   const [result, setResult] = useState<AIBuildResult | null>(null)
+  const [questions, setQuestions] = useState<AIBuildQuestion[] | null>(null)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
 
   const buildMutation = useAIBuildCollection()
 
   function handleGenerate() {
     if (!description.trim()) return
     setResult(null)
-    buildMutation.mutate(description, {
-      onSuccess: (data) => setResult(data),
-    })
+    setQuestions(null)
+    setAnswers({})
+    buildMutation.mutate(
+      { description },
+      {
+        onSuccess: (data) => {
+          if (data.mode === 'questions' && data.questions?.length) {
+            setQuestions(data.questions)
+            const initial: Record<string, string> = {}
+            for (const q of data.questions) {
+              initial[q.id] = ''
+            }
+            setAnswers(initial)
+          } else if (data.schema) {
+            setResult(data.schema)
+          }
+        },
+      },
+    )
+  }
+
+  function handleSubmitAnswers() {
+    setQuestions(null)
+    buildMutation.mutate(
+      { description, answers },
+      {
+        onSuccess: (data) => {
+          if (data.schema) {
+            setResult(data.schema)
+          }
+        },
+      },
+    )
   }
 
   function handleApply() {
     if (!result) return
     onApply(result)
     setOpen(false)
-    setDescription('')
-    setResult(null)
+    resetState()
   }
 
   function handleOpenChange(next: boolean) {
     setOpen(next)
-    if (!next) {
-      setDescription('')
-      setResult(null)
-      buildMutation.reset()
-    }
+    if (!next) resetState()
   }
+
+  function resetState() {
+    setDescription('')
+    setResult(null)
+    setQuestions(null)
+    setAnswers({})
+    buildMutation.reset()
+  }
+
+  function setAnswer(id: string, value: string) {
+    setAnswers((prev) => ({ ...prev, [id]: value }))
+  }
+
+  const allAnswered = questions
+    ? questions.every((q) => answers[q.id]?.trim())
+    : false
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        className="inline-flex items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium ring-offset-background hover:bg-accent hover:text-accent-foreground"
-      >
+      <DialogTrigger className="inline-flex items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium ring-offset-background hover:bg-accent hover:text-accent-foreground">
         <Sparkles className="h-4 w-4" />
         AI로 만들기
       </DialogTrigger>
@@ -64,11 +111,13 @@ export default function AIBuildDialog({ onApply }: Props) {
         <DialogHeader>
           <DialogTitle>AI 컬렉션 빌더</DialogTitle>
           <DialogDescription>
-            어떤 업무를 관리하고 싶은지 설명해 주세요. AI가 적절한 컬렉션 구조를 제안합니다.
+            어떤 업무를 관리하고 싶은지 설명해 주세요. AI가 적절한 컬렉션 구조를
+            제안합니다.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Description input */}
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -77,38 +126,128 @@ export default function AIBuildDialog({ onApply }: Props) {
             disabled={buildMutation.isPending}
           />
 
-          <div className="flex justify-end">
-            <Button
-              onClick={handleGenerate}
-              disabled={!description.trim() || buildMutation.isPending}
-            >
-              {buildMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                  생성 중...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-1.5 h-4 w-4" />
-                  생성하기
-                </>
-              )}
-            </Button>
-          </div>
+          {/* Generate button — only show when no questions and no result */}
+          {!questions && !result && (
+            <div className="flex justify-end">
+              <Button
+                onClick={handleGenerate}
+                disabled={!description.trim() || buildMutation.isPending}
+              >
+                {buildMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    생성 중...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-1.5 h-4 w-4" />
+                    생성하기
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
 
+          {/* Error */}
           {buildMutation.isError && (
             <p className="text-sm text-destructive">
               {buildMutation.error?.message ?? 'AI 요청에 실패했습니다'}
             </p>
           )}
 
+          {/* Questions panel */}
+          {questions && (
+            <div className="space-y-4 rounded-lg border p-4">
+              <div>
+                <p className="text-sm font-medium">
+                  AI가 더 정확한 앱을 만들기 위해 몇 가지를 확인하고 싶어합니다.
+                </p>
+              </div>
+              {questions.map((q) => (
+                <div key={q.id} className="space-y-1.5">
+                  <label className="text-sm font-medium">{q.question}</label>
+                  {q.choices?.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {q.choices.map((choice) => (
+                        <Badge
+                          key={choice}
+                          variant={
+                            answers[q.id] === choice ? 'default' : 'outline'
+                          }
+                          className="cursor-pointer px-3 py-1 text-sm"
+                          onClick={() => setAnswer(q.id, choice)}
+                        >
+                          {choice}
+                        </Badge>
+                      ))}
+                      <Input
+                        value={
+                          q.choices.includes(answers[q.id] ?? '')
+                            ? ''
+                            : answers[q.id] ?? ''
+                        }
+                        onChange={(e) => setAnswer(q.id, e.target.value)}
+                        placeholder={q.placeholder || '직접 입력'}
+                        className="mt-1 h-8 text-sm"
+                      />
+                    </div>
+                  ) : (
+                    <Input
+                      value={answers[q.id] ?? ''}
+                      onChange={(e) => setAnswer(q.id, e.target.value)}
+                      placeholder={q.placeholder || '답변을 입력하세요'}
+                      className="h-8 text-sm"
+                    />
+                  )}
+                </div>
+              ))}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={buildMutation.isPending}
+                  onClick={() => {
+                    setQuestions(null)
+                    buildMutation.mutate(
+                      { description, answers: { _skip: 'true' } },
+                      {
+                        onSuccess: (data) => {
+                          if (data.schema) setResult(data.schema)
+                        },
+                      },
+                    )
+                  }}
+                >
+                  건너뛰고 생성
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSubmitAnswers}
+                  disabled={!allAnswered || buildMutation.isPending}
+                >
+                  {buildMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      생성 중...
+                    </>
+                  ) : (
+                    '답변 후 생성'
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Result preview */}
           {result && (
             <div className="space-y-3 rounded-lg border p-4">
               <div>
                 <h4 className="text-sm font-semibold">{result.label}</h4>
                 <p className="text-xs text-muted-foreground">{result.slug}</p>
                 {result.description && (
-                  <p className="mt-1 text-sm text-muted-foreground">{result.description}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {result.description}
+                  </p>
                 )}
               </div>
 
@@ -124,10 +263,13 @@ export default function AIBuildDialog({ onApply }: Props) {
                     >
                       <span>
                         {f.label}
-                        <span className="ml-1.5 text-xs text-muted-foreground">({f.slug})</span>
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          ({f.slug})
+                        </span>
                       </span>
                       <span className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                        {FIELD_TYPE_LABELS[f.field_type as FieldType] ?? f.field_type}
+                        {FIELD_TYPE_LABELS[f.field_type as FieldType] ??
+                          f.field_type}
                       </span>
                     </div>
                   ))}
@@ -139,7 +281,13 @@ export default function AIBuildDialog({ onApply }: Props) {
 
         {result && (
           <DialogFooter>
-            <Button variant="outline" onClick={() => setResult(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setResult(null)
+                setQuestions(null)
+              }}
+            >
               다시 생성
             </Button>
             <Button onClick={handleApply}>적용하기</Button>
