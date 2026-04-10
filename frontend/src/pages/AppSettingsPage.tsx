@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
+import { Monitor } from 'lucide-react'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 import ErrorState from '@/components/common/ErrorState'
@@ -8,6 +9,7 @@ import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
 import IconPicker from '@/components/works/IconPicker'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -65,6 +67,24 @@ export default function AppSettingsPage() {
 
   const [confirmDeleteField, setConfirmDeleteField] = useState<string | null>(null)
   const [confirmDeleteCollection, setConfirmDeleteCollection] = useState(false)
+  const isMobile = useIsMobile()
+
+  if (isMobile) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
+        <Monitor className="h-12 w-12 text-muted-foreground" />
+        <div>
+          <h2 className="text-lg font-semibold">PC에서 이용해 주세요</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            앱 설정은 넓은 화면에서 사용할 수 있습니다.
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => navigate('/apps')}>
+          앱 목록으로 돌아가기
+        </Button>
+      </div>
+    )
+  }
 
   if (isLoading) return <LoadingState />
   if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
