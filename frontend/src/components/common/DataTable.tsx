@@ -461,14 +461,14 @@ export function DataTable<T>({
           scrollRef.current = el
           ;(grid.containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
         }}
-        className="rounded-md border overflow-auto focus:outline-none"
+        className="rounded-lg border border-stone-200/80 bg-white shadow-sm overflow-auto focus:outline-none"
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
         <Table style={{ width: table.getCenterTotalSize() }} role="grid" aria-rowcount={total ?? data.length}>
-          <TableHeader role="rowgroup">
+          <TableHeader role="rowgroup" className="bg-stone-50/80">
             {table.getHeaderGroups().map((group) => (
-              <TableRow key={group.id} role="row">
+              <TableRow key={group.id} role="row" className="hover:bg-transparent">
                 {group.headers.map((header, headerIdx) => {
                   const canSort = header.column.getCanSort()
                   const sortDir = header.column.getIsSorted()
@@ -482,7 +482,7 @@ export function DataTable<T>({
                       key={header.id}
                       role="columnheader"
                       aria-sort={sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : canSort ? 'none' : undefined}
-                      className={`relative group ${isPinned ? 'bg-background' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-border' : ''}`}
+                      className={`relative group ${isPinned ? 'bg-stone-50' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-border' : ''}`}
                       style={{
                         width: header.getSize(),
                         position: isPinned ? 'sticky' : undefined,
