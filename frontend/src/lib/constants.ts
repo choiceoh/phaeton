@@ -40,29 +40,6 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   spacer: '공백',
 }
 
-export const FIELD_TYPE_ICONS: Record<FieldType, string> = {
-  text: 'Aa',
-  textarea: '¶',
-  number: '#',
-  integer: '1',
-  boolean: '☐',
-  date: '📅',
-  datetime: '🕐',
-  time: '⏱',
-  select: '▼',
-  multiselect: '▽',
-  relation: '🔗',
-  user: '👤',
-  file: '📎',
-  json: '{ }',
-  autonumber: '⧣',
-  formula: 'fx',
-  lookup: '->',
-  rollup: 'E',
-  label: 'Lbl',
-  line: '━',
-  spacer: '⬜',
-}
 
 export const LAYOUT_FIELD_TYPES: FieldType[] = ['label', 'line', 'spacer']
 export const isLayoutType = (ft: FieldType) => LAYOUT_FIELD_TYPES.includes(ft)
