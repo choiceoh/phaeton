@@ -9,8 +9,11 @@ import (
 type EventType string
 
 const (
-	EventComment     EventType = "comment"
-	EventStateChange EventType = "state_change"
+	EventComment      EventType = "comment"
+	EventStateChange  EventType = "state_change"
+	EventRecordCreate EventType = "record_created"
+	EventRecordUpdate EventType = "record_updated"
+	EventRecordDelete EventType = "record_deleted"
 )
 
 // Event is published when something notable happens.
@@ -22,6 +25,12 @@ type Event struct {
 	ActorName    string
 	Title        string
 	Body         string
+
+	// Record data for automation evaluation.
+	OldRecord  map[string]any // nil for create
+	NewRecord  map[string]any // nil for delete
+	StatusFrom string         // previous _status (for status_change)
+	StatusTo   string         // new _status (for status_change)
 }
 
 // Handler processes an event.

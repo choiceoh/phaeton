@@ -17,11 +17,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/choiceoh/phaeton/backend/internal/ai"
+	"github.com/choiceoh/phaeton/backend/internal/automation"
 	"github.com/choiceoh/phaeton/backend/internal/db"
 	"github.com/choiceoh/phaeton/backend/internal/events"
 	"github.com/choiceoh/phaeton/backend/internal/handler"
 	"github.com/choiceoh/phaeton/backend/internal/infra/lifecycle"
 	"github.com/choiceoh/phaeton/backend/internal/infra/logging"
+	"github.com/choiceoh/phaeton/backend/internal/infra/workerpool"
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/migration"
 	"github.com/choiceoh/phaeton/backend/internal/samlsp"
@@ -76,9 +78,12 @@ func run() int {
 
 	migEngine := migration.NewEngine(pool, store, cache)
 
+	// Event bus.
+	bus := events.NewBus()
+
 	// Schema & dynamic handlers (PR #53 — built-in dynamic handler).
 	schemaHandler := handler.NewSchemaHandler(store, cache, migEngine)
-	dynHandler := handler.NewDynHandler(pool, cache)
+	dynHandler := handler.NewDynHandler(pool, cache, bus)
 	viewHandler := handler.NewViewHandler(store)
 	savedViewHandler := handler.NewSavedViewHandler(store)
 	historyHandler := handler.NewHistoryHandler(pool, cache)
@@ -88,11 +93,16 @@ func run() int {
 	aiClient := ai.NewClient()
 	aiHandler := handler.NewAIHandler(aiClient, store)
 
-	// Event bus + notification subscriber.
-	bus := events.NewBus()
+	// Notification subscriber.
 	commentHandler := handler.NewCommentHandler(pool, cache, bus)
 	notifHandler := handler.NewNotificationHandler(pool)
 	handler.SubscribeNotifications(pool, bus)
+
+	// Automation engine.
+	wp := workerpool.New(0)
+	autoEngine := automation.New(pool, cache, wp)
+	autoEngine.Subscribe(bus)
+	autoHandler := handler.NewAutomationHandler(pool)
 
 	// Login rate limiter: 5 failures / 15 minutes → 30 minute lockout.
 	loginLimiter := middleware.NewRateLimiter(5, 15*60*1000, 30*60*1000)
@@ -118,7 +128,7 @@ func run() int {
 	}
 
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, savedViewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, logger, loginLimiter, samlMiddleware)
+	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, savedViewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, autoHandler, logger, loginLimiter, samlMiddleware)
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -174,6 +184,7 @@ func buildRouter(
 	commentH *handler.CommentHandler,
 	notifH *handler.NotificationHandler,
 	aiH *handler.AIHandler,
+	autoH *handler.AutomationHandler,
 	logger *slog.Logger,
 	loginLimiter *middleware.RateLimiter,
 	samlMW *samlsp.Middleware,
@@ -272,6 +283,17 @@ func buildRouter(
 			r.Post("/collections/{id}/saved-views", savedViewH.CreateSavedView)
 			r.Patch("/saved-views/{savedViewId}", savedViewH.UpdateSavedView)
 			r.Delete("/saved-views/{savedViewId}", savedViewH.DeleteSavedView)
+
+			// Automations: director and pm only.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("director", "pm"))
+				r.Get("/collections/{id}/automations", autoH.List)
+				r.Post("/collections/{id}/automations", autoH.Create)
+				r.Get("/automations/{automationId}", autoH.Get)
+				r.Patch("/automations/{automationId}", autoH.Update)
+				r.Delete("/automations/{automationId}", autoH.Delete)
+				r.Get("/automations/{automationId}/runs", autoH.ListRuns)
+			})
 		})
 
 		// Dynamic API — auto-generated CRUD for data tables.

@@ -77,4 +77,14 @@ export const queryKeys = {
     history: (collectionId?: string) =>
       [...queryKeys.migrations.all, 'history', collectionId ?? 'all'] as const,
   },
+
+  automations: {
+    all: ['automations'] as const,
+    list: (collectionId: string) =>
+      [...queryKeys.automations.all, 'list', collectionId] as const,
+    detail: (id: string) =>
+      [...queryKeys.automations.all, 'detail', id] as const,
+    runs: (id: string) =>
+      [...queryKeys.automations.all, 'runs', id] as const,
+  },
 } as const

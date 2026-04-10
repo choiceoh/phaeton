@@ -274,6 +274,20 @@ export default function AppSettingsPage() {
           </section>
         </RoleGate>
 
+        <RoleGate roles={['director', 'pm']}>
+          <section>
+            <h2 className="text-lg font-semibold">자동화</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              레코드 생성/수정/삭제 시 자동으로 알림 발송, 필드 업데이트, Webhook 호출을 실행합니다.
+            </p>
+            <Link to={`/apps/${collection.id}/automations`}>
+              <Button variant="outline" size="sm" className="mt-2">
+                자동화 설정
+              </Button>
+            </Link>
+          </section>
+        </RoleGate>
+
         <RoleGate roles={['director']}>
           <section>
             <h2 className="mb-3 text-lg font-semibold">멤버 ({members?.length ?? 0})</h2>
