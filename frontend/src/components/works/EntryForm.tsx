@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 
 import RelationCombobox from '@/components/common/RelationCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
@@ -57,7 +58,7 @@ export default function EntryForm({
   // Process status transitions (only when editing an existing entry).
   const currentStatus = initialData?._status as string | undefined
   const availableTransitions = (() => {
-    if (!process?.is_enabled || !currentStatus || !initialData?.id) return []
+    if (!process?.is_enabled || !currentStatus || !initialData?.id || !process.statuses?.length) return []
     const statusByName = new Map(process.statuses.map((s) => [s.name, s]))
     const currentStatusObj = statusByName.get(currentStatus)
     if (!currentStatusObj) return []
@@ -444,7 +445,7 @@ function FileInput({
       const result = await api.upload(file)
       onChange(result.url)
     } catch {
-      onChange(undefined)
+      toast.error('파일 업로드에 실패했습니다')
     } finally {
       setUploading(false)
     }

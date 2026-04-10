@@ -76,12 +76,12 @@ export default function ProcessPage() {
         const idToIndex = new Map(process.statuses.map((s, i) => [s.id, i]))
         setTransitions(
           process.transitions
+            .filter((t) => idToIndex.has(t.from_status_id) && idToIndex.has(t.to_status_id))
             .map((t) => ({
-              from_index: idToIndex.get(t.from_status_id) ?? 0,
-              to_index: idToIndex.get(t.to_status_id) ?? 0,
+              from_index: idToIndex.get(t.from_status_id)!,
+              to_index: idToIndex.get(t.to_status_id)!,
               label: t.label,
-            }))
-            .filter((t) => t.from_index !== undefined && t.to_index !== undefined),
+            })),
         )
       } else {
         setTransitions([])
