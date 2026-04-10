@@ -34,6 +34,8 @@ export interface Field {
   is_indexed: boolean
   default_value?: unknown
   options?: Record<string, unknown>
+  width: number
+  height: number
   sort_order: number
   created_at: string
   updated_at: string
@@ -73,6 +75,8 @@ export interface CreateFieldIn {
   is_indexed?: boolean
   default_value?: unknown
   options?: Record<string, unknown>
+  width?: number
+  height?: number
   relation?: {
     target_collection_id: string
     relation_type: RelationType

@@ -661,12 +661,13 @@ func (e *Engine) restoreMeta(ctx context.Context, tx pgx.Tx, mig Migration) erro
 		}
 		if f.ID != "" {
 			_, err := tx.Exec(ctx, `
-				INSERT INTO _meta.fields (id, collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, sort_order)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				INSERT INTO _meta.fields (id, collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, width, height, sort_order)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 				ON CONFLICT DO NOTHING`,
 				pgUUID(f.ID), pgUUID(f.CollectionID), f.Slug, f.Label, string(f.FieldType),
 				f.IsRequired, f.IsUnique, f.IsIndexed,
-				jsonBytesOrNil(f.DefaultValue), jsonBytesOrNil(f.Options), f.SortOrder,
+				jsonBytesOrNil(f.DefaultValue), jsonBytesOrNil(f.Options),
+				f.Width, f.Height, f.SortOrder,
 			)
 			if err != nil {
 				return err
@@ -692,12 +693,13 @@ func (e *Engine) restoreMeta(ctx context.Context, tx pgx.Tx, mig Migration) erro
 			}
 			for _, f := range col.Fields {
 				_, err := tx.Exec(ctx, `
-					INSERT INTO _meta.fields (id, collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, sort_order)
-					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+					INSERT INTO _meta.fields (id, collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, width, height, sort_order)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 					ON CONFLICT DO NOTHING`,
 					pgUUID(f.ID), pgUUID(f.CollectionID), f.Slug, f.Label, string(f.FieldType),
 					f.IsRequired, f.IsUnique, f.IsIndexed,
-					jsonBytesOrNil(f.DefaultValue), jsonBytesOrNil(f.Options), f.SortOrder,
+					jsonBytesOrNil(f.DefaultValue), jsonBytesOrNil(f.Options),
+					f.Width, f.Height, f.SortOrder,
 				)
 				if err != nil {
 					return err

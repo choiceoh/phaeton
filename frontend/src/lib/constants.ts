@@ -47,3 +47,16 @@ export const RELATION_TYPE_LABELS = {
   one_to_many: '1:N',
   many_to_many: 'N:M',
 }
+
+export const WIDTH_OPTIONS = [
+  { value: 1, label: '1/6' },
+  { value: 2, label: '1/3' },
+  { value: 3, label: '1/2' },
+  { value: 6, label: '전체' },
+]
+
+export const HEIGHT_OPTIONS = [
+  { value: 1, label: '1줄' },
+  { value: 2, label: '2줄' },
+  { value: 3, label: '3줄' },
+]

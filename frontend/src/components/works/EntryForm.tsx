@@ -50,9 +50,12 @@ export default function EntryForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-4">
+      <div className="grid grid-cols-6 gap-4">
         {fields.map((field) => (
-          <div key={field.id}>
+          <div
+            key={field.id}
+            style={{ gridColumn: `span ${field.width || 6}` }}
+          >
             <Label>
               {field.label}
               {field.is_required && <span className="ml-1 text-destructive">*</span>}
@@ -99,9 +102,18 @@ function FieldInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const h = field.height || 1
+
   switch (field.field_type) {
     case 'text':
-      return (
+      return h > 1 ? (
+        <Textarea
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
+          rows={h * 2}
+        />
+      ) : (
         <Input
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
@@ -203,7 +215,7 @@ function FieldInput({
               onChange(e.target.value)
             }
           }}
-          rows={4}
+          rows={Math.max(4, h * 2)}
         />
       )
     default:

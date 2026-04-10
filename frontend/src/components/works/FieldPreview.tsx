@@ -1,4 +1,4 @@
-import { FIELD_TYPE_LABELS } from '@/lib/constants'
+import { FIELD_TYPE_LABELS, WIDTH_OPTIONS, HEIGHT_OPTIONS } from '@/lib/constants'
 import type { FieldType } from '@/lib/types'
 
 export interface FieldDraft {
@@ -9,6 +9,8 @@ export interface FieldDraft {
   is_required: boolean
   is_unique: boolean
   is_indexed: boolean
+  width: number
+  height: number
   options?: Record<string, unknown>
   relation?: {
     target_collection_id: string
@@ -74,6 +76,12 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
                 <span className="text-xs text-muted-foreground">
                   {FIELD_TYPE_LABELS[field.field_type]}
                 </span>
+                {(field.width !== 6 || field.height !== 1) && (
+                  <span className="text-xs text-muted-foreground">
+                    {WIDTH_OPTIONS.find((o) => o.value === field.width)?.label ?? field.width}
+                    {field.height !== 1 && ` / ${HEIGHT_OPTIONS.find((o) => o.value === field.height)?.label ?? field.height}`}
+                  </span>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); onRemove(field.id) }}
                   className="text-xs text-muted-foreground hover:text-destructive"

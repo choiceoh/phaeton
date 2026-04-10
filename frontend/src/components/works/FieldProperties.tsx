@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { ON_DELETE_OPTIONS, RELATION_TYPE_LABELS } from '@/lib/constants'
+import { HEIGHT_OPTIONS, ON_DELETE_OPTIONS, RELATION_TYPE_LABELS, WIDTH_OPTIONS } from '@/lib/constants'
 import type { Collection } from '@/lib/types'
 
 import type { FieldDraft } from './FieldPreview'
@@ -79,6 +79,45 @@ export default function FieldProperties({ field, collections, onChange }: Props)
           onCheckedChange={(c) => update({ is_indexed: !!c })}
         />
         <Label htmlFor="indexed">인덱스</Label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label>폭</Label>
+          <Select
+            value={String(field.width)}
+            onValueChange={(v) => update({ width: Number(v) })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {WIDTH_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={String(o.value)}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label>높이</Label>
+          <Select
+            value={String(field.height)}
+            onValueChange={(v) => update({ height: Number(v) })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {HEIGHT_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={String(o.value)}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {(field.field_type === 'select' || field.field_type === 'multiselect') && (
