@@ -17,16 +17,27 @@ import {
   isLayoutType,
   operatorsForFieldType,
 } from '@/lib/constants'
-import type { Field, FilterCondition } from '@/lib/types'
+import type { Field, FilterCondition, FilterGroup, FilterLogic } from '@/lib/types'
 
 interface Props {
   fields: Field[]
-  conditions: FilterCondition[]
-  onChange: (conditions: FilterCondition[]) => void
+  /** Flat conditions — legacy interface, used when filterGroup is not provided */
+  conditions?: FilterCondition[]
+  onChange?: (conditions: FilterCondition[]) => void
+  /** Structured filter group with AND/OR logic */
+  filterGroup?: FilterGroup
+  onFilterGroupChange?: (group: FilterGroup) => void
   slug?: string
 }
 
-export default function FilterBuilder({ fields, conditions, onChange, slug }: Props) {
+export default function FilterBuilder({
+  fields,
+  conditions: legacyConditions,
+  onChange: legacyOnChange,
+  filterGroup,
+  onFilterGroupChange,
+  slug,
+}: Props) {
   const idBase = useId()
   const idCounter = useRef(0)
   const dataFields = fields.filter((f) => !isLayoutType(f.field_type))
@@ -34,45 +45,105 @@ export default function FilterBuilder({ fields, conditions, onChange, slug }: Pr
   const buildFilter = useAIBuildFilter(slug)
   const [aiQuery, setAiQuery] = useState('')
 
+  // Determine if we're in group mode or legacy mode
+  const isGroupMode = !!filterGroup && !!onFilterGroupChange
+
+  // Legacy flat mode helpers
+  const conditions = legacyConditions ?? filterGroup?.conditions ?? []
+
+  function nextId() {
+    idCounter.current++
+    return `${idBase}-${idCounter.current}`
+  }
+
   function addCondition() {
     const first = dataFields[0]
     if (!first) return
     const ops = operatorsForFieldType(first.field_type)
-    idCounter.current++
-    onChange([
-      ...conditions,
-      {
-        id: `${idBase}-${idCounter.current}`,
-        field: first.slug,
-        operator: ops[0] ?? 'eq',
-        value: '',
-      },
-    ])
+    const newCond: FilterCondition = {
+      id: nextId(),
+      field: first.slug,
+      operator: ops[0] ?? 'eq',
+      value: '',
+    }
+
+    if (isGroupMode) {
+      onFilterGroupChange!({
+        ...filterGroup!,
+        conditions: [...filterGroup!.conditions, newCond],
+      })
+    } else {
+      legacyOnChange?.([...conditions, newCond])
+    }
   }
 
   function updateCondition(id: string, patch: Partial<FilterCondition>) {
-    onChange(
-      conditions.map((c) => {
-        if (c.id !== id) return c
-        const updated = { ...c, ...patch }
-        // When field changes, reset operator to first valid one.
-        if (patch.field && patch.field !== c.field) {
-          const f = dataFields.find((df) => df.slug === patch.field)
-          if (f) {
-            const ops = operatorsForFieldType(f.field_type)
-            if (!ops.includes(updated.operator as never)) {
-              updated.operator = ops[0] ?? 'eq'
-            }
+    const mapper = (c: FilterCondition) => {
+      if (c.id !== id) return c
+      const updated = { ...c, ...patch }
+      if (patch.field && patch.field !== c.field) {
+        const f = dataFields.find((df) => df.slug === patch.field)
+        if (f) {
+          const ops = operatorsForFieldType(f.field_type)
+          if (!ops.includes(updated.operator as never)) {
+            updated.operator = ops[0] ?? 'eq'
           }
-          updated.value = ''
         }
-        return updated
-      }),
-    )
+        updated.value = ''
+      }
+      return updated
+    }
+
+    if (isGroupMode) {
+      onFilterGroupChange!(updateGroupConditions(filterGroup!, id, mapper))
+    } else {
+      legacyOnChange?.(conditions.map(mapper))
+    }
   }
 
   function removeCondition(id: string) {
-    onChange(conditions.filter((c) => c.id !== id))
+    if (isGroupMode) {
+      onFilterGroupChange!(removeFromGroup(filterGroup!, id))
+    } else {
+      legacyOnChange?.(conditions.filter((c) => c.id !== id))
+    }
+  }
+
+  function toggleLogic() {
+    if (!isGroupMode) return
+    onFilterGroupChange!({
+      ...filterGroup!,
+      logic: filterGroup!.logic === 'and' ? 'or' : 'and',
+    })
+  }
+
+  function addSubGroup() {
+    if (!isGroupMode) return
+    onFilterGroupChange!({
+      ...filterGroup!,
+      groups: [
+        ...filterGroup!.groups,
+        {
+          id: nextId(),
+          logic: filterGroup!.logic === 'and' ? 'or' : 'and',
+          conditions: [],
+          groups: [],
+        },
+      ],
+    })
+  }
+
+  function updateSubGroup(index: number, updated: FilterGroup) {
+    if (!isGroupMode) return
+    const newGroups = [...filterGroup!.groups]
+    newGroups[index] = updated
+    onFilterGroupChange!({ ...filterGroup!, groups: newGroups })
+  }
+
+  function removeSubGroup(index: number) {
+    if (!isGroupMode) return
+    const newGroups = filterGroup!.groups.filter((_, i) => i !== index)
+    onFilterGroupChange!({ ...filterGroup!, groups: newGroups })
   }
 
   function handleAIFilter() {
@@ -85,11 +156,23 @@ export default function FilterBuilder({ fields, conditions, onChange, slug }: Pr
           operator: c.operator,
           value: c.value ?? '',
         }))
-        onChange(newConditions)
+        if (isGroupMode) {
+          onFilterGroupChange!({
+            ...filterGroup!,
+            conditions: newConditions,
+            groups: [],
+          })
+        } else {
+          legacyOnChange?.(newConditions)
+        }
         setAiQuery('')
       },
     })
   }
+
+  // Render all conditions (root level)
+  const rootConditions = isGroupMode ? filterGroup!.conditions : conditions
+  const rootLogic: FilterLogic = isGroupMode ? filterGroup!.logic : 'and'
 
   return (
     <div className="space-y-2">
@@ -114,77 +197,237 @@ export default function FilterBuilder({ fields, conditions, onChange, slug }: Pr
               {buildFilter.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '적용'}
             </Button>
           </div>
-          {conditions.length > 0 && (
+          {(rootConditions.length > 0 || (isGroupMode && filterGroup!.groups.length > 0)) && (
             <div className="border-b pb-1 mb-1">
               <span className="text-[10px] text-muted-foreground">또는 직접 설정</span>
             </div>
           )}
         </>
       )}
-      {conditions.map((cond) => {
-        const field = dataFields.find((f) => f.slug === cond.field)
-        const validOps = field ? operatorsForFieldType(field.field_type) : ['eq']
-        const opLabels = FILTER_OPERATORS.filter((o) =>
-          validOps.includes(o.value as never),
-        )
 
-        return (
-          <div key={cond.id} className="flex items-center gap-2">
-            {/* Field selector */}
-            <Select
-              value={cond.field}
-              onValueChange={(v) => v && updateCondition(cond.id, { field: v })}
+      {/* Root conditions */}
+      {rootConditions.map((cond, idx) => (
+        <div key={cond.id}>
+          {idx > 0 && isGroupMode && (
+            <div className="flex items-center my-1">
+              <button
+                type="button"
+                className={`rounded px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                  rootLogic === 'and'
+                    ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                    : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                }`}
+                onClick={toggleLogic}
+              >
+                {rootLogic === 'and' ? 'AND' : 'OR'}
+              </button>
+              <div className="flex-1 border-b border-dashed ml-2" />
+            </div>
+          )}
+          <ConditionRow
+            cond={cond}
+            dataFields={dataFields}
+            onUpdate={(patch) => updateCondition(cond.id, patch)}
+            onRemove={() => removeCondition(cond.id)}
+          />
+        </div>
+      ))}
+
+      {/* Sub-groups */}
+      {isGroupMode && filterGroup!.groups.map((subGroup, gi) => (
+        <div key={subGroup.id} className="ml-3 border-l-2 border-muted-foreground/20 pl-3 py-1 space-y-1">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={`rounded px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                subGroup.logic === 'and'
+                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+              }`}
+              onClick={() => updateSubGroup(gi, { ...subGroup, logic: subGroup.logic === 'and' ? 'or' : 'and' })}
             >
-              <SelectTrigger className="w-[140px] h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {dataFields.map((f) => (
-                  <SelectItem key={f.slug} value={f.slug}>
-                    {f.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Operator selector */}
-            <Select
-              value={cond.operator}
-              onValueChange={(v) => v && updateCondition(cond.id, { operator: v })}
-            >
-              <SelectTrigger className="w-[120px] h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {opLabels.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Value input */}
-            {cond.operator !== 'is_null' && (
-              <ValueInput
-                field={field}
-                value={cond.value}
-                onChange={(v) => updateCondition(cond.id, { value: v })}
-              />
-            )}
-
+              {subGroup.logic === 'and' ? 'AND' : 'OR'} 그룹
+            </button>
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-              onClick={() => removeCondition(cond.id)}
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+              onClick={() => removeSubGroup(gi)}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-3 w-3" />
             </Button>
           </div>
-        )
-      })}
-      <Button variant="outline" size="sm" onClick={addCondition} className="gap-1">
+          <SubGroupBuilder
+            group={subGroup}
+            dataFields={dataFields}
+            onChange={(updated) => updateSubGroup(gi, updated)}
+            idBase={idBase}
+            idCounter={idCounter}
+          />
+        </div>
+      ))}
+
+      <div className="flex gap-1">
+        <Button variant="outline" size="sm" onClick={addCondition} className="gap-1">
+          <Plus className="h-3 w-3" />
+          조건 추가
+        </Button>
+        {isGroupMode && (
+          <Button variant="outline" size="sm" onClick={addSubGroup} className="gap-1">
+            <Plus className="h-3 w-3" />
+            그룹 추가
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// --- Sub-components ---
+
+function ConditionRow({
+  cond,
+  dataFields,
+  onUpdate,
+  onRemove,
+}: {
+  cond: FilterCondition
+  dataFields: Field[]
+  onUpdate: (patch: Partial<FilterCondition>) => void
+  onRemove: () => void
+}) {
+  const field = dataFields.find((f) => f.slug === cond.field)
+  const validOps = field ? operatorsForFieldType(field.field_type) : ['eq']
+  const opLabels = FILTER_OPERATORS.filter((o) =>
+    validOps.includes(o.value as never),
+  )
+
+  return (
+    <div className="flex items-center gap-2">
+      <Select
+        value={cond.field}
+        onValueChange={(v) => v && onUpdate({ field: v })}
+      >
+        <SelectTrigger className="w-[140px] h-8 text-sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {dataFields.map((f) => (
+            <SelectItem key={f.slug} value={f.slug}>
+              {f.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={cond.operator}
+        onValueChange={(v) => v && onUpdate({ operator: v })}
+      >
+        <SelectTrigger className="w-[120px] h-8 text-sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {opLabels.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {cond.operator !== 'is_null' && (
+        <ValueInput
+          field={field}
+          value={cond.value}
+          onChange={(v) => onUpdate({ value: v })}
+        />
+      )}
+
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+        onClick={onRemove}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+}
+
+function SubGroupBuilder({
+  group,
+  dataFields,
+  onChange,
+  idBase,
+  idCounter,
+}: {
+  group: FilterGroup
+  dataFields: Field[]
+  onChange: (group: FilterGroup) => void
+  idBase: string
+  idCounter: React.MutableRefObject<number>
+}) {
+  function addCond() {
+    const first = dataFields[0]
+    if (!first) return
+    const ops = operatorsForFieldType(first.field_type)
+    idCounter.current++
+    onChange({
+      ...group,
+      conditions: [
+        ...group.conditions,
+        {
+          id: `${idBase}-sg-${idCounter.current}`,
+          field: first.slug,
+          operator: ops[0] ?? 'eq',
+          value: '',
+        },
+      ],
+    })
+  }
+
+  function updateCond(id: string, patch: Partial<FilterCondition>) {
+    onChange({
+      ...group,
+      conditions: group.conditions.map((c) => {
+        if (c.id !== id) return c
+        const updated = { ...c, ...patch }
+        if (patch.field && patch.field !== c.field) {
+          const f = dataFields.find((df) => df.slug === patch.field)
+          if (f) {
+            const ops = operatorsForFieldType(f.field_type)
+            if (!ops.includes(updated.operator as never)) {
+              updated.operator = ops[0] ?? 'eq'
+            }
+          }
+          updated.value = ''
+        }
+        return updated
+      }),
+    })
+  }
+
+  function removeCond(id: string) {
+    onChange({
+      ...group,
+      conditions: group.conditions.filter((c) => c.id !== id),
+    })
+  }
+
+  return (
+    <div className="space-y-1">
+      {group.conditions.map((cond) => (
+        <ConditionRow
+          key={cond.id}
+          cond={cond}
+          dataFields={dataFields}
+          onUpdate={(patch) => updateCond(cond.id, patch)}
+          onRemove={() => removeCond(cond.id)}
+        />
+      ))}
+      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={addCond}>
         <Plus className="h-3 w-3" />
         조건 추가
       </Button>
@@ -203,7 +446,6 @@ function ValueInput({
 }) {
   const ft = field?.field_type
 
-  // Select/multiselect: show dropdown of choices.
   if ((ft === 'select' || ft === 'multiselect') && field?.options?.choices) {
     const choices = field.options.choices as string[]
     return (
@@ -222,7 +464,6 @@ function ValueInput({
     )
   }
 
-  // Boolean: true/false dropdown.
   if (ft === 'boolean') {
     return (
       <Select value={value} onValueChange={(v) => v && onChange(v)}>
@@ -237,7 +478,6 @@ function ValueInput({
     )
   }
 
-  // Date/datetime: use date input.
   if (ft === 'date') {
     return (
       <Input
@@ -260,7 +500,6 @@ function ValueInput({
     )
   }
 
-  // Number input.
   if (ft === 'number' || ft === 'integer') {
     return (
       <Input
@@ -273,7 +512,6 @@ function ValueInput({
     )
   }
 
-  // Default: text input.
   return (
     <Input
       className="w-[160px] h-8 text-sm"
@@ -282,4 +520,26 @@ function ValueInput({
       onChange={(e) => onChange(e.target.value)}
     />
   )
+}
+
+// --- Helpers ---
+
+function updateGroupConditions(
+  group: FilterGroup,
+  condId: string,
+  mapper: (c: FilterCondition) => FilterCondition,
+): FilterGroup {
+  return {
+    ...group,
+    conditions: group.conditions.map(mapper),
+    groups: group.groups.map((sg) => updateGroupConditions(sg, condId, mapper)),
+  }
+}
+
+function removeFromGroup(group: FilterGroup, condId: string): FilterGroup {
+  return {
+    ...group,
+    conditions: group.conditions.filter((c) => c.id !== condId),
+    groups: group.groups.map((sg) => removeFromGroup(sg, condId)),
+  }
 }
