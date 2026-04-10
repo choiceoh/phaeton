@@ -710,19 +710,9 @@ export default function AppViewPage() {
     [collection],
   )
 
-  if (colLoading) return <LoadingState variant="table" />
-  if (colError) return <ErrorState error={colErr} />
-  if (!collection) return null
-
-  const hasKanban = !!selectField
-  const hasCalendar = !!dateField
-  const hasGallery = !!fileField
-  const hasGantt = dateFields.length >= 1
-  const hasProcessKanban = process?.is_enabled && (process.statuses?.length ?? 0) > 0
-
   // Build synthetic field for process status kanban
   const processGroupField = useMemo(() => {
-    if (!hasProcessKanban || !process) return undefined
+    if (!process?.is_enabled || !process.statuses?.length) return undefined
     return {
       id: '_status',
       collection_id: '',
@@ -741,7 +731,7 @@ export default function AppViewPage() {
         choices: process.statuses.map((s) => s.name),
       },
     }
-  }, [hasProcessKanban, process])
+  }, [process])
 
   // Build allowedMoves map for process kanban based on transitions + user role
   const processAllowedMoves = useMemo(() => {
@@ -764,6 +754,16 @@ export default function AppViewPage() {
     }
     return moves
   }, [process, currentUser])
+
+  if (colLoading) return <LoadingState variant="table" />
+  if (colError) return <ErrorState error={colErr} />
+  if (!collection) return null
+
+  const hasKanban = !!selectField
+  const hasCalendar = !!dateField
+  const hasGallery = !!fileField
+  const hasGantt = dateFields.length >= 1
+  const hasProcessKanban = process?.is_enabled && (process.statuses?.length ?? 0) > 0
 
   function handleEntryClick(entry: Record<string, unknown>) {
     setEditEntry(entry)
