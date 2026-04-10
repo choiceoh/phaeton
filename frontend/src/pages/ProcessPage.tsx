@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { useCollection } from '@/hooks/useCollections'
 import { useProcess, useSaveProcess } from '@/hooks/useProcess'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { formatError } from '@/lib/api'
 
 const STATUS_COLORS = [
@@ -100,6 +102,21 @@ export default function ProcessPage() {
       setTransitions([])
     }
   }, [process])
+
+  const isDirty = useMemo(() => {
+    if (!process) return false
+    if (isEnabled !== process.is_enabled) return true
+    const serverStatuses = (process.statuses ?? []).map((s) => ({
+      name: s.name,
+      color: s.color,
+      sort_order: s.sort_order,
+      is_initial: s.is_initial,
+    }))
+    if (JSON.stringify(statuses) !== JSON.stringify(serverStatuses)) return true
+    return transitions.length !== (process.transitions ?? []).length
+  }, [process, isEnabled, statuses, transitions])
+
+  const blocker = useUnsavedChanges(isDirty)
 
   if (colLoading || procLoading) return <LoadingState />
   if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
@@ -377,6 +394,17 @@ export default function ProcessPage() {
           </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(open) => { if (!open) blocker.reset?.() }}
+        title="저장하지 않고 나가시겠습니까?"
+        description="작성 중인 내용이 저장되지 않습니다."
+        confirmLabel="나가기"
+        cancelLabel="계속 작성"
+        variant="destructive"
+        onConfirm={() => blocker.proceed?.()}
+      />
     </div>
   )
 }
