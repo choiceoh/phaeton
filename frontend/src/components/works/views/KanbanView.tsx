@@ -7,6 +7,7 @@ import {
   closestCorners,
   type DragStartEvent,
   type DragEndEvent,
+  type DragOverEvent,
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -93,12 +94,14 @@ function DroppableColumn({
   onCardClick,
   droppedId,
   dropState,
+  isDropTarget,
 }: {
   column: KanbanColumn
   titleField: Field | undefined
   onCardClick: (entry: Record<string, unknown>) => void
   droppedId?: string | null
   dropState: 'idle' | 'allowed' | 'blocked'
+  isDropTarget?: boolean
 }) {
   const ids = column.entries.map((e) => String(e.id))
 
@@ -114,10 +117,10 @@ function DroppableColumn({
       <SortableContext items={ids} strategy={verticalListSortingStrategy} id={column.value}>
         <div
           className={`min-h-[60px] space-y-2 rounded-lg border-2 p-1 transition-colors ${
-            dropState === 'allowed'
-              ? 'border-blue-400 bg-blue-50/50'
-              : dropState === 'blocked'
-                ? 'border-dashed border-muted-foreground/20 bg-muted/30 opacity-50'
+            dropState === 'blocked'
+              ? 'border-dashed border-muted-foreground/20 bg-muted/30 opacity-50'
+              : dropState === 'allowed' || isDropTarget
+                ? 'border-primary bg-primary/5'
                 : 'border-transparent'
           }`}
         >
@@ -154,6 +157,7 @@ export default function KanbanView({
   const [activeEntry, setActiveEntry] = useState<Record<string, unknown> | null>(null)
   const [droppedId, setDroppedId] = useState<string | null>(null)
   const [fromColumn, setFromColumn] = useState<string | null>(null)
+  const [overColumnValue, setOverColumnValue] = useState<string | null>(null)
 
   useEffect(() => {
     if (!droppedId) return
@@ -219,9 +223,19 @@ export default function KanbanView({
     }
   }
 
+  function handleDragOver(event: DragOverEvent) {
+    const { over } = event
+    if (!over) { setOverColumnValue(null); return }
+    const overId = String(over.id)
+    let col = findColumnValue(overId)
+    if (choices.includes(overId) || overId === '__none__') col = overId
+    setOverColumnValue(col ?? null)
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     setActiveEntry(null)
     setFromColumn(null)
+    setOverColumnValue(null)
     const { active, over } = event
     if (!over || !onCardMove) return
 
@@ -266,6 +280,7 @@ export default function KanbanView({
       sensors={sensors}
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4 sm:snap-none animate-fade-in">
@@ -277,6 +292,7 @@ export default function KanbanView({
             onCardClick={onCardClick}
             droppedId={droppedId}
             dropState={columnDropStates.get(col.value) ?? 'idle'}
+            isDropTarget={overColumnValue === col.value}
           />
         ))}
       </div>

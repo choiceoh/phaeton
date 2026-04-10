@@ -528,7 +528,7 @@ export function DataTable<T>({
                 return (
                 <TableRow
                   key={row.id}
-                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''}`}
+                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as Record<string, unknown>)._optimistic ? 'opacity-60' : ''}`}
                   onClick={() => {
                     // Only trigger row click if no cell is active (user clicking outside grid cells).
                     if (!grid.activeCell && onRowClick) {
