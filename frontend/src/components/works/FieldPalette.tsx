@@ -9,19 +9,24 @@ interface Props {
   collapsed?: boolean
 }
 
-const DATA_ORDER: FieldType[] = [
-  'text',
-  'textarea',
-  'number',
-  'integer',
-  'date',
-  'datetime',
-  'time',
-  'select',
-  'multiselect',
-  'relation',
-  'user',
-  'file',
+interface PaletteEntry {
+  icon: string
+  label: string
+  type: FieldType
+  presetOptions?: Record<string, unknown>
+}
+
+const GROUPED_DATA: PaletteEntry[] = [
+  { icon: FIELD_TYPE_ICONS.text, label: '텍스트', type: 'text' },
+  { icon: FIELD_TYPE_ICONS.number, label: '숫자', type: 'number' },
+  { icon: FIELD_TYPE_ICONS.date, label: '날짜', type: 'date' },
+  { icon: FIELD_TYPE_ICONS.select, label: '선택', type: 'select' },
+]
+
+const OTHER_DATA: PaletteEntry[] = [
+  { icon: FIELD_TYPE_ICONS.relation, label: FIELD_TYPE_LABELS.relation, type: 'relation' },
+  { icon: FIELD_TYPE_ICONS.user, label: FIELD_TYPE_LABELS.user, type: 'user' },
+  { icon: FIELD_TYPE_ICONS.file, label: FIELD_TYPE_LABELS.file, type: 'file' },
 ]
 
 const ADVANCED_ORDER: FieldType[] = ['boolean', 'json', 'autonumber']
@@ -57,22 +62,22 @@ export default function FieldPalette({ onAdd, collapsed = false }: Props) {
         </button>
         {dataOpen && (
           <div className="space-y-1">
-            {DATA_ORDER.map((type) => (
+            {GROUPED_DATA.map((entry) => (
               <PaletteButton
-                key={type}
-                icon={FIELD_TYPE_ICONS[type]}
-                label={FIELD_TYPE_LABELS[type]}
-                onClick={() => onAdd(type)}
+                key={entry.type}
+                icon={entry.icon}
+                label={entry.label}
+                onClick={() => onAdd(entry.type, entry.presetOptions)}
               />
             ))}
-            <PaletteButton icon="◉" label="단일 선택 (라디오)" onClick={() => onAdd('select', { display: 'radio' })} />
-            <PaletteButton icon="₩" label="통화" onClick={() => onAdd('number', { display_type: 'currency', currency_code: 'KRW' })} />
-            <PaletteButton icon="%" label="퍼센트" onClick={() => onAdd('number', { display_type: 'percent' })} />
-            <PaletteButton icon="★" label="별점" onClick={() => onAdd('number', { display_type: 'rating', max_rating: 5 })} />
-            <PaletteButton icon="▰" label="진행률" onClick={() => onAdd('number', { display_type: 'progress' })} />
-            <PaletteButton icon="🌐" label="URL" onClick={() => onAdd('text', { display_type: 'url', validation: 'url' })} />
-            <PaletteButton icon="✉" label="이메일" onClick={() => onAdd('text', { display_type: 'email', validation: 'email' })} />
-            <PaletteButton icon="📞" label="전화번호" onClick={() => onAdd('text', { display_type: 'phone', validation: 'phone' })} />
+            {OTHER_DATA.map((entry) => (
+              <PaletteButton
+                key={entry.type}
+                icon={entry.icon}
+                label={entry.label}
+                onClick={() => onAdd(entry.type, entry.presetOptions)}
+              />
+            ))}
           </div>
         )}
       </div>

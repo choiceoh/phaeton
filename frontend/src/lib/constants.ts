@@ -98,7 +98,6 @@ export const NUMBER_DISPLAY_TYPES = [
   { value: 'plain', label: '기본 숫자' },
   { value: 'currency', label: '통화 (₩)' },
   { value: 'percent', label: '퍼센트 (%)' },
-  { value: 'rating', label: '별점 (★)' },
   { value: 'progress', label: '진행률 바' },
 ]
 
