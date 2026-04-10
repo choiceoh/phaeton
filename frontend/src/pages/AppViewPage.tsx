@@ -53,6 +53,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
+  useAggregate,
   useBatchUpdateEntry,
   useBulkDeleteEntries,
   useCreateEntry,
@@ -218,26 +219,108 @@ export default function AppViewPage() {
     [collection],
   )
 
-  // Compute summary row from current page data.
+  // Per-column aggregate function state (default: sum).
+  const aggFnStorageKey = appId ? `phaeton:aggfn:${appId}` : null
+  const [columnAggFn, setColumnAggFn] = useState<Record<string, string>>(() => {
+    if (aggFnStorageKey) {
+      try {
+        const saved = localStorage.getItem(aggFnStorageKey)
+        if (saved) return JSON.parse(saved)
+      } catch { /* ignore */ }
+    }
+    return {}
+  })
+
+  const handleAggFnChange = useCallback(
+    (slug: string, fn: string) => {
+      setColumnAggFn((prev) => {
+        const next = { ...prev, [slug]: fn }
+        if (aggFnStorageKey) {
+          try { localStorage.setItem(aggFnStorageKey, JSON.stringify(next)) } catch { /* ignore */ }
+        }
+        return next
+      })
+    },
+    [aggFnStorageKey],
+  )
+
+  // Fetch server-side aggregates for numeric fields.
+  const aggSumSlug = numericFields.length > 0 ? collection?.slug : undefined
+  const { data: aggSumData } = useAggregate(aggSumSlug, {
+    group: '_created_by',
+    fn: 'sum',
+    field: numericFields.map((f) => f.slug).join(','),
+  })
+  const { data: aggAvgData } = useAggregate(aggSumSlug, {
+    group: '_created_by',
+    fn: 'avg',
+    field: numericFields.map((f) => f.slug).join(','),
+  })
+
+  // Build summary row from server-side aggregation + page-level fallback.
   const summaryRow = useMemo(() => {
     if (numericFields.length === 0 || !list?.data?.length) return undefined
     const summary: Record<string, { label: string; value: string | number }> = {}
     for (const f of numericFields) {
-      const values = list.data
+      const fn = columnAggFn[f.slug] || 'sum'
+
+      // Page-level computation (fallback and for comparison).
+      const pageValues = list.data
         .map((e) => Number(e[f.slug]))
         .filter((n) => !isNaN(n))
-      if (values.length === 0) continue
-      const sum = values.reduce((a, b) => a + b, 0)
-      const avg = sum / values.length
+      if (pageValues.length === 0) continue
+      const pageSum = pageValues.reduce((a, b) => a + b, 0)
+      const pageAvg = pageSum / pageValues.length
+      const pageMin = Math.min(...pageValues)
+      const pageMax = Math.max(...pageValues)
+      const pageCount = pageValues.length
+
+      // Server-side totals.
+      const serverSum = aggSumData?.reduce((acc, r) => acc + r.value, 0)
+      const serverAvg = aggAvgData?.length
+        ? aggAvgData.reduce((acc, r) => acc + r.value, 0) / aggAvgData.length
+        : undefined
+
       const isAllOnePage = list?.total != null && list.data.length >= list.total
-      const scopeLabel = isAllOnePage ? '' : ' (현재 페이지)'
-      summary[f.slug] = {
-        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })}${scopeLabel}`,
-        value: sum,
+
+      let displayValue: number
+      let label: string
+      const fnLabels: Record<string, string> = { sum: '합계', avg: '평균', count: '개수', min: '최소', max: '최대' }
+      const fnLabel = fnLabels[fn] || fn
+
+      switch (fn) {
+        case 'sum':
+          displayValue = isAllOnePage ? pageSum : (serverSum ?? pageSum)
+          label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: 1 })}`
+          if (!isAllOnePage && serverSum != null) label += ' (전체)'
+          break
+        case 'avg':
+          displayValue = isAllOnePage ? pageAvg : (serverAvg ?? pageAvg)
+          label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: 1 })}`
+          if (!isAllOnePage && serverAvg != null) label += ' (전체)'
+          break
+        case 'count':
+          displayValue = isAllOnePage ? pageCount : (list?.total ?? pageCount)
+          label = `${fnLabel} ${displayValue.toLocaleString('ko')}`
+          break
+        case 'min':
+          displayValue = pageMin
+          label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: 1 })}`
+          if (!isAllOnePage) label += ' (현재 페이지)'
+          break
+        case 'max':
+          displayValue = pageMax
+          label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: 1 })}`
+          if (!isAllOnePage) label += ' (현재 페이지)'
+          break
+        default:
+          displayValue = pageSum
+          label = `합계 ${displayValue.toLocaleString('ko')}`
       }
+      summary[f.slug] = { label, value: displayValue }
     }
     return Object.keys(summary).length > 0 ? summary : undefined
-  }, [numericFields, list])
+  }, [numericFields, list, columnAggFn, aggSumData, aggAvgData])
 
   // Build columns from collection.fields.
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
@@ -881,6 +964,12 @@ export default function AppViewPage() {
                 대시보드
               </Button>
             </Link>
+            <Link to={`/apps/${collection.id}/interface`}>
+              <Button variant="outline" className="gap-1">
+                <LayoutGrid className="h-4 w-4" />
+                인터페이스
+              </Button>
+            </Link>
             <RoleGate roles={['director', 'pm']}>
               <Link to={`/apps/${collection.id}/settings`}>
                 <Button variant="outline">설정</Button>
@@ -976,6 +1065,8 @@ export default function AppViewPage() {
               emptyTitle={TERM.noRecords}
               emptyDescription={TERM.noRecordsDesc}
               summaryRow={summaryRow}
+              summaryFn={columnAggFn}
+              onSummaryFnChange={handleAggFnChange}
               toolbar={tableToolbar}
               initialColumnVisibility={initialColumnVisibility}
               onColumnVisibilityChange={handleColumnVisibilityChange}

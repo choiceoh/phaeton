@@ -35,7 +35,7 @@ func FieldTypeToPG(ft schema.FieldType) string {
 		return "UUID"
 	case schema.FieldFile:
 		return "UUID"
-	case schema.FieldJSON:
+	case schema.FieldJSON, schema.FieldTable:
 		return "JSONB"
 	case schema.FieldAutonumber:
 		return "BIGINT"

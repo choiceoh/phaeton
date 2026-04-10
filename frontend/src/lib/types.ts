@@ -18,6 +18,7 @@ export type FieldType =
   | 'formula'
   | 'lookup'
   | 'rollup'
+  | 'table'
   | 'label'
   | 'line'
   | 'spacer'

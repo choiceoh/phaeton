@@ -6,6 +6,7 @@ import AppListPage from '@/pages/AppListPage'
 import AppSettingsPage from '@/pages/AppSettingsPage'
 import AutomationsPage from '@/pages/AutomationsPage'
 import DashboardPage from '@/pages/DashboardPage'
+import InterfaceDesignerPage from '@/pages/InterfaceDesignerPage'
 import GlobalAutomationsPage from '@/pages/GlobalAutomationsPage'
 import GlobalDashboardPage from '@/pages/GlobalDashboardPage'
 import ProcessPage from '@/pages/ProcessPage'
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/apps/new" element={<AppBuilderPage />} />
         <Route path="/apps/:appId" element={<AppViewPage />} />
         <Route path="/apps/:appId/dashboard" element={<DashboardPage />} />
+        <Route path="/apps/:appId/interface" element={<InterfaceDesignerPage />} />
         <Route path="/apps/:appId/settings" element={<AppSettingsPage />} />
         <Route path="/apps/:appId/process" element={<ProcessPage />} />
         <Route path="/apps/:appId/automations" element={<AutomationsPage />} />

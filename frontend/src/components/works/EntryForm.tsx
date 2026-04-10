@@ -447,6 +447,8 @@ function FieldInput({
       return <UserCombobox value={value as string | undefined} onChange={onChange} />
     case 'file':
       return <FileInput value={value as string | undefined} onChange={onChange} />
+    case 'table':
+      return <TableAreaInput field={field} value={value} onChange={onChange} />
     case 'json':
       return (
         <Textarea
@@ -466,6 +468,127 @@ function FieldInput({
         <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} />
       )
   }
+}
+
+// -- TableAreaInput: inline repeating table within the form --
+
+interface SubColumn {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'select'
+  choices?: string[]
+}
+
+function TableAreaInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: Field
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const subColumns: SubColumn[] = (field.options?.sub_columns as SubColumn[]) || [
+    { key: 'col1', label: '항목', type: 'text' },
+    { key: 'col2', label: '값', type: 'text' },
+  ]
+  const rows = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
+
+  function updateRow(rowIdx: number, key: string, val: unknown) {
+    const next = rows.map((r, i) => (i === rowIdx ? { ...r, [key]: val } : r))
+    onChange(next)
+  }
+
+  function addRow() {
+    const empty: Record<string, unknown> = {}
+    for (const col of subColumns) {
+      empty[col.key] = col.type === 'number' ? null : ''
+    }
+    onChange([...rows, empty])
+  }
+
+  function removeRow(idx: number) {
+    onChange(rows.filter((_, i) => i !== idx))
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-md border overflow-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-muted-foreground w-8">#</th>
+              {subColumns.map((col) => (
+                <th key={col.key} className="px-2 py-1.5 text-left text-xs font-medium text-muted-foreground">
+                  {col.label}
+                </th>
+              ))}
+              <th className="px-2 py-1.5 w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIdx) => (
+              <tr key={rowIdx} className="border-b last:border-b-0">
+                <td className="px-2 py-1 text-xs text-muted-foreground">{rowIdx + 1}</td>
+                {subColumns.map((col) => (
+                  <td key={col.key} className="px-1 py-0.5">
+                    {col.type === 'select' ? (
+                      <select
+                        className="h-7 w-full rounded border border-input bg-transparent px-1 text-sm"
+                        value={(row[col.key] as string) || ''}
+                        onChange={(e) => updateRow(rowIdx, col.key, e.target.value)}
+                      >
+                        <option value="">선택</option>
+                        {(col.choices || []).map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        type={col.type === 'number' ? 'number' : 'text'}
+                        className="h-7 text-sm"
+                        value={row[col.key] != null ? String(row[col.key]) : ''}
+                        onChange={(e) =>
+                          updateRow(
+                            rowIdx,
+                            col.key,
+                            col.type === 'number'
+                              ? e.target.value === '' ? null : Number(e.target.value)
+                              : e.target.value,
+                          )
+                        }
+                      />
+                    )}
+                  </td>
+                ))}
+                <td className="px-1 py-0.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => removeRow(rowIdx)}
+                  >
+                    ×
+                  </Button>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={subColumns.length + 2} className="px-2 py-3 text-center text-xs text-muted-foreground">
+                  행을 추가하세요
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <Button type="button" variant="outline" size="sm" onClick={addRow}>
+        + 행 추가
+      </Button>
+    </div>
+  )
 }
 
 function FileInput({

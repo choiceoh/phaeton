@@ -13,7 +13,7 @@ const ALL_FIELD_TYPES: FieldType[] = [
   'text', 'textarea', 'number', 'integer', 'boolean',
   'date', 'datetime', 'time', 'select', 'multiselect',
   'relation', 'user', 'file', 'json', 'autonumber',
-  'formula', 'lookup', 'rollup', 'label', 'line', 'spacer',
+  'formula', 'lookup', 'rollup', 'table', 'label', 'line', 'spacer',
 ]
 
 describe('FIELD_TYPE_LABELS', () => {

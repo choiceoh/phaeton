@@ -401,6 +401,34 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             </section>
           )}
 
+          {/* 테이블 열 설정 — table */}
+          {field.field_type === 'table' && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">테이블 열 설정 (JSON)</Label>
+              <Textarea
+                rows={6}
+                value={JSON.stringify(
+                  (opts.sub_columns as unknown[]) || [
+                    { key: 'col1', label: '항목', type: 'text' },
+                    { key: 'col2', label: '값', type: 'text' },
+                  ],
+                  null,
+                  2,
+                )}
+                onChange={(e) => {
+                  try {
+                    const parsed = JSON.parse(e.target.value)
+                    if (Array.isArray(parsed)) updateOption('sub_columns', parsed)
+                  } catch { /* ignore parse errors while typing */ }
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                각 열: {'{'}"key", "label", "type"(text|number|select), "choices"(선택시){'}'}<br />
+                예: [{'{'}"key":"item","label":"품목","type":"text"{'}'}, {'{'}"key":"qty","label":"수량","type":"number"{'}'}]
+              </p>
+            </section>
+          )}
+
           {/* 연결 설정 */}
           {isRelation && (
             <section className="space-y-3 rounded-md border bg-muted/30 p-3">
