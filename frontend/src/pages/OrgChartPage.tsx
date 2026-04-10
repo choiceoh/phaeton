@@ -1,3 +1,4 @@
+import EmptyState from '@/components/common/EmptyState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import OrgTree from '@/components/admin/OrgTree'
@@ -50,9 +51,11 @@ export default function OrgChartPage() {
             <SubsidiaryDetail sub={selected.sub} departments={departments ?? []} users={users ?? []} />
           )}
           {!selected && (
-            <p className="py-12 text-center text-sm text-muted-foreground">
-              좌측 트리에서 항목을 선택하세요
-            </p>
+            <EmptyState
+              compact
+              title="좌측 트리에서 항목을 선택하세요"
+              description="계열사, 부서 또는 구성원을 선택하면 상세 정보가 표시됩니다"
+            />
           )}
         </div>
       </div>

@@ -52,34 +52,34 @@ export default function RootLayout() {
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-white shadow-sm">T</span>
               <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Topworks</span>
             </Link>
-            <div className="flex items-center gap-0.5">
-              <NavLink to="/apps" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+            <div className="flex items-center gap-0.5 overflow-x-auto">
+              <NavLink to="/apps" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 업무
               </NavLink>
-              <NavLink to="/dashboard" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+              <NavLink to="/dashboard" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 대시보드
               </NavLink>
-              <NavLink to="/calendar" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+              <NavLink to="/calendar" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 캘린더
               </NavLink>
-              <NavLink to="/automations" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+              <NavLink to="/automations" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 자동화
               </NavLink>
-              <NavLink to="/admin/org" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+              <NavLink to="/admin/org" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 조직도
               </NavLink>
-              <NavLink to="/ai" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+              <NavLink to="/ai" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 AI
               </NavLink>
               {(user.role === 'director' || user.role === 'pm') && (
                 <>
-                  <NavLink to="/history" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+                  <NavLink to="/history" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                     이력
                   </NavLink>
-                  <NavLink to="/admin/users" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+                  <NavLink to="/admin/users" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                     사용자 관리
                   </NavLink>
-                  <NavLink to="/settings" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+                  <NavLink to="/settings" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                     설정
                   </NavLink>
                 </>

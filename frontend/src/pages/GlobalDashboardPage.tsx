@@ -1,9 +1,11 @@
 import { Link } from 'react-router'
 import { BarChart3 } from 'lucide-react'
 
+import EmptyState from '@/components/common/EmptyState'
 import LoadingState from '@/components/common/LoadingState'
 import ErrorState from '@/components/common/ErrorState'
 import PageHeader from '@/components/common/PageHeader'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCollections } from '@/hooks/useCollections'
 
@@ -23,11 +25,16 @@ export default function GlobalDashboardPage() {
       />
 
       {apps.length === 0 ? (
-        <div className="py-16 text-center text-muted-foreground">
-          <BarChart3 className="mx-auto mb-3 h-10 w-10" />
-          <p>아직 컬렉션이 없습니다</p>
-          <p className="text-sm">컬렉션을 만들면 여기에 요약이 표시됩니다.</p>
-        </div>
+        <EmptyState
+          title="아직 컬렉션이 없습니다"
+          description="컬렉션을 만들면 여기에 요약이 표시됩니다"
+          icon={<BarChart3 className="h-10 w-10" />}
+          action={
+            <Link to="/apps/new">
+              <Button>새 업무 만들기</Button>
+            </Link>
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {apps.map((app) => (
