@@ -210,6 +210,12 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     4: 'sm:col-span-4', 5: 'sm:col-span-5', 6: 'sm:col-span-6',
   }
 
+  const rowSpan: Record<number, string> = {
+    1: '',
+    2: 'row-span-2 min-h-24',
+    3: 'row-span-3 min-h-36',
+  }
+
   return (
     <div>
       <h3 className="mb-2 text-sm font-medium text-foreground/70">입력화면 미리보기</h3>
@@ -252,7 +258,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
               ? previewWidth
               : shrunk !== undefined ? shrunk : (field.width || 6)
             return (
-              <div key={field.id} className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'}`}>
+              <div key={field.id} className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'} ${rowSpan[field.height] ?? ''}`}>
                 {dropIndex === i && (
                   <div className="col-span-full -mb-2 h-0.5 rounded bg-primary transition-all" />
                 )}
