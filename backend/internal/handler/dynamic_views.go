@@ -214,6 +214,7 @@ func (h *DynHandler) CalendarView(w http.ResponseWriter, r *http.Request) {
 	for _, wi := range weeks {
 		cw := calendarWeek{
 			Days:    wi.days,
+			Spans:   []calendarSpan{},
 			Singles: make(map[string][]map[string]any),
 		}
 		// Find week start/end (non-empty dates).
