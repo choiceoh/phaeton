@@ -50,7 +50,7 @@ export default function AppCard({ collection, count }: { collection: Collection,
 
   return (
     <Link to={`/apps/${collection.id}`}>
-      <Card className="group p-4 shadow-premium transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-premium-hover">
+      <Card className="group flex h-full flex-col p-4 shadow-premium transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-premium-hover">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-muted-foreground transition-colors duration-300 group-hover:bg-foreground group-hover:text-white">
@@ -62,9 +62,7 @@ export default function AppCard({ collection, count }: { collection: Collection,
             {collection.is_system && <Badge variant="secondary">시스템</Badge>}
           </div>
         </div>
-        {collection.description && (
-          <p className="mt-2.5 line-clamp-2 break-words text-sm leading-relaxed text-muted-foreground">{collection.description}</p>
-        )}
+        <p className="mt-2.5 min-h-[2lh] flex-1 line-clamp-2 break-words text-sm leading-relaxed text-muted-foreground">{collection.description || '\u00A0'}</p>
         <div className="mt-3.5 flex items-center gap-3 text-xs text-muted-foreground/80">
           <span>{collection.fields?.length || 0}개 {TERM.field}</span>
           {count != null && (
