@@ -13,7 +13,7 @@
 
 ## 스택
 
-- **백엔드**: Go 1.24, chi, pgx v5, golang-jwt, goose, bcrypt
+- **백엔드**: Go 1.26, chi, pgx v5, golang-jwt, goose, bcrypt
 - **프론트**: Vite, React 19, shadcn/ui (Radix), Tailwind v4, React Router v7
 - **DB**: PostgreSQL 16
 - **배포**: Go 싱글 바이너리 (embed.FS로 SPA 내장)
