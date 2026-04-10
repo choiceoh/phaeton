@@ -87,6 +87,7 @@ import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
+import { useRetryToast } from '@/hooks/useRetryToast'
 import { useUndoToast } from '@/hooks/useUndoToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
@@ -225,6 +226,7 @@ export default function AppViewPage() {
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
   const undoToast = useUndoToast()
+  const retryToast = useRetryToast()
 
   // Multi-select state for bulk operations.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
@@ -651,7 +653,7 @@ export default function AppViewPage() {
       setEmailTo('')
       setEmailMessage('')
     } catch (err) {
-      toast.error(formatError(err))
+      retryToast(err, handleEmailReport)
     } finally {
       setEmailSending(false)
     }
@@ -810,7 +812,7 @@ export default function AppViewPage() {
     } else {
       createEntry.mutate(data, {
         onSuccess: () => toast.success('생성되었습니다'),
-        onError: (err) => toast.error(formatError(err)),
+        onError: (err) => retryToast(err, () => handleFormViewSubmit(data)),
       })
     }
   }
@@ -829,7 +831,7 @@ export default function AppViewPage() {
             toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
             refetch()
           } else {
-            toast.error(formatError(err))
+            retryToast(err, () => handleCardMove(entryId, newValue))
           }
         },
       },
@@ -870,7 +872,7 @@ export default function AppViewPage() {
               refetch()
               setSheetOpen(false)
             } else {
-              toast.error(formatError(err))
+              retryToast(err, () => handleSubmit(data))
             }
           },
         },
@@ -885,7 +887,7 @@ export default function AppViewPage() {
             setTimeout(() => setNewEntryId(null), 500)
           }
         },
-        onError: (err) => toast.error(formatError(err)),
+        onError: (err) => retryToast(err, () => handleSubmit(data)),
       })
     }
   }
@@ -901,9 +903,10 @@ export default function AppViewPage() {
 
   function handleDelete() {
     if (!deleteId) return
+    const capturedDeleteId = deleteId
     // Capture entry data for undo (recreate).
-    const deletedRow = list?.data?.find((r) => String(r.id) === deleteId)
-    deleteEntry.mutate(deleteId, {
+    const deletedRow = list?.data?.find((r) => String(r.id) === capturedDeleteId)
+    deleteEntry.mutate(capturedDeleteId, {
       onSuccess: () => {
         setDeleteId(null)
         if (deletedRow) {
@@ -917,7 +920,9 @@ export default function AppViewPage() {
           toast.success('삭제되었습니다')
         }
       },
-      onError: (err) => toast.error(formatError(err)),
+      onError: (err) => retryToast(err, () => {
+        setDeleteId(capturedDeleteId)
+      }),
     })
   }
 
@@ -954,7 +959,7 @@ export default function AppViewPage() {
         setSelectedRowIds(new Set())
         setBulkDeleteOpen(false)
       },
-      onError: (err) => toast.error(formatError(err)),
+      onError: (err) => retryToast(err, () => handleBulkDelete()),
     })
   }
 
@@ -1491,12 +1496,27 @@ export default function AppViewPage() {
               readonlyColumns={formulaReadonlyCols}
               cellSaveState={cellSaveState}
               fieldMeta={fieldMeta}
-              emptyTitle={TERM.noRecords}
-              emptyDescription={TERM.noRecordsDesc}
+              emptyTitle={searchText || filterConditions.length > 0 ? '검색 결과가 없습니다' : TERM.noRecords}
+              emptyDescription={searchText || filterConditions.length > 0 ? '검색어 또는 필터 조건을 변경해 보세요.' : TERM.noRecordsDesc}
+              emptyVariant={searchText || filterConditions.length > 0 ? 'no-results' : 'empty'}
               emptyAction={
-                <Button size="sm" onClick={() => { setEditEntry(undefined); setSheetOpen(true) }}>
-                  {TERM.newRecord}
-                </Button>
+                searchText || filterConditions.length > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSearchText('')
+                      setSearchInputValue('')
+                      setFilterConditions([])
+                    }}
+                  >
+                    필터 초기화
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => { setEditEntry(undefined); setSheetOpen(true) }}>
+                    {TERM.newRecord}
+                  </Button>
+                )
               }
               summaryRow={summaryRow}
               summaryFn={columnAggFn}

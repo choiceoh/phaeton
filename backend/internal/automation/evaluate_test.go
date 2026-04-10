@@ -105,7 +105,7 @@ func TestEvaluateConditions_AND(t *testing.T) {
 
 func TestMatchTriggerConfig_NonStatusChange(t *testing.T) {
 	a := Automation{TriggerType: TriggerRecordCreated}
-	if !matchTriggerConfig(a, "", "") {
+	if !matchTriggerConfig(a, "", "", "") {
 		t.Error("non-status_change trigger should always match")
 	}
 }
@@ -161,7 +161,7 @@ func TestMatchTriggerConfig_StatusChange(t *testing.T) {
 				TriggerType:   TriggerStatusChange,
 				TriggerConfig: cfgJSON,
 			}
-			got := matchTriggerConfig(a, tt.from, tt.to)
+			got := matchTriggerConfig(a, tt.from, tt.to, "")
 			if got != tt.wantMatch {
 				t.Errorf("matchTriggerConfig() = %v, want %v", got, tt.wantMatch)
 			}
@@ -174,7 +174,7 @@ func TestMatchTriggerConfig_InvalidJSON(t *testing.T) {
 		TriggerType:   TriggerStatusChange,
 		TriggerConfig: json.RawMessage(`invalid`),
 	}
-	if matchTriggerConfig(a, "a", "b") {
+	if matchTriggerConfig(a, "a", "b", "") {
 		t.Error("invalid JSON config should not match")
 	}
 }
@@ -213,6 +213,82 @@ func TestCompareNumeric(t *testing.T) {
 		if (tt.want < 0 && got >= 0) || (tt.want > 0 && got <= 0) || (tt.want == 0 && got != 0) {
 			t.Errorf("compareNumeric(%q, %q) = %d, want sign %d", tt.a, tt.b, got, tt.want)
 		}
+	}
+}
+
+func TestMatchTriggerConfig_FormSubmit(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       FormSubmitConfig
+		formSlug  string
+		wantMatch bool
+	}{
+		{
+			name:      "exact form match",
+			cfg:       FormSubmitConfig{FormSlug: "contact"},
+			formSlug:  "contact",
+			wantMatch: true,
+		},
+		{
+			name:      "form mismatch",
+			cfg:       FormSubmitConfig{FormSlug: "contact"},
+			formSlug:  "signup",
+			wantMatch: false,
+		},
+		{
+			name:      "empty config matches all",
+			cfg:       FormSubmitConfig{FormSlug: ""},
+			formSlug:  "anything",
+			wantMatch: true,
+		},
+		{
+			name:      "empty form slug with config",
+			cfg:       FormSubmitConfig{FormSlug: "contact"},
+			formSlug:  "",
+			wantMatch: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgJSON, _ := json.Marshal(tt.cfg)
+			a := Automation{
+				TriggerType:   TriggerFormSubmit,
+				TriggerConfig: cfgJSON,
+			}
+			got := matchTriggerConfig(a, "", "", tt.formSlug)
+			if got != tt.wantMatch {
+				t.Errorf("matchTriggerConfig() = %v, want %v", got, tt.wantMatch)
+			}
+		})
+	}
+}
+
+func TestMatchTriggerConfig_FormSubmit_InvalidJSON(t *testing.T) {
+	a := Automation{
+		TriggerType:   TriggerFormSubmit,
+		TriggerConfig: json.RawMessage(`invalid`),
+	}
+	// Invalid JSON in form_submit defaults to matching (see evaluate.go).
+	if !matchTriggerConfig(a, "", "", "any") {
+		t.Error("invalid JSON form_submit config should match (fallback)")
+	}
+}
+
+func TestMatchTriggerConfig_FormSubmit_NullConfig(t *testing.T) {
+	a := Automation{
+		TriggerType:   TriggerFormSubmit,
+		TriggerConfig: json.RawMessage(`{}`),
+	}
+	if !matchTriggerConfig(a, "", "", "some-form") {
+		t.Error("empty config object should match all forms")
+	}
+}
+
+func TestMapEventType_FormSubmit(t *testing.T) {
+	got := mapEventType(events.EventFormSubmit)
+	if got != TriggerFormSubmit {
+		t.Errorf("mapEventType(EventFormSubmit) = %q, want %q", got, TriggerFormSubmit)
 	}
 }
 

@@ -50,13 +50,13 @@ export default function AppCard({ collection, count }: { collection: Collection,
 
   return (
     <Link to={`/apps/${collection.id}`}>
-      <Card className="p-4 transition-all duration-200 hover:bg-accent hover:-translate-y-0.5 hover:shadow-md">
+      <Card className="p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
         <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <AppIcon name={collection.icon} className="h-4 w-4" />
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+              <AppIcon name={collection.icon} className="h-4.5 w-4.5" />
             </div>
-            <h3 className="font-semibold">{collection.label}</h3>
+            <h3 className="font-semibold tracking-tight">{collection.label}</h3>
           </div>
           <div className="flex items-center gap-1.5">
             {collection.is_system && <Badge variant="secondary">시스템</Badge>}

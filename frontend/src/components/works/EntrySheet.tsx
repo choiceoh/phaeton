@@ -55,6 +55,8 @@ export default function EntrySheet({
   const [tab, setTab] = useState<string>('form')
   const [commentBody, setCommentBody] = useState('')
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
   const [aiPrompt, setAiPrompt] = useState('')
   const [prefillData, setPrefillData] = useState<Record<string, unknown> | null>(null)
   const aiAvailable = useAIAvailable()
@@ -125,9 +127,16 @@ export default function EntrySheet({
                   fields={fields}
                   initialData={initialData}
                   slug={slug}
+                  autosave
+                  autosaveStatus={autosaveStatus}
                   onSubmit={(data) => {
+                    setAutosaveStatus('saving')
                     onSubmit(data)
-                    onClose()
+                    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+                    autosaveTimerRef.current = setTimeout(() => {
+                      setAutosaveStatus('saved')
+                      autosaveTimerRef.current = setTimeout(() => setAutosaveStatus('idle'), 2000)
+                    }, 500)
                   }}
                   onCancel={onClose}
                   submitting={submitting}

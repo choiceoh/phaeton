@@ -19,13 +19,14 @@ const (
 
 // Event is published when something notable happens.
 type Event struct {
-	Type         EventType
-	CollectionID string
-	RecordID     string
-	ActorUserID  string
-	ActorName    string
-	Title        string
-	Body         string
+	Type           EventType
+	CollectionID   string
+	CollectionSlug string
+	RecordID       string
+	ActorUserID    string
+	ActorName      string
+	Title          string
+	Body           string
 
 	// Record data for automation evaluation.
 	OldRecord  map[string]any // nil for create
