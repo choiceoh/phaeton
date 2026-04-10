@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git fetch origin && git rebase origin/main",
+            "timeout": 30,
+            "statusMessage": "Rebasing onto origin/main..."
+          },
+          {
+            "type": "command",
+            "command": "cd frontend && npm install --silent 2>/dev/null || true",
+            "timeout": 60,
+            "statusMessage": "Installing frontend dependencies..."
+          },
+          {
+            "type": "command",
+            "command": "echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"SessionStart\\\",\\\"additionalContext\\\":\\\"Recent commits:\\n$(git log --oneline -5)\\n\\nChanged files vs origin/main:\\n$(git diff --name-only origin/main 2>/dev/null || echo 'N/A')\\\"}}\"",
+            "timeout": 10,
+            "statusMessage": "Loading git context..."
+          },
+          {
+            "type": "command",
+            "command": "docker compose ps --format json 2>/dev/null | grep -q db || echo '{\"systemMessage\":\"⚠ DB 컨테이너가 실행 중이 아닙니다. make db를 실행하세요.\"}'",
+            "timeout": 10,
+            "statusMessage": "Checking DB container..."
+          }
+        ]
+      }
+    ]
+  }
+}
