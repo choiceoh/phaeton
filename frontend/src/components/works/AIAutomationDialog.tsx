@@ -13,6 +13,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { useAIBuildAutomation } from '@/hooks/useAIAutomation'
 import type { CreateAutomationReq } from '@/lib/types'
 
@@ -45,6 +46,7 @@ interface Props {
 }
 
 export default function AIAutomationDialog({ collectionId, onApply }: Props) {
+  const aiAvailable = useAIAvailable()
   const [open, setOpen] = useState(false)
   const [description, setDescription] = useState('')
   const [result, setResult] = useState<CreateAutomationReq | null>(null)
@@ -76,6 +78,8 @@ export default function AIAutomationDialog({ collectionId, onApply }: Props) {
     setResult(null)
     buildMutation.reset()
   }
+
+  if (!aiAvailable) return null
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

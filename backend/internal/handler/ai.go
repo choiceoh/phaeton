@@ -22,6 +22,17 @@ func NewAIHandler(client *ai.Client, store *schema.Store) *AIHandler {
 	return &AIHandler{client: client, store: store}
 }
 
+// HealthCheck returns whether the vLLM backend is reachable.
+func (h *AIHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	ok := h.client.Healthy(r.Context())
+	w.Header().Set("Content-Type", "application/json")
+	if ok {
+		w.Write([]byte(`{"available":true}`))
+	} else {
+		w.Write([]byte(`{"available":false}`))
+	}
+}
+
 type aiBuildRequest struct {
 	Description string            `json:"description"`
 	Answers     map[string]string `json:"answers,omitempty"` // question_id → answer (second round)

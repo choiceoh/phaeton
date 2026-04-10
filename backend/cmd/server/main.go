@@ -338,6 +338,7 @@ func buildRouter(
 			http.FileServer(http.Dir("uploads"))))
 
 		// AI endpoints.
+		r.Get("/api/ai/health", aiH.HealthCheck)
 		r.Post("/api/ai/build-collection", aiH.BuildCollection)
 		r.Post("/api/ai/chat", aiH.Chat)
 		r.Post("/api/ai/generate-slug", aiH.GenerateSlug)
