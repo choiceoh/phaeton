@@ -1,5 +1,21 @@
 import type { FieldType } from './types'
 
+// -- 용어 한국어화 (테이블→업무, 필드→항목, 레코드→데이터) --
+export const TERM = {
+  collection: '업무',
+  collections: '업무 목록',
+  field: '항목',
+  fields: '항목',
+  record: '데이터',
+  records: '데이터',
+  newCollection: '새 업무 만들기',
+  newRecord: '새 데이터',
+  noCollections: '아직 업무가 없습니다',
+  noCollectionsDesc: '새 업무를 만들어 데이터 관리를 시작하세요.',
+  noRecords: '아직 데이터가 없습니다',
+  noRecordsDesc: '"새 데이터" 버튼을 눌러 첫 데이터를 입력하세요.',
+} as const
+
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: '텍스트',
   textarea: '멀티 텍스트',
@@ -15,6 +31,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   user: '사용자',
   file: '파일',
   json: 'JSON',
+  autonumber: '자동 번호',
   label: '라벨',
   line: '라인',
   spacer: '공백',
@@ -35,6 +52,7 @@ export const FIELD_TYPE_ICONS: Record<FieldType, string> = {
   user: '👤',
   file: '📎',
   json: '{ }',
+  autonumber: '⧣',
   label: 'Lbl',
   line: '━',
   spacer: '⬜',
@@ -76,6 +94,21 @@ export const HEIGHT_OPTIONS = [
   { value: 3, label: '3줄' },
 ]
 
+export const NUMBER_DISPLAY_TYPES = [
+  { value: 'plain', label: '기본 숫자' },
+  { value: 'currency', label: '통화 (₩)' },
+  { value: 'percent', label: '퍼센트 (%)' },
+  { value: 'rating', label: '별점 (★)' },
+  { value: 'progress', label: '진행률 바' },
+]
+
+export const TEXT_DISPLAY_TYPES = [
+  { value: 'plain', label: '기본 텍스트' },
+  { value: 'url', label: 'URL (링크)' },
+  { value: 'email', label: '이메일' },
+  { value: 'phone', label: '전화번호' },
+]
+
 export const VALIDATION_OPTIONS = [
   { value: 'none', label: '모든 값 허용' },
   { value: 'email', label: '이메일' },
@@ -86,3 +119,45 @@ export const VALIDATION_OPTIONS = [
   { value: 'alphanumeric', label: '영문+숫자' },
   { value: 'regex', label: '정규식' },
 ]
+
+// -- 필터 연산자 --
+export const FILTER_OPERATORS = [
+  { value: 'eq', label: '같음' },
+  { value: 'neq', label: '같지 않음' },
+  { value: 'gt', label: '초과' },
+  { value: 'gte', label: '이상' },
+  { value: 'lt', label: '미만' },
+  { value: 'lte', label: '이하' },
+  { value: 'like', label: '포함' },
+  { value: 'in', label: '포함 (목록)' },
+  { value: 'is_null', label: '비어있음' },
+] as const
+
+export type FilterOperator = (typeof FILTER_OPERATORS)[number]['value']
+
+// Which operators make sense per field type.
+export function operatorsForFieldType(ft: FieldType): FilterOperator[] {
+  switch (ft) {
+    case 'number':
+    case 'integer':
+      return ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'is_null']
+    case 'date':
+    case 'datetime':
+    case 'time':
+      return ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'is_null']
+    case 'boolean':
+      return ['eq', 'neq', 'is_null']
+    case 'select':
+      return ['eq', 'neq', 'in', 'is_null']
+    case 'multiselect':
+      return ['like', 'is_null']
+    case 'text':
+    case 'textarea':
+      return ['eq', 'neq', 'like', 'is_null']
+    default:
+      return ['eq', 'neq', 'like', 'is_null']
+  }
+}
+
+// -- 페이지 사이즈 옵션 --
+export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const

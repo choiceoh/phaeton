@@ -14,6 +14,7 @@ export type FieldType =
   | 'user'
   | 'file'
   | 'json'
+  | 'autonumber'
   | 'label'
   | 'line'
   | 'spacer'
@@ -77,6 +78,23 @@ export interface User {
   name: string
   role: 'director' | 'pm' | 'engineer' | 'viewer'
   is_active: boolean
+  department_id?: string | null
+  position: string
+  title: string
+  phone: string
+  avatar: string
+  joined_at?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface Department {
+  id: string
+  name: string
+  parent_id: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
 // --- Request payloads ---
@@ -154,6 +172,22 @@ export interface SaveProcessReq {
   is_enabled: boolean
   statuses: { name: string; color: string; sort_order: number; is_initial: boolean }[]
   transitions: { from_index: number; to_index: number; label: string }[]
+}
+
+// --- Filter condition (frontend-only) ---
+
+export interface FilterCondition {
+  id: string
+  field: string // field slug
+  operator: string // eq, neq, gt, gte, lt, lte, like, in, is_null
+  value: string
+}
+
+// --- Aggregate response ---
+
+export interface AggregateResult {
+  group: string
+  value: number
 }
 
 // --- Views ---

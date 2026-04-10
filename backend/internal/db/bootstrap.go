@@ -43,6 +43,26 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_users_email_lower ON auth.users (LOWER(email))`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_users_role ON auth.users(role)`,
 
+		// --- auth.departments ---
+		`CREATE TABLE IF NOT EXISTS auth.departments (
+			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name        VARCHAR(255) NOT NULL,
+			parent_id   UUID REFERENCES auth.departments(id) ON DELETE SET NULL,
+			sort_order  INTEGER NOT NULL DEFAULT 0,
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_departments_parent ON auth.departments(parent_id)`,
+
+		// Upgrade: extend auth.users with org fields.
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS department_id UUID REFERENCES auth.departments(id) ON DELETE SET NULL`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS position VARCHAR(63) NOT NULL DEFAULT ''`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS title VARCHAR(63) NOT NULL DEFAULT ''`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS phone VARCHAR(31) NOT NULL DEFAULT ''`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS avatar TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS joined_at DATE`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_users_department ON auth.users(department_id)`,
+
 		// --- _meta.collections ---
 		`CREATE TABLE IF NOT EXISTS _meta.collections (
 			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tansta
 
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
+import type { AggregateResult } from '@/lib/types'
 
 // QueryParams describes the URL query string options accepted by the
 // dynamic List endpoint. Kept generic so callers can build any combination.
@@ -92,5 +93,36 @@ export function useDeleteEntry(slug: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entries.all })
     },
+  })
+}
+
+// useAggregate fetches aggregate data (count/sum/avg/min/max) for a collection.
+export function useAggregate(
+  slug: string | undefined,
+  params: { group: string; fn?: string; field?: string },
+) {
+  const search = new URLSearchParams()
+  search.set('group', params.group)
+  if (params.fn) search.set('fn', params.fn)
+  if (params.field) search.set('field', params.field)
+
+  return useQuery({
+    queryKey: [...queryKeys.entries.all, slug, 'aggregate', params],
+    queryFn: () =>
+      api.get<AggregateResult[]>(`/data/${slug}/aggregate?${search.toString()}`),
+    enabled: !!slug && !!params.group,
+  })
+}
+
+// useCollectionCount fetches the total entry count for a collection (lightweight).
+export function useCollectionCount(slug: string | undefined) {
+  return useQuery({
+    queryKey: [...queryKeys.entries.all, slug, 'count'],
+    queryFn: async () => {
+      const res = await api.getList<Record<string, unknown>>(`/data/${slug}?limit=1`)
+      return res.total
+    },
+    enabled: !!slug,
+    staleTime: 60_000,
   })
 }

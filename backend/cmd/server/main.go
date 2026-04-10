@@ -155,9 +155,24 @@ func buildRouter(
 		r.Use(middleware.RequireAuth())
 
 		// Current user.
-		r.Get("/api/auth/me", handler.Me())
+		r.Get("/api/auth/me", handler.Me(pool))
+		r.Patch("/api/auth/me", handler.UpdateMe(pool))
+		r.Post("/api/auth/password", handler.ChangePassword(pool))
+
+		// Users (list: all, write: director only).
 		r.Get("/api/users", handler.ListUsers(pool))
 		r.Post("/api/users", handler.CreateUser(pool))
+		r.Patch("/api/users/{id}", handler.UpdateUser(pool))
+
+		// Departments.
+		r.Get("/api/departments", handler.ListDepartments(pool))
+		r.Get("/api/departments/{id}", handler.GetDepartment(pool))
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRole("director"))
+			r.Post("/api/departments", handler.CreateDepartment(pool))
+			r.Patch("/api/departments/{id}", handler.UpdateDepartment(pool))
+			r.Delete("/api/departments/{id}", handler.DeleteDepartment(pool))
+		})
 
 		// Schema API — collection/field/migration management.
 		r.Route("/api/schema", func(r chi.Router) {

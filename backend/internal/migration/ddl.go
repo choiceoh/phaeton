@@ -37,6 +37,8 @@ func FieldTypeToPG(ft schema.FieldType) string {
 		return "UUID"
 	case schema.FieldJSON:
 		return "JSONB"
+	case schema.FieldAutonumber:
+		return "BIGINT"
 	case schema.FieldLabel, schema.FieldLine, schema.FieldSpacer:
 		return "" // layout types have no DB column
 	default:
@@ -60,7 +62,7 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 		if f.FieldType.IsLayout() {
 			continue
 		}
-		colDefs = append(colDefs, columnDef(f))
+		colDefs = append(colDefs, columnDefWithTable(col.Slug, f))
 	}
 	colDefs = append(colDefs,
 		"created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
@@ -69,6 +71,14 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 		"updated_by UUID",
 		"deleted_at TIMESTAMPTZ",
 	)
+
+	// Create sequences for autonumber fields before the table.
+	for _, f := range fields {
+		if f.FieldType == schema.FieldAutonumber {
+			seqName := autonumberSeqName(col.Slug, f.Slug)
+			up = append(up, fmt.Sprintf("CREATE SEQUENCE %s", quoteIdent("data", seqName)))
+		}
+	}
 
 	up = append(up, fmt.Sprintf("CREATE TABLE %s (\n  %s\n)", qTable, strings.Join(colDefs, ",\n  ")))
 
@@ -103,6 +113,21 @@ func GenerateAddColumn(tableSlug string, f schema.Field) (up, down []string) {
 	qCol := quoteIdentSingle(f.Slug)
 	pgType := FieldTypeToPG(f.FieldType)
 
+	// Autonumber: create sequence + column with DEFAULT nextval
+	if f.FieldType == schema.FieldAutonumber {
+		seqName := autonumberSeqName(tableSlug, f.Slug)
+		up = append(up,
+			fmt.Sprintf("CREATE SEQUENCE %s", quoteIdent("data", seqName)),
+			fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s NOT NULL DEFAULT nextval('%s')",
+				qTable, qCol, pgType, "data."+seqName),
+		)
+		down = []string{
+			fmt.Sprintf("ALTER TABLE %s DROP COLUMN IF EXISTS %s", qTable, qCol),
+			fmt.Sprintf("DROP SEQUENCE IF EXISTS %s", quoteIdent("data", seqName)),
+		}
+		return up, down
+	}
+
 	clause := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", qTable, qCol, pgType)
 	if f.IsRequired {
 		clause += " NOT NULL"
@@ -130,6 +155,10 @@ func GenerateDropColumn(tableSlug string, f schema.Field) (up, down []string) {
 	pgType := FieldTypeToPG(f.FieldType)
 
 	up = []string{fmt.Sprintf("ALTER TABLE %s DROP COLUMN IF EXISTS %s", qTable, qCol)}
+	if f.FieldType == schema.FieldAutonumber {
+		seqName := autonumberSeqName(tableSlug, f.Slug)
+		up = append(up, fmt.Sprintf("DROP SEQUENCE IF EXISTS %s", quoteIdent("data", seqName)))
+	}
 	down = []string{fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", qTable, qCol, pgType)}
 	return up, down
 }
@@ -235,9 +264,18 @@ func GenerateDropStatusColumn(tableSlug string) (up, down []string) {
 // ---------- internal helpers ----------
 
 func columnDef(f schema.Field) string {
+	return columnDefWithTable("", f)
+}
+
+func columnDefWithTable(tableSlug string, f schema.Field) string {
 	qCol := quoteIdentSingle(f.Slug)
 	pgType := FieldTypeToPG(f.FieldType)
 	def := qCol + " " + pgType
+	if f.FieldType == schema.FieldAutonumber && tableSlug != "" {
+		seqRef := fmt.Sprintf("'data.%s'", autonumberSeqName(tableSlug, f.Slug))
+		def += " NOT NULL DEFAULT nextval(" + seqRef + ")"
+		return def
+	}
 	if f.IsRequired {
 		def += " NOT NULL"
 	}
@@ -309,4 +347,9 @@ func quoteIdentSingle(name string) string {
 
 func escapeSQLString(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
+}
+
+// autonumberSeqName returns the sequence name for an autonumber column.
+func autonumberSeqName(tableSlug, colSlug string) string {
+	return fmt.Sprintf("%s_%s_seq", tableSlug, colSlug)
 }

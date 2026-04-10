@@ -9,6 +9,9 @@ import AppViewPage from '@/pages/AppViewPage'
 import LoginPage from '@/pages/LoginPage'
 import MigrationHistoryPage from '@/pages/MigrationHistoryPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+import UsersPage from '@/pages/UsersPage'
+import ProfilePage from '@/pages/ProfilePage'
+import OrgChartPage from '@/pages/OrgChartPage'
 
 export default function App() {
   return (
@@ -22,6 +25,9 @@ export default function App() {
         <Route path="/apps/:appId/settings" element={<AppSettingsPage />} />
         <Route path="/apps/:appId/process" element={<ProcessPage />} />
         <Route path="/history" element={<MigrationHistoryPage />} />
+        <Route path="/admin/users" element={<UsersPage />} />
+        <Route path="/admin/org" element={<OrgChartPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

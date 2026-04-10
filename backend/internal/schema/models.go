@@ -28,6 +28,8 @@ const (
 	FieldFile        FieldType = "file"
 	FieldJSON        FieldType = "json"
 
+	FieldAutonumber FieldType = "autonumber"
+
 	// Layout types — stored in _meta.fields for ordering but produce no DB column.
 	FieldLabel  FieldType = "label"
 	FieldLine   FieldType = "line"
@@ -38,7 +40,7 @@ var validFieldTypes = map[FieldType]bool{
 	FieldText: true, FieldTextarea: true, FieldNumber: true, FieldInteger: true,
 	FieldBoolean: true, FieldDate: true, FieldDatetime: true, FieldTime: true,
 	FieldSelect: true, FieldMultiselect: true, FieldRelation: true,
-	FieldFile: true, FieldJSON: true, FieldUser: true,
+	FieldFile: true, FieldJSON: true, FieldUser: true, FieldAutonumber: true,
 	FieldLabel: true, FieldLine: true, FieldSpacer: true,
 }
 
