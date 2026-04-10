@@ -14,7 +14,7 @@ interface Props {
 
 export default function ListView({ fields, entries, onRowClick }: Props) {
   const visibleFields = useMemo(
-    () => fields.filter((f) => !isLayoutType(f.field_type)).slice(0, 8),
+    () => fields.filter((f) => !isLayoutType(f.field_type)),
     [fields],
   )
 
@@ -34,7 +34,7 @@ export default function ListView({ fields, entries, onRowClick }: Props) {
       const sum = values.reduce((a, b) => a + b, 0)
       const avg = sum / values.length
       summary[f.slug] = {
-        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })}`,
+        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })} (현재 페이지)`,
         value: sum,
       }
     }

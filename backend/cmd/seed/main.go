@@ -44,5 +44,10 @@ func main() {
 		log.Fatal("seed collections:", err)
 	}
 	fmt.Fprintln(os.Stderr, "✓ preset collections seeded")
+
+	if err := seed.SeedData(ctx, pool, store, cache); err != nil {
+		log.Fatal("seed data:", err)
+	}
+	fmt.Fprintln(os.Stderr, "✓ sample data seeded")
 	fmt.Fprintln(os.Stderr, "seed complete")
 }
