@@ -15,7 +15,7 @@ import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
-import { type CellEditEvent, DataTable } from '@/components/common/DataTable'
+import { type BatchCellEditEvent, type CellEditEvent, DataTable } from '@/components/common/DataTable'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
@@ -43,6 +43,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
+  useBatchUpdateEntry,
   useCreateEntry,
   useDeleteEntry,
   useEntries,
@@ -148,6 +149,7 @@ export default function AppViewPage() {
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
+  const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
 
   // Detect views.
@@ -157,6 +159,12 @@ export default function AppViewPage() {
   )
   const dateField = useMemo(
     () => collection?.fields?.find((f) => f.field_type === 'date' || f.field_type === 'datetime'),
+    [collection],
+  )
+
+  // Formula fields are read-only in the grid.
+  const formulaReadonlyCols = useMemo(
+    () => collection?.fields?.filter((f) => f.field_type === 'formula').map((f) => f.slug) ?? [],
     [collection],
   )
 
@@ -302,6 +310,25 @@ export default function AppViewPage() {
       )
     },
     [updateEntry],
+  )
+
+  // Batch edit handler (for paste operations).
+  const handleBatchCellEdit = useCallback(
+    (event: BatchCellEditEvent) => {
+      // Group updates by rowId.
+      const byRow = new Map<string, Record<string, unknown>>()
+      for (const u of event.updates) {
+        const existing = byRow.get(u.rowId) ?? {}
+        existing[u.columnId] = u.value
+        byRow.set(u.rowId, existing)
+      }
+      const updates = Array.from(byRow.entries()).map(([id, fields]) => ({ id, fields }))
+      batchUpdateEntry.mutate(updates, {
+        onSuccess: () => toast.success(`${updates.length}건 수정되었습니다`),
+        onError: (err) => toast.error(formatError(err)),
+      })
+    },
+    [batchUpdateEntry],
   )
 
   // Search with debounce.
@@ -702,6 +729,8 @@ export default function AppViewPage() {
               onSortChange={setSorting}
               onRowClick={handleEntryClick}
               onCellEdit={handleCellEdit}
+              onBatchCellEdit={handleBatchCellEdit}
+              readonlyColumns={formulaReadonlyCols}
               emptyTitle={TERM.noRecords}
               emptyDescription={TERM.noRecordsDesc}
               summaryRow={summaryRow}

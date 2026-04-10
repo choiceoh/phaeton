@@ -30,6 +30,10 @@ const (
 
 	FieldAutonumber FieldType = "autonumber"
 
+	// Formula type — stored in _meta.fields but produces no DB column.
+	// Values are computed at query time via SQL expressions.
+	FieldFormula FieldType = "formula"
+
 	// Layout types — stored in _meta.fields for ordering but produce no DB column.
 	FieldLabel  FieldType = "label"
 	FieldLine   FieldType = "line"
@@ -41,6 +45,7 @@ var validFieldTypes = map[FieldType]bool{
 	FieldBoolean: true, FieldDate: true, FieldDatetime: true, FieldTime: true,
 	FieldSelect: true, FieldMultiselect: true, FieldRelation: true,
 	FieldFile: true, FieldJSON: true, FieldUser: true, FieldAutonumber: true,
+	FieldFormula: true,
 	FieldLabel: true, FieldLine: true, FieldSpacer: true,
 }
 
@@ -49,6 +54,12 @@ func (ft FieldType) Valid() bool { return validFieldTypes[ft] }
 // IsLayout returns true for field types that are purely visual (no DB column).
 func (ft FieldType) IsLayout() bool {
 	return ft == FieldLabel || ft == FieldLine || ft == FieldSpacer
+}
+
+// IsVirtual returns true for field types that have no DB column but appear in
+// query results (computed at SELECT time). Formula fields are virtual.
+func (ft FieldType) IsVirtual() bool {
+	return ft == FieldFormula
 }
 
 // RelationType for inter-collection references.

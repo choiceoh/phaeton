@@ -32,6 +32,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   file: '파일',
   json: 'JSON',
   autonumber: '자동 번호',
+  formula: '수식',
   label: '라벨',
   line: '라인',
   spacer: '공백',
@@ -53,6 +54,7 @@ export const FIELD_TYPE_ICONS: Record<FieldType, string> = {
   file: '📎',
   json: '{ }',
   autonumber: '⧣',
+  formula: 'fx',
   label: 'Lbl',
   line: '━',
   spacer: '⬜',
@@ -153,6 +155,8 @@ export function operatorsForFieldType(ft: FieldType): FilterOperator[] {
     case 'text':
     case 'textarea':
       return ['eq', 'neq', 'like', 'is_null']
+    case 'formula':
+      return ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'is_null']
     default:
       return ['eq', 'neq', 'like', 'is_null']
   }
