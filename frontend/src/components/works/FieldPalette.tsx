@@ -79,24 +79,20 @@ const DESIGN_ENTRIES: PaletteEntry[] = [
   { icon: FIELD_ICONS.spacer, label: FIELD_TYPE_LABELS.spacer, type: 'spacer' },
 ]
 
-const FORMULA_ENTRIES: PaletteEntry[] = [
+const ADVANCED_ENTRIES: PaletteEntry[] = [
   { icon: FIELD_ICONS.formula, label: FIELD_TYPE_LABELS.formula, type: 'formula' },
   { icon: FIELD_ICONS.lookup, label: FIELD_TYPE_LABELS.lookup, type: 'lookup' },
   { icon: FIELD_ICONS.rollup, label: FIELD_TYPE_LABELS.rollup, type: 'rollup' },
-]
-
-const ADVANCED_ENTRIES: PaletteEntry[] = [
   { icon: FIELD_ICONS.boolean, label: FIELD_TYPE_LABELS.boolean, type: 'boolean' },
   { icon: FIELD_ICONS.json, label: FIELD_TYPE_LABELS.json, type: 'json' },
   { icon: FIELD_ICONS.autonumber, label: FIELD_TYPE_LABELS.autonumber, type: 'autonumber' },
 ]
 
-type TabKey = 'data' | 'design' | 'formula' | 'advanced'
+type TabKey = 'data' | 'design' | 'advanced'
 
 const TABS: { key: TabKey; label: string; entries: PaletteEntry[] }[] = [
   { key: 'data', label: '데이터', entries: DATA_ENTRIES },
   { key: 'design', label: '디자인', entries: DESIGN_ENTRIES },
-  { key: 'formula', label: '수식', entries: FORMULA_ENTRIES },
   { key: 'advanced', label: '고급', entries: ADVANCED_ENTRIES },
 ]
 
