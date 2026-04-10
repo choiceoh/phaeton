@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { type BatchCellEditEvent, type CellEditEvent, DataTable } from '@/components/common/DataTable'
+import { type BatchCellEditEvent, type CellEditEvent, type FieldMeta, DataTable } from '@/components/common/DataTable'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
@@ -429,6 +429,16 @@ export default function AppViewPage() {
     })
     return cols
   }, [collection, process, processVisible])
+
+  // Build fieldMeta map for type-specific inline editors.
+  const fieldMeta = useMemo<Record<string, FieldMeta>>(() => {
+    if (!collection?.fields) return {}
+    const meta: Record<string, FieldMeta> = {}
+    for (const f of collection.fields) {
+      meta[f.slug] = { fieldType: f.field_type, options: f.options }
+    }
+    return meta
+  }, [collection?.fields])
 
   // Default: hide columns beyond the first 8 data fields, restored from localStorage if available.
   const colVisStorageKey = appId ? `phaeton:colvis:${appId}` : null
@@ -1349,6 +1359,7 @@ export default function AppViewPage() {
               onBatchCellEdit={handleBatchCellEdit}
               readonlyColumns={formulaReadonlyCols}
               cellSaveState={cellSaveState}
+              fieldMeta={fieldMeta}
               emptyTitle={TERM.noRecords}
               emptyDescription={TERM.noRecordsDesc}
               emptyAction={

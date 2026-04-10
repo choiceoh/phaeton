@@ -45,6 +45,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 
 import EmptyState from './EmptyState'
 import GridCell from './GridCell'
+import type { FieldType } from '@/lib/types'
+
+export interface FieldMeta {
+  fieldType: FieldType
+  options?: Record<string, unknown>
+}
 
 export interface CellEditEvent {
   rowId: string
@@ -88,6 +94,8 @@ interface Props<T> {
   highlightRows?: number
   /** ID of a newly created row to animate entrance. */
   newRowId?: string | null
+  /** Field metadata per column ID for type-specific inline editors. */
+  fieldMeta?: Record<string, FieldMeta>
   /** Enable row selection with checkboxes */
   selectable?: boolean
   /** Currently selected row IDs (controlled) */
@@ -122,6 +130,7 @@ export function DataTable<T>({
   toolbar,
   initialColumnVisibility,
   onColumnVisibilityChange: onColumnVisibilityChangeProp,
+  fieldMeta,
   highlightRows = 0,
   newRowId,
   selectable,
@@ -456,10 +465,10 @@ export function DataTable<T>({
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
-        <Table style={{ width: table.getCenterTotalSize() }}>
-          <TableHeader>
+        <Table style={{ width: table.getCenterTotalSize() }} role="grid" aria-rowcount={total ?? data.length}>
+          <TableHeader role="rowgroup">
             {table.getHeaderGroups().map((group) => (
-              <TableRow key={group.id}>
+              <TableRow key={group.id} role="row">
                 {group.headers.map((header, headerIdx) => {
                   const canSort = header.column.getCanSort()
                   const sortDir = header.column.getIsSorted()
@@ -471,6 +480,8 @@ export function DataTable<T>({
                   return (
                     <TableHead
                       key={header.id}
+                      role="columnheader"
+                      aria-sort={sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : canSort ? 'none' : undefined}
                       className={`relative group ${isPinned ? 'bg-background' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-border' : ''}`}
                       style={{
                         width: header.getSize(),
@@ -516,10 +527,10 @@ export function DataTable<T>({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
+          <TableBody role="rowgroup">
             {visibleRows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columns.length}>
+              <TableRow role="row">
+                <TableCell role="gridcell" colSpan={columns.length}>
                   <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />
                 </TableCell>
               </TableRow>
@@ -530,7 +541,9 @@ export function DataTable<T>({
                 return (
                 <TableRow
                   key={row.id}
-                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as Record<string, unknown>)._optimistic ? 'opacity-60' : ''}`}
+                  role="row"
+                  aria-rowindex={(page - 1) * limit + rowIdx + 2}
+                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as Record<string, unknown>)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
                   onClick={() => {
                     // Only trigger row click if no cell is active (user clicking outside grid cells).
                     if (!grid.activeCell && onRowClick) {
@@ -548,10 +561,27 @@ export function DataTable<T>({
                     const pinnedLeftCols = columnPinning.left ?? []
                     const isLastPinnedLeftCell = isPinned === 'left' && colIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
 
+                    // Compute selection edge flags for border outline.
+                    const sel = grid.selection
+                    const selNorm = sel ? {
+                      r1: Math.min(sel.startRow, sel.endRow),
+                      r2: Math.max(sel.startRow, sel.endRow),
+                      c1: Math.min(sel.startCol, sel.endCol),
+                      c2: Math.max(sel.startCol, sel.endCol),
+                    } : null
+                    const inSel = isSelected && selNorm
+                    const edgeTop = inSel && rowIdx === selNorm.r1
+                    const edgeBottom = inSel && rowIdx === selNorm.r2
+                    const edgeLeft = inSel && colIdx === selNorm.c1
+                    const edgeRight = inSel && colIdx === selNorm.c2
+
+                    const meta = fieldMeta?.[colId]
+
                     return (
                       <TableCell
                         key={cell.id}
-                        className={`${isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-border' : ''}`}
+                        role="gridcell"
+                        className={`${isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-border' : ''} relative ${edgeTop ? 'border-t-2 border-t-primary' : ''} ${edgeBottom ? 'border-b-2 border-b-primary' : ''} ${edgeLeft ? 'border-l-2 border-l-primary' : ''} ${edgeRight ? 'border-r-2 border-r-primary' : ''}`}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
@@ -575,6 +605,8 @@ export function DataTable<T>({
                             editable={editable}
                             saving={saveState === 'saving'}
                             saved={saveState === 'saved'}
+                            fieldType={meta?.fieldType}
+                            fieldOptions={meta?.options}
                             onSave={(value) => {
                               onCellEdit({
                                 rowId: cellRowId,
