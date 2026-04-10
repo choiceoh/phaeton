@@ -151,6 +151,20 @@ func (c *Cache) CollectionBySlug(slug string) (Collection, bool) {
 	return col, ok
 }
 
+// CollectionByFieldID returns the collection that owns the given field.
+func (c *Cache) CollectionByFieldID(fieldID string) (Collection, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, col := range c.byID {
+		for _, f := range col.Fields {
+			if f.ID == fieldID {
+				return col, true
+			}
+		}
+	}
+	return Collection{}, false
+}
+
 // Fields returns the field list for a collection (empty slice if not found).
 func (c *Cache) Fields(collectionID string) []Field {
 	c.mu.RLock()

@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/migration"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
@@ -84,6 +85,10 @@ func (h *SchemaHandler) CreateCollection(w http.ResponseWriter, r *http.Request)
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	if user, ok := middleware.GetUser(r.Context()); ok {
+		req.CreatedBy = user.UserID
 	}
 
 	col, err := h.engine.CreateCollection(r.Context(), &req)

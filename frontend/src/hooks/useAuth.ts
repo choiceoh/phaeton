@@ -59,3 +59,14 @@ export function hasRole(user: User | null | undefined, roles: User['role'][]): b
   if (!user) return false
   return roles.includes(user.role)
 }
+
+// canManageCollection returns true if the user is director/pm or is the
+// creator of the given collection.
+export function canManageCollection(
+  user: User | null | undefined,
+  collectionCreatedBy?: string,
+): boolean {
+  if (!user) return false
+  if (hasRole(user, ['director', 'pm'])) return true
+  return !!collectionCreatedBy && collectionCreatedBy === user.id
+}
