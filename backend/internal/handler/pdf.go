@@ -19,6 +19,9 @@ import (
 //
 // GET /api/data/{slug}/export.pdf
 func (h *DynHandler) ExportPDF(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 60*time.Second)
+	defer cancel()
+
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
