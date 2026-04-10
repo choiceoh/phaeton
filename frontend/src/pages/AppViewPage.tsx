@@ -21,7 +21,7 @@ import {
   Ellipsis,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -92,6 +92,16 @@ const DEFAULT_LIMIT = 20
 
 export default function AppViewPage() {
   const { appId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') || 'list'
+  const setActiveTab = useCallback((tab: string | number) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (String(tab) === 'list') next.delete('tab')
+      else next.set('tab', String(tab))
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(DEFAULT_LIMIT)
   const [sorting, setSorting] = useState<SortingState>([])
@@ -1291,7 +1301,7 @@ export default function AppViewPage() {
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
       {list && (
-        <Tabs defaultValue="list">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4 max-w-full overflow-x-auto">
             <TabsTrigger value="list">목록</TabsTrigger>
             {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}

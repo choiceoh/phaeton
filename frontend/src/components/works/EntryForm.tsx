@@ -6,11 +6,19 @@ import RelationMultiCombobox from '@/components/common/RelationMultiCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useSimilarRecords } from '@/hooks/useEntries'
+import { X } from 'lucide-react'
+
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -462,20 +470,46 @@ function FieldInput({
       const choices = (field.options?.choices as string[]) || []
       const selected = (value as string[]) || []
       return (
-        <div className="space-y-1">
-          {choices.map((c) => (
-            <label key={c} className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={selected.includes(c)}
-                onCheckedChange={(checked) => {
-                  if (checked) onChange([...selected, c])
-                  else onChange(selected.filter((x) => x !== c))
+        <Popover>
+          <PopoverTrigger
+            className="flex min-h-9 w-full flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm shadow-xs"
+          >
+            {selected.length === 0 && (
+              <span className="text-muted-foreground">선택...</span>
+            )}
+            {selected.map((v) => (
+              <Badge
+                key={v}
+                variant="secondary"
+                className="gap-0.5"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onChange(selected.filter((x) => x !== v))
                 }}
-              />
-              {c}
-            </label>
-          ))}
-        </div>
+              >
+                {v}
+                <X className="h-3 w-3 cursor-pointer" />
+              </Badge>
+            ))}
+          </PopoverTrigger>
+          <PopoverContent align="start" className="max-h-60 overflow-y-auto p-1">
+            {choices.map((c) => (
+              <label
+                key={c}
+                className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <Checkbox
+                  checked={selected.includes(c)}
+                  onCheckedChange={(checked) => {
+                    if (checked) onChange([...selected, c])
+                    else onChange(selected.filter((x) => x !== c))
+                  }}
+                />
+                {c}
+              </label>
+            ))}
+          </PopoverContent>
+        </Popover>
       )
     }
     case 'relation':
