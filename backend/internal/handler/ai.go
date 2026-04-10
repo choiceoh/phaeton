@@ -200,7 +200,7 @@ If you need clarification:
 - "태양광 프로젝트 관리" → {"mode": "proceed"} (solar project management is clear)
 - "발전사업허가 신청 관리" → {"mode": "proceed"} (specific permit type)
 - "관리" → questions (what are you managing?)
-- "우리팀 업무" → questions (too vague, need scope)
+- "우리팀 앱" → questions (too vague, need scope)
 - "인사" → questions (recruitment? payroll? records?)
 
 ## Rules for questions:

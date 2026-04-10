@@ -235,7 +235,7 @@ export default function FormulaEditor({
       {/* Relation fields for cross-collection formulas */}
       {relationFields.length > 0 && (
         <div className="space-y-1">
-          <Label className="text-xs font-semibold text-muted-foreground">연결 항목 (업무 간 참조)</Label>
+          <Label className="text-xs font-semibold text-muted-foreground">연결 항목 (앱 간 참조)</Label>
           <div className="flex flex-wrap gap-1">
             {relationFields.map((f) => (
               <button

@@ -106,7 +106,7 @@ func TestDynIntegration_CRUD(t *testing.T) {
 	router, _, _ := setupDynRouter(t)
 
 	// 1. Create a collection with fields.
-	colID := createTestCollection(t, router, "tasks", "업무")
+	colID := createTestCollection(t, router, "tasks", "앱")
 	addTestField(t, router, colID, "title", "제목", "text")
 	addTestField(t, router, colID, "count", "수량", "number")
 

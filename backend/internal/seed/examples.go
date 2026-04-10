@@ -53,13 +53,13 @@ func inventoryPreset() Preset {
 	}
 }
 
-// ── 업무 요청 ────────────────────────────────────────────────────
+// ── 요청 관리 ────────────────────────────────────────────────────
 
 func requestsPreset() Preset {
 	return Preset{
 		Slug:        "requests",
-		Label:       "업무 요청",
-		Description: "부서 간 업무 요청·처리 현황 추적",
+		Label:       "요청 관리",
+		Description: "부서 간 요청·처리 현황 추적",
 		Icon:        "inbox",
 		Fields: []schema.CreateFieldIn{
 			{Slug: "title", Label: "제목", FieldType: schema.FieldText, IsRequired: true},

@@ -42,7 +42,7 @@ export default function LoginPage() {
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-sm font-bold text-white shadow-sm">T</span>
               <h1 className="text-xl font-bold tracking-tight text-foreground">Topworks</h1>
             </div>
-            <p className="text-sm text-muted-foreground">업무 플랫폼에 로그인하세요</p>
+            <p className="text-sm text-muted-foreground">앱 플랫폼에 로그인하세요</p>
           </div>
 
           <FormField<LoginForm> name="email" label="이메일" required>

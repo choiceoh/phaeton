@@ -83,7 +83,7 @@ func (h *AIHandler) BuildFilter(w http.ResponseWriter, r *http.Request) {
 
 	userMsg := req.Query
 	if col, err := h.store.GetCollectionBySlug(ctx, collectionSlug); err == nil {
-		userMsg = "대상 업무: " + col.Label + " (slug: " + col.Slug + ")\n\n" + req.Query
+		userMsg = "대상 앱: " + col.Label + " (slug: " + col.Slug + ")\n\n" + req.Query
 	}
 
 	raw, err := h.client.CompleteWithTools(ctx, filterSystemPrompt, nil, userMsg, workspaceTools, resolve)

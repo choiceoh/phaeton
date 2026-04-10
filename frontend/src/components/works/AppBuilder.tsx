@@ -187,7 +187,7 @@ export default function AppBuilder() {
 
     createCollection.mutate(body, {
       onSuccess: (created) => {
-        toast.success(`${created.label} 업무가 생성되었습니다`)
+        toast.success(`${created.label} 앱이 생성되었습니다`)
         navigate(`/apps/${created.id}`)
       },
       onError: (err) => {
@@ -201,7 +201,7 @@ export default function AppBuilder() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">새 업무 만들기</h1>
+        <h1 className="text-2xl font-bold">새 앱 만들기</h1>
         <AIBuildDialog onApply={handleAIApply} />
       </div>
 
@@ -222,7 +222,7 @@ export default function AppBuilder() {
             <p className="text-sm font-medium text-muted-foreground">기본 정보</p>
             <div className="grid grid-cols-6 gap-2">
               <div className="col-span-2 space-y-1">
-                <Label>업무 이름 (한글)</Label>
+                <Label>앱 이름 (한글)</Label>
                 <Input value={label} onChange={(e) => handleLabelChange(e.target.value)} placeholder="인허가 체크리스트" />
               </div>
               <div className="col-span-1 space-y-1">
@@ -240,7 +240,7 @@ export default function AppBuilder() {
               </div>
               <div className="col-span-3 space-y-1">
                 <Label>설명</Label>
-                <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="업무 설명" />
+                <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="앱 설명" />
               </div>
             </div>
           </div>

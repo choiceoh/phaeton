@@ -474,7 +474,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             <section className="space-y-3 rounded-md border bg-muted/30 p-3">
               <Label className="text-xs font-semibold text-muted-foreground">연결 설정</Label>
               <div className="space-y-1">
-                <Label className="text-xs">대상 업무</Label>
+                <Label className="text-xs">대상 앱</Label>
                 <Select
                   value={field.relation?.target_collection_id || ''}
                   onValueChange={(v) =>

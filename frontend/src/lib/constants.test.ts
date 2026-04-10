@@ -97,7 +97,7 @@ describe('operatorsForFieldType', () => {
 
 describe('TERM', () => {
   it('has Korean translations', () => {
-    expect(TERM.collection).toBe('업무')
+    expect(TERM.collection).toBe('앱')
     expect(TERM.field).toBe('항목')
     expect(TERM.record).toBe('데이터')
   })

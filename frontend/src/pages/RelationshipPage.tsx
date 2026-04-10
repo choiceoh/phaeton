@@ -16,7 +16,7 @@ export default function RelationshipPage() {
         title="관계 시각화"
         description="앱 간 관계 필드 연결을 시각적으로 확인합니다"
         breadcrumb={[
-          { label: '업무 목록', href: '/apps' },
+          { label: '앱 목록', href: '/apps' },
           { label: '관계 시각화' },
         ]}
       />
@@ -30,7 +30,7 @@ export default function RelationshipPage() {
           description="앱에 관계(relation) 필드를 추가하면 여기에 연결 관계가 표시됩니다."
           action={
             <Link to="/apps" className="text-primary underline text-sm">
-              업무 목록으로 돌아가기
+              앱 목록으로 돌아가기
             </Link>
           }
         />

@@ -62,7 +62,7 @@ const numberField: Field = {
 }
 
 const collection: Collection = {
-  id: 'c1', slug: 'tasks', label: '업무 관리', description: '업무를 관리합니다',
+  id: 'c1', slug: 'tasks', label: '앱 관리', description: '앱을 관리합니다',
   is_system: false, process_enabled: false, sort_order: 0, access_config: {},
   created_at: '2024-01-01', updated_at: '2024-01-01',
   fields: [textField, selectField, dateField, numberField],
@@ -110,7 +110,7 @@ describe('AppViewPage', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getAllByText('업무 관리').length).toBeGreaterThanOrEqual(1)
+        expect(screen.getAllByText('앱 관리').length).toBeGreaterThanOrEqual(1)
       })
 
       await waitFor(() => {

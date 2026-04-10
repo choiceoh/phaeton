@@ -69,7 +69,7 @@ func (h *AIHandler) Prefill(w http.ResponseWriter, r *http.Request) {
 
 	userMsg := req.Description
 	if col, err := h.store.GetCollectionBySlug(ctx, collectionSlug); err == nil {
-		userMsg = "대상 업무: " + col.Label + " (slug: " + col.Slug + ")\n\n" + req.Description
+		userMsg = "대상 앱: " + col.Label + " (slug: " + col.Slug + ")\n\n" + req.Description
 	}
 
 	raw, err := h.client.CompleteWithTools(ctx, prefillSystemPrompt, nil, userMsg, workspaceTools, resolve)

@@ -269,12 +269,12 @@ describe('EntryForm', () => {
 
       const titleInput = screen.getAllByRole('textbox')[0]
       await user.clear(titleInput)
-      await user.type(titleInput, '새 업무')
+      await user.type(titleInput, '새 앱')
 
       const submitBtn = screen.getByText('저장')
       await user.click(submitBtn)
 
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ title: '새 업무' }))
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ title: '새 앱' }))
     })
 
     it('shows "저장 중..." when submitting', () => {

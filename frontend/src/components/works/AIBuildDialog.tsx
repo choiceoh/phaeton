@@ -144,9 +144,9 @@ export default function AIBuildDialog({ onApply }: Props) {
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>AI 업무 빌더</DialogTitle>
+          <DialogTitle>AI 앱 빌더</DialogTitle>
           <DialogDescription>
-            어떤 업무를 관리하고 싶은지 설명해 주세요. AI가 적절한 업무 구조를
+            어떤 앱을 관리하고 싶은지 설명해 주세요. AI가 적절한 앱 구조를
             제안합니다.
           </DialogDescription>
         </DialogHeader>
