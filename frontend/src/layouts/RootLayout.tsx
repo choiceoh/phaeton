@@ -45,54 +45,54 @@ export default function RootLayout() {
 
   return (
     <AIAvailabilityProvider>
-      <div className="min-h-screen bg-stone-50/80">
-        <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-stone-200/80 bg-white/95 px-6 py-2.5 backdrop-blur-sm">
-          <div className="flex items-center gap-1">
-            <Link to="/" className="mr-4 flex items-center gap-2 text-lg font-bold tracking-tight text-stone-900" viewTransition>
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-900 text-xs font-bold text-white">T</span>
-              Topworks
+      <div className="min-h-screen bg-background">
+        <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-border/60 bg-white/80 px-6 py-2.5 backdrop-blur-md backdrop-saturate-150">
+          <div className="flex items-center gap-1.5">
+            <Link to="/" className="mr-5 flex items-center gap-2.5 text-lg font-bold tracking-tight text-foreground" viewTransition>
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-white shadow-sm">T</span>
+              <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Topworks</span>
             </Link>
-            <div className="flex items-center">
-              <NavLink to="/apps" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+            <div className="flex items-center gap-0.5">
+              <NavLink to="/apps" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 업무
               </NavLink>
-              <NavLink to="/dashboard" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+              <NavLink to="/dashboard" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 대시보드
               </NavLink>
-              <NavLink to="/calendar" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+              <NavLink to="/calendar" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 캘린더
               </NavLink>
-              <NavLink to="/automations" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+              <NavLink to="/automations" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 자동화
               </NavLink>
-              <NavLink to="/admin/org" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+              <NavLink to="/admin/org" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 조직도
               </NavLink>
               {(user.role === 'director' || user.role === 'pm') && (
                 <>
-                  <NavLink to="/history" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                  <NavLink to="/history" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                     이력
                   </NavLink>
-                  <NavLink to="/admin/users" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                  <NavLink to="/admin/users" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                     사용자 관리
                   </NavLink>
-                  <NavLink to="/settings" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                  <NavLink to="/settings" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                     설정
                   </NavLink>
                 </>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1 text-sm text-stone-500">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <NotificationBell />
             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-stone-100 focus-visible:outline-none">
+              <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent focus-visible:outline-none">
                 <Avatar className="h-7 w-7">
-                  <AvatarFallback className="bg-stone-900 text-[11px] font-medium text-white">
+                  <AvatarFallback className="bg-foreground text-[11px] font-medium text-white">
                     {user.name.slice(0, 1)}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-sm text-stone-700">{user.name}</span>
+                <span className="text-sm font-medium text-foreground">{user.name}</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuLabel className="font-normal">
@@ -121,7 +121,7 @@ export default function RootLayout() {
             </DropdownMenu>
           </div>
         </nav>
-        <main className="mx-auto max-w-7xl px-6 py-8">
+        <main className="mx-auto max-w-7xl px-6 py-10">
           <Outlet />
         </main>
         <AIChatPanel />

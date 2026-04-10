@@ -19,8 +19,8 @@ const VARIANT_ICONS: Record<Variant, ReactNode> = {
 }
 
 const VARIANT_BORDER: Record<Variant, string> = {
-  'empty': 'border-dashed border-stone-300',
-  'no-results': 'border-dashed border-stone-200',
+  'empty': 'border-dashed border-border',
+  'no-results': 'border-dashed border-border/60',
   'no-permission': 'border-dashed border-destructive/20',
 }
 
@@ -31,21 +31,21 @@ export default function EmptyState({ title, description, icon, action, compact, 
     <div
       className={
         compact
-          ? 'flex flex-col items-center justify-center gap-2 px-4 py-4 text-center animate-fade-in'
-          : `flex flex-col items-center justify-center gap-3 rounded-xl border px-4 py-8 text-center sm:px-6 sm:py-14 animate-fade-in ${VARIANT_BORDER[variant]}`
+          ? 'flex flex-col items-center justify-center gap-2.5 px-4 py-4 text-center animate-fade-in'
+          : `flex flex-col items-center justify-center gap-3.5 rounded-2xl border px-4 py-10 text-center sm:px-6 sm:py-16 animate-fade-in ${VARIANT_BORDER[variant]}`
       }
     >
       {resolvedIcon && (
         <div className={compact
-          ? 'flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-stone-400'
-          : 'flex h-14 w-14 items-center justify-center rounded-full bg-stone-100 text-stone-400'
+          ? 'flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-muted-foreground/60'
+          : 'flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-muted-foreground/60'
         }>{resolvedIcon}</div>
       )}
-      <h3 className={compact ? 'text-sm font-medium' : 'text-base font-medium text-stone-700'}>{title}</h3>
+      <h3 className={compact ? 'text-sm font-medium' : 'text-base font-medium text-foreground'}>{title}</h3>
       {description && (
-        <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+        <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">{description}</p>
       )}
-      {action && <div className="mt-2">{action}</div>}
+      {action && <div className="mt-3">{action}</div>}
     </div>
   )
 }
