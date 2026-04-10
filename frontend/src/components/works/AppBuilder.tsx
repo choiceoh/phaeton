@@ -162,31 +162,35 @@ export default function AppBuilder() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">새 컬렉션 만들기</h1>
         <AIBuildDialog onApply={handleAIApply} />
       </div>
 
-      <div className="grid grid-cols-[1fr_1fr_2fr] gap-4">
-        <div className="space-y-1">
-          <Label>컬렉션 이름 (한글)</Label>
-          <Input value={label} onChange={(e) => handleLabelChange(e.target.value)} placeholder="인허가 체크리스트" />
-        </div>
-        <div className="space-y-1">
-          <Label>슬러그 (영문)</Label>
-          <div className="relative">
-            <Input
-              value={slug}
-              onChange={(e) => handleSlugChange(e.target.value)}
-              placeholder="자동 생성됨"
-            />
-            {generateSlug.isPending && (
-              <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-            )}
+      <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+        <p className="text-sm font-medium text-muted-foreground">기본 정보</p>
+        <div className="grid grid-cols-[1fr_1fr_2fr] gap-4">
+          <div className="space-y-1">
+            <Label>컬렉션 이름 (한글)</Label>
+            <Input value={label} onChange={(e) => handleLabelChange(e.target.value)} placeholder="인허가 체크리스트" />
           </div>
-        </div>
-        <div className="space-y-1">
-          <Label>설명</Label>
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="컬렉션 설명" />
+          <div className="space-y-1">
+            <Label>슬러그 (영문)</Label>
+            <div className="relative">
+              <Input
+                value={slug}
+                onChange={(e) => handleSlugChange(e.target.value)}
+                placeholder="자동 생성됨"
+              />
+              {generateSlug.isPending && (
+                <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              )}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>설명</Label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="컬렉션 설명" />
+          </div>
         </div>
       </div>
 
