@@ -26,15 +26,20 @@ import {
 import type { Collection, Field, FieldType } from '@/lib/types'
 
 import type { FieldDraft } from './FieldPreview'
+import FormulaEditor from './FormulaEditor'
 
 interface Props {
   field: FieldDraft | null
   collections: Collection[]
   siblingFields?: FieldDraft[]
   onChange: (field: FieldDraft) => void
+  /** Collection slug — needed for formula preview API. */
+  collectionSlug?: string
+  /** All fields in the collection — needed for formula field reference hints. */
+  allFields?: FieldDraft[]
 }
 
-export default function FieldProperties({ field, collections, siblingFields, onChange }: Props) {
+export default function FieldProperties({ field, collections, siblingFields, onChange, collectionSlug, allFields }: Props) {
   if (!field) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -160,6 +165,96 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             </section>
           </>
         )}
+      </div>
+    )
+  }
+
+  // Formula fields: show dedicated editor instead of standard properties.
+  if (isFormula) {
+    const formulaFields = (allFields ?? []).filter(
+      (f) => !['label', 'line', 'spacer', 'formula'].includes(f.field_type),
+    )
+    return (
+      <div className="space-y-4 overflow-y-auto">
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
+            {FIELD_TYPE_LABELS[field.field_type]}
+          </span>
+          <h3 className="text-sm font-medium">속성</h3>
+        </div>
+
+        <section className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground">이름</Label>
+          <Input value={field.label} onChange={(e) => update({ label: e.target.value })} />
+        </section>
+
+        <Separator />
+
+        <FormulaEditor
+          expression={(opts.expression as string) || ''}
+          resultType={(opts.result_type as string) || 'number'}
+          precision={opts.precision as number | undefined}
+          slug={collectionSlug}
+          fields={formulaFields as any}
+          onChange={(expr) => updateOption('expression', expr)}
+          onResultTypeChange={(rt) => updateOption('result_type', rt)}
+          onPrecisionChange={(p) => updateOption('precision', p)}
+        />
+
+        <Separator />
+
+        <section className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground">그리드 크기</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">폭</Label>
+              <Select
+                value={String(field.width)}
+                onValueChange={(v) => update({ width: Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WIDTH_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={String(o.value)}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">높이</Label>
+              <Select
+                value={String(field.height)}
+                onValueChange={(v) => update({ height: Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HEIGHT_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={String(o.value)}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </section>
+
+        <Separator />
+
+        <section className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground">코드</Label>
+          <Input
+            value={field.slug}
+            onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+            placeholder="snake_case"
+          />
+        </section>
       </div>
     )
   }

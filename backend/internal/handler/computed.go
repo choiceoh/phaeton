@@ -53,7 +53,9 @@ func (h *DynHandler) resolveComputedFields(
 
 		switch f.FieldType {
 		case schema.FieldFormula:
-			resolveFormula(records, fields, f, opts)
+			// Formula fields are computed at the SQL level (see formulaExpr in dynamic.go).
+			// Only fall back to client-side evaluation if no SQL value was set.
+			continue
 		case schema.FieldLookup:
 			h.resolveLookup(ctx, records, fields, bySlug, f, opts)
 		case schema.FieldRollup:

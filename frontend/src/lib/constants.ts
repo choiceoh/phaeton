@@ -171,6 +171,8 @@ export function operatorsForFieldType(ft: FieldType): FilterOperator[] {
     case 'text':
     case 'textarea':
       return ['eq', 'neq', 'like', 'is_null']
+    case 'formula':
+      return ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'is_null']
     default:
       return ['eq', 'neq', 'like', 'is_null']
   }

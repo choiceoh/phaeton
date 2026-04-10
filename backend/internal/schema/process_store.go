@@ -84,7 +84,7 @@ func (s *Store) listProcessStatuses(ctx context.Context, processID string) ([]Pr
 func (s *Store) listProcessTransitions(ctx context.Context, processID string) ([]ProcessTransition, error) {
 	pUID, _ := parseUUID(processID)
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, process_id, from_status_id, to_status_id, label, created_at
+		SELECT id, process_id, from_status_id, to_status_id, label, allowed_roles, created_at
 		FROM _meta.process_transitions
 		WHERE process_id = $1
 		ORDER BY created_at`, pUID)
@@ -102,13 +102,16 @@ func (s *Store) listProcessTransitions(ctx context.Context, processID string) ([
 			from pgtype.UUID
 			to   pgtype.UUID
 		)
-		if err := rows.Scan(&id, &pid, &from, &to, &pt.Label, &pt.CreatedAt); err != nil {
+		if err := rows.Scan(&id, &pid, &from, &to, &pt.Label, &pt.AllowedRoles, &pt.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan process transition: %w", err)
 		}
 		pt.ID = uuidStr(id)
 		pt.ProcessID = uuidStr(pid)
 		pt.FromStatusID = uuidStr(from)
 		pt.ToStatusID = uuidStr(to)
+		if pt.AllowedRoles == nil {
+			pt.AllowedRoles = []string{}
+		}
 		out = append(out, pt)
 	}
 	return out, rows.Err()
@@ -182,13 +185,17 @@ func (s *Store) SaveProcessTx(ctx context.Context, tx pgx.Tx, collectionID strin
 	for i, t := range req.Transitions {
 		fromUID, _ := parseUUID(statusIDs[t.FromIndex])
 		toUID, _ := parseUUID(statusIDs[t.ToIndex])
+		roles := t.AllowedRoles
+		if roles == nil {
+			roles = []string{}
+		}
 		var tid pgtype.UUID
 		var pt ProcessTransition
 		err := tx.QueryRow(ctx, `
-			INSERT INTO _meta.process_transitions (process_id, from_status_id, to_status_id, label)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO _meta.process_transitions (process_id, from_status_id, to_status_id, label, allowed_roles)
+			VALUES ($1, $2, $3, $4, $5)
 			RETURNING id, created_at`,
-			procID, fromUID, toUID, t.Label,
+			procID, fromUID, toUID, t.Label, roles,
 		).Scan(&tid, &pt.CreatedAt)
 		if err != nil {
 			return Process{}, fmt.Errorf("insert transition[%d]: %w", i, err)
@@ -198,6 +205,7 @@ func (s *Store) SaveProcessTx(ctx context.Context, tx pgx.Tx, collectionID strin
 		pt.FromStatusID = statusIDs[t.FromIndex]
 		pt.ToStatusID = statusIDs[t.ToIndex]
 		pt.Label = t.Label
+		pt.AllowedRoles = roles
 		proc.Transitions[i] = pt
 	}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/choiceoh/phaeton/backend/internal/formula"
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
@@ -84,17 +85,13 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	where += " " + searchClause
 	args = append(args, searchArgs...)
 
-	// Row-level security: viewers only see their own rows.
+	// Row-level security: restrict row visibility based on collection's rls_mode.
 	rlsClause := ""
 	colRole := middleware.GetCollectionRole(r.Context())
 	if colRole == "viewer" {
-		user, _ := middleware.GetUser(r.Context())
-		args = append(args, user.UserID)
-		if len(sortJoins) > 0 {
-			rlsClause = fmt.Sprintf(" AND %s.created_by = $%d", qTable, len(args))
-		} else {
-			rlsClause = fmt.Sprintf(" AND created_by = $%d", len(args))
-		}
+		rlsClause = buildRLSClause(r, col, &args, func() string {
+			if len(sortJoins) > 0 { return qTable }; return ""
+		}())
 	}
 
 	// Count total. Sort joins are not needed for COUNT, but we use the same
@@ -122,9 +119,9 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	procEnabled := h.hasProcessEnabled(col.ID)
 	var selectCols string
 	if joinClause != "" {
-		selectCols = qualifySelectCols(fields, qTable, procEnabled)
+		selectCols = qualifySelectCols(fields, qTable, procEnabled, &selectColOpts{cache: h.cache})
 	} else {
-		selectCols = buildSelectCols(fields, procEnabled)
+		selectCols = buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 	}
 	dataSQL := fmt.Sprintf("SELECT %s FROM %s%s WHERE %s %s%s %s LIMIT %d OFFSET %d",
 		selectCols, qTable, joinClause, deletedClause, where, rlsClause, orderBy, limit, offset)
@@ -173,15 +170,13 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	procEnabled := h.hasProcessEnabled(col.ID)
-	selectCols := buildSelectCols(fields, procEnabled)
+	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 
-	// RLS: viewer can only see own rows.
+	// RLS: restrict row visibility based on collection's rls_mode.
 	getArgs := []any{id}
 	rlsGet := ""
 	if colRole := middleware.GetCollectionRole(r.Context()); colRole == "viewer" {
-		user, _ := middleware.GetUser(r.Context())
-		getArgs = append(getArgs, user.UserID)
-		rlsGet = fmt.Sprintf(" AND created_by = $%d", len(getArgs))
+		rlsGet = buildRLSClause(r, col, &getArgs, "")
 	}
 
 	getSQL := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1 AND deleted_at IS NULL%s", selectCols, qTable, rlsGet)
@@ -261,12 +256,12 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		idx++
 	}
 
-	// Optional: created_by from body (will be replaced by auth later).
-	if cb, ok := body["created_by"]; ok {
-		colNames = append(colNames, `"created_by"`)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
-		args = append(args, cb)
-	}
+	// Auto-set created_by from authenticated user.
+	user, _ := middleware.GetUser(r.Context())
+	colNames = append(colNames, `"created_by"`)
+	placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+	args = append(args, user.UserID)
+	idx++
 
 	// Process: inject initial status for new entries.
 	procEnabled := h.hasProcessEnabled(col.ID)
@@ -280,7 +275,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields, procEnabled)
+	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 
 	var sql string
 	if len(colNames) == 0 {
@@ -314,7 +309,6 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Record change history.
-	user, _ := middleware.GetUser(r.Context())
 	if recID, ok := records[0]["id"].(string); ok {
 		diff := createDiff(records[0], fields)
 		recordChange(r.Context(), h.pool, col.ID, recID, user.UserID, user.Name, "create", diff)
@@ -370,6 +364,12 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	sets := []string{`"updated_at" = now()`}
 	args := []any{}
 	idx := 1
+
+	// Auto-set updated_by from authenticated user.
+	sets = append(sets, fmt.Sprintf(`"updated_by" = $%d`, idx))
+	args = append(args, user.UserID)
+	idx++
+
 	for _, f := range fields {
 		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber {
 			continue
@@ -409,7 +409,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		if currentStatus != nil {
 			fromStatus = *currentStatus
 		}
-		if err := h.validateStatusTransition(col.ID, fromStatus, newStatusStr); err != nil {
+		if err := h.validateStatusTransition(col.ID, fromStatus, newStatusStr, user.Role); err != nil {
 			handleErr(w, r, err)
 			return
 		}
@@ -420,10 +420,19 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	args = append(args, id)
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields, procEnabled)
+	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 
-	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL RETURNING %s",
-		qTable, strings.Join(sets, ", "), idx, selectCols)
+	// RLS: viewers can only update their own rows.
+	rlsClause := ""
+	colRole := middleware.GetCollectionRole(r.Context())
+	if colRole == "viewer" {
+		idx++
+		args = append(args, user.UserID)
+		rlsClause = fmt.Sprintf(" AND created_by = $%d", len(args))
+	}
+
+	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL%s RETURNING %s",
+		qTable, strings.Join(sets, ", "), idx, rlsClause, selectCols)
 
 	rows, err := h.pool.Query(r.Context(), sql, args...)
 	if err != nil {
@@ -705,7 +714,7 @@ func (h *DynHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	bulkProcEnabled := h.hasProcessEnabled(col.ID)
-	selectCols := buildSelectCols(fields, bulkProcEnabled)
+	selectCols := buildSelectCols(fields, bulkProcEnabled, &selectColOpts{cache: h.cache})
 
 	// Inject initial status for bulk create if process is enabled.
 	if bulkProcEnabled {
@@ -716,9 +725,10 @@ func (h *DynHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	user, _ := middleware.GetUser(r.Context())
 	created := make([]map[string]any, 0, len(bodies))
 	for i, body := range bodies {
-		colNames, placeholders, args := buildInsertColumns(body, fields)
+		colNames, placeholders, args := buildInsertColumns(body, fields, user.UserID)
 		var sql string
 		if len(colNames) == 0 {
 			sql = fmt.Sprintf("INSERT INTO %s DEFAULT VALUES RETURNING %s", qTable, selectCols)
@@ -788,9 +798,19 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 		args[i] = id
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
+
+	// RLS: viewers can only delete their own rows.
+	rlsClause := ""
+	colRole := middleware.GetCollectionRole(r.Context())
+	if colRole == "viewer" {
+		user, _ := middleware.GetUser(r.Context())
+		args = append(args, user.UserID)
+		rlsClause = fmt.Sprintf(" AND created_by = $%d", len(args))
+	}
+
 	sql := fmt.Sprintf(
-		"UPDATE %s SET deleted_at = now() WHERE id IN (%s) AND deleted_at IS NULL",
-		qTable, strings.Join(placeholders, ","),
+		"UPDATE %s SET deleted_at = now() WHERE id IN (%s) AND deleted_at IS NULL%s",
+		qTable, strings.Join(placeholders, ","), rlsClause,
 	)
 	tag, err := h.pool.Exec(r.Context(), sql, args...)
 	if err != nil {
@@ -804,7 +824,8 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 
 // buildInsertColumns extracts the column list for an INSERT from a body map,
 // returning quoted column names, $-placeholders, and the matching arg values.
-func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []string, placeholders []string, args []any) {
+// userID is injected as created_by for all inserts.
+func buildInsertColumns(body map[string]any, fields []schema.Field, userID string) (cols []string, placeholders []string, args []any) {
 	idx := 1
 	for _, f := range fields {
 		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber {
@@ -819,18 +840,212 @@ func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []stri
 		args = append(args, coerceValue(v, f.FieldType))
 		idx++
 	}
-	if cb, ok := body["created_by"]; ok {
-		cols = append(cols, `"created_by"`)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
-		args = append(args, cb)
-		idx++
-	}
+	// Auto-set created_by from authenticated user.
+	cols = append(cols, `"created_by"`)
+	placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+	args = append(args, userID)
+	idx++
 	if st, ok := body["_status"]; ok {
 		cols = append(cols, `"_status"`)
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
 		args = append(args, st)
 	}
 	return cols, placeholders, args
+}
+
+// --- FormulaPreview ---
+
+// FormulaPreview validates a formula expression and returns sample results.
+// POST /api/data/{slug}/formula-preview
+// Body: { "expression": "price * quantity", "result_type": "number" }
+func (h *DynHandler) FormulaPreview(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	col, fields, ok := h.resolveCollection(w, slug)
+	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_view") {
+		return
+	}
+
+	var body struct {
+		Expression string `json:"expression"`
+		ResultType string `json:"result_type"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	slugMap := buildSlugMap(fields)
+	resolver := buildRelationResolver(fields, h.cache)
+	result, err := formula.ParseWithResolver(body.Expression, slugMap, resolver)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"valid":      false,
+			"error":      err.Error(),
+			"sql":        "",
+			"refs":       []string{},
+			"cross_refs": []string{},
+			"samples":    []any{},
+		})
+		return
+	}
+	sqlExpr := result.SQL
+	refs := result.Refs
+	crossRefs := result.CrossRefs
+
+	// Fetch up to 5 sample rows to show computed values.
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	sampleSQL := fmt.Sprintf("SELECT (%s) AS result FROM %s WHERE deleted_at IS NULL LIMIT 5", sqlExpr, qTable)
+
+	rows, err := h.pool.Query(r.Context(), sampleSQL)
+	var samples []any
+	if err == nil {
+		for rows.Next() {
+			vals, e := rows.Values()
+			if e != nil {
+				break
+			}
+			if len(vals) > 0 {
+				samples = append(samples, normalizeValue(vals[0]))
+			}
+		}
+		rows.Close()
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"valid":      true,
+		"error":      "",
+		"sql":        sqlExpr,
+		"refs":       refs,
+		"cross_refs": crossRefs,
+		"samples":    samples,
+	})
+}
+
+// --- BatchUpdate ---
+
+// BatchUpdate applies partial updates to multiple rows in a single transaction.
+// Body: { "updates": [{ "id": "uuid", "fields": { "col": value, ... } }, ...] }
+func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	col, fields, ok := h.resolveCollection(w, slug)
+	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_edit") {
+		return
+	}
+
+	var body struct {
+		Updates []struct {
+			ID     string         `json:"id"`
+			Fields map[string]any `json:"fields"`
+		} `json:"updates"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(body.Updates) == 0 {
+		writeError(w, http.StatusBadRequest, "empty batch payload")
+		return
+	}
+	if len(body.Updates) > 1000 {
+		writeError(w, http.StatusBadRequest, "batch payload too large (max 1000)")
+		return
+	}
+
+	// Validate all payloads up front.
+	for i, u := range body.Updates {
+		if u.ID == "" {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("updates[%d]: id is required", i))
+			return
+		}
+		if err := validatePayload(r.Context(), h.pool, h.cache, u.Fields, fields, false); err != nil {
+			handleErr(w, r, fmt.Errorf("updates[%d]: %w", i, err))
+			return
+		}
+	}
+
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	procEnabled := h.hasProcessEnabled(col.ID)
+	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
+	user, _ := middleware.GetUser(r.Context())
+
+	type changeMeta struct {
+		recordID string
+		diff     map[string]any
+	}
+
+	updated := make([]map[string]any, 0, len(body.Updates))
+	changes := make([]changeMeta, 0, len(body.Updates))
+
+	for i, u := range body.Updates {
+		sets := []string{`"updated_at" = now()`}
+		args := []any{}
+		idx := 1
+		for _, f := range fields {
+			if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
+				continue
+			}
+			v, exists := u.Fields[f.Slug]
+			if !exists {
+				continue
+			}
+			sets = append(sets, fmt.Sprintf("%q = $%d", f.Slug, idx))
+			args = append(args, coerceValue(v, f.FieldType))
+			idx++
+		}
+
+		if len(sets) == 1 {
+			continue
+		}
+
+		args = append(args, u.ID)
+		sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL RETURNING %s",
+			qTable, strings.Join(sets, ", "), idx, selectCols)
+
+		rows, err := tx.Query(r.Context(), sql, args...)
+		if err != nil {
+			handleErr(w, r, fmt.Errorf("updates[%d]: %w", i, err))
+			return
+		}
+		recs, err := collectRows(rows)
+		rows.Close()
+		if err != nil {
+			handleErr(w, r, fmt.Errorf("updates[%d]: %w", i, err))
+			return
+		}
+		if len(recs) > 0 {
+			updated = append(updated, recs[0])
+			diff := make(map[string]any)
+			for k, v := range u.Fields {
+				diff[k] = map[string]any{"new": v}
+			}
+			changes = append(changes, changeMeta{recordID: u.ID, diff: diff})
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		handleErr(w, r, err)
+		return
+	}
+
+	// Record change history after successful commit.
+	for _, c := range changes {
+		recordChange(r.Context(), h.pool, col.ID, c.recordID, user.UserID, user.Name, "update", c.diff)
+	}
+
+	writeJSON(w, http.StatusOK, updated)
 }
 
 // --- Delete (soft) ---
@@ -847,9 +1062,21 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	sql := fmt.Sprintf("UPDATE %s SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL", qTable)
+	user, _ := middleware.GetUser(r.Context())
 
-	tag, err := h.pool.Exec(r.Context(), sql, id)
+	// RLS: viewers can only delete their own rows.
+	var sqlDel string
+	var delArgs []any
+	colRole := middleware.GetCollectionRole(r.Context())
+	if colRole == "viewer" {
+		sqlDel = fmt.Sprintf("UPDATE %s SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL AND created_by = $2", qTable)
+		delArgs = []any{id, user.UserID}
+	} else {
+		sqlDel = fmt.Sprintf("UPDATE %s SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL", qTable)
+		delArgs = []any{id}
+	}
+
+	tag, err := h.pool.Exec(r.Context(), sqlDel, delArgs...)
 	if err != nil {
 		handleErr(w, r, err)
 		return
@@ -860,7 +1087,6 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Record change history.
-	user, _ := middleware.GetUser(r.Context())
 	recordChange(r.Context(), h.pool, col.ID, id, user.UserID, user.Name, "delete", map[string]any{"_deleted": true})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -885,6 +1111,28 @@ func (h *DynHandler) checkAccess(w http.ResponseWriter, r *http.Request, col sch
 		return false
 	}
 	return true
+}
+
+// buildRLSClause appends an AND clause that restricts rows based on the
+// collection's rls_mode. prefix is the optional table qualifier (e.g. "data"."my_table").
+// Default / "creator" mode: created_by = $userID.
+// "department" mode: created_by IN (SELECT id FROM auth.users WHERE department_id = $deptID).
+func buildRLSClause(r *http.Request, col schema.Collection, args *[]any, prefix string) string {
+	user, _ := middleware.GetUser(r.Context())
+	colRef := "created_by"
+	if prefix != "" {
+		colRef = prefix + ".created_by"
+	}
+
+	mode := col.AccessConfig.RLSMode
+	if mode == "department" && user.DepartmentID != "" {
+		*args = append(*args, user.DepartmentID)
+		return fmt.Sprintf(" AND %s IN (SELECT id FROM auth.users WHERE department_id = $%d)", colRef, len(*args))
+	}
+
+	// Default: creator-only.
+	*args = append(*args, user.UserID)
+	return fmt.Sprintf(" AND %s = $%d", colRef, len(*args))
 }
 
 func (h *DynHandler) resolveCollection(w http.ResponseWriter, slug string) (schema.Collection, []schema.Field, bool) {
@@ -917,8 +1165,8 @@ func (h *DynHandler) initialStatusName(collectionID string) string {
 	return ""
 }
 
-// validateStatusTransition checks if a status transition is allowed.
-func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus string) error {
+// validateStatusTransition checks if a status transition is allowed for the given user role.
+func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus, userRole string) error {
 	p, ok := h.cache.ProcessByCollectionID(collectionID)
 	if !ok || !p.IsEnabled {
 		return fmt.Errorf("%w: 이 컬렉션에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
@@ -941,7 +1189,17 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 
 	for _, t := range p.Transitions {
 		if t.FromStatusID == fromID && t.ToStatusID == toID {
-			return nil // transition allowed
+			// If allowed_roles is empty, any role can perform the transition.
+			if len(t.AllowedRoles) == 0 {
+				return nil
+			}
+			for _, r := range t.AllowedRoles {
+				if r == userRole {
+					return nil
+				}
+			}
+			return fmt.Errorf("%w: 역할 %q은(는) %q → %q 전이를 수행할 수 없습니다",
+				schema.ErrInvalidInput, userRole, fromStatus, toStatus)
 		}
 	}
 
@@ -960,16 +1218,38 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 		schema.ErrInvalidInput, fromStatus, toStatus, allowed)
 }
 
-func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
+// selectColOpts holds optional parameters for column generation.
+type selectColOpts struct {
+	cache  *schema.Cache
+	fields []schema.Field // all fields (needed for resolver)
+}
+
+func buildSelectCols(fields []schema.Field, hasStatus bool, opts *selectColOpts) string {
 	cols := []string{`"id"`}
+	slugMap := buildSlugMap(fields)
+	var cache *schema.Cache
+	if opts != nil {
+		cache = opts.cache
+	}
 	for _, f := range fields {
-		if f.FieldType.NoColumn() {
+		if f.FieldType.IsLayout() {
+			continue
+		}
+		// Formula: computed as SQL expression in SELECT.
+		// Lookup/Rollup: skipped here, resolved post-fetch.
+		if f.FieldType == schema.FieldFormula {
+			if expr := formulaExpr(f, slugMap, cache, fields); expr != "" {
+				cols = append(cols, fmt.Sprintf(`(%s) AS %q`, expr, f.Slug))
+			}
+			continue
+		}
+		if f.FieldType == schema.FieldLookup || f.FieldType == schema.FieldRollup {
 			continue
 		}
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
 	}
 	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`)
-	if len(hasStatus) > 0 && hasStatus[0] {
+	if hasStatus {
 		cols = append(cols, `"_status"`)
 	}
 	return strings.Join(cols, ", ")
@@ -978,10 +1258,24 @@ func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 // qualifySelectCols returns the same column list but each column qualified
 // with the given table prefix and aliased back to its bare name so the
 // row scanner sees the same field names.
-func qualifySelectCols(fields []schema.Field, prefix string, hasStatus ...bool) string {
+func qualifySelectCols(fields []schema.Field, prefix string, hasStatus bool, opts *selectColOpts) string {
 	cols := []string{fmt.Sprintf(`%s.%q AS %q`, prefix, "id", "id")}
+	slugMap := buildSlugMap(fields)
+	var cache *schema.Cache
+	if opts != nil {
+		cache = opts.cache
+	}
 	for _, f := range fields {
-		if f.FieldType.NoColumn() {
+		if f.FieldType.IsLayout() {
+			continue
+		}
+		if f.FieldType == schema.FieldFormula {
+			if expr := formulaExpr(f, slugMap, cache, fields); expr != "" {
+				cols = append(cols, fmt.Sprintf(`(%s) AS %q`, expr, f.Slug))
+			}
+			continue
+		}
+		if f.FieldType == schema.FieldLookup || f.FieldType == schema.FieldRollup {
 			continue
 		}
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
@@ -989,10 +1283,86 @@ func qualifySelectCols(fields []schema.Field, prefix string, hasStatus ...bool) 
 	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "updated_by", "deleted_at"} {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, sysCol, sysCol))
 	}
-	if len(hasStatus) > 0 && hasStatus[0] {
+	if hasStatus {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, "_status", "_status"))
 	}
 	return strings.Join(cols, ", ")
+}
+
+// buildSlugMap creates a set of valid field slugs for formula parsing.
+func buildSlugMap(fields []schema.Field) map[string]bool {
+	m := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		if !f.FieldType.IsLayout() && !f.FieldType.IsComputed() {
+			m[f.Slug] = true
+		}
+	}
+	return m
+}
+
+// formulaExpr parses a formula field's expression and returns a safe SQL fragment.
+// Returns empty string on parse error (field is silently omitted from SELECT).
+func formulaExpr(f schema.Field, slugMap map[string]bool, cache *schema.Cache, fields []schema.Field) string {
+	opts, err := schema.ExtractFormulaOptions(f.Options)
+	if err != nil || opts == nil || opts.Expression == "" {
+		return ""
+	}
+
+	// Build a relation resolver from the cache.
+	var resolver formula.RelationResolver
+	if cache != nil {
+		resolver = buildRelationResolver(fields, cache)
+	}
+
+	result, err := formula.ParseWithResolver(opts.Expression, slugMap, resolver)
+	if err != nil {
+		return ""
+	}
+	return result.SQL
+}
+
+// buildRelationResolver creates a RelationResolver callback that uses the schema
+// cache to resolve relation fields to their target tables.
+func buildRelationResolver(fields []schema.Field, cache *schema.Cache) formula.RelationResolver {
+	// Index relation fields by slug.
+	relBySlug := make(map[string]schema.Field)
+	for _, f := range fields {
+		if f.FieldType == schema.FieldRelation && f.Relation != nil {
+			relBySlug[f.Slug] = f
+		}
+	}
+
+	return func(relSlug string) (*formula.RelationInfo, error) {
+		f, ok := relBySlug[relSlug]
+		if !ok || f.Relation == nil {
+			return nil, fmt.Errorf("%q is not a relation field", relSlug)
+		}
+
+		targetCol, ok := cache.CollectionByID(f.Relation.TargetCollectionID)
+		if !ok {
+			return nil, fmt.Errorf("target collection not found for relation %q", relSlug)
+		}
+
+		targetTable := fmt.Sprintf("%q.%q", "data", targetCol.Slug)
+
+		// For reverse relations (SUMREL etc.), find the FK column on the target
+		// table that points back to this collection.
+		reverseCol := ""
+		targetFields := cache.Fields(targetCol.ID)
+		for _, tf := range targetFields {
+			if tf.FieldType == schema.FieldRelation && tf.Relation != nil &&
+				tf.Relation.TargetCollectionID == f.CollectionID {
+				reverseCol = tf.Slug
+				break
+			}
+		}
+
+		return &formula.RelationInfo{
+			TargetTable:   targetTable,
+			OwnerColumn:   f.Slug,
+			ReverseColumn: reverseCol,
+		}, nil
+	}
 }
 
 // collectRows uses pgx.RowToMap and normalizes types.
@@ -1100,7 +1470,7 @@ func (h *DynHandler) expandRelations(ctx context.Context, records []map[string]a
 
 		// Batch fetch targets in a single query.
 		targetFields := h.cache.Fields(targetCol.ID)
-		targetSelectCols := buildSelectCols(targetFields)
+		targetSelectCols := buildSelectCols(targetFields, false, nil)
 
 		placeholders := make([]string, len(ids))
 		args := make([]any, len(ids))
@@ -1230,7 +1600,7 @@ func (h *DynHandler) expandUserFields(ctx context.Context, records []map[string]
 // fetchRow loads a single record by ID. Used for pre-update comparisons.
 func (h *DynHandler) fetchRow(ctx context.Context, col schema.Collection, fields []schema.Field, id string) (map[string]any, error) {
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields)
+	selectCols := buildSelectCols(fields, false, &selectColOpts{cache: h.cache})
 	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1 AND deleted_at IS NULL", selectCols, qTable)
 	rows, err := h.pool.Query(ctx, sql, id)
 	if err != nil {

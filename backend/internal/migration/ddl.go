@@ -39,10 +39,10 @@ func FieldTypeToPG(ft schema.FieldType) string {
 		return "JSONB"
 	case schema.FieldAutonumber:
 		return "BIGINT"
-	case schema.FieldLabel, schema.FieldLine, schema.FieldSpacer:
-		return "" // layout types have no DB column
 	case schema.FieldFormula, schema.FieldLookup, schema.FieldRollup:
 		return "" // computed types have no DB column
+	case schema.FieldLabel, schema.FieldLine, schema.FieldSpacer:
+		return "" // layout types have no DB column
 	default:
 		return "TEXT"
 	}

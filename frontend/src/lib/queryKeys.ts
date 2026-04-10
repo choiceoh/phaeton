@@ -66,6 +66,12 @@ export const queryKeys = {
       [...queryKeys.views.all, collectionId, 'list'] as const,
   },
 
+  savedViews: {
+    all: ['savedViews'] as const,
+    list: (collectionId: string) =>
+      [...queryKeys.savedViews.all, collectionId, 'list'] as const,
+  },
+
   migrations: {
     all: ['migrations'] as const,
     history: (collectionId?: string) =>

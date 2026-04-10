@@ -225,23 +225,61 @@ func ValidateTransitions(transitions []Transition, choices []string) error {
 	return nil
 }
 
+// FormulaOptions is the expected shape of `options` for formula fields.
+type FormulaOptions struct {
+	Expression string `json:"expression"`
+	ResultType string `json:"result_type"` // number, integer, text, boolean, date
+	Precision  *int   `json:"precision,omitempty"`
+}
+
+func validateFormulaOptions(raw json.RawMessage) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return fmt.Errorf("%w: formula field requires options.expression", ErrInvalidInput)
+	}
+	var opts FormulaOptions
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		return fmt.Errorf("%w: options must be a JSON object with 'expression': %v", ErrInvalidInput, err)
+	}
+	expr := strings.TrimSpace(opts.Expression)
+	if expr == "" {
+		return fmt.Errorf("%w: formula field requires a non-empty expression", ErrInvalidInput)
+	}
+	switch opts.ResultType {
+	case "", "number", "integer", "text", "boolean", "date":
+		// valid
+	default:
+		return fmt.Errorf("%w: invalid result_type %q; must be number, integer, text, boolean, or date", ErrInvalidInput, opts.ResultType)
+	}
+	return nil
+}
+
+// ExtractFormulaOptions parses the formula options from a raw JSON payload.
+func ExtractFormulaOptions(raw json.RawMessage) (*FormulaOptions, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var opts FormulaOptions
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		return nil, err
+	}
+	return &opts, nil
+}
+
 // validateComputedOptions checks that computed field options are well-formed.
 func validateComputedOptions(f *CreateFieldIn) error {
-	if len(f.Options) == 0 || string(f.Options) == "null" {
-		return fmt.Errorf("%w: computed field %q requires options", ErrInvalidInput, f.Slug)
-	}
-	var opts map[string]any
-	if err := json.Unmarshal(f.Options, &opts); err != nil {
-		return fmt.Errorf("%w: invalid options JSON: %v", ErrInvalidInput, err)
-	}
-
 	switch f.FieldType {
 	case FieldFormula:
-		expr, _ := opts["expression"].(string)
-		if strings.TrimSpace(expr) == "" {
-			return fmt.Errorf("%w: formula field %q requires options.expression", ErrInvalidInput, f.Slug)
+		if err := validateFormulaOptions(f.Options); err != nil {
+			return fmt.Errorf("field %q: %w", f.Slug, err)
 		}
 	case FieldLookup:
+		if len(f.Options) == 0 || string(f.Options) == "null" {
+			return fmt.Errorf("%w: lookup field %q requires options", ErrInvalidInput, f.Slug)
+		}
+		var opts map[string]any
+		if err := json.Unmarshal(f.Options, &opts); err != nil {
+			return fmt.Errorf("%w: invalid options JSON: %v", ErrInvalidInput, err)
+		}
 		relField, _ := opts["relation_field"].(string)
 		targetField, _ := opts["target_field"].(string)
 		if relField == "" {
@@ -251,6 +289,13 @@ func validateComputedOptions(f *CreateFieldIn) error {
 			return fmt.Errorf("%w: lookup field %q requires options.target_field", ErrInvalidInput, f.Slug)
 		}
 	case FieldRollup:
+		if len(f.Options) == 0 || string(f.Options) == "null" {
+			return fmt.Errorf("%w: rollup field %q requires options", ErrInvalidInput, f.Slug)
+		}
+		var opts map[string]any
+		if err := json.Unmarshal(f.Options, &opts); err != nil {
+			return fmt.Errorf("%w: invalid options JSON: %v", ErrInvalidInput, err)
+		}
 		relField, _ := opts["relation_field"].(string)
 		targetField, _ := opts["target_field"].(string)
 		fn, _ := opts["function"].(string)
