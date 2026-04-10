@@ -9,6 +9,8 @@ export interface FieldDraft {
   is_required: boolean
   is_unique: boolean
   is_indexed: boolean
+  default_value?: string
+  description?: string
   width: number
   height: number
   options?: Record<string, unknown>

@@ -60,3 +60,14 @@ export const HEIGHT_OPTIONS = [
   { value: 2, label: '2줄' },
   { value: 3, label: '3줄' },
 ]
+
+export const VALIDATION_OPTIONS = [
+  { value: 'none', label: '모든 값 허용' },
+  { value: 'email', label: '이메일' },
+  { value: 'url', label: 'URL' },
+  { value: 'phone', label: '전화번호' },
+  { value: 'number_only', label: '숫자만' },
+  { value: 'alpha_only', label: '영문만' },
+  { value: 'alphanumeric', label: '영문+숫자' },
+  { value: 'regex', label: '정규식' },
+]
