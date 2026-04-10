@@ -30,13 +30,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-stone-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-stone-50/80 px-4">
       <FormProvider {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}
-          className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow-sm animate-scale-in"
+          className="w-full max-w-sm space-y-5 rounded-xl border border-stone-200/80 bg-white p-8 shadow-lg animate-scale-in"
         >
-          <h1 className="text-xl font-bold text-stone-900">Phaeton</h1>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-900 text-sm font-bold text-white">P</span>
+              <h1 className="text-xl font-bold tracking-tight text-stone-900">Phaeton</h1>
+            </div>
+            <p className="text-sm text-stone-500">업무 플랫폼에 로그인하세요</p>
+          </div>
 
           <FormField<LoginForm> name="email" label="이메일" required>
             <Input type="email" autoComplete="email" {...form.register('email')} />
