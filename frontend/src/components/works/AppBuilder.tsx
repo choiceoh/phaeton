@@ -5,11 +5,12 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { useCollections, useCreateCollection } from '@/hooks/useCollections'
+import type { AIBuildResult } from '@/hooks/useAI'
 import { formatError } from '@/lib/api'
 import type { CreateCollectionReq, FieldType } from '@/lib/types'
 
+import AIBuildDialog from './AIBuildDialog'
 import FieldPalette from './FieldPalette'
 import FieldPreview, { type FieldDraft } from './FieldPreview'
 import FieldProperties from './FieldProperties'
@@ -28,6 +29,26 @@ export default function AppBuilder() {
   const createCollection = useCreateCollection()
 
   const selectedField = fields.find((f) => f.id === selectedId) || null
+
+  function handleAIApply(result: AIBuildResult) {
+    setSlug(result.slug)
+    setLabel(result.label)
+    setDescription(result.description || '')
+    const drafts: FieldDraft[] = result.fields.map((f) => ({
+      id: `ai_${++fieldCounter.current}`,
+      slug: f.slug,
+      label: f.label,
+      field_type: f.field_type as FieldType,
+      is_required: f.is_required,
+      is_unique: false,
+      is_indexed: false,
+      width: f.width || 6,
+      height: f.height || 1,
+      options: f.options,
+    }))
+    setFields(drafts)
+    setSelectedId(null)
+  }
 
   function handleAddField(fieldType: FieldType, presetOptions?: Record<string, unknown>) {
     const id = `field_${++fieldCounter.current}`
@@ -103,6 +124,10 @@ export default function AppBuilder() {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <AIBuildDialog onApply={handleAIApply} />
+      </div>
+
       <div className="grid grid-cols-[1fr_1fr_2fr] gap-4">
         <div className="space-y-1">
           <Label>컬렉션 이름 (한글)</Label>
