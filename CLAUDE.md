@@ -1,8 +1,9 @@
-# CLAUDE.md — Phaeton v2
+# CLAUDE.md — Topworks (내부 코드명: Phaeton)
 
 ## 프로젝트
 
-노코드 업무앱 플랫폼. 사용자가 코드 없이 앱(폼+데이터+뷰)을 만들고 ERP 기능을 직접 구성.
+노코드 업무앱 플랫폼 **Topworks**. 사용자가 코드 없이 앱(폼+데이터+뷰)을 만들고 ERP 기능을 직접 구성.
+외부 정식 이름은 **Topworks**, 내부 개발명/코드명은 **Phaeton**. 폴더명·모듈 경로·DB 자격증명·도커 볼륨·localStorage 키 등 내부 식별자는 `phaeton`을 그대로 사용. 엔드유저에게 보이는 UI 텍스트·이메일 제목·AI 프롬프트·User-Agent 등은 모두 **Topworks**로 표기.
 각 앱 = 진짜 PostgreSQL 테이블 (동적 DDL). Go 백엔드 + Vite React SPA.
 사용자 300명, DGX Spark 구동.
 

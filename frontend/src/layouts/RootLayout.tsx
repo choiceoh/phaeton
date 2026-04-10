@@ -39,8 +39,8 @@ export default function RootLayout() {
         <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-stone-200/80 bg-white/95 px-6 py-2.5 backdrop-blur-sm">
           <div className="flex items-center gap-1">
             <Link to="/" className="mr-4 flex items-center gap-2 text-lg font-bold tracking-tight text-stone-900" viewTransition>
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-900 text-xs font-bold text-white">P</span>
-              Phaeton
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-900 text-xs font-bold text-white">T</span>
+              Topworks
             </Link>
             <div className="flex items-center">
               <NavLink to="/apps" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>

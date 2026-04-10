@@ -79,7 +79,7 @@ type aiBuildSchema struct {
 // legacy flat response used internally for AI JSON parsing
 type aiBuildResponse = aiBuildSchema
 
-const systemPromptBase = `You are a schema designer for Phaeton, a no-code business app platform used by a Korean company.
+const systemPromptBase = `You are a schema designer for Topworks, a no-code business app platform used by a Korean company.
 The user will describe a business process or data they want to manage. You must generate a collection (app) schema as JSON.
 
 ## Output Format
@@ -141,7 +141,7 @@ Option rules:
 - Make critical identification fields required (is_required: true), but don't over-require.`
 
 
-const triagePrompt = `You are a requirements analyst for Phaeton, a no-code business app platform.
+const triagePrompt = `You are a requirements analyst for Topworks, a no-code business app platform.
 The user wants to create a new app. Your job is to decide whether their description is clear enough to generate a good schema, or if you need to ask clarifying questions first.
 
 ## Decision Criteria — Ask questions ONLY when:

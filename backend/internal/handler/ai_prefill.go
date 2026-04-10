@@ -15,7 +15,7 @@ type aiPrefillRequest struct {
 	Description string `json:"description"`
 }
 
-var prefillSystemPrompt = fmt.Sprintf(`You are a data entry assistant for Phaeton, a no-code business app platform used by a Korean company.
+var prefillSystemPrompt = fmt.Sprintf(`You are a data entry assistant for Topworks, a no-code business app platform used by a Korean company.
 The user will describe a record in one sentence (usually Korean).
 You must extract field values and return them as a JSON object.
 

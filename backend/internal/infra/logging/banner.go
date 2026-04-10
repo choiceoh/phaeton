@@ -19,7 +19,7 @@ func PrintBanner(w io.Writer, info BannerInfo, color bool) {
 	green := pick(color, ansiBoldGrn)
 	reset := pick(color, ansiReset)
 
-	fmt.Fprintf(w, "\n  %s%s✦%s %sphaeton%s\n", cyan, bold, reset, bold, reset)
+	fmt.Fprintf(w, "\n  %s%s✦%s %stopworks%s\n", cyan, bold, reset, bold, reset)
 	fmt.Fprintf(w, "  %s%s%s\n\n", dim, info.Version, reset)
 
 	kv := func(key, val string) {
@@ -37,7 +37,7 @@ func PrintShutdown(w io.Writer, uptime time.Duration, color bool) {
 	dim := pick(color, ansiDim)
 	bold := pick(color, ansiBold)
 	reset := pick(color, ansiReset)
-	fmt.Fprintf(w, "\n  %sphaeton stopped%s  %s(%s)%s\n\n",
+	fmt.Fprintf(w, "\n  %stopworks stopped%s  %s(%s)%s\n\n",
 		bold, reset, dim, formatUptime(uptime), reset)
 }
 

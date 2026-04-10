@@ -13,7 +13,7 @@ type aiAutomationRequest struct {
 	Description string `json:"description"`
 }
 
-const automationSystemPrompt = `You are an automation designer for Phaeton, a no-code business app platform used by a Korean company.
+const automationSystemPrompt = `You are an automation designer for Topworks, a no-code business app platform used by a Korean company.
 The user will describe what automation they want. You must generate an automation rule as JSON.
 
 ## Tools

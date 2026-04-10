@@ -35,8 +35,8 @@ func TestSetVersion_UserAgent(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	if gotUA != "Phaeton/1.2.3" {
-		t.Errorf("User-Agent = %q, want %q", gotUA, "Phaeton/1.2.3")
+	if gotUA != "Topworks/1.2.3" {
+		t.Errorf("User-Agent = %q, want %q", gotUA, "Topworks/1.2.3")
 	}
 }
 
@@ -56,8 +56,8 @@ func TestUserAgent_Default(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	if gotUA != "Phaeton" {
-		t.Errorf("User-Agent = %q, want %q", gotUA, "Phaeton")
+	if gotUA != "Topworks" {
+		t.Errorf("User-Agent = %q, want %q", gotUA, "Topworks")
 	}
 }
 

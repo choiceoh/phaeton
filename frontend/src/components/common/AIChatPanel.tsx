@@ -141,7 +141,7 @@ export default function AIChatPanel() {
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-2">
               <MessageCircle className="h-4 w-4 text-stone-500" />
-              <span className="text-sm font-medium">Phaeton 도우미</span>
+              <span className="text-sm font-medium">Topworks 도우미</span>
             </div>
             <button
               onClick={() => setOpen(false)}
@@ -160,7 +160,7 @@ export default function AIChatPanel() {
               <div className="flex h-full flex-col items-center justify-center text-center">
                 <MessageCircle className="mb-2 h-8 w-8 text-stone-300" />
                 <p className="text-sm text-stone-400">
-                  Phaeton 사용에 대해 궁금한 점을 물어보세요.
+                  Topworks 사용에 대해 궁금한 점을 물어보세요.
                 </p>
                 <div className="mt-3 space-y-1.5">
                   {hints.map((hint) => (

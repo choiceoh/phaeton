@@ -57,7 +57,7 @@ func (h *ReportHandler) EmailReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Subject == "" {
-		req.Subject = fmt.Sprintf("[Phaeton] %s Report", col.Label)
+		req.Subject = fmt.Sprintf("[Topworks] %s Report", col.Label)
 	}
 
 	// Fetch data (same logic as ExportPDF).

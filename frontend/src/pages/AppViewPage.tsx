@@ -645,7 +645,7 @@ export default function AppViewPage() {
       const qs = buildExportQS()
       await api.post(`/data/${collection.slug}/email-report${qs ? `?${qs}` : ''}`, {
         to: emailTo,
-        subject: `[Phaeton] ${collection.label} 리포트`,
+        subject: `[Topworks] ${collection.label} 리포트`,
         message: emailMessage || `${collection.label} 데이터 리포트입니다.`,
       })
       toast.success(`${emailTo}로 리포트가 전송되었습니다`)

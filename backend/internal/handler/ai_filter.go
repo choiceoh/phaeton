@@ -15,7 +15,7 @@ type aiFilterRequest struct {
 	Query string `json:"query"`
 }
 
-var filterSystemPrompt = fmt.Sprintf(`You are a filter builder for Phaeton, a no-code business app platform used by a Korean company.
+var filterSystemPrompt = fmt.Sprintf(`You are a filter builder for Topworks, a no-code business app platform used by a Korean company.
 The user will describe what data they want to see in natural language (usually Korean).
 You must generate filter conditions as a JSON array.
 
