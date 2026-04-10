@@ -178,6 +178,21 @@ func Logout() http.HandlerFunc {
 // Me handles GET /api/auth/me.
 func Me(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if middleware.AuthDisabled() {
+			dev := middleware.DevUser
+			now := time.Now()
+			writeJSON(w, http.StatusOK, User{
+				ID:        dev.UserID,
+				Email:     dev.Email,
+				Name:      dev.Name,
+				Role:      dev.Role,
+				IsActive:  true,
+				CreatedAt: now,
+				UpdatedAt: now,
+			})
+			return
+		}
+
 		claims, ok := middleware.GetUser(r.Context())
 		if !ok {
 			apierr.Unauthorized("not authenticated").Write(w)
