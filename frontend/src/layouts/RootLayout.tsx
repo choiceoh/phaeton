@@ -36,27 +36,27 @@ export default function RootLayout() {
             <Link to="/" className="text-lg font-semibold text-stone-900">
               Phaeton
             </Link>
-            <Link to="/apps" className="text-sm text-stone-600 hover:text-stone-900">
+            <Link to="/apps" className="nav-link text-sm text-stone-600 hover:text-stone-900">
               업무
             </Link>
-            <Link to="/dashboard" className="text-sm text-stone-600 hover:text-stone-900">
+            <Link to="/dashboard" className="nav-link text-sm text-stone-600 hover:text-stone-900">
               대시보드
             </Link>
-            <Link to="/admin/org" className="text-sm text-stone-600 hover:text-stone-900">
+            <Link to="/admin/org" className="nav-link text-sm text-stone-600 hover:text-stone-900">
               조직도
             </Link>
-            <Link to="/automations" className="text-sm text-stone-600 hover:text-stone-900">
+            <Link to="/automations" className="nav-link text-sm text-stone-600 hover:text-stone-900">
               자동화
             </Link>
             {(user.role === 'director' || user.role === 'pm') && (
               <>
-                <Link to="/history" className="text-sm text-stone-600 hover:text-stone-900">
+                <Link to="/history" className="nav-link text-sm text-stone-600 hover:text-stone-900">
                   이력
                 </Link>
-                <Link to="/admin/users" className="text-sm text-stone-600 hover:text-stone-900">
+                <Link to="/admin/users" className="nav-link text-sm text-stone-600 hover:text-stone-900">
                   사용자 관리
                 </Link>
-                <Link to="/settings" className="text-sm text-stone-600 hover:text-stone-900">
+                <Link to="/settings" className="nav-link text-sm text-stone-600 hover:text-stone-900">
                   설정
                 </Link>
               </>
@@ -73,7 +73,9 @@ export default function RootLayout() {
           </div>
         </nav>
         <main className="mx-auto max-w-7xl p-6">
-          <Outlet />
+          <div key={pathname} className="animate-fade-in-up">
+            <Outlet />
+          </div>
         </main>
         <AIChatPanel />
       </div>

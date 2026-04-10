@@ -24,7 +24,7 @@ export default function AppCard({ collection }: { collection: Collection }) {
 
   return (
     <Link to={`/apps/${collection.id}`}>
-      <Card className="p-4 transition-colors hover:bg-accent">
+      <Card className="p-4 transition-all duration-200 hover:bg-accent hover:-translate-y-0.5 hover:shadow-md">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xl">{ICONS[collection.icon || ''] || '📋'}</span>

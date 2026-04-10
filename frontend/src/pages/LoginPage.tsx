@@ -34,7 +34,7 @@ export default function LoginPage() {
       <FormProvider {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}
-          className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow-sm"
+          className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow-sm animate-scale-in"
         >
           <h1 className="text-xl font-bold text-stone-900">Phaeton</h1>
 
