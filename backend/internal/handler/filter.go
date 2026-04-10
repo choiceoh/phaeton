@@ -221,12 +221,16 @@ func ParseSortWithRelations(param string, fields []schema.Field, resolveRelation
 }
 
 // ParsePagination extracts page and limit from query params.
+// Page is capped at 10 000 to prevent integer overflow in offset calculation.
 func ParsePagination(params url.Values) (page, limit, offset int) {
 	page = 1
 	limit = 20
 
 	if p, err := strconv.Atoi(params.Get("page")); err == nil && p > 0 {
 		page = p
+	}
+	if page > 10_000 {
+		page = 10_000
 	}
 	if l, err := strconv.Atoi(params.Get("limit")); err == nil && l > 0 && l <= 100 {
 		limit = l

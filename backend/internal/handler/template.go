@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -360,6 +361,12 @@ func (h *TemplateHandler) ImportTemplate(w http.ResponseWriter, r *http.Request)
 		tpl.Collection.Slug = slugOverride
 	}
 
+	// Validate slug format.
+	if err := schema.ValidateSlug(tpl.Collection.Slug); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid slug: %v", err))
+		return
+	}
+
 	// Check slug uniqueness.
 	if _, exists := h.cache.CollectionBySlug(tpl.Collection.Slug); exists {
 		writeError(w, http.StatusConflict, fmt.Sprintf("collection slug %q already exists; use ?slug=new_slug to override", tpl.Collection.Slug))
@@ -493,10 +500,22 @@ func (h *TemplateHandler) ImportTemplate(w http.ResponseWriter, r *http.Request)
 		warnings = []string{}
 	}
 
+	// Determine whether any warning represents a data-loss scenario
+	// (e.g. relation fields downgraded to text) so the caller can decide
+	// whether the import result is acceptable.
+	hasDataLoss := false
+	for _, w := range warnings {
+		if len(w) > 0 && (strings.Contains(w, "imported as text") || strings.Contains(w, "self-reference field")) {
+			hasDataLoss = true
+			break
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"collection_id": col.ID,
 		"slug":          col.Slug,
 		"warnings":      warnings,
+		"has_data_loss":  hasDataLoss,
 	})
 }
 
