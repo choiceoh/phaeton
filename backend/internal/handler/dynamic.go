@@ -400,7 +400,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		if currentStatus != nil {
 			fromStatus = *currentStatus
 		}
-		if err := h.validateStatusTransition(col.ID, fromStatus, newStatusStr); err != nil {
+		if err := h.validateStatusTransition(col.ID, fromStatus, newStatusStr, user.Role); err != nil {
 			handleErr(w, r, err)
 			return
 		}
@@ -905,8 +905,8 @@ func (h *DynHandler) initialStatusName(collectionID string) string {
 	return ""
 }
 
-// validateStatusTransition checks if a status transition is allowed.
-func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus string) error {
+// validateStatusTransition checks if a status transition is allowed for the given user role.
+func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus, userRole string) error {
 	p, ok := h.cache.ProcessByCollectionID(collectionID)
 	if !ok || !p.IsEnabled {
 		return fmt.Errorf("%w: 이 컬렉션에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
@@ -929,7 +929,17 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 
 	for _, t := range p.Transitions {
 		if t.FromStatusID == fromID && t.ToStatusID == toID {
-			return nil // transition allowed
+			// If allowed_roles is empty, any role can perform the transition.
+			if len(t.AllowedRoles) == 0 {
+				return nil
+			}
+			for _, r := range t.AllowedRoles {
+				if r == userRole {
+					return nil
+				}
+			}
+			return fmt.Errorf("%w: 역할 %q은(는) %q → %q 전이를 수행할 수 없습니다",
+				schema.ErrInvalidInput, userRole, fromStatus, toStatus)
 		}
 	}
 
