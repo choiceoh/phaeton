@@ -270,10 +270,10 @@ export default function FieldProperties({ field, collections, siblingFields, onC
         <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
           {FIELD_TYPE_LABELS[field.field_type]}
         </span>
-        <div className="flex items-center gap-1 rounded-md border p-0.5">
+        <div className="flex items-center gap-1 rounded-lg border p-1">
           <button
             type="button"
-            className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+            className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
               tab === 'basic'
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted'
@@ -284,7 +284,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
           </button>
           <button
             type="button"
-            className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+            className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
               tab === 'advanced'
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted'
