@@ -74,6 +74,8 @@ func mapEventType(t events.EventType) string {
 		return TriggerRecordDeleted
 	case events.EventStateChange:
 		return TriggerStatusChange
+	case events.EventFormSubmit:
+		return TriggerFormSubmit
 	default:
 		return ""
 	}
@@ -82,8 +84,8 @@ func mapEventType(t events.EventType) string {
 func (e *Engine) execute(ctx context.Context, a Automation, ev events.Event) {
 	start := time.Now()
 
-	// Check trigger-specific config (e.g. from/to status).
-	if !matchTriggerConfig(a, ev.StatusFrom, ev.StatusTo) {
+	// Check trigger-specific config (e.g. from/to status, form slug).
+	if !matchTriggerConfig(a, ev.StatusFrom, ev.StatusTo, ev.FormSlug) {
 		logRun(ctx, e.pool, a.ID, a.CollectionID, ev.RecordID, a.TriggerType, "skipped", "trigger config mismatch", time.Since(start))
 		return
 	}

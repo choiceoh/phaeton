@@ -14,6 +14,7 @@ const (
 	EventRecordCreate EventType = "record_created"
 	EventRecordUpdate EventType = "record_updated"
 	EventRecordDelete EventType = "record_deleted"
+	EventFormSubmit   EventType = "form_submit"
 )
 
 // Event is published when something notable happens.
@@ -31,6 +32,7 @@ type Event struct {
 	NewRecord  map[string]any // nil for delete
 	StatusFrom string         // previous _status (for status_change)
 	StatusTo   string         // new _status (for status_change)
+	FormSlug   string         // form slug (for form_submit)
 }
 
 // Handler processes an event.

@@ -47,22 +47,33 @@ func evaluateOne(c Condition, record map[string]any) bool {
 	}
 }
 
-// matchTriggerConfig checks trigger-specific config (e.g. from/to status).
-func matchTriggerConfig(a Automation, statusFrom, statusTo string) bool {
-	if a.TriggerType != TriggerStatusChange {
+// matchTriggerConfig checks trigger-specific config (e.g. from/to status, form slug).
+func matchTriggerConfig(a Automation, statusFrom, statusTo, formSlug string) bool {
+	switch a.TriggerType {
+	case TriggerStatusChange:
+		var cfg TriggerStatusConfig
+		if err := json.Unmarshal(a.TriggerConfig, &cfg); err != nil {
+			return false
+		}
+		if cfg.FromStatus != "" && cfg.FromStatus != statusFrom {
+			return false
+		}
+		if cfg.ToStatus != "" && cfg.ToStatus != statusTo {
+			return false
+		}
+		return true
+	case TriggerFormSubmit:
+		var cfg FormSubmitConfig
+		if err := json.Unmarshal(a.TriggerConfig, &cfg); err != nil {
+			return true // no config = match all forms
+		}
+		if cfg.FormSlug != "" && cfg.FormSlug != formSlug {
+			return false
+		}
+		return true
+	default:
 		return true
 	}
-	var cfg TriggerStatusConfig
-	if err := json.Unmarshal(a.TriggerConfig, &cfg); err != nil {
-		return false
-	}
-	if cfg.FromStatus != "" && cfg.FromStatus != statusFrom {
-		return false
-	}
-	if cfg.ToStatus != "" && cfg.ToStatus != statusTo {
-		return false
-	}
-	return true
 }
 
 func stringify(v any) string {
