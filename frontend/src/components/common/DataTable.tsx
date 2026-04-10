@@ -73,6 +73,8 @@ interface Props<T> {
   emptyDescription?: string
   summaryRow?: Record<string, { label: string; value: string | number }>
   toolbar?: React.ReactNode
+  /** Number of top rows to highlight (e.g. after CSV import). */
+  highlightRows?: number
   /** Enable row selection with checkboxes */
   selectable?: boolean
   /** Currently selected row IDs (controlled) */
@@ -101,6 +103,7 @@ export function DataTable<T>({
   emptyDescription,
   summaryRow,
   toolbar,
+  highlightRows = 0,
   selectable,
   selectedRowIds,
   onSelectionChange,
@@ -443,7 +446,7 @@ export function DataTable<T>({
               visibleRows.map((row, rowIdx) => (
                 <TableRow
                   key={row.id}
-                  className={onRowClick && !onCellEdit ? 'cursor-pointer' : ''}
+                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''}`}
                   onClick={() => {
                     // Only trigger row click if no cell is active (user clicking outside grid cells).
                     if (!grid.activeCell && onRowClick) {

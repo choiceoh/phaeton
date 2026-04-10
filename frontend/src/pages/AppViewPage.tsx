@@ -61,6 +61,7 @@ import {
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
+import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
 import { formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
@@ -77,6 +78,7 @@ export default function AppViewPage() {
   const [editEntry, setEditEntry] = useState<Record<string, unknown> | undefined>()
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importedCount, setImportedCount] = useState(0)
 
   // Filter state
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
@@ -104,6 +106,9 @@ export default function AppViewPage() {
   const { data: collection, isLoading: colLoading, isError: colError, error: colErr } =
     useCollection(appId)
   const { data: process } = useProcess(appId)
+
+  // Show toast when automation runs are detected.
+  useAutomationRunToasts(collection?.id)
 
   // Build expand string from all relation fields.
   const expand = useMemo(() => {
@@ -476,8 +481,12 @@ export default function AppViewPage() {
         throw new Error(body.error || body.message || res.statusText)
       }
       const result = await res.json()
-      toast.success(`${result.data?.imported ?? 0}건 가져왔습니다`)
-      refetch()
+      const count = result.data?.imported ?? 0
+      toast.success(`${count}건 가져왔습니다`)
+      setImportedCount(count)
+      await refetch()
+      // Clear highlight after animation
+      setTimeout(() => setImportedCount(0), 2000)
     } catch (err) {
       toast.error(formatError(err))
     } finally {
@@ -744,6 +753,18 @@ export default function AppViewPage() {
             </>
           )}
 
+          {/* Active filter/sort indicator */}
+          {(filterConditions.length > 0 || sortItems.length > 0) && (
+            <div className="flex items-center gap-2 border-l pl-2 ml-1 text-xs text-muted-foreground">
+              {filterConditions.length > 0 && (
+                <span>{filterConditions.length}개 조건 적용됨</span>
+              )}
+              {sortItems.length > 0 && (
+                <span>{sortItems.length}개 정렬 적용됨</span>
+              )}
+            </div>
+          )}
+
           {(filterConditions.length > 0 || sortItems.length > 0) && !savingView && (
             <Popover>
               <PopoverTrigger
@@ -891,6 +912,7 @@ export default function AppViewPage() {
               emptyDescription={TERM.noRecordsDesc}
               summaryRow={summaryRow}
               toolbar={tableToolbar}
+              highlightRows={importedCount}
               selectable
               selectedRowIds={selectedRowIds}
               onSelectionChange={setSelectedRowIds}
