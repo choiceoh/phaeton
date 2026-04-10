@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
@@ -57,6 +57,11 @@ export default function AppBuilder() {
   const aiAvailable = useAIAvailable()
   const generateSlug = useAIGenerateSlug()
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const slugManualRef = useRef(false)
+
+  useEffect(() => {
+    slugManualRef.current = slugManual
+  }, [slugManual])
 
   const selectedField = fields.find((f) => f.id === selectedId) || null
 
@@ -70,17 +75,16 @@ export default function AppBuilder() {
   const requestSlug = useCallback((text: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
+      if (slugManualRef.current) return
       generateSlug.mutate(text, {
         onSuccess: (res) => {
-          setSlug((prev) => {
-            // Only update if user hasn't manually edited
-            if (!slugManual) return res.slug
-            return prev
-          })
+          // Re-check after async response in case user typed in slug field meanwhile.
+          if (slugManualRef.current) return
+          setSlug(res.slug)
         },
       })
     }, 500)
-  }, [slugManual, generateSlug])
+  }, [generateSlug])
 
   function handleLabelChange(value: string) {
     setLabel(value)

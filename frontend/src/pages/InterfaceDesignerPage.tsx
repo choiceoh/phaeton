@@ -44,7 +44,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useCollection } from '@/hooks/useCollections'
-import { useAggregate, useCollectionCount, useEntries } from '@/hooks/useEntries'
+import { useAggregate, useCollectionCount, useEntries, useTotals } from '@/hooks/useEntries'
 import type { Field } from '@/lib/types'
 
 // ── Types ──
@@ -514,20 +514,22 @@ function WidgetRenderer({
 function StatCardWidget({ widget, slug }: { widget: WidgetConfig; slug: string }) {
   const fn = widget.stat_fn || 'count'
   const { data: count } = useCollectionCount(fn === 'count' ? slug : undefined)
-  const { data: aggData } = useAggregate(
+  const { data: totals } = useTotals(
     fn !== 'count' && widget.stat_field ? slug : undefined,
-    { group: '_created_by', fn, field: widget.stat_field || '' },
   )
 
   let displayValue: number | string = '-'
   if (fn === 'count') {
     displayValue = count ?? '-'
-  } else if (aggData?.length) {
-    const total = aggData.reduce((acc, r) => acc + r.value, 0)
-    if (fn === 'avg') {
-      displayValue = (total / aggData.length).toLocaleString('ko', { maximumFractionDigits: 1 })
-    } else {
-      displayValue = total.toLocaleString('ko')
+  } else if (totals && widget.stat_field) {
+    const stats = totals[widget.stat_field]
+    if (stats && typeof stats === 'object') {
+      const value = stats[fn as 'sum' | 'avg' | 'min' | 'max']
+      if (typeof value === 'number') {
+        displayValue = fn === 'avg'
+          ? value.toLocaleString('ko', { maximumFractionDigits: 1 })
+          : value.toLocaleString('ko')
+      }
     }
   }
 
