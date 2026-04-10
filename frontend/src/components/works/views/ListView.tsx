@@ -1,4 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { isLayoutType } from '@/lib/constants'
 import type { Field } from '@/lib/types'
 
 interface Props {
@@ -16,7 +17,7 @@ export default function ListView({ fields, entries, onRowClick }: Props) {
     )
   }
 
-  const visibleFields = fields.slice(0, 6)
+  const visibleFields = fields.filter((f) => !isLayoutType(f.field_type)).slice(0, 6)
 
   return (
     <Table>
@@ -54,8 +55,13 @@ function formatCell(value: unknown, fieldType: string): string {
   if (fieldType === 'date' || fieldType === 'datetime') {
     return new Date(value as string).toLocaleDateString('ko')
   }
+  if (fieldType === 'time') return String(value)
   if (fieldType === 'multiselect' && Array.isArray(value)) {
     return value.join(', ')
+  }
+  if (fieldType === 'textarea') {
+    const s = String(value)
+    return s.length > 100 ? s.slice(0, 100) + '...' : s
   }
   if (fieldType === 'json') {
     return JSON.stringify(value)

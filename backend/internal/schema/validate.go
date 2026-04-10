@@ -44,7 +44,7 @@ var pgReserved = map[string]bool{
 // autoColumns are injected by the engine into every data table.
 var autoColumns = map[string]bool{
 	"id": true, "created_at": true, "updated_at": true,
-	"created_by": true, "deleted_at": true,
+	"created_by": true, "updated_by": true, "deleted_at": true,
 }
 
 func ValidateSlug(slug string) error {
@@ -100,6 +100,14 @@ func validateFieldIn(f *CreateFieldIn) error {
 	}
 	if err := ValidateFieldType(f.FieldType); err != nil {
 		return err
+	}
+	// Layout fields must not carry data constraints.
+	if f.FieldType.IsLayout() {
+		f.IsRequired = false
+		f.IsUnique = false
+		f.IsIndexed = false
+		f.DefaultValue = nil
+		return nil
 	}
 	if f.FieldType == FieldRelation && f.Relation == nil {
 		return fmt.Errorf("%w: relation field requires relation config", ErrInvalidInput)

@@ -70,10 +70,14 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			default_value   JSONB,
 			options         JSONB,
 			sort_order      INTEGER NOT NULL DEFAULT 0,
+			is_layout       BOOLEAN NOT NULL DEFAULT FALSE,
 			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 			UNIQUE(collection_id, slug)
 		)`,
+
+		// Upgrade: add is_layout column for existing installations.
+		`ALTER TABLE _meta.fields ADD COLUMN IF NOT EXISTS is_layout BOOLEAN NOT NULL DEFAULT FALSE`,
 
 		// --- _meta.relations ---
 		`CREATE TABLE IF NOT EXISTS _meta.relations (

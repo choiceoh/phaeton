@@ -337,18 +337,23 @@ func (e *Engine) AddField(ctx context.Context, collectionID string, req *schema.
 		return schema.Field{}, nil, err
 	}
 
-	ddlUp, ddlDown := GenerateAddColumn(col.Slug, f)
-	if err := execStmts(ctx, tx, ddlUp); err != nil {
-		return schema.Field{}, nil, fmt.Errorf("exec add column: %w", err)
-	}
+	var ddlUp, ddlDown []string
 
-	// FK / junction for relation.
-	if f.Relation != nil {
-		stmts, err := e.applyRelationDDL(ctx, tx, col.Slug, f)
-		if err != nil {
-			return schema.Field{}, nil, err
+	// Layout fields produce no DDL.
+	if !f.FieldType.IsLayout() {
+		ddlUp, ddlDown = GenerateAddColumn(col.Slug, f)
+		if err := execStmts(ctx, tx, ddlUp); err != nil {
+			return schema.Field{}, nil, fmt.Errorf("exec add column: %w", err)
 		}
-		ddlUp = append(ddlUp, stmts...)
+
+		// FK / junction for relation.
+		if f.Relation != nil {
+			stmts, err := e.applyRelationDDL(ctx, tx, col.Slug, f)
+			if err != nil {
+				return schema.Field{}, nil, err
+			}
+			ddlUp = append(ddlUp, stmts...)
+		}
 	}
 
 	payload, _ := json.Marshal(map[string]any{"field": f, "collection_slug": col.Slug})
@@ -386,6 +391,11 @@ func (e *Engine) AlterField(ctx context.Context, fieldID string, req *schema.Upd
 	var ddlDown []string
 
 	if req.FieldType != nil && *req.FieldType != old.FieldType {
+		// Block layout ↔ non-layout conversion.
+		if old.FieldType.IsLayout() != req.FieldType.IsLayout() {
+			return nil, fmt.Errorf("%w: cannot convert between layout and data field types",
+				schema.ErrInvalidInput)
+		}
 		allowed, conditional := CheckCompat(old.FieldType, *req.FieldType)
 		if !allowed {
 			return nil, fmt.Errorf("%w: conversion from %s to %s is not supported",
@@ -486,6 +496,14 @@ func (e *Engine) PreviewDropField(ctx context.Context, fieldID string) (Preview,
 		return Preview{}, fmt.Errorf("collection %s: %w", f.CollectionID, schema.ErrNotFound)
 	}
 
+	// Layout fields have no data — always safe to drop.
+	if f.FieldType.IsLayout() {
+		return Preview{
+			SafetyLevel: Safe,
+			Description: fmt.Sprintf("레이아웃 필드 %s.%s 삭제", col.Slug, f.Slug),
+		}, nil
+	}
+
 	qTable := quoteIdent("data", col.Slug)
 	qCol := quoteIdentSingle(f.Slug)
 	var nonNull int64
@@ -522,9 +540,11 @@ func (e *Engine) DropField(ctx context.Context, fieldID string) error {
 
 	var ddlUp, ddlDown []string
 
-	// Many-to-many fields are backed by a junction table, not a column on the owner table.
-	// Drop the junction table instead of attempting a non-existent DROP COLUMN.
-	if f.Relation != nil && f.Relation.RelationType == schema.RelManyToMany {
+	// Layout fields have no DB column — just delete the meta row.
+	if f.FieldType.IsLayout() {
+		// no DDL needed
+	} else if f.Relation != nil && f.Relation.RelationType == schema.RelManyToMany {
+		// Many-to-many fields are backed by a junction table, not a column on the owner table.
 		junc := f.Relation.JunctionTable
 		if junc == "" {
 			target, ok := e.cache.CollectionByID(f.Relation.TargetCollectionID)

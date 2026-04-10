@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import RelationCombobox from '@/components/common/RelationCombobox'
+import UserCombobox from '@/components/common/UserCombobox'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -13,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { isLayoutType } from '@/lib/constants'
 import type { Field } from '@/lib/types'
 
 interface Props {
@@ -51,21 +53,32 @@ export default function EntryForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-4">
-        {fields.map((field) => (
-          <div key={field.id}>
-            <Label>
-              {field.label}
-              {field.is_required && <span className="ml-1 text-destructive">*</span>}
-            </Label>
-            <div className="mt-1">
-              <FieldInput
-                field={field}
-                value={extractValue(data[field.slug], field)}
-                onChange={(v) => setValue(field.slug, v)}
-              />
+        {fields.map((field) => {
+          // Layout fields render without the Label wrapper.
+          if (isLayoutType(field.field_type)) {
+            return (
+              <div key={field.id}>
+                <LayoutElement field={field} />
+              </div>
+            )
+          }
+
+          return (
+            <div key={field.id}>
+              <Label>
+                {field.label}
+                {field.is_required && <span className="ml-1 text-destructive">*</span>}
+              </Label>
+              <div className="mt-1">
+                <FieldInput
+                  field={field}
+                  value={extractValue(data[field.slug], field)}
+                  onChange={(v) => setValue(field.slug, v)}
+                />
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onCancel}>
@@ -90,6 +103,23 @@ function extractValue(value: unknown, field: Field): unknown {
   return value
 }
 
+function LayoutElement({ field }: { field: Field }) {
+  switch (field.field_type) {
+    case 'label':
+      return (
+        <p className="text-sm text-muted-foreground">
+          {(field.options?.content as string) || field.label}
+        </p>
+      )
+    case 'line':
+      return <hr className="my-2" />
+    case 'spacer':
+      return <div style={{ height: (field.options?.height as number) || 24 }} />
+    default:
+      return null
+  }
+}
+
 function FieldInput({
   field,
   value,
@@ -105,6 +135,15 @@ function FieldInput({
         <Input
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
+        />
+      )
+    case 'textarea':
+      return (
+        <Textarea
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          rows={(field.options?.rows as number) || 4}
           required={field.is_required}
         />
       )
@@ -136,6 +175,15 @@ function FieldInput({
           required={field.is_required}
         />
       )
+    case 'time':
+      return (
+        <Input
+          type="time"
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
+        />
+      )
     case 'boolean':
       return (
         <div className="flex items-center gap-2 pt-1">
@@ -144,6 +192,27 @@ function FieldInput({
       )
     case 'select': {
       const choices = (field.options?.choices as string[]) || []
+      const display = field.options?.display as string | undefined
+
+      if (display === 'radio') {
+        return (
+          <div className="space-y-1">
+            {choices.map((c) => (
+              <label key={c} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name={field.slug}
+                  value={c}
+                  checked={value === c}
+                  onChange={() => onChange(c)}
+                />
+                {c}
+              </label>
+            ))}
+          </div>
+        )
+      }
+
       return (
         <Select value={(value as string) || ''} onValueChange={onChange}>
           <SelectTrigger>
@@ -190,6 +259,8 @@ function FieldInput({
           onChange={onChange}
         />
       )
+    case 'user':
+      return <UserCombobox value={value as string | undefined} onChange={onChange} />
     case 'file':
       return <Input type="file" onChange={(e) => onChange(e.target.files?.[0]?.name)} />
     case 'json':

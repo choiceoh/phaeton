@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { ON_DELETE_OPTIONS, RELATION_TYPE_LABELS } from '@/lib/constants'
+import { isLayoutType, ON_DELETE_OPTIONS, RELATION_TYPE_LABELS } from '@/lib/constants'
 import type { Collection } from '@/lib/types'
 
 import type { FieldDraft } from './FieldPreview'
@@ -33,6 +33,7 @@ export default function FieldProperties({ field, collections, onChange }: Props)
     onChange({ ...field!, ...patch })
   }
 
+  const isLayout = isLayoutType(field.field_type)
   const selectChoices = (field.options?.choices as string[]) || []
 
   return (
@@ -54,33 +55,75 @@ export default function FieldProperties({ field, collections, onChange }: Props)
         <p className="text-xs text-muted-foreground">[a-z][a-z0-9_]{'{0,62}'}</p>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id="required"
-          checked={field.is_required}
-          onCheckedChange={(c) => update({ is_required: !!c })}
-        />
-        <Label htmlFor="required">필수</Label>
-      </div>
+      {!isLayout && (
+        <>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="required"
+              checked={field.is_required}
+              onCheckedChange={(c) => update({ is_required: !!c })}
+            />
+            <Label htmlFor="required">필수</Label>
+          </div>
 
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id="unique"
-          checked={field.is_unique}
-          onCheckedChange={(c) => update({ is_unique: !!c })}
-        />
-        <Label htmlFor="unique">고유값</Label>
-      </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="unique"
+              checked={field.is_unique}
+              onCheckedChange={(c) => update({ is_unique: !!c })}
+            />
+            <Label htmlFor="unique">고유값</Label>
+          </div>
 
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id="indexed"
-          checked={field.is_indexed}
-          onCheckedChange={(c) => update({ is_indexed: !!c })}
-        />
-        <Label htmlFor="indexed">인덱스</Label>
-      </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="indexed"
+              checked={field.is_indexed}
+              onCheckedChange={(c) => update({ is_indexed: !!c })}
+            />
+            <Label htmlFor="indexed">인덱스</Label>
+          </div>
+        </>
+      )}
 
+      {/* Label layout: editable display text */}
+      {field.field_type === 'label' && (
+        <div className="space-y-2">
+          <Label>표시 텍스트</Label>
+          <Textarea
+            rows={3}
+            value={(field.options?.content as string) || ''}
+            onChange={(e) => update({ options: { ...field.options, content: e.target.value } })}
+            placeholder="폼에 표시할 안내 문구"
+          />
+        </div>
+      )}
+
+      {/* Spacer layout: height */}
+      {field.field_type === 'spacer' && (
+        <div className="space-y-2">
+          <Label>높이 (px)</Label>
+          <Input
+            type="number"
+            value={(field.options?.height as number) || 24}
+            onChange={(e) => update({ options: { ...field.options, height: Number(e.target.value) || 24 } })}
+          />
+        </div>
+      )}
+
+      {/* Textarea: row count */}
+      {field.field_type === 'textarea' && (
+        <div className="space-y-2">
+          <Label>행 수</Label>
+          <Input
+            type="number"
+            value={(field.options?.rows as number) || 4}
+            onChange={(e) => update({ options: { ...field.options, rows: Number(e.target.value) || 4 } })}
+          />
+        </div>
+      )}
+
+      {/* Select/Multiselect: choices + display mode */}
       {(field.field_type === 'select' || field.field_type === 'multiselect') && (
         <div className="space-y-2">
           <Label>선택 옵션 (줄바꿈)</Label>
@@ -92,6 +135,24 @@ export default function FieldProperties({ field, collections, onChange }: Props)
               update({ options: { ...field.options, choices } })
             }}
           />
+        </div>
+      )}
+
+      {field.field_type === 'select' && (
+        <div className="space-y-2">
+          <Label>표시 방식</Label>
+          <Select
+            value={(field.options?.display as string) || 'dropdown'}
+            onValueChange={(v) => update({ options: { ...field.options, display: v } })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="dropdown">드롭다운</SelectItem>
+              <SelectItem value="radio">라디오 버튼</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       )}
 
