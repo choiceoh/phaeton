@@ -159,7 +159,7 @@ export default function KanbanView({
     filters,
   })
 
-  const columns: KanbanColumn[] = kanbanData?.columns ?? []
+  const columns: KanbanColumn[] = useMemo(() => kanbanData?.columns ?? [], [kanbanData?.columns])
   const serverAllowedMoves = kanbanData?.allowed_moves
 
   const allowedMoves = useMemo(() => {
