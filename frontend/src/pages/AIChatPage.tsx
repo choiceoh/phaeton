@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, MessageCircle, RotateCcw, Send } from 'lucide-react'
+import Markdown from 'react-markdown'
 
 import { Button } from '@/components/ui/button'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
@@ -22,6 +23,7 @@ export default function AIChatPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const chatMutation = useAIChat()
+  const pendingRef = useRef(0)
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -45,17 +47,21 @@ export default function AIChatPage() {
     const newMessages = [...messages, userMsg]
     setMessages(newMessages)
     setInput('')
+    if (inputRef.current) inputRef.current.style.height = ''
 
+    const seq = ++pendingRef.current
     chatMutation.mutate(
       { message: msg, history: messages },
       {
         onSuccess: (data) => {
+          if (seq !== pendingRef.current) return
           setMessages((prev) => [
             ...prev,
             { role: 'assistant', content: data.reply },
           ])
         },
         onError: () => {
+          if (seq !== pendingRef.current) return
           setMessages((prev) => [
             ...prev,
             {
@@ -76,7 +82,7 @@ export default function AIChatPage() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       handleSend()
     }
@@ -98,7 +104,7 @@ export default function AIChatPage() {
       {messages.length > 0 && (
         <div className="flex items-center justify-end py-2">
           <button
-            onClick={() => { setMessages([]); setInput('') }}
+            onClick={() => { pendingRef.current++; setMessages([]); setInput('') }}
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600"
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -136,13 +142,19 @@ export default function AIChatPage() {
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg px-4 py-3 text-sm whitespace-pre-wrap ${
+                  className={`max-w-[80%] rounded-lg px-4 py-3 text-sm ${
                     msg.role === 'user'
-                      ? 'bg-stone-900 text-white'
+                      ? 'whitespace-pre-wrap bg-stone-900 text-white'
                       : 'bg-stone-100 text-stone-800'
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === 'assistant' ? (
+                    <div className="prose prose-sm prose-stone max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                      <Markdown>{msg.content}</Markdown>
+                    </div>
+                  ) : (
+                    msg.content
+                  )}
                 </div>
               </div>
             ))}

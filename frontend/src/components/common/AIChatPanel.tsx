@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router'
 import { Loader2, MessageCircle, Send, X } from 'lucide-react'
+import Markdown from 'react-markdown'
 
 import { Button } from '@/components/ui/button'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
@@ -114,7 +115,7 @@ export default function AIChatPanel() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       handleSend()
     }
@@ -186,13 +187,19 @@ export default function AIChatPanel() {
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
+                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
                     msg.role === 'user'
-                      ? 'bg-stone-900 text-white'
+                      ? 'whitespace-pre-wrap bg-stone-900 text-white'
                       : 'bg-stone-100 text-stone-800'
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === 'assistant' ? (
+                    <div className="prose prose-sm prose-stone max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                      <Markdown>{msg.content}</Markdown>
+                    </div>
+                  ) : (
+                    msg.content
+                  )}
                 </div>
               </div>
             ))}
