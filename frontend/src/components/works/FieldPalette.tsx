@@ -27,11 +27,6 @@ import { FIELD_TYPE_LABELS } from '@/lib/constants'
 import type { FieldType } from '@/lib/types'
 import type { LucideIcon } from 'lucide-react'
 
-interface Props {
-  onAdd: (fieldType: FieldType, presetOptions?: Record<string, unknown>) => void
-  collapsed?: boolean
-}
-
 interface PaletteEntry {
   icon: LucideIcon
   label: string
@@ -96,19 +91,28 @@ const TABS: { key: TabKey; label: string; entries: PaletteEntry[] }[] = [
   { key: 'advanced', label: '고급', entries: ADVANCED_ENTRIES },
 ]
 
-function PaletteButton({ icon: Icon, label, onClick }: { icon: LucideIcon, label: string, onClick: () => void }) {
+function PaletteButton({ icon: Icon, label, entry }: { icon: LucideIcon, label: string, entry: PaletteEntry }) {
+  function handleDragStart(e: React.DragEvent) {
+    e.dataTransfer.setData(
+      'application/palette-field',
+      JSON.stringify({ type: entry.type, presetOptions: entry.presetOptions }),
+    )
+    e.dataTransfer.effectAllowed = 'copy'
+  }
+
   return (
-    <button
-      onClick={onClick}
-      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      className="flex w-full cursor-grab items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent active:cursor-grabbing"
     >
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span>{label}</span>
-    </button>
+    </div>
   )
 }
 
-export default function FieldPalette({ onAdd }: Props) {
+export default function FieldPalette() {
   const [tab, setTab] = useState<TabKey>('data')
   const activeTab = TABS.find((t) => t.key === tab)!
 
@@ -136,7 +140,7 @@ export default function FieldPalette({ onAdd }: Props) {
             key={entry.type}
             icon={entry.icon}
             label={entry.label}
-            onClick={() => onAdd(entry.type, entry.presetOptions)}
+            entry={entry}
           />
         ))}
       </div>

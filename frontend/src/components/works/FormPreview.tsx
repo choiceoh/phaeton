@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+
 import { FIELD_TYPE_LABELS, isLayoutType } from '@/lib/constants'
 
 import { Checkbox } from '@/components/ui/checkbox'
@@ -10,6 +12,8 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
+import type { FieldType } from '@/lib/types'
+
 import type { FieldDraft } from './FieldPreview'
 
 interface Props {
@@ -18,27 +22,114 @@ interface Props {
   onSelect: (id: string) => void
   onReorder: (fields: FieldDraft[]) => void
   onRemove: (id: string) => void
+  onAdd: (fieldType: FieldType, presetOptions?: Record<string, unknown>, index?: number) => void
+  onFieldChange: (updated: FieldDraft) => void
 }
 
-export default function FormPreview({ fields, selectedId, onSelect, onReorder, onRemove }: Props) {
+export default function FormPreview({ fields, selectedId, onSelect, onReorder, onRemove, onAdd, onFieldChange }: Props) {
+  const gridRef = useRef<HTMLDivElement>(null)
+  const resizeRef = useRef<{ fieldId: string, startX: number, startWidth: number } | null>(null)
+  const [resizingId, setResizingId] = useState<string | null>(null)
+  const [previewWidth, setPreviewWidth] = useState<number | null>(null)
+
+  const handleResizeStart = useCallback((e: React.MouseEvent, field: FieldDraft) => {
+    e.preventDefault()
+    e.stopPropagation()
+    resizeRef.current = { fieldId: field.id, startX: e.clientX, startWidth: field.width || 6 }
+    setResizingId(field.id)
+    setPreviewWidth(field.width || 6)
+  }, [])
+
+  useEffect(() => {
+    if (!resizingId) return
+
+    function onMouseMove(e: MouseEvent) {
+      if (!resizeRef.current || !gridRef.current) return
+      const gridRect = gridRef.current.getBoundingClientRect()
+      const colWidth = gridRect.width / 6
+      const deltaX = e.clientX - resizeRef.current.startX
+      const deltaCols = Math.round(deltaX / colWidth)
+      const newWidth = Math.max(1, Math.min(6, resizeRef.current.startWidth + deltaCols))
+      setPreviewWidth(newWidth)
+    }
+
+    function onMouseUp() {
+      if (resizeRef.current && previewWidth !== null) {
+        const field = fields.find((f) => f.id === resizeRef.current!.fieldId)
+        if (field && previewWidth !== field.width) {
+          onFieldChange({ ...field, width: previewWidth })
+        }
+      }
+      resizeRef.current = null
+      setResizingId(null)
+      setPreviewWidth(null)
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [resizingId, previewWidth, fields, onFieldChange])
+
   function handleDragStart(e: React.DragEvent, index: number) {
+    if (resizingId) { e.preventDefault(); return }
     e.dataTransfer.setData('text/plain', String(index))
+    e.dataTransfer.setData('source/reorder', 'true')
   }
 
   function handleDrop(e: React.DragEvent, targetIndex: number) {
     e.preventDefault()
-    const sourceIndex = Number(e.dataTransfer.getData('text/plain'))
-    if (sourceIndex === targetIndex) return
-    const updated = [...fields]
-    const [moved] = updated.splice(sourceIndex, 1)
-    updated.splice(targetIndex, 0, moved)
-    onReorder(updated)
+    e.currentTarget.classList.remove('bg-accent/40')
+
+    const paletteData = e.dataTransfer.getData('application/palette-field')
+    if (paletteData) {
+      const { type, presetOptions } = JSON.parse(paletteData)
+      onAdd(type, presetOptions, targetIndex)
+      return
+    }
+
+    const isReorder = e.dataTransfer.getData('source/reorder')
+    if (isReorder) {
+      const sourceIndex = Number(e.dataTransfer.getData('text/plain'))
+      if (sourceIndex === targetIndex) return
+      const updated = [...fields]
+      const [moved] = updated.splice(sourceIndex, 1)
+      updated.splice(targetIndex, 0, moved)
+      onReorder(updated)
+    }
+  }
+
+  function handleDropEnd(e: React.DragEvent) {
+    e.preventDefault()
+    e.currentTarget.classList.remove('bg-accent/40')
+
+    const paletteData = e.dataTransfer.getData('application/palette-field')
+    if (paletteData) {
+      const { type, presetOptions } = JSON.parse(paletteData)
+      onAdd(type, presetOptions)
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.currentTarget.classList.add('bg-accent/40')
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.currentTarget.classList.remove('bg-accent/40')
   }
 
   if (fields.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed text-sm text-muted-foreground">
-        왼쪽에서 필드를 추가하세요
+      <div
+        className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed text-sm text-muted-foreground transition-colors"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDropEnd}
+      >
+        왼쪽에서 필드를 드래그하세요
       </div>
     )
   }
@@ -52,7 +143,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     <div>
       <h3 className="mb-2 text-sm font-medium text-muted-foreground">입력화면 미리보기</h3>
       <div className="rounded-lg border bg-background p-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
+        <div ref={gridRef} className="grid grid-cols-1 gap-4 sm:grid-cols-6">
           {fields.map((field, i) => {
             if (isLayoutType(field.field_type)) {
               return (
@@ -64,7 +155,8 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                   onClick={() => onSelect(field.id)}
                   draggable
                   onDragStart={(e) => handleDragStart(e, i)}
-                  onDragOver={(e) => e.preventDefault()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, i)}
                 >
                   <LayoutPreview field={field} />
@@ -72,17 +164,18 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
               )
             }
 
-            const span = field.width || 6
+            const span = resizingId === field.id && previewWidth !== null ? previewWidth : (field.width || 6)
             return (
               <div
                 key={field.id}
-                className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'} cursor-pointer rounded-md p-2 transition-colors ${
+                className={`relative col-span-full ${smSpan[span] ?? 'sm:col-span-6'} cursor-pointer rounded-md p-2 transition-colors ${
                   selectedId === field.id ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
-                }`}
+                } ${resizingId === field.id ? 'ring-2 ring-primary/50' : ''}`}
                 onClick={() => onSelect(field.id)}
-                draggable
+                draggable={!resizingId}
                 onDragStart={(e) => handleDragStart(e, i)}
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, i)}
               >
                 <div className="flex items-center justify-between">
@@ -90,13 +183,18 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                     {field.label || '(제목 없음)'}
                     {field.is_required && <span className="ml-1 text-destructive">*</span>}
                   </Label>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onRemove(field.id) }}
-                    className="text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive [div:hover>&]:opacity-100"
-                    type="button"
-                  >
-                    ×
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {(selectedId === field.id || resizingId === field.id) && (
+                      <span className="text-[10px] text-muted-foreground">{span}/6</span>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onRemove(field.id) }}
+                      className="text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive [div:hover>&]:opacity-100"
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
                 {field.description && (
                   <p className="mt-0.5 text-xs text-muted-foreground">{field.description}</p>
@@ -104,9 +202,27 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                 <div className="pointer-events-none mt-1">
                   <DraftFieldInput field={field} />
                 </div>
+                {/* Resize handle */}
+                <div
+                  className="absolute top-0 right-0 h-full w-2 cursor-col-resize rounded-r-md opacity-0 transition-opacity hover:bg-primary/20 hover:opacity-100 [div:hover>&]:opacity-100"
+                  onMouseDown={(e) => handleResizeStart(e, field)}
+                />
               </div>
             )
           })}
+          <div
+            className="col-span-full flex h-10 items-center justify-center rounded-md border-2 border-dashed border-transparent text-xs text-muted-foreground transition-colors"
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.currentTarget.classList.add('border-muted-foreground/30', 'bg-accent/40')
+            }}
+            onDragLeave={(e) => {
+              e.currentTarget.classList.remove('border-muted-foreground/30', 'bg-accent/40')
+            }}
+            onDrop={handleDropEnd}
+          >
+            여기에 드래그하여 추가
+          </div>
         </div>
       </div>
     </div>
