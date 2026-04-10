@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-ui build clean db db-stop lint lint-go lint-ui test test-go test-ui test-integration fmt up down
+.PHONY: dev dev-api dev-ui build clean db db-stop lint lint-go lint-ui test test-go test-ui test-integration fmt up down backup backup-start backup-stop backup-logs
 
 ifneq (,$(wildcard .env))
 include .env
@@ -67,6 +67,19 @@ test-integration:
 
 test-ui:
 	cd frontend && npm run test
+
+# 백업
+backup:
+	./scripts/backup-db.sh
+
+backup-start:
+	docker compose --profile backup up -d backup
+
+backup-stop:
+	docker compose --profile backup stop backup
+
+backup-logs:
+	docker compose --profile backup logs -f backup
 
 # 포맷
 fmt:
