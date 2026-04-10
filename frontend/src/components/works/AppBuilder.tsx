@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useBlocker, useNavigate } from 'react-router'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 import { useCollections, useCreateCollection } from '@/hooks/useCollections'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import type { AIBuildResult } from '@/hooks/useAI'
 import { useAIGenerateSlug } from '@/hooks/useAI'
@@ -44,16 +45,7 @@ export default function AppBuilder() {
     [label, slug, description, fields],
   )
 
-  const blocker = useBlocker(isDirty)
-
-  useEffect(() => {
-    if (!isDirty) return
-    function handleBeforeUnload(e: BeforeUnloadEvent) {
-      e.preventDefault()
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [isDirty])
+  const blocker = useUnsavedChanges(isDirty)
 
   const requestSlug = useCallback((text: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)

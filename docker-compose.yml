@@ -65,4 +65,4 @@ services:
 volumes:
   pgdata:
     external: true
-    name: practical-neumann_pgdata
+    name: phaeton_pgdata

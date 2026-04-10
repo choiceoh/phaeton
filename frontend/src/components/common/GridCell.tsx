@@ -107,7 +107,7 @@ export default function GridCell({
         </span>
       )}
       {saved && !saving && (
-        <span className="absolute right-0.5 top-1/2 -translate-y-1/2">
+        <span className="absolute right-0.5 top-1/2 -translate-y-1/2 animate-check-fade">
           <CheckIcon className="size-3.5 text-foreground/70" />
         </span>
       )}

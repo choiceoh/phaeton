@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
@@ -82,7 +82,7 @@ func (e *Engine) SaveProcess(ctx context.Context, collectionID string, req *sche
 	}
 
 	if err := e.cache.ReloadProcess(ctx, collectionID); err != nil {
-		log.Printf("cache reload process after SaveProcess: %v", err)
+		slog.Warn("cache reload process after SaveProcess", "error", err)
 	}
 	return proc, nil
 }

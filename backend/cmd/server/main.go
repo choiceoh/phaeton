@@ -169,7 +169,26 @@ func run() int {
 	}
 
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, savedViewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, autoHandler, chartHandler, templateHandler, sseHandler, logger, loginLimiter, apiLimiter, samlMiddleware)
+	r := buildRouter(routerConfig{
+		pool:         pool,
+		schemaH:      schemaHandler,
+		dynH:         dynHandler,
+		viewH:        viewHandler,
+		savedViewH:   savedViewHandler,
+		histH:        historyHandler,
+		memberH:      memberHandler,
+		commentH:     commentHandler,
+		notifH:       notifHandler,
+		aiH:          aiHandler,
+		autoH:        autoHandler,
+		chartH:       chartHandler,
+		templateH:    templateHandler,
+		sseH:         sseHandler,
+		logger:       logger,
+		loginLimiter: loginLimiter,
+		apiLimiter:   apiLimiter,
+		samlMW:       samlMiddleware,
+	})
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -223,39 +242,41 @@ func run() int {
 	}, logger)
 }
 
-func buildRouter(
-	pool *pgxpool.Pool,
-	schemaH *handler.SchemaHandler,
-	dynH *handler.DynHandler,
-	viewH *handler.ViewHandler,
-	savedViewH *handler.SavedViewHandler,
-	histH *handler.HistoryHandler,
-	memberH *handler.MemberHandler,
-	commentH *handler.CommentHandler,
-	notifH *handler.NotificationHandler,
-	aiH *handler.AIHandler,
-	autoH *handler.AutomationHandler,
-	chartH *handler.ChartHandler,
-	templateH *handler.TemplateHandler,
-	sseH *handler.SSEHandler,
-	logger *slog.Logger,
-	loginLimiter *middleware.RateLimiter,
-	apiLimiter *middleware.APILimiter,
-	samlMW *samlsp.Middleware,
-) *chi.Mux {
+type routerConfig struct {
+	pool         *pgxpool.Pool
+	schemaH      *handler.SchemaHandler
+	dynH         *handler.DynHandler
+	viewH        *handler.ViewHandler
+	savedViewH   *handler.SavedViewHandler
+	histH        *handler.HistoryHandler
+	memberH      *handler.MemberHandler
+	commentH     *handler.CommentHandler
+	notifH       *handler.NotificationHandler
+	aiH          *handler.AIHandler
+	autoH        *handler.AutomationHandler
+	chartH       *handler.ChartHandler
+	templateH    *handler.TemplateHandler
+	sseH         *handler.SSEHandler
+	logger       *slog.Logger
+	loginLimiter *middleware.RateLimiter
+	apiLimiter   *middleware.APILimiter
+	samlMW       *samlsp.Middleware
+}
+
+func buildRouter(cfg routerConfig) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Global middleware.
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
-	r.Use(middleware.Logger(logger))
+	r.Use(middleware.Logger(cfg.logger))
 	r.Use(middleware.CORS())
 	r.Use(chimw.Recoverer)
 
 	// Health — includes DB connectivity check.
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if err := pool.Ping(r.Context()); err != nil {
+		if err := cfg.pool.Ping(r.Context()); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			w.Write([]byte(`{"status":"unhealthy","db":"unreachable"}`))
 			return
@@ -270,7 +291,7 @@ func buildRouter(
 	})
 
 	// Auth (public).
-	r.Post("/api/auth/login", handler.Login(pool, loginLimiter))
+	r.Post("/api/auth/login", handler.Login(cfg.pool, cfg.loginLimiter))
 	r.Post("/api/auth/logout", handler.Logout())
 
 	// Webhooks (public — HMAC-verified via WEBHOOK_SECRET).
@@ -278,130 +299,140 @@ func buildRouter(
 	r.Post("/api/hooks/{topic}", webhookH.Receive)
 
 	// SAML SP endpoints (metadata + ACS).
-	if samlMW != nil {
-		r.Handle("/saml/*", samlMW.Handler())
+	if cfg.samlMW != nil {
+		r.Handle("/saml/*", cfg.samlMW.Handler())
 	}
 
 	// Protected routes.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth())
-		r.Use(apiLimiter.Middleware())
+		r.Use(cfg.apiLimiter.Middleware())
 
 		// Current user.
-		r.Get("/api/auth/me", handler.Me(pool))
-		r.Patch("/api/auth/me", handler.UpdateMe(pool))
-		r.Post("/api/auth/password", handler.ChangePassword(pool))
+		r.Get("/api/auth/me", handler.Me(cfg.pool))
+		r.Patch("/api/auth/me", handler.UpdateMe(cfg.pool))
+		r.Post("/api/auth/password", handler.ChangePassword(cfg.pool))
 
 		// Users (list: all, write: director only).
-		r.Get("/api/users", handler.ListUsers(pool))
-		r.Get("/api/users/{id}", handler.GetUser(pool))
-		r.Post("/api/users", handler.CreateUser(pool))
-		r.Patch("/api/users/{id}", handler.UpdateUser(pool))
+		r.Get("/api/users", handler.ListUsers(cfg.pool))
+		r.Get("/api/users/{id}", handler.GetUser(cfg.pool))
+		r.Post("/api/users", handler.CreateUser(cfg.pool))
+		r.Patch("/api/users/{id}", handler.UpdateUser(cfg.pool))
 
-		// Departments.
-		r.Get("/api/departments", handler.ListDepartments(pool))
-		r.Get("/api/departments/{id}", handler.GetDepartment(pool))
+		// Subsidiaries.
+		r.Get("/api/subsidiaries", handler.ListSubsidiaries(pool))
+		r.Get("/api/subsidiaries/{id}", handler.GetSubsidiary(pool))
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRole("director"))
-			r.Post("/api/departments", handler.CreateDepartment(pool))
-			r.Patch("/api/departments/{id}", handler.UpdateDepartment(pool))
-			r.Delete("/api/departments/{id}", handler.DeleteDepartment(pool))
+			r.Post("/api/subsidiaries", handler.CreateSubsidiary(pool))
+			r.Patch("/api/subsidiaries/{id}", handler.UpdateSubsidiary(pool))
+			r.Delete("/api/subsidiaries/{id}", handler.DeleteSubsidiary(pool))
+		})
+
+		// Departments.
+		r.Get("/api/departments", handler.ListDepartments(cfg.pool))
+		r.Get("/api/departments/{id}", handler.GetDepartment(cfg.pool))
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRole("director"))
+			r.Post("/api/departments", handler.CreateDepartment(cfg.pool))
+			r.Patch("/api/departments/{id}", handler.UpdateDepartment(cfg.pool))
+			r.Delete("/api/departments/{id}", handler.DeleteDepartment(cfg.pool))
 		})
 
 		// Schema API — collection/field/migration management.
 		r.Route("/api/schema", func(r chi.Router) {
 			// Read-only: all authenticated users.
-			r.Get("/collections", schemaH.ListCollections)
-			r.Get("/collections/{id}", schemaH.GetCollection)
-			r.Get("/migrations/history", schemaH.MigrationHistory)
+			r.Get("/collections", cfg.schemaH.ListCollections)
+			r.Get("/collections/{id}", cfg.schemaH.GetCollection)
+			r.Get("/migrations/history", cfg.schemaH.MigrationHistory)
 
 			// Write: director and pm only.
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("director", "pm"))
-				r.Post("/collections", schemaH.CreateCollection)
-				r.Patch("/collections/{id}", schemaH.UpdateCollection)
-				r.Delete("/collections/{id}", schemaH.DeleteCollection)
+				r.Post("/collections", cfg.schemaH.CreateCollection)
+				r.Patch("/collections/{id}", cfg.schemaH.UpdateCollection)
+				r.Delete("/collections/{id}", cfg.schemaH.DeleteCollection)
 
-				r.Get("/collections/{id}/process", schemaH.GetProcess)
-				r.Put("/collections/{id}/process", schemaH.SaveProcess)
+				r.Get("/collections/{id}/process", cfg.schemaH.GetProcess)
+				r.Put("/collections/{id}/process", cfg.schemaH.SaveProcess)
 
-				r.Post("/collections/{id}/fields", schemaH.AddField)
-				r.Patch("/fields/{fieldId}", schemaH.UpdateField)
-				r.Delete("/fields/{fieldId}", schemaH.DeleteField)
+				r.Post("/collections/{id}/fields", cfg.schemaH.AddField)
+				r.Patch("/fields/{fieldId}", cfg.schemaH.UpdateField)
+				r.Delete("/fields/{fieldId}", cfg.schemaH.DeleteField)
 
-				r.Post("/migrations/rollback/{migrationId}", schemaH.RollbackMigration)
+				r.Post("/migrations/rollback/{migrationId}", cfg.schemaH.RollbackMigration)
 
 				// Template export/import.
-				r.Get("/collections/{id}/export", templateH.ExportCollection)
-				r.Post("/templates/import", templateH.ImportTemplate)
+				r.Get("/collections/{id}/export", cfg.templateH.ExportCollection)
+				r.Post("/templates/import", cfg.templateH.ImportTemplate)
 			})
 
 			// Collection members
-			r.Get("/collections/{id}/members", memberH.List)
-			r.Post("/collections/{id}/members", memberH.Add)
-			r.Patch("/collections/{id}/members/{userId}", memberH.Update)
-			r.Delete("/collections/{id}/members/{userId}", memberH.Remove)
+			r.Get("/collections/{id}/members", cfg.memberH.List)
+			r.Post("/collections/{id}/members", cfg.memberH.Add)
+			r.Patch("/collections/{id}/members/{userId}", cfg.memberH.Update)
+			r.Delete("/collections/{id}/members/{userId}", cfg.memberH.Remove)
 
 			// Views: read/write for all authenticated users.
-			r.Get("/collections/{id}/views", viewH.ListViews)
-			r.Post("/collections/{id}/views", viewH.CreateView)
-			r.Patch("/views/{viewId}", viewH.UpdateView)
-			r.Delete("/views/{viewId}", viewH.DeleteView)
+			r.Get("/collections/{id}/views", cfg.viewH.ListViews)
+			r.Post("/collections/{id}/views", cfg.viewH.CreateView)
+			r.Patch("/views/{viewId}", cfg.viewH.UpdateView)
+			r.Delete("/views/{viewId}", cfg.viewH.DeleteView)
 
 			// Saved views (filter/sort persistence).
-			r.Get("/collections/{id}/saved-views", savedViewH.ListSavedViews)
-			r.Post("/collections/{id}/saved-views", savedViewH.CreateSavedView)
-			r.Patch("/saved-views/{savedViewId}", savedViewH.UpdateSavedView)
-			r.Delete("/saved-views/{savedViewId}", savedViewH.DeleteSavedView)
+			r.Get("/collections/{id}/saved-views", cfg.savedViewH.ListSavedViews)
+			r.Post("/collections/{id}/saved-views", cfg.savedViewH.CreateSavedView)
+			r.Patch("/saved-views/{savedViewId}", cfg.savedViewH.UpdateSavedView)
+			r.Delete("/saved-views/{savedViewId}", cfg.savedViewH.DeleteSavedView)
 
 			// Automations: director and pm only.
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("director", "pm"))
-				r.Get("/collections/{id}/automations", autoH.List)
-				r.Post("/collections/{id}/automations", autoH.Create)
-				r.Get("/automations/{automationId}", autoH.Get)
-				r.Patch("/automations/{automationId}", autoH.Update)
-				r.Delete("/automations/{automationId}", autoH.Delete)
-				r.Get("/automations/{automationId}/runs", autoH.ListRuns)
+				r.Get("/collections/{id}/automations", cfg.autoH.List)
+				r.Post("/collections/{id}/automations", cfg.autoH.Create)
+				r.Get("/automations/{automationId}", cfg.autoH.Get)
+				r.Patch("/automations/{automationId}", cfg.autoH.Update)
+				r.Delete("/automations/{automationId}", cfg.autoH.Delete)
+				r.Get("/automations/{automationId}/runs", cfg.autoH.ListRuns)
 			})
 
 			// Charts
-			r.Get("/collections/{id}/charts", chartH.List)
-			r.Post("/collections/{id}/charts", chartH.Create)
-			r.Patch("/charts/{chartId}", chartH.Update)
-			r.Delete("/charts/{chartId}", chartH.Delete)
+			r.Get("/collections/{id}/charts", cfg.chartH.List)
+			r.Post("/collections/{id}/charts", cfg.chartH.Create)
+			r.Patch("/charts/{chartId}", cfg.chartH.Update)
+			r.Delete("/charts/{chartId}", cfg.chartH.Delete)
 		})
 
 		// Dynamic API — auto-generated CRUD for data tables.
 		r.Route("/api/data", func(r chi.Router) {
-			r.Use(middleware.CollectionAccess(pool))
-			r.Get("/{slug}", dynH.List)
-			r.Get("/{slug}/aggregate", dynH.Aggregate)
-			r.Post("/{slug}/aggregate/batch", dynH.BatchAggregate)
-			r.Get("/{slug}/export.csv", dynH.ExportCSV)
-			r.Get("/{slug}/{id}", dynH.Get)
+			r.Use(middleware.CollectionAccess(cfg.pool))
+			r.Get("/{slug}", cfg.dynH.List)
+			r.Get("/{slug}/aggregate", cfg.dynH.Aggregate)
+			r.Post("/{slug}/aggregate/batch", cfg.dynH.BatchAggregate)
+			r.Get("/{slug}/export.csv", cfg.dynH.ExportCSV)
+			r.Get("/{slug}/{id}", cfg.dynH.Get)
 
 			// Write: director, pm, engineer.
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("director", "pm", "engineer"))
-				r.Post("/{slug}", dynH.Create)
-				r.Post("/{slug}/bulk", dynH.BulkCreate)
-				r.Post("/{slug}/formula-preview", dynH.FormulaPreview)
-				r.Patch("/{slug}/batch", dynH.BatchUpdate)
-				r.Delete("/{slug}/bulk", dynH.BulkDelete)
-				r.Post("/{slug}/import", dynH.ImportCSV)
-				r.Patch("/{slug}/{id}", dynH.Update)
-				r.Delete("/{slug}/{id}", dynH.Delete)
+				r.Post("/{slug}", cfg.dynH.Create)
+				r.Post("/{slug}/bulk", cfg.dynH.BulkCreate)
+				r.Post("/{slug}/formula-preview", cfg.dynH.FormulaPreview)
+				r.Patch("/{slug}/batch", cfg.dynH.BatchUpdate)
+				r.Delete("/{slug}/bulk", cfg.dynH.BulkDelete)
+				r.Post("/{slug}/import", cfg.dynH.ImportCSV)
+				r.Patch("/{slug}/{id}", cfg.dynH.Update)
+				r.Delete("/{slug}/{id}", cfg.dynH.Delete)
 			})
 
 			// Record history
-			r.Get("/{slug}/{id}/history", histH.ListRecordHistory)
+			r.Get("/{slug}/{id}/history", cfg.histH.ListRecordHistory)
 
 			// Comments
-			r.Get("/{slug}/{id}/comments", commentH.List)
-			r.Post("/{slug}/{id}/comments", commentH.Create)
-			r.Patch("/{slug}/{id}/comments/{commentId}", commentH.Update)
-			r.Delete("/{slug}/{id}/comments/{commentId}", commentH.Delete)
+			r.Get("/{slug}/{id}/comments", cfg.commentH.List)
+			r.Post("/{slug}/{id}/comments", cfg.commentH.Create)
+			r.Patch("/{slug}/{id}/comments/{commentId}", cfg.commentH.Update)
+			r.Delete("/{slug}/{id}/comments/{commentId}", cfg.commentH.Delete)
 		})
 
 		// File upload & download (authenticated).
@@ -410,20 +441,20 @@ func buildRouter(
 			http.FileServer(http.Dir("uploads"))))
 
 		// AI endpoints.
-		r.Get("/api/ai/health", aiH.HealthCheck)
-		r.Post("/api/ai/build-collection", aiH.BuildCollection)
-		r.Post("/api/ai/chat", aiH.Chat)
-		r.Post("/api/ai/generate-slug", aiH.GenerateSlug)
-		r.Post("/api/ai/build-automation/{id}", aiH.BuildAutomation)
+		r.Get("/api/ai/health", cfg.aiH.HealthCheck)
+		r.Post("/api/ai/build-collection", cfg.aiH.BuildCollection)
+		r.Post("/api/ai/chat", cfg.aiH.Chat)
+		r.Post("/api/ai/generate-slug", cfg.aiH.GenerateSlug)
+		r.Post("/api/ai/build-automation/{id}", cfg.aiH.BuildAutomation)
 
 		// Notifications
-		r.Get("/api/notifications", notifH.List)
-		r.Get("/api/notifications/unread-count", notifH.UnreadCount)
-		r.Patch("/api/notifications/{id}/read", notifH.MarkRead)
-		r.Post("/api/notifications/read-all", notifH.MarkAllRead)
+		r.Get("/api/notifications", cfg.notifH.List)
+		r.Get("/api/notifications/unread-count", cfg.notifH.UnreadCount)
+		r.Patch("/api/notifications/{id}/read", cfg.notifH.MarkRead)
+		r.Post("/api/notifications/read-all", cfg.notifH.MarkAllRead)
 
 		// SSE real-time events
-		r.Get("/api/events", sseH.Stream)
+		r.Get("/api/events", cfg.sseH.Stream)
 	})
 
 	// SPA static files — catch-all for non-API routes.

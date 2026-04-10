@@ -43,6 +43,19 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_users_email_lower ON auth.users (LOWER(email))`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_users_role ON auth.users(role)`,
 
+		// --- auth.subsidiaries ---
+		`CREATE TABLE IF NOT EXISTS auth.subsidiaries (
+			id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			external_code VARCHAR(63),
+			name          VARCHAR(255) NOT NULL,
+			sort_order    INTEGER NOT NULL DEFAULT 0,
+			is_active     BOOLEAN NOT NULL DEFAULT true,
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_subsidiaries_external_code
+		     ON auth.subsidiaries(external_code) WHERE external_code IS NOT NULL`,
+
 		// --- auth.departments ---
 		`CREATE TABLE IF NOT EXISTS auth.departments (
 			id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -57,9 +70,14 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		     ON auth.departments(external_code) WHERE external_code IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_departments_parent ON auth.departments(parent_id)`,
 
+		// Upgrade: extend auth.departments with subsidiary reference.
+		`ALTER TABLE auth.departments ADD COLUMN IF NOT EXISTS subsidiary_id UUID REFERENCES auth.subsidiaries(id)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_departments_subsidiary ON auth.departments(subsidiary_id)`,
+
 		// Upgrade: extend auth.users with profile columns.
 		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS external_id    VARCHAR(255)`,
 		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS department_id  UUID REFERENCES auth.departments(id)`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS subsidiary_id  UUID REFERENCES auth.subsidiaries(id)`,
 		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS position       VARCHAR(127)`,
 		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS title          VARCHAR(127)`,
 		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS phone          VARCHAR(31)`,
@@ -68,6 +86,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_users_external_id
 		     ON auth.users(external_id) WHERE external_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_users_department ON auth.users(department_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_users_subsidiary ON auth.users(subsidiary_id)`,
 
 		// --- _meta.collections ---
 		`CREATE TABLE IF NOT EXISTS _meta.collections (

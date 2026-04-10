@@ -30,6 +30,7 @@ import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
 import FilterBuilder from '@/components/works/FilterBuilder'
+import FilterChips from '@/components/works/FilterChips'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import CalendarView from '@/components/works/views/CalendarView'
 import ChartPanel from '@/components/works/views/ChartPanel'
@@ -478,7 +479,7 @@ export default function AppViewPage() {
                 next.delete(cellKey)
                 return next
               })
-            }, 1200)
+            }, 1500)
           },
           onError: (err) => {
             setCellSaveState((prev) => {
@@ -595,7 +596,7 @@ export default function AppViewPage() {
     [collection],
   )
 
-  if (colLoading) return <LoadingState />
+  if (colLoading) return <LoadingState variant="table" />
   if (colError) return <ErrorState error={colErr} />
   if (!collection) return null
 
@@ -766,6 +767,7 @@ export default function AppViewPage() {
 
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
+    <>
     <div className="flex items-center gap-2 flex-wrap w-full">
       {/* ── Group 1: 데이터 조회 (검색·필터·정렬) ── */}
       <div className="relative w-full sm:w-auto order-first">
@@ -999,6 +1001,24 @@ export default function AppViewPage() {
         </div>
       )}
     </div>
+    <FilterChips
+      conditions={filterConditions}
+      sortItems={sortItems}
+      fields={collection.fields ?? []}
+      onRemoveFilter={(id) => {
+        setFilterConditions((prev) => prev.filter((c) => c.id !== id))
+        setPage(1)
+      }}
+      onRemoveSort={(index) => {
+        setSortItems((prev) => prev.filter((_, i) => i !== index))
+      }}
+      onClearAll={() => {
+        setFilterConditions([])
+        setSortItems([])
+        setPage(1)
+      }}
+    />
+    </>
   )
 
   return (

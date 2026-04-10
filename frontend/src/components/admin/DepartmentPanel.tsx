@@ -17,6 +17,7 @@ import {
   useUpdateDepartment,
   useDeleteDepartment,
 } from '@/hooks/useDepartments'
+import { useSubsidiaries } from '@/hooks/useSubsidiaries'
 import { formatError } from '@/lib/api'
 import type { Department } from '@/lib/types'
 
@@ -24,26 +25,34 @@ const NONE = '__none__'
 
 export default function DepartmentPanel() {
   const { data: departments } = useDepartments()
+  const { data: subsidiaries } = useSubsidiaries()
   const createDept = useCreateDepartment()
   const updateDept = useUpdateDepartment()
   const deleteDept = useDeleteDepartment()
 
   const [newName, setNewName] = useState('')
   const [newParent, setNewParent] = useState(NONE)
+  const [newSubsidiary, setNewSubsidiary] = useState(NONE)
   const [editing, setEditing] = useState<Department | null>(null)
   const [editName, setEditName] = useState('')
   const [editParent, setEditParent] = useState(NONE)
+  const [editSubsidiary, setEditSubsidiary] = useState(NONE)
   const [deleting, setDeleting] = useState<Department | null>(null)
 
   function handleCreate() {
     if (!newName.trim()) return
     createDept.mutate(
-      { name: newName.trim(), parent_id: newParent === NONE ? null : newParent },
+      {
+        name: newName.trim(),
+        parent_id: newParent === NONE ? null : newParent,
+        subsidiary_id: newSubsidiary === NONE ? null : newSubsidiary,
+      },
       {
         onSuccess: () => {
           toast.success('부서가 생성되었습니다')
           setNewName('')
           setNewParent(NONE)
+          setNewSubsidiary(NONE)
         },
         onError: (err) => toast.error(formatError(err)),
       },
@@ -53,7 +62,12 @@ export default function DepartmentPanel() {
   function handleUpdate() {
     if (!editing || !editName.trim()) return
     updateDept.mutate(
-      { id: editing.id, name: editName.trim(), parent_id: editParent === NONE ? '' : editParent },
+      {
+        id: editing.id,
+        name: editName.trim(),
+        parent_id: editParent === NONE ? '' : editParent,
+        subsidiary_id: editSubsidiary === NONE ? '' : editSubsidiary,
+      },
       {
         onSuccess: () => {
           toast.success('부서가 수정되었습니다')
@@ -68,6 +82,7 @@ export default function DepartmentPanel() {
     setEditing(d)
     setEditName(d.name)
     setEditParent(d.parent_id ?? NONE)
+    setEditSubsidiary(d.subsidiary_id ?? NONE)
   }
 
   // Build indented list: depth-first walk from roots.
@@ -107,6 +122,19 @@ export default function DepartmentPanel() {
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
         />
+        <Select value={newSubsidiary} onValueChange={(v) => setNewSubsidiary(v ?? NONE)}>
+          <SelectTrigger className="text-xs">
+            <SelectValue placeholder="소속 계열사" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>미지정</SelectItem>
+            {(subsidiaries ?? []).map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={newParent} onValueChange={(v) => setNewParent(v ?? NONE)}>
           <SelectTrigger className="text-xs">
             <SelectValue placeholder="상위 부서" />
