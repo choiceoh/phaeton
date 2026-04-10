@@ -279,7 +279,13 @@ export default function AutomationsPage() {
   return (
     <div>
       <PageHeader
-        title={`${collection.label} > 자동화`}
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label, href: `/apps/${collection.id}` },
+          { label: '설정', href: `/apps/${collection.id}/settings` },
+          { label: '자동화' },
+        ]}
+        title="자동화"
         actions={
           <div className="flex gap-2">
             {!formOpen && (
