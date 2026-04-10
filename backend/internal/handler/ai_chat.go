@@ -59,6 +59,9 @@ var queryTagRe = regexp.MustCompile(`\[DATA_QUERY:([a-z0-9_]+)(?::(\d+))?(?::([^
 
 // buildChatSystemPrompt adds existing workspace apps (with record counts and views) to the chat system prompt.
 func (h *AIHandler) buildChatSystemPrompt(ctx context.Context) string {
+	if h.store == nil {
+		return chatSystemPromptBase
+	}
 	collections, err := h.store.ListCollections(ctx)
 	if err != nil {
 		slog.Warn("ai chat: failed to list collections", "error", err)

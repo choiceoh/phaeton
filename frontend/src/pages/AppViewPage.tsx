@@ -362,9 +362,44 @@ export default function AppViewPage() {
     window.open(`/api/data/${collection.slug}/export.csv${qs ? `?${qs}` : ''}`, '_blank')
   }
 
+  const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !collection) return
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const res = await fetch(`/api/data/${collection.slug}/import`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(body.error || body.message || res.statusText)
+      }
+      const result = await res.json()
+      toast.success(`${result.data?.imported ?? 0}건 가져왔습니다`)
+      refetch()
+    } catch (err) {
+      toast.error(formatError(err))
+    } finally {
+      e.target.value = ''
+    }
+  }, [collection, refetch])
+
+  const dateFields = useMemo(
+    () => collection?.fields?.filter((f) => f.field_type === 'date' || f.field_type === 'datetime') ?? [],
+    [collection],
+  )
+
   if (colLoading) return <LoadingState />
   if (colError) return <ErrorState error={colErr} />
   if (!collection) return null
+
+  const hasKanban = !!selectField
+  const hasCalendar = !!dateField
+  const hasGallery = !!fileField
+  const hasGantt = dateFields.length >= 1
 
   function handleEntryClick(entry: Record<string, unknown>) {
     setEditEntry(entry)
@@ -419,40 +454,6 @@ export default function AppViewPage() {
       onError: (err) => toast.error(formatError(err)),
     })
   }
-
-  const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !collection) return
-    const formData = new FormData()
-    formData.append('file', file)
-    try {
-      const res = await fetch(`/api/data/${collection.slug}/import`, {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: res.statusText }))
-        throw new Error(body.error || body.message || res.statusText)
-      }
-      const result = await res.json()
-      toast.success(`${result.data?.imported ?? 0}건 가져왔습니다`)
-      refetch()
-    } catch (err) {
-      toast.error(formatError(err))
-    } finally {
-      e.target.value = ''
-    }
-  }, [collection, refetch])
-
-  const dateFields = useMemo(
-    () => collection.fields?.filter((f) => f.field_type === 'date' || f.field_type === 'datetime') ?? [],
-    [collection],
-  )
-  const hasKanban = !!selectField
-  const hasCalendar = !!dateField
-  const hasGallery = !!fileField
-  const hasGantt = dateFields.length >= 1
 
   function applyView(view: SavedView) {
     setActiveView(view)

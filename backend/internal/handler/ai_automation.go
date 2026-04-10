@@ -130,6 +130,9 @@ func (h *AIHandler) BuildAutomation(w http.ResponseWriter, r *http.Request) {
 
 // buildAutomationPrompt includes collection fields and process statuses in the prompt.
 func (h *AIHandler) buildAutomationPrompt(r *http.Request, collectionID string) string {
+	if h.store == nil {
+		return automationSystemPrompt
+	}
 	col, err := h.store.GetCollection(r.Context(), collectionID)
 	if err != nil {
 		slog.Warn("ai automation: failed to get collection", "error", err)

@@ -139,6 +139,9 @@ Option rules:
 
 // buildSystemPrompt constructs the full system prompt including existing app context.
 func (h *AIHandler) buildSystemPrompt(r *http.Request) string {
+	if h.store == nil {
+		return systemPromptBase
+	}
 	collections, err := h.store.ListCollections(r.Context())
 	if err != nil {
 		slog.Warn("ai: failed to list collections for context", "error", err)
@@ -313,12 +316,14 @@ func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 		triageInput := req.Description
 
 		// Include existing app context so triage can avoid duplicate questions.
-		if collections, err := h.store.ListCollections(ctx); err == nil && len(collections) > 0 {
-			var names []string
-			for _, c := range collections {
-				names = append(names, fmt.Sprintf("%s(%s)", c.Label, c.Slug))
+		if h.store != nil {
+			if collections, err := h.store.ListCollections(ctx); err == nil && len(collections) > 0 {
+				var names []string
+				for _, c := range collections {
+					names = append(names, fmt.Sprintf("%s(%s)", c.Label, c.Slug))
+				}
+				triageInput += "\n\n기존 워크스페이스 앱: " + strings.Join(names, ", ")
 			}
-			triageInput += "\n\n기존 워크스페이스 앱: " + strings.Join(names, ", ")
 		}
 
 		raw, err := h.client.Complete(ctx, triagePrompt, triageInput)
