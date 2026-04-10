@@ -53,6 +53,16 @@ func (p *Pool) Submit(task func()) {
 	}()
 }
 
+// Wait blocks until all currently active tasks finish.
+func (p *Pool) Wait() {
+	for range p.maxSize {
+		p.sem <- struct{}{}
+	}
+	for range p.maxSize {
+		<-p.sem
+	}
+}
+
 type Stats struct {
 	MaxSize int `json:"maxSize"`
 	Active  int `json:"active"`

@@ -84,6 +84,11 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 
 	up = append(up, fmt.Sprintf("CREATE TABLE %s (\n  %s\n)", qTable, strings.Join(colDefs, ",\n  ")))
 
+	// Partial index on deleted_at — every query filters WHERE deleted_at IS NULL.
+	up = append(up, fmt.Sprintf(
+		"CREATE INDEX IF NOT EXISTS %s ON %s (id) WHERE deleted_at IS NULL",
+		quoteIdentSingle(fmt.Sprintf("idx_%s_active", col.Slug)), qTable))
+
 	for _, f := range fields {
 		if f.IsIndexed {
 			up = append(up, generateCreateIndex(col.Slug, f.Slug))
