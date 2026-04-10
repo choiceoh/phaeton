@@ -289,6 +289,7 @@ func buildRouter(
 
 		// AI endpoints.
 		r.Post("/api/ai/build-collection", aiH.BuildCollection)
+		r.Post("/api/ai/generate-slug", aiH.GenerateSlug)
 
 		// Notifications
 		r.Get("/api/notifications", notifH.List)
