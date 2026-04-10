@@ -4,6 +4,8 @@ import {
   AlignLeft,
   Binary,
   Braces,
+  Building,
+  Building2,
   Calendar,
   CalendarClock,
   ChevronDown,
@@ -68,6 +70,8 @@ const DATA_ENTRIES: PaletteEntry[] = [
   { icon: FIELD_ICONS.relation, label: FIELD_TYPE_LABELS.relation, type: 'relation' },
   { icon: FIELD_ICONS.user, label: FIELD_TYPE_LABELS.user, type: 'user' },
   { icon: FIELD_ICONS.file, label: FIELD_TYPE_LABELS.file, type: 'file' },
+  { icon: Building, label: '계열사', type: 'relation', presetOptions: { systemSlug: '_subsidiaries' } },
+  { icon: Building2, label: '부서', type: 'relation', presetOptions: { systemSlug: '_departments' } },
 ]
 
 const DESIGN_ENTRIES: PaletteEntry[] = [
@@ -141,7 +145,7 @@ export default function FieldPalette() {
       <div className="space-y-1">
         {activeTab.entries.map((entry) => (
           <PaletteButton
-            key={entry.type}
+            key={`${entry.type}-${entry.label}`}
             icon={entry.icon}
             label={entry.label}
             entry={entry}

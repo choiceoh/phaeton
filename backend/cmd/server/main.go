@@ -298,6 +298,16 @@ func buildRouter(
 		r.Post("/api/users", handler.CreateUser(pool))
 		r.Patch("/api/users/{id}", handler.UpdateUser(pool))
 
+		// Subsidiaries.
+		r.Get("/api/subsidiaries", handler.ListSubsidiaries(pool))
+		r.Get("/api/subsidiaries/{id}", handler.GetSubsidiary(pool))
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRole("director"))
+			r.Post("/api/subsidiaries", handler.CreateSubsidiary(pool))
+			r.Patch("/api/subsidiaries/{id}", handler.UpdateSubsidiary(pool))
+			r.Delete("/api/subsidiaries/{id}", handler.DeleteSubsidiary(pool))
+		})
+
 		// Departments.
 		r.Get("/api/departments", handler.ListDepartments(pool))
 		r.Get("/api/departments/{id}", handler.GetDepartment(pool))

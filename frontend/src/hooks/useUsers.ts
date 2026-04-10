@@ -20,6 +20,7 @@ export function useCreateUser() {
       name: string
       password: string
       role: string
+      subsidiary_id?: string | null
       department_id?: string | null
       position?: string
       title?: string
@@ -39,6 +40,7 @@ export function useUpdateUser() {
       email?: string
       role?: string
       is_active?: boolean
+      subsidiary_id?: string | null
       department_id?: string | null
       position?: string
       title?: string
