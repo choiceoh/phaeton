@@ -25,6 +25,7 @@ type UserClaims struct {
 	Name         string `json:"name"`
 	Role         string `json:"role"`
 	DepartmentID string `json:"departmentId,omitempty"`
+	SubsidiaryID string `json:"subsidiaryId,omitempty"`
 }
 
 // RequireAuth returns middleware that validates JWT from Authorization header or cookie.
@@ -95,6 +96,10 @@ func claimsToUser(claims jwt.MapClaims) (UserClaims, error) {
 	// Optional: departmentId (may be absent for users without a department).
 	if deptID, ok := claims["departmentId"].(string); ok {
 		user.DepartmentID = deptID
+	}
+	// Optional: subsidiaryId (may be absent for users without a subsidiary).
+	if subID, ok := claims["subsidiaryId"].(string); ok {
+		user.SubsidiaryID = subID
 	}
 
 	return user, nil

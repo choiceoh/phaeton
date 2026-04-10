@@ -135,10 +135,10 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 		}
 	}
 	err := tx.QueryRow(ctx, `
-		INSERT INTO _meta.collections (slug, label, description, icon, access_config)
-		VALUES ($1, $2, $3, $4, COALESCE($5::jsonb, '{}'))
+		INSERT INTO _meta.collections (slug, label, description, icon, is_system, access_config)
+		VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'))
 		RETURNING id, created_at, updated_at`,
-		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), jsonOrNil(acJSON),
+		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), req.IsSystem, jsonOrNil(acJSON),
 	).Scan(&id, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return Collection{}, fmt.Errorf("insert collection: %w", err)
@@ -148,6 +148,7 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 	c.Label = req.Label
 	c.Description = req.Description
 	c.Icon = req.Icon
+	c.IsSystem = req.IsSystem
 	return c, nil
 }
 

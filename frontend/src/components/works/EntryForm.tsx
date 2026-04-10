@@ -49,6 +49,7 @@ export default function EntryForm({
   slug,
 }: Props) {
   const [data, setData] = useState<Record<string, unknown>>(initialData ?? {})
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const { data: currentUser } = useCurrentUser()
 
   // Similar records detection: track the first text field value with debounce.
@@ -72,10 +73,23 @@ export default function EntryForm({
 
   function setValue(name: string, value: unknown) {
     setData((prev) => ({ ...prev, [name]: value }))
+    if (errors[name]) setErrors((prev) => { const next = { ...prev }; delete next[name]; return next })
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    const newErrors: Record<string, string> = {}
+    for (const field of fields) {
+      if (!field.is_required || isLayoutType(field.field_type)) continue
+      const val = data[field.slug]
+      if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+        newErrors[field.slug] = '필수 항목입니다'
+      }
+    }
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
     onSubmit(data)
   }
 
@@ -186,6 +200,9 @@ export default function EntryForm({
                   value={extractValue(data[field.slug], field)}
                   onChange={(v) => setValue(field.slug, v)}
                 />
+                {errors[field.slug] && (
+                  <p className="mt-1 text-xs text-destructive">{errors[field.slug]}</p>
+                )}
               </div>
             </div>
           )

@@ -18,13 +18,16 @@ type Preset struct {
 	Label       string
 	Description string
 	Icon        string
+	IsSystem    bool
 	Fields      []schema.CreateFieldIn
 }
 
 // Presets returns the built-in collection presets for Phaeton.
-// Ordering matters: "projects" must be created before "milestones" so the relation target exists.
+// Ordering matters: system collections first, then "projects" before "milestones" so relation targets exist.
 func Presets() []Preset {
 	return []Preset{
+		orgSubsidiariesPreset(),
+		orgDepartmentsPreset(),
 		projectsPreset(),
 		milestonesPreset(),
 		staffPreset(),
@@ -34,6 +37,79 @@ func Presets() []Preset {
 		requestsPreset(),
 		meetingsPreset(),
 		expensesPreset(),
+	}
+}
+
+func orgSubsidiariesPreset() Preset {
+	return Preset{
+		Slug:        "_subsidiaries",
+		Label:       "계열사",
+		Description: "계열사(법인) 관리",
+		Icon:        "building",
+		IsSystem:    true,
+		Fields: []schema.CreateFieldIn{
+			{
+				Slug:       "name",
+				Label:      "계열사명",
+				FieldType:  schema.FieldText,
+				IsRequired: true,
+				IsIndexed:  true,
+			},
+			{
+				Slug:      "code",
+				Label:     "코드",
+				FieldType: schema.FieldText,
+				IsUnique:  true,
+			},
+			{
+				Slug:      "sort_order",
+				Label:     "정렬 순서",
+				FieldType: schema.FieldInteger,
+			},
+			{
+				Slug:      "is_active",
+				Label:     "활성",
+				FieldType: schema.FieldBoolean,
+				DefaultValue: jsonRaw(true),
+			},
+		},
+	}
+}
+
+func orgDepartmentsPreset() Preset {
+	return Preset{
+		Slug:        "_departments",
+		Label:       "부서",
+		Description: "부서 관리 (계층 구조)",
+		Icon:        "building-2",
+		IsSystem:    true,
+		Fields: []schema.CreateFieldIn{
+			{
+				Slug:       "name",
+				Label:      "부서명",
+				FieldType:  schema.FieldText,
+				IsRequired: true,
+				IsIndexed:  true,
+			},
+			{
+				Slug:      "code",
+				Label:     "코드",
+				FieldType: schema.FieldText,
+				IsUnique:  true,
+			},
+			{
+				Slug:      "sort_order",
+				Label:     "정렬 순서",
+				FieldType: schema.FieldInteger,
+			},
+			{
+				Slug:      "is_active",
+				Label:     "활성",
+				FieldType: schema.FieldBoolean,
+				DefaultValue: jsonRaw(true),
+			},
+			// Relations (parent, subsidiary) added by applyOrgRefs() after creation.
+		},
 	}
 }
 
@@ -238,6 +314,7 @@ func Run(ctx context.Context, engine *migration.Engine, cache *schema.Cache) err
 			Label:       p.Label,
 			Description: p.Description,
 			Icon:        p.Icon,
+			IsSystem:    p.IsSystem,
 			Fields:      p.Fields,
 		}
 		col, err := engine.CreateCollection(ctx, req)
@@ -248,9 +325,77 @@ func Run(ctx context.Context, engine *migration.Engine, cache *schema.Cache) err
 		slog.Info("seed: created collection", "slug", p.Slug, "id", col.ID)
 	}
 
-	// After all base collections exist, add project relations.
+	// After all base collections exist, add relations.
+	if err := applyOrgRefs(ctx, engine, cache); err != nil {
+		return fmt.Errorf("seed: apply org refs: %w", err)
+	}
 	if err := applyProjectRefs(ctx, engine, cache); err != nil {
 		return fmt.Errorf("seed: apply project refs: %w", err)
+	}
+
+	return nil
+}
+
+// applyOrgRefs adds subsidiary and self-referential parent relations to _departments.
+func applyOrgRefs(ctx context.Context, engine *migration.Engine, cache *schema.Cache) error {
+	depts, ok := cache.CollectionBySlug("_departments")
+	if !ok {
+		return nil
+	}
+
+	// Add subsidiary relation if not present.
+	subs, subOK := cache.CollectionBySlug("_subsidiaries")
+	if subOK {
+		exists := false
+		for _, f := range cache.Fields(depts.ID) {
+			if f.Slug == "subsidiary" {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			req := &schema.CreateFieldIn{
+				Slug:      "subsidiary",
+				Label:     "소속 계열사",
+				FieldType: schema.FieldRelation,
+				IsIndexed: true,
+				Relation: &schema.CreateRelIn{
+					TargetCollectionID: subs.ID,
+					RelationType:       schema.RelOneToMany,
+					OnDelete:           "SET NULL",
+				},
+			}
+			if _, _, err := engine.AddField(ctx, depts.ID, req, true); err != nil {
+				return fmt.Errorf("add _departments.subsidiary: %w", err)
+			}
+			slog.Info("seed: added relation", "collection", "_departments", "field", "subsidiary")
+		}
+	}
+
+	// Add self-referential parent relation if not present.
+	exists := false
+	for _, f := range cache.Fields(depts.ID) {
+		if f.Slug == "parent" {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		req := &schema.CreateFieldIn{
+			Slug:      "parent",
+			Label:     "상위 부서",
+			FieldType: schema.FieldRelation,
+			IsIndexed: true,
+			Relation: &schema.CreateRelIn{
+				TargetCollectionID: depts.ID,
+				RelationType:       schema.RelOneToMany,
+				OnDelete:           "SET NULL",
+			},
+		}
+		if _, _, err := engine.AddField(ctx, depts.ID, req, true); err != nil {
+			return fmt.Errorf("add _departments.parent: %w", err)
+		}
+		slog.Info("seed: added relation", "collection", "_departments", "field", "parent")
 	}
 
 	return nil

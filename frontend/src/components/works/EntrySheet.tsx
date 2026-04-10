@@ -1,6 +1,7 @@
+import { History, Loader2, MessageSquare } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { Loader2 } from 'lucide-react'
 
+import EmptyState from '@/components/common/EmptyState'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -54,6 +55,7 @@ export default function EntrySheet({
   const aiAvailable = useAIAvailable()
   const prefill = useAIPrefill(slug)
   const formKeyRef = useRef(0)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const { data: currentUser } = useCurrentUser()
 
@@ -72,13 +74,13 @@ export default function EntrySheet({
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) { onClose(); setTab('form') } }}>
-      <SheetContent className="w-full overflow-y-auto sm:w-[480px] sm:max-w-lg">
+      <SheetContent ref={contentRef} className="w-full overflow-y-auto sm:w-[480px] sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>{title || '새 항목'}</SheetTitle>
         </SheetHeader>
         <div className="mt-4">
           {isEdit ? (
-            <Tabs value={tab} onValueChange={setTab}>
+            <Tabs value={tab} onValueChange={(v) => { setTab(v); contentRef.current?.scrollTo(0, 0) }}>
               <TabsList>
                 <TabsTrigger value="form">편집</TabsTrigger>
                 <TabsTrigger value="comments">댓글</TabsTrigger>
@@ -125,7 +127,12 @@ export default function EntrySheet({
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">댓글이 없습니다.</p>
+                    <EmptyState
+                      compact
+                      icon={<MessageSquare className="h-8 w-8" />}
+                      title="아직 댓글이 없습니다"
+                      description="댓글을 남겨 팀원들과 소통하세요."
+                    />
                   )}
                   <div className="space-y-2">
                     <Textarea
@@ -178,7 +185,12 @@ export default function EntrySheet({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">변경 이력이 없습니다.</p>
+                  <EmptyState
+                    compact
+                    icon={<History className="h-8 w-8" />}
+                    title="변경 이력이 없습니다"
+                    description="데이터가 수정되면 이력이 기록됩니다."
+                  />
                 )}
               </TabsContent>
             </Tabs>

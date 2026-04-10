@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -69,10 +70,10 @@ export default function TemplateGallery() {
 
         {/* Template cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {filtered.map((tpl) => (
+          {filtered.map((tpl, i) => (
             <Card
               key={tpl.id}
-              className="cursor-pointer p-4 transition-colors hover:bg-accent"
+              className={`cursor-pointer p-4 transition-all duration-200 hover:bg-accent hover:-translate-y-0.5 hover:shadow-md animate-scale-in stagger-${Math.min(i + 1, 12)}`}
               onClick={() => setPreview(tpl)}
             >
               <div className="mb-1 text-xs font-medium text-muted-foreground">
@@ -127,7 +128,7 @@ export default function TemplateGallery() {
                 onClick={handleUseTemplate}
                 disabled={createCollection.isPending}
               >
-                {createCollection.isPending ? '생성 중...' : '이 템플릿 사용'}
+                {createCollection.isPending ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />생성 중...</> : '이 템플릿 사용'}
               </Button>
             </DialogFooter>
           </DialogContent>

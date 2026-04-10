@@ -357,7 +357,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                 onValueChange={(v) => update({ field_type: v as FieldType })}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>{variantGroup.find(v => v.value === field.field_type)?.label}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {variantGroup.map((o) => (

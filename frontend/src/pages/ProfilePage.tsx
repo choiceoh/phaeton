@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useDepartments } from '@/hooks/useDepartments'
+import { useSubsidiaries } from '@/hooks/useSubsidiaries'
 import { useUpdateMe, useChangePassword } from '@/hooks/useUsers'
 import { formatError } from '@/lib/api'
 import { ROLE_LABELS } from '@/lib/constants'
@@ -37,6 +38,7 @@ type PasswordForm = z.infer<typeof passwordSchema>
 export default function ProfilePage() {
   const { data: user, isLoading } = useCurrentUser()
   const { data: departments } = useDepartments()
+  const { data: subsidiaries } = useSubsidiaries()
   const updateMe = useUpdateMe()
   const changePw = useChangePassword()
 
@@ -52,6 +54,9 @@ export default function ProfilePage() {
 
   const deptName = user?.department_id
     ? departments?.find((d) => d.id === user.department_id)?.name
+    : undefined
+  const subName = user?.subsidiary_id
+    ? subsidiaries?.find((s) => s.id === user.subsidiary_id)?.name
     : undefined
 
   function onProfileSubmit(values: ProfileForm) {
@@ -92,6 +97,12 @@ export default function ProfilePage() {
             <span className="text-muted-foreground">역할</span>
             <p className="font-medium">{ROLE_LABELS[user.role] ?? user.role}</p>
           </div>
+          {subName && (
+            <div>
+              <span className="text-muted-foreground">계열사</span>
+              <p className="font-medium">{subName}</p>
+            </div>
+          )}
           {deptName && (
             <div>
               <span className="text-muted-foreground">부서</span>

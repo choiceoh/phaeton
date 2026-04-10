@@ -39,7 +39,7 @@ export default function AppListPage() {
 
       {/* Template gallery */}
       {showTemplates && (
-        <div className="mb-6">
+        <div className="mb-6 animate-slide-down">
           <h3 className="mb-3 text-sm font-medium text-muted-foreground">
             템플릿으로 빠르게 시작하세요
           </h3>
@@ -47,15 +47,15 @@ export default function AppListPage() {
         </div>
       )}
 
-      {isLoading && <LoadingState />}
+      {isLoading && <LoadingState variant="card-grid" />}
       {isError && <ErrorState error={error} onRetry={() => refetch()} />}
 
       {collections && collections.length === 0 && !showTemplates && (
-        <div className="mx-auto max-w-lg mt-8">
+        <div className="mx-auto max-w-lg mt-8 animate-fade-in-up">
           <EmptyState
             title={TERM.noCollections}
             description={TERM.noCollectionsDesc}
-            icon="📋"
+            icon={<Layers className="h-10 w-10" />}
             action={
               <RoleGate roles={['director', 'pm']}>
                 <Link to="/apps/new">
@@ -95,8 +95,10 @@ export default function AppListPage() {
 
       {collections && collections.length > 0 && (
         <div className="grid justify-center gap-4 grid-cols-[repeat(auto-fill,minmax(280px,340px))]">
-          {collections.map((c) => (
-            <AppCard key={c.id} collection={c} />
+          {collections.map((c, i) => (
+            <div key={c.id} className={`animate-scale-in stagger-${Math.min(i + 1, 12)}`}>
+              <AppCard collection={c} />
+            </div>
           ))}
         </div>
       )}

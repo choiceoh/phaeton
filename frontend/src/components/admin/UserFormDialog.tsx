@@ -23,7 +23,7 @@ import {
 import { useCreateUser, useUpdateUser } from '@/hooks/useUsers'
 import { formatError } from '@/lib/api'
 import { ROLE_LABELS } from '@/lib/constants'
-import type { Department, User } from '@/lib/types'
+import type { Department, Subsidiary, User } from '@/lib/types'
 
 const NONE = '__none__'
 
@@ -32,6 +32,7 @@ const createSchema = z.object({
   name: z.string().min(1, '이름을 입력하세요'),
   password: z.string().min(6, '6자 이상 입력하세요'),
   role: z.enum(['director', 'pm', 'engineer', 'viewer']),
+  subsidiary_id: z.string().optional(),
   department_id: z.string().optional(),
   position: z.string().optional(),
   title: z.string().optional(),
@@ -44,6 +45,7 @@ const editSchema = z.object({
   name: z.string().min(1, '이름을 입력하세요'),
   password: z.string().optional(),
   role: z.enum(['director', 'pm', 'engineer', 'viewer']),
+  subsidiary_id: z.string().optional(),
   department_id: z.string().optional(),
   position: z.string().optional(),
   title: z.string().optional(),
@@ -57,11 +59,12 @@ type EditForm = z.infer<typeof editSchema>
 interface Props {
   user?: User
   departments: Department[]
+  subsidiaries: Subsidiary[]
   onClose: () => void
   onToggleActive?: () => void
 }
 
-export default function UserFormDialog({ user, departments, onClose, onToggleActive }: Props) {
+export default function UserFormDialog({ user, departments, subsidiaries, onClose, onToggleActive }: Props) {
   const isEdit = !!user
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
@@ -73,6 +76,7 @@ export default function UserFormDialog({ user, departments, onClose, onToggleAct
       name: user?.name ?? '',
       password: '',
       role: user?.role ?? 'viewer',
+      subsidiary_id: user?.subsidiary_id ?? NONE,
       department_id: user?.department_id ?? NONE,
       position: user?.position ?? '',
       title: user?.title ?? '',
@@ -83,6 +87,7 @@ export default function UserFormDialog({ user, departments, onClose, onToggleAct
 
   function onSubmit(values: CreateForm | EditForm) {
     const deptId = values.department_id === NONE ? '' : values.department_id
+    const subId = values.subsidiary_id === NONE ? '' : values.subsidiary_id
 
     if (isEdit) {
       updateUser.mutate(
@@ -91,6 +96,7 @@ export default function UserFormDialog({ user, departments, onClose, onToggleAct
           email: values.email,
           name: values.name,
           role: values.role,
+          subsidiary_id: subId || null,
           department_id: deptId || null,
           position: values.position ?? '',
           title: values.title ?? '',
@@ -114,6 +120,7 @@ export default function UserFormDialog({ user, departments, onClose, onToggleAct
           name: v.name,
           password: v.password,
           role: v.role,
+          subsidiary_id: subId || null,
           department_id: deptId || null,
           position: v.position ?? '',
           title: v.title ?? '',
@@ -178,6 +185,27 @@ export default function UserFormDialog({ user, departments, onClose, onToggleAct
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <FormField<CreateForm | EditForm> name="subsidiary_id" label="계열사">
+                <Select
+                  value={form.watch('subsidiary_id') || NONE}
+                  onValueChange={(v) => {
+                    form.setValue('subsidiary_id', v ?? NONE)
+                    form.setValue('department_id', NONE)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>미지정</SelectItem>
+                    {subsidiaries.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
               <FormField<CreateForm | EditForm> name="department_id" label="부서">
                 <Select
                   value={form.watch('department_id') || NONE}
@@ -188,31 +216,39 @@ export default function UserFormDialog({ user, departments, onClose, onToggleAct
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NONE}>미지정</SelectItem>
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
+                    {departments
+                      .filter((d) => {
+                        const selectedSub = form.watch('subsidiary_id')
+                        if (!selectedSub || selectedSub === NONE) return true
+                        return d.subsidiary_id === selectedSub
+                      })
+                      .map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
-              </FormField>
-              <FormField<CreateForm | EditForm> name="position" label="직위">
-                <Input placeholder="예: 대리, 과장" {...form.register('position')} />
               </FormField>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <FormField<CreateForm | EditForm> name="position" label="직위">
+                <Input placeholder="예: 대리, 과장" {...form.register('position')} />
+              </FormField>
               <FormField<CreateForm | EditForm> name="title" label="직책">
                 <Input placeholder="예: 팀장, 본부장" {...form.register('title')} />
               </FormField>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <FormField<CreateForm | EditForm> name="phone" label="전화번호">
                 <Input type="tel" {...form.register('phone')} />
               </FormField>
+              <FormField<CreateForm | EditForm> name="joined_at" label="입사일">
+                <Input type="date" {...form.register('joined_at')} />
+              </FormField>
             </div>
-
-            <FormField<CreateForm | EditForm> name="joined_at" label="입사일">
-              <Input type="date" {...form.register('joined_at')} />
-            </FormField>
 
             <DialogFooter className="gap-2">
               {isEdit && onToggleActive && (

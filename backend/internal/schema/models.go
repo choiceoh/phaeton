@@ -206,6 +206,7 @@ type CreateCollectionReq struct {
 	Label        string          `json:"label"`
 	Description  string          `json:"description,omitempty"`
 	Icon         string          `json:"icon,omitempty"`
+	IsSystem     bool            `json:"is_system,omitempty"`
 	AccessConfig *AccessConfig   `json:"access_config,omitempty"`
 	Fields       []CreateFieldIn `json:"fields,omitempty"`
 }

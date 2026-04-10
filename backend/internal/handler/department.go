@@ -19,23 +19,35 @@ import (
 
 // Department represents an auth.departments row.
 type Department struct {
-	ID           string        `json:"id"`
-	ExternalCode *string       `json:"external_code,omitempty"`
-	Name         string        `json:"name"`
-	ParentID     *string       `json:"parent_id,omitempty"`
-	SortOrder    int           `json:"sort_order"`
-	CreatedAt    time.Time     `json:"created_at"`
-	UpdatedAt    time.Time     `json:"updated_at"`
-	Children     []*Department `json:"children,omitempty"`
+	ID             string        `json:"id"`
+	ExternalCode   *string       `json:"external_code,omitempty"`
+	Name           string        `json:"name"`
+	ParentID       *string       `json:"parent_id,omitempty"`
+	SubsidiaryID   *string       `json:"subsidiary_id,omitempty"`
+	SortOrder      int           `json:"sort_order"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
+	SubsidiaryName *string       `json:"subsidiary_name,omitempty"`
+	Children       []*Department `json:"children,omitempty"`
 }
 
 // ListDepartments handles GET /api/departments.
 // Returns a flat list by default; ?tree=true returns a nested tree.
 func ListDepartments(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := pool.Query(r.Context(),
-			`SELECT id, external_code, name, parent_id, sort_order, created_at, updated_at
-			 FROM auth.departments ORDER BY sort_order, name`)
+		query := `SELECT d.id, d.external_code, d.name, d.parent_id, d.subsidiary_id,
+		                 d.sort_order, d.created_at, d.updated_at, s.name
+		          FROM auth.departments d
+		          LEFT JOIN auth.subsidiaries s ON s.id = d.subsidiary_id`
+
+		args := []any{}
+		if subID := r.URL.Query().Get("subsidiary_id"); subID != "" {
+			query += ` WHERE d.subsidiary_id = $1`
+			args = append(args, subID)
+		}
+		query += ` ORDER BY d.sort_order, d.name`
+
+		rows, err := pool.Query(r.Context(), query, args...)
 		if err != nil {
 			slog.Error("list departments: query failed", "error", err)
 			apierr.WrapInternal("query departments", err).Write(w)
@@ -46,7 +58,8 @@ func ListDepartments(pool *pgxpool.Pool) http.HandlerFunc {
 		depts := make([]Department, 0)
 		for rows.Next() {
 			var d Department
-			if err := rows.Scan(&d.ID, &d.ExternalCode, &d.Name, &d.ParentID, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			if err := rows.Scan(&d.ID, &d.ExternalCode, &d.Name, &d.ParentID, &d.SubsidiaryID,
+				&d.SortOrder, &d.CreatedAt, &d.UpdatedAt, &d.SubsidiaryName); err != nil {
 				slog.Warn("list departments: scan failed", "error", err)
 				continue
 			}
@@ -92,9 +105,13 @@ func GetDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		var d Department
 		err := pool.QueryRow(r.Context(),
-			`SELECT id, external_code, name, parent_id, sort_order, created_at, updated_at
-			 FROM auth.departments WHERE id = $1`, id,
-		).Scan(&d.ID, &d.ExternalCode, &d.Name, &d.ParentID, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt)
+			`SELECT d.id, d.external_code, d.name, d.parent_id, d.subsidiary_id,
+			        d.sort_order, d.created_at, d.updated_at, s.name
+			 FROM auth.departments d
+			 LEFT JOIN auth.subsidiaries s ON s.id = d.subsidiary_id
+			 WHERE d.id = $1`, id,
+		).Scan(&d.ID, &d.ExternalCode, &d.Name, &d.ParentID, &d.SubsidiaryID,
+			&d.SortOrder, &d.CreatedAt, &d.UpdatedAt, &d.SubsidiaryName)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				apierr.NotFound("department not found").Write(w)
@@ -115,6 +132,7 @@ func CreateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 			ExternalCode *string `json:"external_code"`
 			Name         string  `json:"name"`
 			ParentID     *string `json:"parent_id"`
+			SubsidiaryID *string `json:"subsidiary_id"`
 			SortOrder    int     `json:"sort_order"`
 		}
 		if err := readJSON(r, &input); err != nil {
@@ -129,11 +147,11 @@ func CreateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var d Department
 		err := pool.QueryRow(r.Context(),
-			`INSERT INTO auth.departments (external_code, name, parent_id, sort_order)
-			 VALUES ($1, $2, $3, $4)
-			 RETURNING id, external_code, name, parent_id, sort_order, created_at, updated_at`,
-			input.ExternalCode, input.Name, input.ParentID, input.SortOrder,
-		).Scan(&d.ID, &d.ExternalCode, &d.Name, &d.ParentID, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt)
+			`INSERT INTO auth.departments (external_code, name, parent_id, subsidiary_id, sort_order)
+			 VALUES ($1, $2, $3, $4, $5)
+			 RETURNING id, external_code, name, parent_id, subsidiary_id, sort_order, created_at, updated_at`,
+			input.ExternalCode, input.Name, input.ParentID, input.SubsidiaryID, input.SortOrder,
+		).Scan(&d.ID, &d.ExternalCode, &d.Name, &d.ParentID, &d.SubsidiaryID, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt)
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) {
@@ -162,6 +180,7 @@ func UpdateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 			ExternalCode *string `json:"external_code"`
 			Name         *string `json:"name"`
 			ParentID     *string `json:"parent_id"`
+			SubsidiaryID *string `json:"subsidiary_id"`
 			SortOrder    *int    `json:"sort_order"`
 		}
 		if err := readJSON(r, &input); err != nil {
@@ -201,6 +220,16 @@ func UpdateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 			} else {
 				sets = append(sets, fmt.Sprintf("parent_id = $%d", argN))
 				args = append(args, *input.ParentID)
+			}
+			argN++
+		}
+		if input.SubsidiaryID != nil {
+			if *input.SubsidiaryID == "" {
+				sets = append(sets, fmt.Sprintf("subsidiary_id = $%d", argN))
+				args = append(args, nil)
+			} else {
+				sets = append(sets, fmt.Sprintf("subsidiary_id = $%d", argN))
+				args = append(args, *input.SubsidiaryID)
 			}
 			argN++
 		}

@@ -85,6 +85,7 @@ export interface User {
   role: 'director' | 'pm' | 'engineer' | 'viewer'
   is_active: boolean
   department_id?: string | null
+  subsidiary_id?: string | null
   position: string
   title: string
   phone: string
@@ -92,13 +93,27 @@ export interface User {
   joined_at?: string | null
   created_at?: string
   updated_at?: string
+  department_name?: string | null
+  subsidiary_name?: string | null
 }
 
 export interface Department {
   id: string
   name: string
   parent_id: string | null
+  subsidiary_id?: string | null
+  subsidiary_name?: string | null
   sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Subsidiary {
+  id: string
+  external_code?: string | null
+  name: string
+  sort_order: number
+  is_active: boolean
   created_at: string
   updated_at: string
 }

@@ -14,7 +14,7 @@ export function useDepartments() {
 export function useCreateDepartment() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { name: string; parent_id?: string | null; sort_order?: number }) =>
+    mutationFn: (input: { name: string; parent_id?: string | null; subsidiary_id?: string | null; sort_order?: number }) =>
       api.post<{ id: string }>('/departments', input),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.departments.all }),
   })
@@ -23,7 +23,7 @@ export function useCreateDepartment() {
 export function useUpdateDepartment() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string; name?: string; parent_id?: string | null; sort_order?: number }) =>
+    mutationFn: ({ id, ...body }: { id: string; name?: string; parent_id?: string | null; subsidiary_id?: string | null; sort_order?: number }) =>
       api.patch<{ status: string }>(`/departments/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.departments.all }),
   })

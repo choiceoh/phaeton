@@ -46,7 +46,7 @@ export default function DashboardPage() {
   const { data: savedCharts } = useCharts(appId)
   const [chartPrompt, setChartPrompt] = useState('')
 
-  if (isLoading) return <LoadingState />
+  if (isLoading) return <LoadingState variant="summary" />
   if (isError) return <ErrorState error={error} />
   if (!collection) return null
 
