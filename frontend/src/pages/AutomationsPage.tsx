@@ -131,7 +131,7 @@ export default function AutomationsPage() {
     setFormOpen(true)
   }
 
-  if (colLoading || autoLoading) return <LoadingState />
+  if (colLoading || autoLoading) return <LoadingState variant="table" />
   if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!collection) return null
 

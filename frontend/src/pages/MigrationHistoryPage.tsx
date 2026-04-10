@@ -47,7 +47,7 @@ export default function MigrationHistoryPage() {
     <div>
       <PageHeader title="변경 이력" description="모든 구조 변경 기록" />
 
-      {isLoading && <LoadingState />}
+      {isLoading && <LoadingState variant="table" />}
       {isError && <ErrorState error={error} onRetry={() => refetch()} />}
 
       {migrations && migrations.length === 0 && (

@@ -11,7 +11,7 @@ import { useCollections } from '@/hooks/useCollections'
 export default function GlobalAutomationsPage() {
   const { data: collections, isLoading, isError, error } = useCollections()
 
-  if (isLoading) return <LoadingState />
+  if (isLoading) return <LoadingState variant="table" />
   if (isError) return <ErrorState error={error} />
 
   const apps = collections ?? []
