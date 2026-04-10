@@ -61,6 +61,16 @@ func (b *Broker) Broadcast(msg SSEMessage) {
 	}
 }
 
+// Close disconnects all SSE clients by closing their channels.
+func (b *Broker) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for c := range b.clients {
+		close(c)
+		delete(b.clients, c)
+	}
+}
+
 // ClientCount returns the number of connected SSE clients.
 func (b *Broker) ClientCount() int {
 	b.mu.RLock()

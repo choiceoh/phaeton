@@ -110,6 +110,10 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		// Upgrade: add is_layout column for existing installations.
 		`ALTER TABLE _meta.fields ADD COLUMN IF NOT EXISTS is_layout BOOLEAN NOT NULL DEFAULT FALSE`,
 
+		// Performance: index on fields.collection_id (used in every schema lookup).
+		`CREATE INDEX IF NOT EXISTS idx_meta_fields_collection
+		     ON _meta.fields(collection_id)`,
+
 		// --- _meta.relations ---
 		`CREATE TABLE IF NOT EXISTS _meta.relations (
 			id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),

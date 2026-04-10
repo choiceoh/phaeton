@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router'
 
 import App from './App'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
+import { OfflineBanner } from './components/common/OfflineBanner'
 import { Toaster } from './components/ui/sonner'
 import { queryClient } from './lib/queryClient'
 import './index.css'
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ErrorBoundary>
+          <OfflineBanner />
           <App />
         </ErrorBoundary>
         <Toaster richColors closeButton position="top-right" />

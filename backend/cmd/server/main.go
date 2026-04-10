@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/phaeton/backend/internal/handler"
 	"github.com/choiceoh/phaeton/backend/internal/infra/lifecycle"
 	"github.com/choiceoh/phaeton/backend/internal/infra/logging"
+	"github.com/choiceoh/phaeton/backend/internal/infra/metrics"
 	"github.com/choiceoh/phaeton/backend/internal/infra/workerpool"
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/migration"
@@ -42,9 +43,16 @@ func main() {
 }
 
 func run() int {
-	// Logging.
-	color := os.Getenv("NO_COLOR") == ""
-	logger := slog.New(logging.NewConsoleHandler(os.Stderr, slog.LevelInfo, color))
+	// Logging: JSON in production, console otherwise.
+	isProd := os.Getenv("GO_ENV") == "production"
+	var logHandler slog.Handler
+	if isProd {
+		logHandler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
+	} else {
+		color := os.Getenv("NO_COLOR") == ""
+		logHandler = logging.NewConsoleHandler(os.Stderr, slog.LevelInfo, color)
+	}
+	logger := slog.New(logHandler)
 	slog.SetDefault(logger)
 
 	// In production, refuse to start without an explicit JWT secret.
@@ -188,13 +196,20 @@ func run() int {
 			Version: version,
 			Addr:    ln.Addr().String(),
 			DB:      "connected",
-		}, color)
+		}, !isProd)
 
 		go func() {
 			<-ctx.Done()
-			logging.PrintShutdown(os.Stderr, time.Since(startedAt), color)
+			logging.PrintShutdown(os.Stderr, time.Since(startedAt), !isProd)
+
+			// Stop background workers before draining HTTP connections.
+			// syncRunner stops automatically via ctx cancellation.
 			autoScheduler.Stop()
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			sseBroker.Close()
+			wp.Wait()
+			logger.Info("background workers stopped")
+
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if err := srv.Shutdown(shutdownCtx); err != nil {
 				logger.Error("shutdown failed", "error", err)
@@ -237,10 +252,21 @@ func buildRouter(
 	r.Use(middleware.CORS())
 	r.Use(chimw.Recoverer)
 
-	// Health.
-	r.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
+	// Health — includes DB connectivity check.
+	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok"}`))
+		if err := pool.Ping(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"status":"unhealthy","db":"unreachable"}`))
+			return
+		}
+		w.Write([]byte(`{"status":"ok","db":"connected"}`))
+	})
+
+	// Metrics — Prometheus-compatible text format.
+	r.Get("/metrics", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+		metrics.WriteMetrics(w)
 	})
 
 	// Auth (public).

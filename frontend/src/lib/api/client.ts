@@ -8,6 +8,7 @@
 import { ApiError } from './errors'
 
 const BASE = '/api'
+const DEFAULT_TIMEOUT_MS = 30_000
 
 interface Envelope<T> {
   data?: T
@@ -29,6 +30,8 @@ interface RequestOptions {
   // When true, the response is returned as-is (no envelope unwrap). Used for
   // list endpoints that include total/page metadata at the envelope level.
   raw?: boolean
+  // Per-request timeout in ms. Defaults to DEFAULT_TIMEOUT_MS (30s).
+  timeout?: number
 }
 
 async function request<T>(
@@ -37,12 +40,18 @@ async function request<T>(
   body?: unknown,
   opts: RequestOptions = {},
 ): Promise<T> {
+  const timeoutMs = opts.timeout ?? DEFAULT_TIMEOUT_MS
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  const signal = opts.signal
+    ? AbortSignal.any([opts.signal, timeoutSignal])
+    : timeoutSignal
+
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
     credentials: 'include',
-    signal: opts.signal,
+    signal,
   })
 
   const requestId = res.headers.get('X-Request-ID') ?? undefined
