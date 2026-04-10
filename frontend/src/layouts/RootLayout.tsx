@@ -49,6 +49,9 @@ export default function RootLayout() {
               <NavLink to="/dashboard" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
                 대시보드
               </NavLink>
+              <NavLink to="/calendar" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                캘린더
+              </NavLink>
               <NavLink to="/automations" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
                 자동화
               </NavLink>

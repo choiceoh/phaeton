@@ -8,6 +8,7 @@ import AutomationsPage from '@/pages/AutomationsPage'
 import DashboardPage from '@/pages/DashboardPage'
 import InterfaceDesignerPage from '@/pages/InterfaceDesignerPage'
 import GlobalAutomationsPage from '@/pages/GlobalAutomationsPage'
+import GlobalCalendarPage from '@/pages/GlobalCalendarPage'
 import GlobalDashboardPage from '@/pages/GlobalDashboardPage'
 import ProcessPage from '@/pages/ProcessPage'
 import RelationshipPage from '@/pages/RelationshipPage'
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/apps/:appId/process" element={<ProcessPage />} />
         <Route path="/apps/:appId/automations" element={<AutomationsPage />} />
         <Route path="/dashboard" element={<GlobalDashboardPage />} />
+        <Route path="/calendar" element={<GlobalCalendarPage />} />
         <Route path="/automations" element={<GlobalAutomationsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/history" element={<MigrationHistoryPage />} />
