@@ -110,20 +110,54 @@ type chatRequest struct {
 	Messages    []chatMessage `json:"messages"`
 	Temperature float64       `json:"temperature"`
 	MaxTokens   int           `json:"max_tokens,omitempty"`
+	Tools       []Tool        `json:"tools,omitempty"`
 }
 
 type chatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 type chatResponse struct {
 	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
+		Message    chatResponseMessage `json:"message"`
+		FinishReason string            `json:"finish_reason"`
 	} `json:"choices"`
 }
+
+type chatResponseMessage struct {
+	Content   string     `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+}
+
+// Tool describes an OpenAI-compatible function tool.
+type Tool struct {
+	Type     string       `json:"type"` // "function"
+	Function ToolFunction `json:"function"`
+}
+
+// ToolFunction is the function definition inside a Tool.
+type ToolFunction struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters"`
+}
+
+// ToolCall is a tool invocation returned by the model.
+type ToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"` // "function"
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
+// ToolResolver is called for each tool invocation. It receives the function
+// name and raw JSON arguments and returns the result string to feed back.
+type ToolResolver func(name string, arguments string) (string, error)
 
 // Complete sends a chat completion request and returns the assistant message.
 func (c *Client) Complete(ctx context.Context, system, user string) (string, error) {
@@ -173,6 +207,101 @@ func (c *Client) CompleteChat(ctx context.Context, system string, history []Chat
 		MaxTokens:   2048,
 	}
 	return c.doRequest(ctx, body)
+}
+
+// CompleteWithTools sends a chat request with tool definitions and automatically
+// resolves tool calls using the provided resolver (max 3 rounds).
+func (c *Client) CompleteWithTools(ctx context.Context, system string, history []ChatMessage, userMsg string, tools []Tool, resolve ToolResolver) (string, error) {
+	model, err := c.resolveModel(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve model: %w", err)
+	}
+
+	msgs := []chatMessage{
+		{Role: "system", Content: system},
+	}
+	for _, h := range history {
+		msgs = append(msgs, chatMessage{Role: h.Role, Content: h.Content})
+	}
+	msgs = append(msgs, chatMessage{Role: "user", Content: userMsg})
+
+	const maxRounds = 3
+	for range maxRounds {
+		body := chatRequest{
+			Model:       model,
+			Messages:    msgs,
+			Temperature: 0.5,
+			MaxTokens:   2048,
+			Tools:       tools,
+		}
+
+		resp, err := c.doRequestFull(ctx, body)
+		if err != nil {
+			return "", err
+		}
+
+		if len(resp.Choices) == 0 {
+			return "", fmt.Errorf("ai returned no choices")
+		}
+		choice := resp.Choices[0]
+
+		// No tool calls — return text.
+		if len(choice.Message.ToolCalls) == 0 || choice.FinishReason != "tool_calls" {
+			return choice.Message.Content, nil
+		}
+
+		// Append assistant message with tool calls.
+		msgs = append(msgs, chatMessage{
+			Role:      "assistant",
+			ToolCalls: choice.Message.ToolCalls,
+		})
+
+		// Resolve each tool call and append results.
+		for _, tc := range choice.Message.ToolCalls {
+			result, err := resolve(tc.Function.Name, tc.Function.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("error: %s", err.Error())
+			}
+			msgs = append(msgs, chatMessage{
+				Role:       "tool",
+				Content:    result,
+				ToolCallID: tc.ID,
+			})
+		}
+	}
+
+	return "", fmt.Errorf("tool call loop exceeded %d rounds", maxRounds)
+}
+
+// doRequestFull is like doRequest but returns the full parsed response.
+func (c *Client) doRequestFull(ctx context.Context, body chatRequest) (*chatResponse, error) {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/chat/completions", bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ai request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("ai server returned %d: %s", resp.StatusCode, string(b))
+	}
+
+	var result chatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
 }
 
 // doRequest is the shared HTTP call logic.
