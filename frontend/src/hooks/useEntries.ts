@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tansta
 
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
-import type { AggregateResult } from '@/lib/types'
+import type { AggregateResult, TotalsResult } from '@/lib/types'
 
 // QueryParams describes the URL query string options accepted by the
 // dynamic List endpoint. Kept generic so callers can build any combination.
@@ -66,9 +66,34 @@ export function useCreateEntry(slug: string) {
   return useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post<Record<string, unknown>>(`/data/${slug}`, body),
-    onSuccess: () => {
-      // Invalidate every list query for this collection. Detail queries are
-      // unaffected because new rows have a fresh id.
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const previousLists = qc.getQueriesData<EntryListResult>({
+        queryKey: queryKeys.entries.all,
+      })
+      const tempEntry = {
+        ...body,
+        id: `__temp_${Date.now()}`,
+        created_at: new Date().toISOString(),
+        _optimistic: true,
+      }
+      qc.setQueriesData<EntryListResult>(
+        { queryKey: queryKeys.entries.all },
+        (old) => {
+          if (!old?.data) return old
+          return { ...old, data: [tempEntry, ...old.data], total: old.total + 1 }
+        },
+      )
+      return { previousLists }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousLists) {
+        for (const [key, data] of context.previousLists) {
+          qc.setQueryData(key, data)
+        }
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entries.all })
     },
   })
@@ -79,8 +104,36 @@ export function useUpdateEntry(slug: string) {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch<Record<string, unknown>>(`/data/${slug}/${id}`, body),
+    onMutate: async ({ id, body }) => {
+      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const previousLists = qc.getQueriesData<EntryListResult>({
+        queryKey: queryKeys.entries.all,
+      })
+      qc.setQueriesData<EntryListResult>(
+        { queryKey: queryKeys.entries.all },
+        (old) => {
+          if (!old?.data) return old
+          return {
+            ...old,
+            data: old.data.map((row) =>
+              String(row.id) === id ? { ...row, ...body } : row,
+            ),
+          }
+        },
+      )
+      return { previousLists }
+    },
     onSuccess: (updated, { id }) => {
       qc.setQueryData(queryKeys.entries.detail(slug, id), updated)
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousLists) {
+        for (const [key, data] of context.previousLists) {
+          qc.setQueryData(key, data)
+        }
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entries.all })
     },
   })
@@ -91,7 +144,35 @@ export function useBatchUpdateEntry(slug: string) {
   return useMutation({
     mutationFn: (updates: { id: string; fields: Record<string, unknown>; _version?: number }[]) =>
       api.patch<Record<string, unknown>[]>(`/data/${slug}/batch`, { updates }),
-    onSuccess: () => {
+    onMutate: async (updates) => {
+      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const previousLists = qc.getQueriesData<EntryListResult>({
+        queryKey: queryKeys.entries.all,
+      })
+      const updateMap = new Map(updates.map((u) => [u.id, u.fields]))
+      qc.setQueriesData<EntryListResult>(
+        { queryKey: queryKeys.entries.all },
+        (old) => {
+          if (!old?.data) return old
+          return {
+            ...old,
+            data: old.data.map((row) => {
+              const fields = updateMap.get(String(row.id))
+              return fields ? { ...row, ...fields } : row
+            }),
+          }
+        },
+      )
+      return { previousLists }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousLists) {
+        for (const [key, data] of context.previousLists) {
+          qc.setQueryData(key, data)
+        }
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entries.all })
     },
   })
@@ -101,7 +182,32 @@ export function useDeleteEntry(slug: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api.del<{ status: string }>(`/data/${slug}/${id}`),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const previousLists = qc.getQueriesData<EntryListResult>({
+        queryKey: queryKeys.entries.all,
+      })
+      qc.setQueriesData<EntryListResult>(
+        { queryKey: queryKeys.entries.all },
+        (old) => {
+          if (!old?.data) return old
+          return {
+            ...old,
+            data: old.data.filter((row) => String(row.id) !== id),
+            total: Math.max(0, old.total - 1),
+          }
+        },
+      )
+      return { previousLists }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousLists) {
+        for (const [key, data] of context.previousLists) {
+          qc.setQueryData(key, data)
+        }
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entries.all })
     },
   })
@@ -111,9 +217,55 @@ export function useBulkDeleteEntries(slug: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (ids: string[]) => api.del<{ deleted: number }>(`/data/${slug}/bulk`, { ids }),
-    onSuccess: () => {
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const previousLists = qc.getQueriesData<EntryListResult>({
+        queryKey: queryKeys.entries.all,
+      })
+      const idSet = new Set(ids)
+      qc.setQueriesData<EntryListResult>(
+        { queryKey: queryKeys.entries.all },
+        (old) => {
+          if (!old?.data) return old
+          return {
+            ...old,
+            data: old.data.filter((row) => !idSet.has(String(row.id))),
+            total: Math.max(0, old.total - ids.length),
+          }
+        },
+      )
+      return { previousLists }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousLists) {
+        for (const [key, data] of context.previousLists) {
+          qc.setQueryData(key, data)
+        }
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entries.all })
     },
+  })
+}
+
+// useTotals fetches server-side totals (sum/avg/min/max/count) for all numeric
+// fields in a collection. Supports same filter params as List.
+export function useTotals(slug: string | undefined, filters?: Record<string, string>) {
+  const search = new URLSearchParams()
+  if (filters) {
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) search.set(key, value)
+    }
+  }
+  const qs = search.toString()
+
+  return useQuery({
+    queryKey: [...queryKeys.entries.all, slug, 'totals', filters],
+    queryFn: () =>
+      api.get<TotalsResult>(`/data/${slug}/totals${qs ? `?${qs}` : ''}`),
+    enabled: !!slug,
+    staleTime: 30_000,
   })
 }
 

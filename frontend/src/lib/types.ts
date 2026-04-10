@@ -54,12 +54,19 @@ export interface Field {
   relation?: Relation
 }
 
+export interface RLSFilter {
+  field: string
+  op: 'eq' | 'neq' | 'in' | 'contains'
+  value: string // literal or $user.id, $user.department_id, $user.subsidiary_id, etc.
+}
+
 export interface AccessConfig {
   entry_view?: string[]
   entry_create?: string[]
   entry_edit?: string[]
   entry_delete?: string[]
-  rls_mode?: '' | 'none' | 'creator' | 'department'
+  rls_mode?: '' | 'none' | 'creator' | 'department' | 'subsidiary' | 'filter'
+  rls_filters?: RLSFilter[]
 }
 
 export interface Collection {
@@ -210,6 +217,12 @@ export interface FilterCondition {
 export interface AggregateResult {
   group: string
   value: number
+}
+
+// Totals response from GET /api/data/{slug}/totals
+export interface TotalsResult {
+  _count: number
+  [fieldSlug: string]: number | { sum: number; avg: number; min: number; max: number }
 }
 
 // --- Views ---
@@ -392,6 +405,17 @@ export interface CreateAutomationReq {
   trigger_config?: Record<string, unknown>
   conditions: { field_slug: string, operator: ConditionOperator, value: string }[]
   actions: { action_type: ActionType, action_config: Record<string, unknown> }[]
+}
+
+// --- Webhook events ---
+
+export interface WebhookEvent {
+  id: string
+  topic: string
+  source: string
+  payload: Record<string, unknown>
+  processed: boolean
+  received_at: string
 }
 
 // --- Envelope responses ---

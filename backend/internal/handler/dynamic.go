@@ -527,6 +527,100 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // --- Aggregate ---
 
+// Totals returns aggregate values (sum, avg, count, min, max) for all numeric
+// fields across the full (filtered + RLS-restricted) dataset — no GROUP BY.
+//
+// GET /api/data/{slug}/totals
+//
+// Response: { "_count": N, "field_slug": { "sum": N, "avg": N, "min": N, "max": N }, ... }
+func (h *DynHandler) Totals(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	col, fields, ok := h.resolveCollection(w, slug)
+	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_view") {
+		return
+	}
+
+	// Collect numeric fields.
+	var numFields []schema.Field
+	for _, f := range fields {
+		if f.FieldType == schema.FieldNumber || f.FieldType == schema.FieldInteger || f.FieldType == schema.FieldAutonumber {
+			numFields = append(numFields, f)
+		}
+	}
+	if len(numFields) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{})
+		return
+	}
+
+	params := r.URL.Query()
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+
+	where, args, err := ParseFilters(params, fields)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Text search.
+	searchClause, searchArgs := BuildSearchClause(params.Get("q"), fields, "", len(args)+1)
+	where += " " + searchClause
+	args = append(args, searchArgs...)
+
+	// RLS.
+	rlsClause := ""
+	colRole := middleware.GetCollectionRole(r.Context())
+	if colRole == "viewer" {
+		rlsClause = buildRLSClause(r, col, &args, "")
+	}
+
+	// Build SELECT with all five aggregation functions for each numeric field.
+	var selectParts []string
+	selectParts = append(selectParts, "COUNT(*) AS _count")
+	for _, f := range numFields {
+		q := fmt.Sprintf("%q", f.Slug)
+		selectParts = append(selectParts,
+			fmt.Sprintf("SUM(%s) AS %q", q, "sum_"+f.Slug),
+			fmt.Sprintf("AVG(%s) AS %q", q, "avg_"+f.Slug),
+			fmt.Sprintf("MIN(%s) AS %q", q, "min_"+f.Slug),
+			fmt.Sprintf("MAX(%s) AS %q", q, "max_"+f.Slug),
+		)
+	}
+
+	sql := fmt.Sprintf("SELECT %s FROM %s WHERE deleted_at IS NULL %s%s",
+		strings.Join(selectParts, ", "), qTable, where, rlsClause)
+
+	row := h.pool.QueryRow(r.Context(), sql, args...)
+
+	// Scan all columns: 1 (count) + 4 per numeric field.
+	nCols := 1 + len(numFields)*4
+	vals := make([]any, nCols)
+	ptrs := make([]any, nCols)
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	if err := row.Scan(ptrs...); err != nil {
+		handleErr(w, r, err)
+		return
+	}
+
+	totalCount := normalizeValue(vals[0])
+	result := make(map[string]any, len(numFields)+1)
+	result["_count"] = totalCount
+	for i, f := range numFields {
+		base := 1 + i*4
+		result[f.Slug] = map[string]any{
+			"sum": normalizeValue(vals[base]),
+			"avg": normalizeValue(vals[base+1]),
+			"min": normalizeValue(vals[base+2]),
+			"max": normalizeValue(vals[base+3]),
+		}
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 // Aggregate runs simple GROUP BY queries for dashboard widgets.
 // Query params:
 //
@@ -1269,8 +1363,12 @@ func (h *DynHandler) checkAccess(w http.ResponseWriter, r *http.Request, col sch
 
 // buildRLSClause appends an AND clause that restricts rows based on the
 // collection's rls_mode. prefix is the optional table qualifier (e.g. "data"."my_table").
-// Default / "creator" mode: created_by = $userID.
-// "department" mode: created_by IN (SELECT id FROM auth.users WHERE department_id = $deptID).
+//
+// Supported modes:
+//   - ""/"creator": created_by = $userID
+//   - "department": created_by IN (SELECT id FROM auth.users WHERE department_id = $deptID)
+//   - "subsidiary": created_by IN (SELECT id FROM auth.users WHERE subsidiary_id = $subID)
+//   - "filter": custom field-based filters from AccessConfig.RLSFilters
 func buildRLSClause(r *http.Request, col schema.Collection, args *[]any, prefix string) string {
 	user, _ := middleware.GetUser(r.Context())
 	colRef := "created_by"
@@ -1279,14 +1377,92 @@ func buildRLSClause(r *http.Request, col schema.Collection, args *[]any, prefix 
 	}
 
 	mode := col.AccessConfig.RLSMode
-	if mode == "department" && user.DepartmentID != "" {
-		*args = append(*args, user.DepartmentID)
-		return fmt.Sprintf(" AND %s IN (SELECT id FROM auth.users WHERE department_id = $%d)", colRef, len(*args))
+
+	switch mode {
+	case "department":
+		if user.DepartmentID != "" {
+			*args = append(*args, user.DepartmentID)
+			return fmt.Sprintf(" AND %s IN (SELECT id FROM auth.users WHERE department_id = $%d)", colRef, len(*args))
+		}
+		// Fall back to creator if no department.
+
+	case "subsidiary":
+		if user.SubsidiaryID != "" {
+			*args = append(*args, user.SubsidiaryID)
+			return fmt.Sprintf(" AND %s IN (SELECT id FROM auth.users WHERE subsidiary_id = $%d)", colRef, len(*args))
+		}
+		// Fall back to creator if no subsidiary.
+
+	case "filter":
+		if len(col.AccessConfig.RLSFilters) > 0 {
+			return buildCustomRLSFilters(col.AccessConfig.RLSFilters, user, args, prefix)
+		}
+		// Fall back to creator if no filters configured.
 	}
 
 	// Default: creator-only.
 	*args = append(*args, user.UserID)
 	return fmt.Sprintf(" AND %s = $%d", colRef, len(*args))
+}
+
+// buildCustomRLSFilters generates AND clauses from custom RLS filter rules.
+// User attribute references ($user.id, $user.department_id, $user.subsidiary_id)
+// are resolved at query time.
+func buildCustomRLSFilters(filters []schema.RLSFilter, user middleware.UserClaims, args *[]any, prefix string) string {
+	var clauses []string
+	for _, f := range filters {
+		col := fmt.Sprintf("%q", f.Field)
+		if prefix != "" {
+			col = prefix + "." + col
+		}
+
+		// Resolve user attribute references in value.
+		val := resolveRLSValue(f.Value, user)
+
+		switch f.Op {
+		case "eq":
+			*args = append(*args, val)
+			clauses = append(clauses, fmt.Sprintf("%s = $%d", col, len(*args)))
+		case "neq":
+			*args = append(*args, val)
+			clauses = append(clauses, fmt.Sprintf("%s != $%d", col, len(*args)))
+		case "in":
+			// Value is comma-separated list.
+			*args = append(*args, val)
+			clauses = append(clauses, fmt.Sprintf("%s = ANY(string_to_array($%d, ','))", col, len(*args)))
+		case "contains":
+			*args = append(*args, "%"+val+"%")
+			clauses = append(clauses, fmt.Sprintf("CAST(%s AS TEXT) ILIKE $%d", col, len(*args)))
+		default:
+			// Unknown op — treat as eq for safety.
+			*args = append(*args, val)
+			clauses = append(clauses, fmt.Sprintf("%s = $%d", col, len(*args)))
+		}
+	}
+	if len(clauses) == 0 {
+		return ""
+	}
+	return " AND " + strings.Join(clauses, " AND ")
+}
+
+// resolveRLSValue replaces $user.* references with actual user attribute values.
+func resolveRLSValue(value string, user middleware.UserClaims) string {
+	switch value {
+	case "$user.id":
+		return user.UserID
+	case "$user.department_id":
+		return user.DepartmentID
+	case "$user.subsidiary_id":
+		return user.SubsidiaryID
+	case "$user.email":
+		return user.Email
+	case "$user.name":
+		return user.Name
+	case "$user.role":
+		return user.Role
+	default:
+		return value
+	}
 }
 
 func (h *DynHandler) resolveCollection(w http.ResponseWriter, slug string) (schema.Collection, []schema.Field, bool) {

@@ -9,37 +9,41 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/choiceoh/phaeton/backend/internal/infra/apierr"
 )
 
 // WebhookEvent is the envelope stored for each received webhook.
 type WebhookEvent struct {
-	ID        string          `json:"id"`
-	Topic     string          `json:"topic"`
-	Payload   json.RawMessage `json:"payload"`
-	Received  time.Time       `json:"received_at"`
-	Source    string          `json:"source,omitempty"`
-	Processed bool           `json:"processed"`
-}
-
-// WebhookHandler provides a generic webhook receiver.
-// Individual topic handlers are registered via Handle().
-type WebhookHandler struct {
-	secret   string
-	handlers map[string]TopicHandler
+	ID         string          `json:"id"`
+	Topic      string          `json:"topic"`
+	Source     string          `json:"source,omitempty"`
+	Payload    json.RawMessage `json:"payload"`
+	Processed  bool            `json:"processed"`
+	ReceivedAt time.Time       `json:"received_at"`
 }
 
 // TopicHandler processes a webhook payload for a specific topic.
 type TopicHandler func(payload json.RawMessage) error
 
+// WebhookHandler provides a generic webhook receiver with DB persistence.
+type WebhookHandler struct {
+	pool     *pgxpool.Pool
+	secret   string
+	handlers map[string]TopicHandler
+}
+
 // NewWebhookHandler creates a handler with optional HMAC-SHA256 verification.
 // Set WEBHOOK_SECRET env var to enable signature validation.
-func NewWebhookHandler() *WebhookHandler {
+func NewWebhookHandler(pool *pgxpool.Pool) *WebhookHandler {
 	return &WebhookHandler{
+		pool:     pool,
 		secret:   os.Getenv("WEBHOOK_SECRET"),
 		handlers: make(map[string]TopicHandler),
 	}
@@ -77,30 +81,151 @@ func (h *WebhookHandler) Receive(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	source := r.Header.Get("X-Webhook-Source")
 	slog.Info("webhook received",
 		"topic", topic,
-		"source", r.Header.Get("X-Webhook-Source"),
+		"source", source,
 		"size", len(body),
 	)
 
+	// Persist event.
+	var evt WebhookEvent
+	err = h.pool.QueryRow(r.Context(),
+		`INSERT INTO _meta.webhook_events (topic, source, payload)
+		 VALUES ($1, $2, $3)
+		 RETURNING id, topic, source, payload, processed, received_at`,
+		topic, source, json.RawMessage(body),
+	).Scan(&evt.ID, &evt.Topic, &evt.Source, &evt.Payload, &evt.Processed, &evt.ReceivedAt)
+	if err != nil {
+		slog.Error("webhook: failed to store event", "error", err)
+		apierr.Internal("failed to store webhook event").Write(w)
+		return
+	}
+
+	// Dispatch to topic handler if registered.
 	fn, ok := h.handlers[topic]
 	if !ok {
-		// Accept but log — no handler registered yet for this topic.
 		slog.Warn("webhook: no handler for topic", "topic", topic)
-		writeJSON(w, http.StatusAccepted, map[string]string{
-			"status": "accepted",
-			"note":   "no handler registered for topic",
-		})
+		writeJSON(w, http.StatusAccepted, evt)
 		return
 	}
 
 	if err := fn(json.RawMessage(body)); err != nil {
 		slog.Error("webhook: handler failed", "topic", topic, "error", err)
+		// Mark as processed (with failure noted in logs).
+		h.pool.Exec(r.Context(),
+			`UPDATE _meta.webhook_events SET processed = TRUE WHERE id = $1`, evt.ID)
 		apierr.Internal("webhook processing failed").Write(w)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "processed"})
+	// Mark as successfully processed.
+	h.pool.Exec(r.Context(),
+		`UPDATE _meta.webhook_events SET processed = TRUE WHERE id = $1`, evt.ID)
+	evt.Processed = true
+
+	writeJSON(w, http.StatusOK, evt)
+}
+
+// List returns paginated webhook events (GET /api/webhooks).
+func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	offset := (page - 1) * limit
+
+	topicFilter := r.URL.Query().Get("topic")
+
+	// Count.
+	var total int64
+	countQ := `SELECT COUNT(*) FROM _meta.webhook_events`
+	args := []any{}
+	if topicFilter != "" {
+		countQ += ` WHERE topic = $1`
+		args = append(args, topicFilter)
+	}
+	if err := h.pool.QueryRow(r.Context(), countQ, args...).Scan(&total); err != nil {
+		slog.Error("webhook: count failed", "error", err)
+		apierr.Internal("failed to list webhooks").Write(w)
+		return
+	}
+
+	// Fetch.
+	listQ := `SELECT id, topic, source, payload, processed, received_at
+		FROM _meta.webhook_events`
+	listArgs := []any{}
+	if topicFilter != "" {
+		listQ += ` WHERE topic = $1`
+		listArgs = append(listArgs, topicFilter)
+		listQ += ` ORDER BY received_at DESC LIMIT $2 OFFSET $3`
+		listArgs = append(listArgs, limit, offset)
+	} else {
+		listQ += ` ORDER BY received_at DESC LIMIT $1 OFFSET $2`
+		listArgs = append(listArgs, limit, offset)
+	}
+
+	rows, err := h.pool.Query(r.Context(), listQ, listArgs...)
+	if err != nil {
+		slog.Error("webhook: list query failed", "error", err)
+		apierr.Internal("failed to list webhooks").Write(w)
+		return
+	}
+	defer rows.Close()
+
+	events := []WebhookEvent{}
+	for rows.Next() {
+		var e WebhookEvent
+		if err := rows.Scan(&e.ID, &e.Topic, &e.Source, &e.Payload, &e.Processed, &e.ReceivedAt); err != nil {
+			slog.Error("webhook: scan failed", "error", err)
+			apierr.Internal("failed to list webhooks").Write(w)
+			return
+		}
+		events = append(events, e)
+	}
+
+	writeList(w, events, total, page, limit)
+}
+
+// Get returns a single webhook event (GET /api/webhooks/{id}).
+func (h *WebhookHandler) Get(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var e WebhookEvent
+	err := h.pool.QueryRow(r.Context(),
+		`SELECT id, topic, source, payload, processed, received_at
+		 FROM _meta.webhook_events WHERE id = $1`, id,
+	).Scan(&e.ID, &e.Topic, &e.Source, &e.Payload, &e.Processed, &e.ReceivedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			apierr.NotFound("webhook event not found").Write(w)
+			return
+		}
+		slog.Error("webhook: get failed", "error", err)
+		apierr.Internal("failed to get webhook").Write(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, e)
+}
+
+// Delete removes a single webhook event (DELETE /api/webhooks/{id}).
+func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	tag, err := h.pool.Exec(r.Context(),
+		`DELETE FROM _meta.webhook_events WHERE id = $1`, id)
+	if err != nil {
+		slog.Error("webhook: delete failed", "error", err)
+		apierr.Internal("failed to delete webhook").Write(w)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		apierr.NotFound("webhook event not found").Write(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // verifyHMAC checks the HMAC-SHA256 signature.

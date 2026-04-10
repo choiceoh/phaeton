@@ -13,6 +13,7 @@ require (
 
 require (
 	github.com/beevik/etree v1.5.0 // indirect
+	github.com/go-pdf/fpdf v0.9.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

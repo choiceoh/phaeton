@@ -15,11 +15,31 @@ import { useAIGenerateSlug } from '@/hooks/useAI'
 import { formatError } from '@/lib/api'
 import type { CreateCollectionReq, FieldType } from '@/lib/types'
 
+import CoachMark from '@/components/common/CoachMark'
+
 import AIBuildDialog from './AIBuildDialog'
 import FieldPalette from './FieldPalette'
 import { type FieldDraft } from './FieldPreview'
 import FieldProperties from './FieldProperties'
 import FormPreview from './FormPreview'
+
+const BUILDER_COACH_STEPS = [
+  {
+    title: '항목 팔레트',
+    description: '여기서 원하는 항목을 드래그하거나 클릭하여 입력화면에 추가하세요.',
+    target: '[data-coach="palette"]',
+  },
+  {
+    title: '입력화면 미리보기',
+    description: '추가한 항목들이 실제 입력화면에 어떻게 보이는지 확인할 수 있습니다.',
+    target: '[data-coach="preview"]',
+  },
+  {
+    title: '항목 속성',
+    description: '항목을 선택하면 여기서 이름, 필수 여부, 옵션 등을 설정할 수 있습니다.',
+    target: '[data-coach="palette"]',
+  },
+]
 
 export default function AppBuilder() {
   const navigate = useNavigate()
@@ -188,8 +208,8 @@ export default function AppBuilder() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
-        <div className="max-h-[calc(100vh-160px)] overflow-y-auto rounded-lg border p-3">
-          <FieldPalette />
+        <div data-coach="palette" className="max-h-[calc(100vh-160px)] overflow-y-auto rounded-lg border p-3">
+          <FieldPalette onAdd={handleAddField} />
           {selectedField && (
             <>
               <div className="my-3 border-t" />
@@ -197,7 +217,7 @@ export default function AppBuilder() {
             </>
           )}
         </div>
-        <div className="rounded-lg border p-3 space-y-4">
+        <div data-coach="preview" className="rounded-lg border p-3 space-y-4">
           <div className="space-y-3">
             <p className="text-sm font-medium text-muted-foreground">기본 정보</p>
             <div className="grid grid-cols-6 gap-2">
@@ -255,6 +275,8 @@ export default function AppBuilder() {
         variant="destructive"
         onConfirm={() => blocker.proceed?.()}
       />
+
+      <CoachMark storageKey="phaeton:coach:builder" steps={BUILDER_COACH_STEPS} />
     </div>
   )
 }

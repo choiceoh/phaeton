@@ -19,6 +19,8 @@ import { ROLE_LABELS } from '@/lib/constants'
 const profileSchema = z.object({
   name: z.string().min(1, '이름을 입력하세요'),
   phone: z.string().optional(),
+  position: z.string().optional(),
+  title: z.string().optional(),
 })
 
 const passwordSchema = z
@@ -44,7 +46,7 @@ export default function ProfilePage() {
 
   const profileForm = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
-    values: { name: user?.name ?? '', phone: user?.phone ?? '' },
+    values: { name: user?.name ?? '', phone: user?.phone ?? '', position: user?.position ?? '', title: user?.title ?? '' },
   })
 
   const pwForm = useForm<PasswordForm>({
@@ -109,18 +111,6 @@ export default function ProfilePage() {
               <p className="font-medium">{deptName}</p>
             </div>
           )}
-          {user.position && (
-            <div>
-              <span className="text-muted-foreground">직위</span>
-              <p className="font-medium">{user.position}</p>
-            </div>
-          )}
-          {user.title && (
-            <div>
-              <span className="text-muted-foreground">직책</span>
-              <p className="font-medium">{user.title}</p>
-            </div>
-          )}
           {user.joined_at && (
             <div>
               <span className="text-muted-foreground">입사일</span>
@@ -140,6 +130,12 @@ export default function ProfilePage() {
             </FormField>
             <FormField<ProfileForm> name="phone" label="전화번호">
               <Input type="tel" {...profileForm.register('phone')} />
+            </FormField>
+            <FormField<ProfileForm> name="position" label="직위">
+              <Input {...profileForm.register('position')} />
+            </FormField>
+            <FormField<ProfileForm> name="title" label="직책">
+              <Input {...profileForm.register('title')} />
             </FormField>
             <Button type="submit" disabled={updateMe.isPending}>
               {updateMe.isPending ? '저장 중...' : '저장'}

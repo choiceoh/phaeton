@@ -27,8 +27,15 @@ import {
 } from 'lucide-react'
 
 import { FIELD_TYPE_LABELS } from '@/lib/constants'
+import { FIELD_HINTS } from '@/lib/fieldHints'
 import type { FieldType } from '@/lib/types'
 import type { LucideIcon } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 interface PaletteEntry {
   icon: LucideIcon
@@ -98,8 +105,9 @@ const TABS: { key: TabKey; label: string; entries: PaletteEntry[] }[] = [
   { key: 'advanced', label: '고급', entries: ADVANCED_ENTRIES },
 ]
 
-function PaletteButton({ icon: Icon, label, entry }: { icon: LucideIcon, label: string, entry: PaletteEntry }) {
+function PaletteButton({ icon: Icon, label, entry, onClick }: { icon: LucideIcon, label: string, entry: PaletteEntry, onClick?: () => void }) {
   const [dragging, setDragging] = useState(false)
+  const hint = FIELD_HINTS[entry.type]
 
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData(
@@ -114,21 +122,42 @@ function PaletteButton({ icon: Icon, label, entry }: { icon: LucideIcon, label: 
     setDragging(false)
   }
 
-  return (
+  const button = (
     <div
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={`flex w-full cursor-grab items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${dragging ? 'dragging-source' : ''}`}
+      onClick={onClick}
+      className={`flex w-full cursor-grab items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${dragging ? 'dragging-source' : ''}`}
       tabIndex={0}
     >
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span>{label}</span>
+      <div className="min-w-0">
+        <span>{label}</span>
+        {hint && (
+          <p className="truncate text-[11px] leading-tight text-muted-foreground">{hint.description}</p>
+        )}
+      </div>
     </div>
+  )
+
+  if (!hint?.example) return button
+
+  return (
+    <TooltipProvider delay={400}>
+      <Tooltip>
+        <TooltipTrigger render={<div />}>{button}</TooltipTrigger>
+        <TooltipContent side="right" className="text-xs">{hint.example}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 
-export default function FieldPalette() {
+interface FieldPaletteProps {
+  onAdd?: (fieldType: FieldType, presetOptions?: Record<string, unknown>) => void
+}
+
+export default function FieldPalette({ onAdd }: FieldPaletteProps = {}) {
   const [tab, setTab] = useState<TabKey>('data')
   const activeTab = TABS.find((t) => t.key === tab)!
 
@@ -150,13 +179,14 @@ export default function FieldPalette() {
           </button>
         ))}
       </div>
-      <div className="space-y-1">
+      <div className="space-y-0.5">
         {activeTab.entries.map((entry) => (
           <PaletteButton
             key={`${entry.type}-${entry.label}`}
             icon={entry.icon}
             label={entry.label}
             entry={entry}
+            onClick={onAdd ? () => onAdd(entry.type, entry.presetOptions) : undefined}
           />
         ))}
       </div>

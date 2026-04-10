@@ -56,6 +56,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
   const [removeTargetId, setRemoveTargetId] = useState<string | null>(null)
   const [shrinkRow, setShrinkRow] = useState<number | null>(null)
   const [draggedWidth, setDraggedWidth] = useState<number>(3)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
 
   // Compute rows and shrink map for the currently hovered row
   const rowMap = computeRows(fields)
@@ -133,6 +134,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     e.preventDefault()
     e.currentTarget.classList.remove('bg-accent/40')
     setShrinkRow(null)
+    setDropIndex(null)
 
     const paletteData = e.dataTransfer.getData('application/palette-field')
     if (paletteData) {
@@ -156,6 +158,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     e.preventDefault()
     e.currentTarget.classList.remove('bg-accent/40')
     setShrinkRow(null)
+    setDropIndex(null)
 
     const paletteData = e.dataTransfer.getData('application/palette-field')
     if (paletteData) {
@@ -164,23 +167,26 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     }
   }
 
-  function handleFieldDragOver(e: React.DragEvent, fieldId: string) {
+  function handleFieldDragOver(e: React.DragEvent, fieldId: string, index: number) {
     e.preventDefault()
     e.currentTarget.classList.add('bg-accent/40')
     const entry = rowMap.find((r) => r.fieldId === fieldId)
     if (entry) {
       setShrinkRow(entry.rowIndex)
     }
+    setDropIndex(index)
   }
 
   function handleFieldDragLeave(e: React.DragEvent) {
     e.currentTarget.classList.remove('bg-accent/40')
+    setDropIndex(null)
   }
 
   function handleGridDragLeave(e: React.DragEvent) {
-    // Clear shrink when leaving the grid entirely
+    // Clear shrink and dropIndex when leaving the grid entirely
     if (gridRef.current && !gridRef.current.contains(e.relatedTarget as Node)) {
       setShrinkRow(null)
+      setDropIndex(null)
     }
   }
 
@@ -192,7 +198,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
         onDragLeave={(e) => { e.currentTarget.classList.remove('bg-accent/40') }}
         onDrop={handleDropEnd}
       >
-        왼쪽에서 필드를 드래그하세요
+        왼쪽에서 항목을 드래그하거나 클릭하여 추가하세요
       </div>
     )
   }
@@ -210,20 +216,24 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
           {fields.map((field, i) => {
             if (isLayoutType(field.field_type)) {
               return (
-                <div
-                  key={field.id}
-                  className={`col-span-full cursor-pointer rounded-md px-1 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                    selectedId === field.id ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
-                  }`}
-                  tabIndex={0}
-                  onClick={() => onSelect(field.id)}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, i)}
-                  onDragOver={(e) => handleFieldDragOver(e, field.id)}
-                  onDragLeave={handleFieldDragLeave}
-                  onDrop={(e) => handleDrop(e, i)}
-                >
-                  <LayoutPreview field={field} />
+                <div key={field.id} className="col-span-full">
+                  {dropIndex === i && (
+                    <div className="col-span-full -mb-2 h-0.5 rounded bg-primary transition-all" />
+                  )}
+                  <div
+                    className={`cursor-pointer rounded-md px-1 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                      selectedId === field.id ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
+                    }`}
+                    tabIndex={0}
+                    onClick={() => onSelect(field.id)}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, i)}
+                    onDragOver={(e) => handleFieldDragOver(e, field.id, i)}
+                    onDragLeave={handleFieldDragLeave}
+                    onDrop={(e) => handleDrop(e, i)}
+                  >
+                    <LayoutPreview field={field} />
+                  </div>
                 </div>
               )
             }
@@ -233,19 +243,22 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
               ? previewWidth
               : shrunk !== undefined ? shrunk : (field.width || 6)
             return (
-              <div
-                key={field.id}
-                className={`relative col-span-full ${smSpan[span] ?? 'sm:col-span-6'} cursor-pointer rounded-md p-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                  selectedId === field.id ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
-                } ${resizingId === field.id ? 'ring-2 ring-primary/50' : ''}`}
-                tabIndex={0}
-                onClick={() => onSelect(field.id)}
-                draggable={!resizingId}
-                onDragStart={(e) => handleDragStart(e, i)}
-                onDragOver={(e) => handleFieldDragOver(e, field.id)}
-                onDragLeave={handleFieldDragLeave}
-                onDrop={(e) => handleDrop(e, i)}
-              >
+              <div key={field.id} className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'}`}>
+                {dropIndex === i && (
+                  <div className="col-span-full -mb-2 h-0.5 rounded bg-primary transition-all" />
+                )}
+                <div
+                  className={`relative cursor-pointer rounded-md p-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    selectedId === field.id ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
+                  } ${resizingId === field.id ? 'ring-2 ring-primary/50' : ''}`}
+                  tabIndex={0}
+                  onClick={() => onSelect(field.id)}
+                  draggable={!resizingId}
+                  onDragStart={(e) => handleDragStart(e, i)}
+                  onDragOver={(e) => handleFieldDragOver(e, field.id, i)}
+                  onDragLeave={handleFieldDragLeave}
+                  onDrop={(e) => handleDrop(e, i)}
+                >
                 <div className="flex items-center justify-between">
                   <Label className="pointer-events-none">
                     {field.label || '(제목 없음)'}
@@ -275,18 +288,24 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                   className="absolute top-0 right-0 h-full w-2 cursor-col-resize rounded-r-md opacity-0 transition-opacity hover:bg-primary/20 hover:opacity-100 [div:hover>&]:opacity-100"
                   onMouseDown={(e) => handleResizeStart(e, field)}
                 />
+                </div>
               </div>
             )
           })}
+          {dropIndex === fields.length && (
+            <div className="col-span-full h-0.5 rounded bg-primary transition-all" />
+          )}
           <div
             className="col-span-full flex h-10 items-center justify-center rounded-md border-2 border-dashed border-transparent text-xs text-muted-foreground transition-colors"
             onDragOver={(e) => {
               e.preventDefault()
               setShrinkRow(null)
+              setDropIndex(fields.length)
               e.currentTarget.classList.add('border-muted-foreground/30', 'bg-accent/40')
             }}
             onDragLeave={(e) => {
               e.currentTarget.classList.remove('border-muted-foreground/30', 'bg-accent/40')
+              setDropIndex(null)
             }}
             onDrop={handleDropEnd}
           >

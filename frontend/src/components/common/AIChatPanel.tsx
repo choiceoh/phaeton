@@ -1,12 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useParams } from 'react-router'
 import { Loader2, MessageCircle, Send, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { useAIChat, type ChatMessage } from '@/hooks/useAIChat'
+import { useCollection } from '@/hooks/useCollections'
+
+const DEFAULT_HINTS = [
+  '앱을 만들려면 어떻게 하나요?',
+  '현재 어떤 앱들이 있나요?',
+  '항목 유형에는 어떤 것들이 있나요?',
+]
 
 export default function AIChatPanel() {
   const aiAvailable = useAIAvailable()
+  const { appId } = useParams<{ appId?: string }>()
+  const location = useLocation()
+  const { data: collection } = useCollection(appId)
 
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -15,6 +26,45 @@ export default function AIChatPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const chatMutation = useAIChat()
+
+  const hints = useMemo(() => {
+    if (!collection) return DEFAULT_HINTS
+    const name = collection.label
+    const isView = location.pathname.endsWith(appId ?? '')
+    const isDashboard = location.pathname.includes('/dashboard')
+    const isSettings = location.pathname.includes('/settings')
+    const isProcess = location.pathname.includes('/process')
+
+    if (isDashboard) {
+      return [
+        `"${name}" 대시보드에 차트를 추가하려면?`,
+        `"${name}" 데이터를 요약해 주세요`,
+        `대시보드 위젯 종류에는 어떤 것이 있나요?`,
+      ]
+    }
+    if (isProcess) {
+      return [
+        `"${name}" 프로세스 단계를 설정하려면?`,
+        `상태 전이 조건은 어떻게 설정하나요?`,
+        `자동화 규칙을 추가하는 방법은?`,
+      ]
+    }
+    if (isSettings) {
+      return [
+        `"${name}" 앱 설정에서 뭘 바꿀 수 있나요?`,
+        `접근 권한을 설정하려면?`,
+        `필드를 추가하거나 수정하는 방법은?`,
+      ]
+    }
+    if (isView) {
+      return [
+        `"${name}"에 데이터를 추가하려면?`,
+        `"${name}" 필드를 수정하는 방법은?`,
+        `뷰를 추가하거나 전환하려면 어떻게 하나요?`,
+      ]
+    }
+    return DEFAULT_HINTS
+  }, [collection, location.pathname, appId])
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -113,11 +163,7 @@ export default function AIChatPanel() {
                   Phaeton 사용에 대해 궁금한 점을 물어보세요.
                 </p>
                 <div className="mt-3 space-y-1.5">
-                  {[
-                    '앱을 만들려면 어떻게 하나요?',
-                    '현재 어떤 앱들이 있나요?',
-                    '항목 유형에는 어떤 것들이 있나요?',
-                  ].map((hint) => (
+                  {hints.map((hint) => (
                     <button
                       key={hint}
                       onClick={() => {

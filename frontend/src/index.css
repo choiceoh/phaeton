@@ -284,6 +284,22 @@
   transition: opacity 0.15s ease-out, transform 0.15s ease-out;
 }
 
+/* Page transition via View Transitions API */
+::view-transition-old(root) {
+  animation: vt-fade-out 120ms ease-out both;
+}
+::view-transition-new(root) {
+  animation: vt-fade-in 150ms ease-out 30ms both;
+}
+@keyframes vt-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes vt-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Reduced motion: disable all custom animations */
 @media (prefers-reduced-motion: reduce) {
   .animate-shake,
@@ -301,5 +317,9 @@
   }
   .dragging-source {
     transition: none !important;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
   }
 }
