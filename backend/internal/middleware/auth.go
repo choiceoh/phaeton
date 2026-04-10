@@ -29,7 +29,11 @@ type UserClaims struct {
 }
 
 // AuthDisabled returns true when AUTH_DISABLED=true, bypassing JWT validation.
+// Always returns false in production (GO_ENV=production) regardless of the variable.
 func AuthDisabled() bool {
+	if os.Getenv("GO_ENV") == "production" {
+		return false
+	}
 	return strings.EqualFold(os.Getenv("AUTH_DISABLED"), "true")
 }
 

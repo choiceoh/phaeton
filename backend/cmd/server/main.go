@@ -516,8 +516,7 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 
 		// File upload & download (authenticated).
 		r.Post("/api/upload", handler.Upload)
-		r.Handle("/api/uploads/*", http.StripPrefix("/api/uploads/",
-			http.FileServer(http.Dir("uploads"))))
+		r.Get("/api/uploads/{filename}", handler.ServeUpload)
 
 		// AI endpoints — longer write deadline for LLM inference.
 		r.Route("/api/ai", func(ai chi.Router) {

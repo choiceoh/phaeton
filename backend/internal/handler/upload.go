@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -70,6 +72,32 @@ func Upload(w http.ResponseWriter, r *http.Request) {
 		"name": header.Filename,
 		"size": header.Size,
 	})
+}
+
+// ServeUpload serves a single uploaded file by its stored filename.
+// It rejects any path containing separators or dot-dot sequences to prevent traversal.
+func ServeUpload(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "filename")
+
+	// Block path traversal: no slashes, backslashes, or ".." allowed.
+	if name == "" || strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Resolve and verify the file is inside the uploads directory.
+	abs, err := filepath.Abs(filepath.Join(uploadDir, name))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	base, _ := filepath.Abs(uploadDir)
+	if !strings.HasPrefix(abs, base+string(filepath.Separator)) {
+		http.NotFound(w, r)
+		return
+	}
+
+	http.ServeFile(w, r, abs)
 }
 
 // sanitizeExt ensures the extension only contains safe characters.
