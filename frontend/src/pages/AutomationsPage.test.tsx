@@ -108,13 +108,7 @@ describe('AutomationsPage', () => {
     it('shows loading state initially', () => {
       mockFetch.mockReturnValue(new Promise(() => {}))
       renderPage()
-      expect(
-        document.querySelector('.animate-spin') ||
-        document.querySelector('.animate-pulse') ||
-        screen.queryByText(/로딩/i) ||
-        document.querySelector('[class*="skeleton"]') ||
-        document.querySelector('table'),
-      ).toBeTruthy()
+      expect(document.querySelector('.skeleton-shimmer') || screen.queryByText(/로딩/i)).toBeTruthy()
     })
 
     it('shows empty state when no automations exist', async () => {
@@ -175,7 +169,7 @@ describe('AutomationsPage', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getAllByText('새 자동화').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('새 자동화').length).toBeGreaterThanOrEqual(1)
       })
 
       await user.click(screen.getAllByText('새 자동화')[0])
@@ -191,7 +185,7 @@ describe('AutomationsPage', () => {
       const user = userEvent.setup()
       renderPage()
 
-      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThan(0))
+      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThanOrEqual(1))
       await user.click(screen.getAllByText('새 자동화')[0])
 
       // Add an action first (required)
@@ -208,7 +202,7 @@ describe('AutomationsPage', () => {
       const user = userEvent.setup()
       renderPage()
 
-      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThan(0))
+      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThanOrEqual(1))
       await user.click(screen.getAllByText('새 자동화')[0])
 
       // Fill name but no action
@@ -245,7 +239,7 @@ describe('AutomationsPage', () => {
       const user = userEvent.setup()
       renderPage()
 
-      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThan(0))
+      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThanOrEqual(1))
       await user.click(screen.getAllByText('새 자동화')[0])
 
       await user.type(screen.getByPlaceholderText('예: 승인 시 알림 발송'), '신규 알림')
@@ -264,7 +258,7 @@ describe('AutomationsPage', () => {
       const user = userEvent.setup()
       renderPage()
 
-      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThan(0))
+      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThanOrEqual(1))
       await user.click(screen.getAllByText('새 자동화')[0])
 
       expect(screen.getByText('조건 (0)')).toBeInTheDocument()
@@ -281,7 +275,7 @@ describe('AutomationsPage', () => {
       const user = userEvent.setup()
       renderPage()
 
-      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThan(0))
+      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThanOrEqual(1))
       await user.click(screen.getAllByText('새 자동화')[0])
 
       expect(screen.getByText('액션 (0)')).toBeInTheDocument()
@@ -340,7 +334,7 @@ describe('AutomationsPage', () => {
       const user = userEvent.setup()
       renderPage()
 
-      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThan(0))
+      await waitFor(() => expect(screen.getAllByText('새 자동화').length).toBeGreaterThanOrEqual(1))
       await user.click(screen.getAllByText('새 자동화')[0])
 
       await user.type(screen.getByPlaceholderText('예: 승인 시 알림 발송'), '테스트')
@@ -349,7 +343,7 @@ describe('AutomationsPage', () => {
 
       // Form should be closed, "새 자동화" button should reappear
       await waitFor(() => {
-        expect(screen.getAllByText('새 자동화').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('새 자동화').length).toBeGreaterThanOrEqual(1)
         expect(screen.queryByPlaceholderText('예: 승인 시 알림 발송')).not.toBeInTheDocument()
       })
     })
