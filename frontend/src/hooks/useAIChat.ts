@@ -16,9 +16,11 @@ interface ChatResponse {
   reply: string
 }
 
+const AI_TIMEOUT = 120_000
+
 export function useAIChat() {
   return useMutation({
     mutationFn: (req: ChatRequest) =>
-      api.post<ChatResponse>('/ai/chat', req),
+      api.post<ChatResponse>('/ai/chat', req, { timeout: AI_TIMEOUT }),
   })
 }
