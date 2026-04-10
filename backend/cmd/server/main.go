@@ -210,6 +210,7 @@ func buildRouter(
 			// Read: all authenticated users.
 			r.Get("/{slug}", dynH.List)
 			r.Get("/{slug}/aggregate", dynH.Aggregate)
+			r.Get("/{slug}/export.csv", dynH.ExportCSV)
 			r.Get("/{slug}/{id}", dynH.Get)
 
 			// Write: director, pm, engineer.
@@ -218,6 +219,7 @@ func buildRouter(
 				r.Post("/{slug}", dynH.Create)
 				r.Post("/{slug}/bulk", dynH.BulkCreate)
 				r.Delete("/{slug}/bulk", dynH.BulkDelete)
+				r.Post("/{slug}/import", dynH.ImportCSV)
 				r.Patch("/{slug}/{id}", dynH.Update)
 				r.Delete("/{slug}/{id}", dynH.Delete)
 			})

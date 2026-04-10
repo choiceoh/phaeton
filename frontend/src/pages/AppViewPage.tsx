@@ -7,6 +7,7 @@ import {
   Power,
   PowerOff,
   Search,
+  Upload,
   X,
 } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
@@ -56,6 +57,7 @@ export default function AppViewPage() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editEntry, setEditEntry] = useState<Record<string, unknown> | undefined>()
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Filter state
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
@@ -101,14 +103,9 @@ export default function AppViewPage() {
         f[cond.field] = `${cond.operator}:${cond.value}`
       }
     }
-    // Search: find first text/textarea field, apply like filter.
+    // Full-text search across all text/textarea fields via backend ?q= param.
     if (searchText) {
-      const textField = collection?.fields?.find(
-        (fld) => fld.field_type === 'text' || fld.field_type === 'textarea',
-      )
-      if (textField) {
-        f[textField.slug] = `like:${searchText}`
-      }
+      f.q = searchText
     }
     return Object.keys(f).length > 0 ? f : undefined
   }, [filterConditions, searchText, collection])
@@ -296,34 +293,19 @@ export default function AppViewPage() {
 
   // CSV export.
   function handleCsvExport() {
-    if (!list?.data?.length || !collection?.fields) return
-    const visibleFields = collection.fields.filter((f) => !isLayoutType(f.field_type))
-    const headers = [...visibleFields.map((f) => f.label), '작성일']
-    const rows = list.data.map((entry) => [
-      ...visibleFields.map((f) => {
-        const val = formatCell(entry[f.slug], f)
-        // Escape commas and quotes in CSV
-        if (String(val).includes(',') || String(val).includes('"')) {
-          return `"${String(val).replace(/"/g, '""')}"`
-        }
-        return val
-      }),
-      entry.created_at ? new Date(entry.created_at as string).toLocaleDateString('ko') : '',
-    ])
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map((r) => r.join(',')),
-    ].join('\n')
-
-    const bom = '\uFEFF' // UTF-8 BOM for Korean Excel compat
-    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${collection.slug}_${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    if (!collection) return
+    const params = new URLSearchParams()
+    if (searchText) params.set('q', searchText)
+    if (sortParam) params.set('sort', sortParam)
+    for (const cond of filterConditions) {
+      if (cond.operator === 'is_null') {
+        params.set(cond.field, 'is_null:')
+      } else if (cond.value) {
+        params.set(cond.field, `${cond.operator}:${cond.value}`)
+      }
+    }
+    const qs = params.toString()
+    window.open(`/api/data/${collection.slug}/export.csv${qs ? `?${qs}` : ''}`, '_blank')
   }
 
   if (colLoading) return <LoadingState />
@@ -373,6 +355,31 @@ export default function AppViewPage() {
       onError: (err) => toast.error(formatError(err)),
     })
   }
+
+  const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !collection) return
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const res = await fetch(`/api/data/${collection.slug}/import`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(body.error || body.message || res.statusText)
+      }
+      const result = await res.json()
+      toast.success(`${result.data?.imported ?? 0}건 가져왔습니다`)
+      refetch()
+    } catch (err) {
+      toast.error(formatError(err))
+    } finally {
+      e.target.value = ''
+    }
+  }, [collection, refetch])
 
   const hasKanban = !!selectField
   const hasCalendar = !!dateField
@@ -484,11 +491,30 @@ export default function AppViewPage() {
         size="sm"
         className="h-8 gap-1"
         onClick={handleCsvExport}
-        disabled={!list?.data?.length}
       >
         <Download className="h-3.5 w-3.5" />
-        CSV
+        내보내기
       </Button>
+
+      {/* CSV Import */}
+      <RoleGate roles={['director', 'pm', 'engineer']}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Upload className="h-3.5 w-3.5" />
+          가져오기
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={handleImportCSV}
+        />
+      </RoleGate>
 
       {/* Process ON/OFF toggle */}
       {process?.is_enabled && (

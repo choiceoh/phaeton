@@ -158,6 +158,9 @@ function extractValue(value: unknown, field: Field): unknown {
   if (field.field_type === 'relation' && typeof value === 'object') {
     return (value as Record<string, unknown>).id
   }
+  if (field.field_type === 'user' && typeof value === 'object') {
+    return (value as Record<string, unknown>).id
+  }
   return value
 }
 

@@ -24,9 +24,9 @@ const (
 	FieldSelect      FieldType = "select"
 	FieldMultiselect FieldType = "multiselect"
 	FieldRelation    FieldType = "relation"
+	FieldUser        FieldType = "user"
 	FieldFile        FieldType = "file"
 	FieldJSON        FieldType = "json"
-	FieldUser        FieldType = "user"
 
 	FieldAutonumber FieldType = "autonumber"
 

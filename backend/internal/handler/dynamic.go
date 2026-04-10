@@ -75,6 +75,15 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Text search: ?q=term searches across all text/textarea fields.
+	searchClause, searchArgs := BuildSearchClause(
+		params.Get("q"), fields,
+		func() string { if len(sortJoins) > 0 { return qTable }; return "" }(),
+		len(args)+1,
+	)
+	where += " " + searchClause
+	args = append(args, searchArgs...)
+
 	// Count total. Sort joins are not needed for COUNT, but we use the same
 	// WHERE prefix to keep parameter ordering consistent.
 	deletedClause := "deleted_at IS NULL"
@@ -127,6 +136,9 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Auto-expand user fields.
+	h.expandUserFields(r.Context(), records, fields)
+
 	writeList(w, records, total, page, limit)
 }
 
@@ -171,6 +183,9 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	// Auto-expand user fields.
+	h.expandUserFields(r.Context(), records, fields)
 
 	writeJSON(w, http.StatusOK, records[0])
 }
@@ -1057,6 +1072,87 @@ func (h *DynHandler) expandRelations(ctx context.Context, records []map[string]a
 		}
 	}
 	return nil
+}
+
+// expandUserFields batch-fetches auth.users for all user-type fields and replaces
+// UUID values with {id, name, email} objects. This runs automatically, unlike
+// relation expand which is opt-in.
+func (h *DynHandler) expandUserFields(ctx context.Context, records []map[string]any, fields []schema.Field) {
+	var userFields []schema.Field
+	for _, f := range fields {
+		if f.FieldType == schema.FieldUser {
+			userFields = append(userFields, f)
+		}
+	}
+	if len(userFields) == 0 {
+		return
+	}
+
+	// Collect all distinct user UUIDs across all user fields.
+	seen := make(map[string]struct{})
+	var ids []string
+	for _, row := range records {
+		for _, f := range userFields {
+			s, ok := row[f.Slug].(string)
+			if !ok || s == "" {
+				continue
+			}
+			if _, dup := seen[s]; dup {
+				continue
+			}
+			seen[s] = struct{}{}
+			ids = append(ids, s)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+
+	// Batch fetch users.
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	sql := fmt.Sprintf(
+		`SELECT id, name, email FROM auth.users WHERE id IN (%s)`,
+		strings.Join(placeholders, ","),
+	)
+	rows, err := h.pool.Query(ctx, sql, args...)
+	if err != nil {
+		return // best effort — don't fail the request
+	}
+	defer rows.Close()
+
+	type userInfo struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+	byID := make(map[string]userInfo)
+	for rows.Next() {
+		var u userInfo
+		var uid pgtype.UUID
+		if err := rows.Scan(&uid, &u.Name, &u.Email); err != nil {
+			continue
+		}
+		u.ID = pgutil.UUIDToString(uid)
+		byID[u.ID] = u
+	}
+
+	// Replace UUIDs with user objects.
+	for _, row := range records {
+		for _, f := range userFields {
+			s, ok := row[f.Slug].(string)
+			if !ok || s == "" {
+				continue
+			}
+			if u, found := byID[s]; found {
+				row[f.Slug] = u
+			}
+		}
+	}
 }
 
 // coerceValue ensures the Go value matches what pgx expects for the column type.
