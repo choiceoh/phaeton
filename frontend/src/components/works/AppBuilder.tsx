@@ -29,7 +29,7 @@ export default function AppBuilder() {
 
   const selectedField = fields.find((f) => f.id === selectedId) || null
 
-  function handleAddField(fieldType: FieldType) {
+  function handleAddField(fieldType: FieldType, presetOptions?: Record<string, unknown>) {
     const id = `field_${++fieldCounter.current}`
     const draft: FieldDraft = {
       id,
@@ -41,6 +41,7 @@ export default function AppBuilder() {
       is_indexed: false,
       width: 6,
       height: 1,
+      options: presetOptions,
     }
     setFields([...fields, draft])
     setSelectedId(id)

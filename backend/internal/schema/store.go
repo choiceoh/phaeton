@@ -216,7 +216,7 @@ func (s *Store) ListFields(ctx context.Context, collectionID string) ([]Field, e
 	rows, err := s.pool.Query(ctx, `
 		SELECT f.id, f.collection_id, f.slug, f.label, f.field_type,
 		       f.is_required, f.is_unique, f.is_indexed,
-		       f.default_value, f.options, f.width, f.height, f.sort_order,
+		       f.default_value, f.options, f.width, f.height, f.sort_order, f.is_layout,
 		       f.created_at, f.updated_at,
 		       r.id, r.target_collection_id, r.relation_type, r.junction_table, r.on_delete
 		FROM _meta.fields f
@@ -247,7 +247,7 @@ func (s *Store) GetField(ctx context.Context, id string) (Field, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT f.id, f.collection_id, f.slug, f.label, f.field_type,
 		       f.is_required, f.is_unique, f.is_indexed,
-		       f.default_value, f.options, f.width, f.height, f.sort_order,
+		       f.default_value, f.options, f.width, f.height, f.sort_order, f.is_layout,
 		       f.created_at, f.updated_at,
 		       r.id, r.target_collection_id, r.relation_type, r.junction_table, r.on_delete
 		FROM _meta.fields f
@@ -273,6 +273,7 @@ func (s *Store) CreateFieldTx(ctx context.Context, tx pgx.Tx, collectionID strin
 	var fieldID pgtype.UUID
 	var f Field
 
+	isLayout := req.FieldType.IsLayout()
 	width := req.Width
 	if width == 0 {
 		width = 6
@@ -284,14 +285,14 @@ func (s *Store) CreateFieldTx(ctx context.Context, tx pgx.Tx, collectionID strin
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO _meta.fields
-			(collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, width, height, sort_order)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			(collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, width, height, sort_order, is_layout)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id, created_at, updated_at`,
 		colUID, req.Slug, req.Label, string(req.FieldType),
 		req.IsRequired, req.IsUnique, req.IsIndexed,
 		jsonOrNil(req.DefaultValue), jsonOrNil(req.Options),
 		width, height,
-		0, // sort_order default
+		0, isLayout,
 	).Scan(&fieldID, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		return Field{}, fmt.Errorf("insert field: %w", err)
@@ -309,6 +310,7 @@ func (s *Store) CreateFieldTx(ctx context.Context, tx pgx.Tx, collectionID strin
 	f.Options = req.Options
 	f.Width = width
 	f.Height = height
+	f.IsLayout = isLayout
 
 	// Insert relation if present.
 	if req.Relation != nil {
@@ -465,7 +467,7 @@ func scanFieldRow(row pgx.Row) (Field, error) {
 	err := row.Scan(
 		&fID, &colID, &f.Slug, &f.Label, &ft,
 		&f.IsRequired, &f.IsUnique, &f.IsIndexed,
-		&defV, &opts, &f.Width, &f.Height, &f.SortOrder,
+		&defV, &opts, &f.Width, &f.Height, &f.SortOrder, &f.IsLayout,
 		&f.CreatedAt, &f.UpdatedAt,
 		&rID, &rTarget, &rType, &rJunc, &rOnDel,
 	)

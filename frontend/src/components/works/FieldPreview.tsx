@@ -1,4 +1,4 @@
-import { FIELD_TYPE_LABELS, WIDTH_OPTIONS, HEIGHT_OPTIONS } from '@/lib/constants'
+import { FIELD_TYPE_LABELS, WIDTH_OPTIONS, HEIGHT_OPTIONS, isLayoutType } from '@/lib/constants'
 import type { FieldType } from '@/lib/types'
 
 export interface FieldDraft {
@@ -61,6 +61,7 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
             key={field.id}
             className={`cursor-pointer rounded-md border p-3 transition-colors ${
               selectedId === field.id ? 'border-primary bg-accent' : 'hover:bg-accent/50'
+            } ${isLayoutType(field.field_type) ? 'border-dashed opacity-75' : ''
             }`}
             onClick={() => onSelect(field.id)}
             draggable

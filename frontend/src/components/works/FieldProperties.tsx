@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   FIELD_TYPE_LABELS,
   HEIGHT_OPTIONS,
+  isLayoutType,
   ON_DELETE_OPTIONS,
   RELATION_TYPE_LABELS,
   VALIDATION_OPTIONS,
@@ -47,12 +48,67 @@ export default function FieldProperties({ field, collections, onChange }: Props)
 
   const opts = field.options || {}
   const selectChoices = (opts.choices as string[]) || []
-  const isText = field.field_type === 'text'
+  const isLayout = isLayoutType(field.field_type)
+  const isText = field.field_type === 'text' || field.field_type === 'textarea'
   const isNumeric = field.field_type === 'number' || field.field_type === 'integer'
   const isSelect = field.field_type === 'select' || field.field_type === 'multiselect'
   const isRelation = field.field_type === 'relation'
   const isBoolean = field.field_type === 'boolean'
   const isDate = field.field_type === 'date' || field.field_type === 'datetime'
+
+  // Layout fields: show minimal properties only
+  if (isLayout) {
+    return (
+      <div className="space-y-4 overflow-y-auto">
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
+            {FIELD_TYPE_LABELS[field.field_type]}
+          </span>
+          <h3 className="text-sm font-medium">속성</h3>
+        </div>
+        <section className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground">이름</Label>
+          <Input value={field.label} onChange={(e) => update({ label: e.target.value })} />
+        </section>
+        <Separator />
+        <section className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground">슬러그 (영문)</Label>
+          <Input
+            value={field.slug}
+            onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+            placeholder="snake_case"
+          />
+        </section>
+        {field.field_type === 'label' && (
+          <>
+            <Separator />
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">표시 텍스트</Label>
+              <Textarea
+                rows={3}
+                value={(opts.content as string) || ''}
+                onChange={(e) => updateOption('content', e.target.value)}
+                placeholder="폼에 표시할 안내 문구"
+              />
+            </section>
+          </>
+        )}
+        {field.field_type === 'spacer' && (
+          <>
+            <Separator />
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">높이 (px)</Label>
+              <Input
+                type="number"
+                value={(opts.height as number) || 24}
+                onChange={(e) => updateOption('height', Number(e.target.value) || 24)}
+              />
+            </section>
+          </>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4 overflow-y-auto">
@@ -252,6 +308,23 @@ export default function FieldProperties({ field, collections, onChange }: Props)
               placeholder="옵션1&#10;옵션2&#10;옵션3"
             />
           </section>
+          {field.field_type === 'select' && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">표시 방식</Label>
+              <Select
+                value={(opts.display as string) || 'dropdown'}
+                onValueChange={(v) => updateOption('display', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dropdown">드롭다운</SelectItem>
+                  <SelectItem value="radio">라디오 버튼</SelectItem>
+                </SelectContent>
+              </Select>
+            </section>
+          )}
           <Separator />
         </>
       )}

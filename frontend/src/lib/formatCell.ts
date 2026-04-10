@@ -10,8 +10,13 @@ export function formatCell(value: unknown, field: Field): string {
   if (field.field_type === 'date' || field.field_type === 'datetime') {
     return new Date(value as string).toLocaleDateString('ko')
   }
+  if (field.field_type === 'time') return String(value)
   if (field.field_type === 'multiselect' && Array.isArray(value)) {
     return value.join(', ')
+  }
+  if (field.field_type === 'textarea') {
+    const s = String(value)
+    return s.length > 100 ? s.slice(0, 100) + '...' : s
   }
   if (field.field_type === 'json') return JSON.stringify(value)
   return String(value)

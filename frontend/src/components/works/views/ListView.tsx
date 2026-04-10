@@ -1,4 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { isLayoutType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { Field } from '@/lib/types'
 
@@ -17,7 +18,7 @@ export default function ListView({ fields, entries, onRowClick }: Props) {
     )
   }
 
-  const visibleFields = fields.slice(0, 6)
+  const visibleFields = fields.filter((f) => !isLayoutType(f.field_type)).slice(0, 6)
 
   return (
     <Table>

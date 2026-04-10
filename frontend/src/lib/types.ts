@@ -1,16 +1,22 @@
 // Field types supported by the schema engine.
 export type FieldType =
   | 'text'
+  | 'textarea'
   | 'number'
   | 'integer'
   | 'boolean'
   | 'date'
   | 'datetime'
+  | 'time'
   | 'select'
   | 'multiselect'
   | 'relation'
   | 'file'
   | 'json'
+  | 'user'
+  | 'label'
+  | 'line'
+  | 'spacer'
 
 export type RelationType = 'one_to_one' | 'one_to_many' | 'many_to_many'
 
@@ -37,6 +43,7 @@ export interface Field {
   width: number
   height: number
   sort_order: number
+  is_layout?: boolean
   created_at: string
   updated_at: string
   relation?: Relation

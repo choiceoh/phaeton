@@ -14,26 +14,40 @@ type FieldType string
 
 const (
 	FieldText        FieldType = "text"
+	FieldTextarea    FieldType = "textarea"
 	FieldNumber      FieldType = "number"
 	FieldInteger     FieldType = "integer"
 	FieldBoolean     FieldType = "boolean"
 	FieldDate        FieldType = "date"
 	FieldDatetime    FieldType = "datetime"
+	FieldTime        FieldType = "time"
 	FieldSelect      FieldType = "select"
 	FieldMultiselect FieldType = "multiselect"
 	FieldRelation    FieldType = "relation"
 	FieldFile        FieldType = "file"
 	FieldJSON        FieldType = "json"
+	FieldUser        FieldType = "user"
+
+	// Layout types — stored in _meta.fields for ordering but produce no DB column.
+	FieldLabel  FieldType = "label"
+	FieldLine   FieldType = "line"
+	FieldSpacer FieldType = "spacer"
 )
 
 var validFieldTypes = map[FieldType]bool{
-	FieldText: true, FieldNumber: true, FieldInteger: true,
-	FieldBoolean: true, FieldDate: true, FieldDatetime: true,
+	FieldText: true, FieldTextarea: true, FieldNumber: true, FieldInteger: true,
+	FieldBoolean: true, FieldDate: true, FieldDatetime: true, FieldTime: true,
 	FieldSelect: true, FieldMultiselect: true, FieldRelation: true,
-	FieldFile: true, FieldJSON: true,
+	FieldFile: true, FieldJSON: true, FieldUser: true,
+	FieldLabel: true, FieldLine: true, FieldSpacer: true,
 }
 
 func (ft FieldType) Valid() bool { return validFieldTypes[ft] }
+
+// IsLayout returns true for field types that are purely visual (no DB column).
+func (ft FieldType) IsLayout() bool {
+	return ft == FieldLabel || ft == FieldLine || ft == FieldSpacer
+}
 
 // RelationType for inter-collection references.
 type RelationType string
@@ -74,6 +88,7 @@ type Field struct {
 	Width        int16           `json:"width"`
 	Height       int16           `json:"height"`
 	SortOrder    int             `json:"sort_order"`
+	IsLayout     bool            `json:"is_layout"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
 	Relation     *Relation       `json:"relation,omitempty"`

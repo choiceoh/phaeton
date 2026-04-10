@@ -192,6 +192,9 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 	idx := 1
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		v, exists := body[f.Slug]
 		if !exists {
 			continue
@@ -270,6 +273,9 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 	idx := 1
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		v, exists := body[f.Slug]
 		if !exists {
 			continue
@@ -551,6 +557,9 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []string, placeholders []string, args []any) {
 	idx := 1
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		v, exists := body[f.Slug]
 		if !exists {
 			continue
@@ -608,9 +617,12 @@ func (h *DynHandler) resolveCollection(w http.ResponseWriter, slug string) (sche
 func buildSelectCols(fields []schema.Field) string {
 	cols := []string{`"id"`}
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
 	}
-	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"deleted_at"`)
+	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`)
 	return strings.Join(cols, ", ")
 }
 
@@ -620,9 +632,12 @@ func buildSelectCols(fields []schema.Field) string {
 func qualifySelectCols(fields []schema.Field, prefix string) string {
 	cols := []string{fmt.Sprintf(`%s.%q AS %q`, prefix, "id", "id")}
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
 	}
-	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "deleted_at"} {
+	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "updated_by", "deleted_at"} {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, sysCol, sysCol))
 	}
 	return strings.Join(cols, ", ")
