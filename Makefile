@@ -1,4 +1,9 @@
-.PHONY: dev dev-api dev-ui build clean db db-stop
+.PHONY: dev dev-api dev-ui build clean db db-stop lint lint-go lint-ui test test-go test-ui fmt up down
+
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
 
 # 개발
 dev: dev-api dev-ui
@@ -22,7 +27,17 @@ build-api:
 clean:
 	rm -rf bin/ backend/cmd/server/static/assets
 
-# DB
+# Docker — 전체 스택 (DB + App)
+up:
+	docker compose up --build -d
+
+down:
+	docker compose down
+
+logs:
+	docker compose logs -f app
+
+# DB만 (로컬 개발용)
 db:
 	docker compose up -d db
 
@@ -31,3 +46,26 @@ db-stop:
 
 db-reset:
 	docker compose down -v && docker compose up -d db
+
+# 린트
+lint: lint-go lint-ui
+
+lint-go:
+	cd backend && golangci-lint run ./...
+
+lint-ui:
+	cd frontend && npm run lint
+
+# 테스트
+test: test-go test-ui
+
+test-go:
+	cd backend && go test ./...
+
+test-ui:
+	cd frontend && npm run test
+
+# 포맷
+fmt:
+	cd backend && gofmt -w .
+	cd frontend && npx eslint . --fix

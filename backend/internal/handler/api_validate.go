@@ -235,4 +235,3 @@ func checkRelationTarget(ctx context.Context, pool *pgxpool.Pool, cache *schema.
 	}
 	return nil
 }
-

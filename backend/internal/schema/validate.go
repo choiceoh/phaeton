@@ -91,6 +91,10 @@ func ValidateFieldCreate(req *CreateFieldIn) error {
 	return validateFieldIn(req)
 }
 
+// validWidths and validHeights define the allowed layout grid values.
+var validWidths = map[int16]bool{1: true, 2: true, 3: true, 6: true}
+var validHeights = map[int16]bool{1: true, 2: true, 3: true}
+
 func validateFieldIn(f *CreateFieldIn) error {
 	if err := ValidateSlug(f.Slug); err != nil {
 		return err
@@ -108,6 +112,12 @@ func validateFieldIn(f *CreateFieldIn) error {
 		f.IsIndexed = false
 		f.DefaultValue = nil
 		return nil
+	}
+	if f.Width != 0 && !validWidths[f.Width] {
+		return fmt.Errorf("%w: width must be 1, 2, 3, or 6", ErrInvalidInput)
+	}
+	if f.Height != 0 && !validHeights[f.Height] {
+		return fmt.Errorf("%w: height must be 1, 2, or 3", ErrInvalidInput)
 	}
 	if f.FieldType == FieldRelation && f.Relation == nil {
 		return fmt.Errorf("%w: relation field requires relation config", ErrInvalidInput)

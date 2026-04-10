@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { api } from '@/lib/api'
 import { isLayoutType } from '@/lib/constants'
 import type { Field } from '@/lib/types'
 
@@ -52,19 +53,20 @@ export default function EntryForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-4">
+      <div className="grid grid-cols-6 gap-4">
         {fields.map((field) => {
-          // Layout fields render without the Label wrapper.
           if (isLayoutType(field.field_type)) {
             return (
-              <div key={field.id}>
+              <div key={field.id} style={{ gridColumn: 'span 6' }}>
                 <LayoutElement field={field} />
               </div>
             )
           }
-
           return (
-            <div key={field.id}>
+            <div
+              key={field.id}
+              style={{ gridColumn: `span ${field.width || 6}` }}
+            >
               <Label>
                 {field.label}
                 {field.is_required && <span className="ml-1 text-destructive">*</span>}
@@ -129,21 +131,39 @@ function FieldInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const h = field.height || 1
+
   switch (field.field_type) {
-    case 'text':
-      return (
-        <Input
-          value={(value as string) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          required={field.is_required}
-        />
-      )
     case 'textarea':
       return (
         <Textarea
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
-          rows={(field.options?.rows as number) || 4}
+          rows={(field.options?.rows as number) || Math.max(4, h * 2)}
+          required={field.is_required}
+        />
+      )
+    case 'time':
+      return (
+        <Input
+          type="time"
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
+        />
+      )
+    case 'text':
+      return h > 1 ? (
+        <Textarea
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
+          rows={h * 2}
+        />
+      ) : (
+        <Input
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
           required={field.is_required}
         />
       )
@@ -175,15 +195,6 @@ function FieldInput({
           required={field.is_required}
         />
       )
-    case 'time':
-      return (
-        <Input
-          type="time"
-          value={(value as string) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          required={field.is_required}
-        />
-      )
     case 'boolean':
       return (
         <div className="flex items-center gap-2 pt-1">
@@ -193,7 +204,6 @@ function FieldInput({
     case 'select': {
       const choices = (field.options?.choices as string[]) || []
       const display = field.options?.display as string | undefined
-
       if (display === 'radio') {
         return (
           <div className="space-y-1">
@@ -212,7 +222,6 @@ function FieldInput({
           </div>
         )
       }
-
       return (
         <Select value={(value as string) || ''} onValueChange={onChange}>
           <SelectTrigger>
@@ -262,7 +271,7 @@ function FieldInput({
     case 'user':
       return <UserCombobox value={value as string | undefined} onChange={onChange} />
     case 'file':
-      return <Input type="file" onChange={(e) => onChange(e.target.files?.[0]?.name)} />
+      return <FileInput value={value as string | undefined} onChange={onChange} />
     case 'json':
       return (
         <Textarea
@@ -274,7 +283,7 @@ function FieldInput({
               onChange(e.target.value)
             }
           }}
-          rows={4}
+          rows={Math.max(4, h * 2)}
         />
       )
     default:
@@ -282,4 +291,45 @@ function FieldInput({
         <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} />
       )
   }
+}
+
+function FileInput({
+  value,
+  onChange,
+}: {
+  value: string | undefined
+  onChange: (v: unknown) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const result = await api.upload(file)
+      onChange(result.url)
+    } catch {
+      onChange(undefined)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <Input type="file" onChange={handleFile} disabled={uploading} />
+      {uploading && <p className="text-xs text-muted-foreground">업로드 중...</p>}
+      {value && !uploading && (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-primary underline"
+        >
+          {value.split('/').pop()}
+        </a>
+      )}
+    </div>
+  )
 }

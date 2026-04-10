@@ -210,7 +210,6 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		colNames = append(colNames, `"created_by"`)
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
 		args = append(args, cb)
-		idx++
 	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
@@ -316,10 +315,11 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Aggregate runs simple GROUP BY queries for dashboard widgets.
 // Query params:
-//   group=field_slug   — required, must be a non-relation column on this collection
-//   fn=count|sum|avg|min|max — default: count
-//   field=field_slug   — required for sum/avg/min/max; ignored for count
-//   filter passthrough — same WHERE syntax as List
+//
+//	group=field_slug   — required, must be a non-relation column on this collection
+//	fn=count|sum|avg|min|max — default: count
+//	field=field_slug   — required for sum/avg/min/max; ignored for count
+//	filter passthrough — same WHERE syntax as List
 //
 // Response: [{ "group": "<value>", "value": <number> }, ...]
 func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
@@ -341,7 +341,7 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	for _, f := range fields {
 		bySlug[f.Slug] = f
 	}
-	groupField, ok := bySlug[groupSlug]
+	_, ok = bySlug[groupSlug]
 	if !ok {
 		// Allow grouping by certain auto columns too.
 		if groupSlug != "created_at" && groupSlug != "deleted_at" {
@@ -349,9 +349,7 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if groupField.FieldType == schema.FieldRelation {
-		// Grouping by raw UUID is allowed but unusual; client should expand.
-	}
+	// Grouping by relation (raw UUID) is allowed but unusual; client should expand.
 
 	fn := strings.ToLower(params.Get("fn"))
 	if fn == "" {
@@ -657,7 +655,7 @@ func collectRows(rows pgx.Rows) ([]map[string]any, error) {
 		}
 		row := make(map[string]any, len(vals))
 		for i, v := range vals {
-			name := string(descs[i].Name)
+			name := descs[i].Name
 			row[name] = normalizeValue(v)
 		}
 		result = append(result, row)
