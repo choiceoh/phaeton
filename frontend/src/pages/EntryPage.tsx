@@ -25,6 +25,7 @@ import { useProcess } from '@/hooks/useProcess'
 import { useRetryToast } from '@/hooks/useRetryToast'
 import { ApiError, formatError } from '@/lib/api'
 import { TERM } from '@/lib/constants'
+import type { EntryRow } from '@/lib/types'
 
 export default function EntryPage() {
   const { appId, entryId } = useParams()
@@ -84,7 +85,7 @@ export default function EntryPage() {
     initialData = entryData
   } else if (duplicateSource) {
     // Strip identity/system fields for duplicate
-    const { id, _version, created_at, updated_at, _created_by, _optimistic, _updated_at, _created_at, ...rest } = duplicateSource as Record<string, unknown>
+    const { id, _version, created_at, updated_at, _created_by, _optimistic, _updated_at, _created_at, ...rest } = duplicateSource as EntryRow
     initialData = rest
   } else if (entryDefaults && Object.keys(entryDefaults).length > 0) {
     initialData = entryDefaults
@@ -92,7 +93,7 @@ export default function EntryPage() {
 
   function handleSubmit(data: Record<string, unknown>) {
     if (isEdit && entryId) {
-      const version = (entryData as Record<string, unknown> | undefined)?._version as number | undefined
+      const version = (entryData as EntryRow | undefined)?._version
       if (version != null) data._version = version
       setAutosaveStatus('saving')
       updateEntry.mutate(

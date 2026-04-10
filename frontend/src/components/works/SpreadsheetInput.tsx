@@ -9,6 +9,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import type { Field } from '@/lib/types'
+import { getFieldOptions } from '@/lib/fieldGuards'
 
 // ── Types ──
 
@@ -248,12 +249,13 @@ export default function SpreadsheetInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
-  const subColumns: SpreadsheetCol[] = (field.options?.sub_columns as SpreadsheetCol[]) || [
+  const spreadOpts = getFieldOptions(field, 'spreadsheet')
+  const subColumns: SpreadsheetCol[] = (spreadOpts?.sub_columns as SpreadsheetCol[]) || [
     { key: 'col1', label: 'A', type: 'text' },
     { key: 'col2', label: 'B', type: 'text' },
     { key: 'col3', label: 'C', type: 'text' },
   ]
-  const initialRows = (field.options?.initial_rows as number) || 5
+  const initialRows = spreadOpts?.initial_rows || 5
   const rawRows = Array.isArray(value) ? (value as Row[]) : []
 
   const displayRows = useMemo(() => {
@@ -281,10 +283,10 @@ export default function SpreadsheetInput({
   const [filterCol, setFilterCol] = useState<number | null>(null)
   const [filterText, setFilterText] = useState('')
   const [condRules, setCondRules] = useState<ConditionalRule[]>(
-    (field.options?.conditional_rules as ConditionalRule[]) || [],
+    (spreadOpts?.conditional_rules as unknown as ConditionalRule[]) || [],
   )
   const [mergedCells, setMergedCells] = useState<MergedCell[]>(
-    (field.options?.merged_cells as MergedCell[]) || [],
+    (spreadOpts?.merged_cells as unknown as MergedCell[]) || [],
   )
   const [showCondEditor, setShowCondEditor] = useState(false)
 

@@ -28,6 +28,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { DatePicker } from '@/components/ui/date-picker'
 import { isLayoutType, isComputedType } from '@/lib/constants'
 import type { Field } from '@/lib/types'
+import { getChoices } from '@/lib/fieldGuards'
 
 interface Props {
   open: boolean
@@ -179,7 +180,7 @@ function BulkValueInput({
         </div>
       )
     case 'select': {
-      const choices = (field.options?.choices as string[]) || []
+      const choices = getChoices(field)
       return (
         <Select value={(value as string) || ''} onValueChange={onChange}>
           <SelectTrigger>

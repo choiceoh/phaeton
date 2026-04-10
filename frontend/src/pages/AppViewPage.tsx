@@ -91,9 +91,20 @@ import { useUndoToast } from '@/hooks/useUndoToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
-import type { FilterCondition, SavedView } from '@/lib/types'
+import type { EntryRow, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
+import { emptyFilterGroup, isFilterGroupEmpty, flattenFilterGroup, serializeFilterGroup } from '@/lib/types'
+import { getDisplayType } from '@/lib/fieldGuards'
 
 const DEFAULT_LIMIT = 20
+
+/** Recursively remove a condition by ID from a FilterGroup */
+function removeCondFromGroup(group: FilterGroup, condId: string): FilterGroup {
+  return {
+    ...group,
+    conditions: group.conditions.filter((c) => c.id !== condId),
+    groups: group.groups.map((sg) => removeCondFromGroup(sg, condId)),
+  }
+}
 
 export default function AppViewPage() {
   const { appId } = useParams()
@@ -116,8 +127,11 @@ export default function AppViewPage() {
   const [importedCount, setImportedCount] = useState(0)
   const [hotkeyHelpOpen, setHotkeyHelpOpen] = useState(false)
 
-  // Filter state
-  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
+  // Filter state — uses FilterGroup for AND/OR support
+  const [filterGroup, setFilterGroup] = useState<FilterGroup>(emptyFilterGroup())
+  // Derived flat list for backward compatibility
+  const filterConditions = flattenFilterGroup(filterGroup)
+  const hasActiveFilters = !isFilterGroupEmpty(filterGroup)
 
   // Sort panel state (separate from column header sorting)
   const [sortItems, setSortItems] = useState<SortItem[]>([])
@@ -181,22 +195,30 @@ export default function AppViewPage() {
     setPage(1)
   }, [])
 
-  // Build filters from conditions + search text.
+  // Build filters from FilterGroup + search text.
+  // Use JSON _filter param when the group has OR logic or nested groups;
+  // fall back to legacy key-value params for simple AND-only flat conditions.
   const filters = useMemo(() => {
     const f: Record<string, string> = {}
-    for (const cond of filterConditions) {
-      if (cond.operator === 'is_null') {
-        f[cond.field] = 'is_null:'
-      } else if (cond.value) {
-        f[cond.field] = `${cond.operator}:${cond.value}`
+    const needsJsonFilter = filterGroup.logic === 'or' || filterGroup.groups.length > 0
+    const serialized = serializeFilterGroup(filterGroup)
+
+    if (needsJsonFilter && serialized) {
+      f._filter = serialized
+    } else {
+      for (const cond of filterConditions) {
+        if (cond.operator === 'is_null') {
+          f[cond.field] = 'is_null:'
+        } else if (cond.value) {
+          f[cond.field] = `${cond.operator}:${cond.value}`
+        }
       }
     }
-    // Full-text search across all text/textarea fields via backend ?q= param.
     if (searchText) {
       f.q = searchText
     }
     return Object.keys(f).length > 0 ? f : undefined
-  }, [filterConditions, searchText, collection])
+  }, [filterGroup, filterConditions, searchText])
 
   const {
     data: list,
@@ -377,7 +399,7 @@ export default function AppViewPage() {
           size: f.field_type === 'textarea' ? 250 : 150,
           cell: ({ row }: { row: { original: Record<string, unknown> } }) => {
             const v = row.original[f.slug]
-            const dt = f.options?.display_type as string | undefined
+            const dt = getDisplayType(f)
 
             // Render text display subtypes as clickable links
             if (f.field_type === 'text' && dt && v) {
@@ -781,7 +803,7 @@ export default function AppViewPage() {
     }
   }
 
-  function handleCardMove(entryId: string, newValue: string) {
+  function handleCardMove(entryId: string, newValue: string, oldValue: string) {
     if (!selectField) return
     const body: Record<string, unknown> = { [selectField.slug]: newValue }
     const version = getRowVersion(entryId)
@@ -789,27 +811,39 @@ export default function AppViewPage() {
     updateEntry.mutate(
       { id: entryId, body },
       {
-        onSuccess: () => toast.success('이동되었습니다'),
+        onSuccess: () => {
+          undoToast.push(
+            '이동되었습니다',
+            () => updateEntry.mutate({ id: entryId, body: { [selectField.slug]: oldValue } }),
+            () => updateEntry.mutate({ id: entryId, body: { [selectField.slug]: newValue } }),
+          )
+        },
         onError: (err) => {
           if (err instanceof ApiError && err.isConflict()) {
             toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
             refetch()
           } else {
-            retryToast(err, () => handleCardMove(entryId, newValue))
+            retryToast(err, () => handleCardMove(entryId, newValue, oldValue))
           }
         },
       },
     )
   }
 
-  function handleProcessCardMove(entryId: string, newValue: string) {
+  function handleProcessCardMove(entryId: string, newValue: string, oldValue: string) {
     const body: Record<string, unknown> = { _status: newValue }
     const version = getRowVersion(entryId)
     if (version != null) body._version = version
     updateEntry.mutate(
       { id: entryId, body },
       {
-        onSuccess: () => toast.success('상태가 변경되었습니다'),
+        onSuccess: () => {
+          undoToast.push(
+            '상태가 변경되었습니다',
+            () => updateEntry.mutate({ id: entryId, body: { _status: oldValue } }),
+            () => updateEntry.mutate({ id: entryId, body: { _status: newValue } }),
+          )
+        },
         onError: (err) => {
           if (err instanceof ApiError && err.isConflict()) {
             toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
@@ -832,7 +866,7 @@ export default function AppViewPage() {
       onSuccess: () => {
         setDeleteId(null)
         if (deletedRow) {
-          const row = deletedRow as Record<string, unknown>
+          const row = deletedRow as EntryRow
           const rest = Object.fromEntries(
             Object.entries(row).filter(([k]) => !['id', '_version', 'created_at', 'updated_at', '_optimistic'].includes(k)),
           )
@@ -915,17 +949,35 @@ export default function AppViewPage() {
   function applyView(view: SavedView) {
     setActiveView(view)
     if (view.filter_config && Object.keys(view.filter_config).length > 0) {
-      const restored: FilterCondition[] = Object.entries(view.filter_config).map(
-        ([key, value], i) => {
-          const parts = key.split(':')
-          const field = parts[0]
-          const operator = parts.slice(1).join(':') || 'eq'
-          return { id: `sv-${i}`, field, operator, value }
-        },
-      )
-      setFilterConditions(restored)
+      const config = view.filter_config as Record<string, unknown>
+      // New format: filter_config has a "logic" key
+      if ('logic' in config && 'conditions' in config) {
+        const fg = config as unknown as FilterGroup
+        // Re-assign IDs to prevent collisions
+        let idx = 0
+        function reId(g: FilterGroup): FilterGroup {
+          return {
+            ...g,
+            id: `sv-g-${idx++}`,
+            conditions: g.conditions.map((c) => ({ ...c, id: `sv-${idx++}` })),
+            groups: (g.groups ?? []).map(reId),
+          }
+        }
+        setFilterGroup(reId(fg))
+      } else {
+        // Legacy format: flat key-value map
+        const restored: FilterCondition[] = Object.entries(config).map(
+          ([key, value], i) => {
+            const parts = key.split(':')
+            const field = parts[0]
+            const operator = parts.slice(1).join(':') || 'eq'
+            return { id: `sv-${i}`, field, operator, value: String(value) }
+          },
+        )
+        setFilterGroup({ ...emptyFilterGroup(), conditions: restored })
+      }
     } else {
-      setFilterConditions([])
+      setFilterGroup(emptyFilterGroup())
     }
     if (view.sort_config) {
       const items: SortItem[] = view.sort_config.split(',').filter(Boolean).map((s) => ({
@@ -941,17 +993,26 @@ export default function AppViewPage() {
 
   function clearView() {
     setActiveView(null)
-    setFilterConditions([])
+    setFilterGroup(emptyFilterGroup())
     setSortItems([])
     setPage(1)
   }
 
   function handleSaveView() {
     if (!newViewName.trim()) return
-    const filterConfig: Record<string, string> = {}
-    for (const c of filterConditions) {
-      if (c.field && c.operator) {
-        filterConfig[`${c.field}:${c.operator}`] = c.value
+    // Save FilterGroup as the filter_config (supports AND/OR)
+    let filterConfig: Record<string, unknown> = {}
+    if (!isFilterGroupEmpty(filterGroup)) {
+      if (filterGroup.logic === 'or' || filterGroup.groups.length > 0) {
+        // Save as new FilterGroup format
+        filterConfig = { logic: filterGroup.logic, conditions: filterGroup.conditions.map((c) => ({ field: c.field, operator: c.operator, value: c.value })), groups: filterGroup.groups }
+      } else {
+        // Save as legacy flat format for backward compat
+        for (const c of filterConditions) {
+          if (c.field && c.operator) {
+            (filterConfig as Record<string, string>)[`${c.field}:${c.operator}`] = c.value
+          }
+        }
       }
     }
     const sortConfig = sortItems.length > 0
@@ -1012,7 +1073,7 @@ export default function AppViewPage() {
         >
             <Filter className="h-3.5 w-3.5" />
             필터
-            {filterConditions.length > 0 && (
+            {hasActiveFilters && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
                 {filterConditions.length}
               </Badge>
@@ -1022,20 +1083,20 @@ export default function AppViewPage() {
           <div className="mb-2 text-sm font-medium">필터 조건</div>
           <FilterBuilder
             fields={collection.fields ?? []}
-            conditions={filterConditions}
+            filterGroup={filterGroup}
             slug={collection.slug}
-            onChange={(conds) => {
-              setFilterConditions(conds)
+            onFilterGroupChange={(g) => {
+              setFilterGroup(g)
               setPage(1)
             }}
           />
-          {filterConditions.length > 0 && (
+          {hasActiveFilters && (
             <Button
               variant="ghost"
               size="sm"
               className="mt-2 text-destructive"
               onClick={() => {
-                setFilterConditions([])
+                setFilterGroup(emptyFilterGroup())
                 setPage(1)
               }}
             >
@@ -1136,7 +1197,7 @@ export default function AppViewPage() {
       </div>
 
       {/* ── Group 3: 뷰 관리 ── */}
-      {((savedViews && savedViews.length > 0) || filterConditions.length > 0 || sortItems.length > 0) && (
+      {((savedViews && savedViews.length > 0) || hasActiveFilters || sortItems.length > 0) && (
         <div className="flex items-center gap-1.5 border-l pl-3 ml-1">
           {savedViews && savedViews.length > 0 && (
             <>
@@ -1180,9 +1241,9 @@ export default function AppViewPage() {
           )}
 
           {/* Active filter/sort indicator */}
-          {(filterConditions.length > 0 || sortItems.length > 0) && (
+          {(hasActiveFilters || sortItems.length > 0) && (
             <div className="flex items-center gap-2 border-l pl-2 ml-1 text-xs text-muted-foreground">
-              {filterConditions.length > 0 && (
+              {hasActiveFilters && (
                 <span>{filterConditions.length}개 조건 적용됨</span>
               )}
               {sortItems.length > 0 && (
@@ -1191,7 +1252,7 @@ export default function AppViewPage() {
             </div>
           )}
 
-          {(filterConditions.length > 0 || sortItems.length > 0) && !savingView && (
+          {(hasActiveFilters || sortItems.length > 0) && !savingView && (
             <Popover>
               <PopoverTrigger
                 className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
@@ -1225,18 +1286,18 @@ export default function AppViewPage() {
       )}
     </div>
     <FilterChips
-      conditions={filterConditions}
+      filterGroup={filterGroup}
       sortItems={sortItems}
       fields={collection.fields ?? []}
       onRemoveFilter={(id) => {
-        setFilterConditions((prev) => prev.filter((c) => c.id !== id))
+        setFilterGroup((prev) => removeCondFromGroup(prev, id))
         setPage(1)
       }}
       onRemoveSort={(index) => {
         setSortItems((prev) => prev.filter((_, i) => i !== index))
       }}
       onClearAll={() => {
-        setFilterConditions([])
+        setFilterGroup(emptyFilterGroup())
         setSortItems([])
         setPage(1)
       }}
@@ -1419,18 +1480,18 @@ export default function AppViewPage() {
               readonlyColumns={formulaReadonlyCols}
               cellSaveState={cellSaveState}
               fieldMeta={fieldMeta}
-              emptyTitle={searchText || filterConditions.length > 0 ? '검색 결과가 없습니다' : TERM.noRecords}
-              emptyDescription={searchText || filterConditions.length > 0 ? '검색어 또는 필터 조건을 변경해 보세요.' : TERM.noRecordsDesc}
-              emptyVariant={searchText || filterConditions.length > 0 ? 'no-results' : 'empty'}
+              emptyTitle={searchText || hasActiveFilters ? '검색 결과가 없습니다' : TERM.noRecords}
+              emptyDescription={searchText || hasActiveFilters ? '검색어 또는 필터 조건을 변경해 보세요.' : TERM.noRecordsDesc}
+              emptyVariant={searchText || hasActiveFilters ? 'no-results' : 'empty'}
               emptyAction={
-                searchText || filterConditions.length > 0 ? (
+                searchText || hasActiveFilters ? (
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => {
                       setSearchText('')
                       setSearchInputValue('')
-                      setFilterConditions([])
+                      setFilterGroup(emptyFilterGroup())
                     }}
                   >
                     필터 초기화
@@ -1501,6 +1562,13 @@ export default function AppViewPage() {
                 filters={filters}
                 onEntryClick={handleEntryClick}
                 onEntryUpdate={handleGanttUpdate}
+                onCreateEntry={(prefill) => {
+                  const params = new URLSearchParams()
+                  for (const [k, v] of Object.entries(prefill)) {
+                    if (v != null) params.set(k, String(v))
+                  }
+                  navigate(`/apps/${appId}/entries/new?${params.toString()}`)
+                }}
               />
               </ErrorBoundary>
             </TabsContent>

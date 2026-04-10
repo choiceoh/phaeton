@@ -1,6 +1,7 @@
 import {
   type Column,
   type ColumnDef,
+  type ColumnOrderState,
   type ColumnPinningState,
   type SortingState,
   type VisibilityState,
@@ -10,11 +11,27 @@ import {
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   ArrowDownUp,
   ChevronDown,
   ChevronUp,
   ChevronsLeft,
   ChevronsRight,
+  GripVertical,
   PinIcon,
   PinOffIcon,
   Settings2,
@@ -27,6 +44,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -47,7 +65,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 
 import EmptyState from './EmptyState'
 import GridCell from './GridCell'
-import type { FieldType } from '@/lib/types'
+import type { EntryRow, FieldType } from '@/lib/types'
 
 export interface FieldMeta {
   fieldType: FieldType
@@ -148,6 +166,7 @@ export function DataTable<T>({
     right: [],
   })
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({})
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([])
 
   // Horizontal scroll indicator state.
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -178,7 +197,7 @@ export function DataTable<T>({
       enableHiding: false,
       size: 40,
       header: () => {
-        const allIds = data.map((d) => String((d as Record<string, unknown>).id))
+        const allIds = data.map((d) => String((d as EntryRow).id))
         const allSelected = allIds.length > 0 && allIds.every((id) => selectedRowIds?.has(id))
         return (
           <Checkbox
@@ -198,7 +217,7 @@ export function DataTable<T>({
         )
       },
       cell: ({ row }) => {
-        const id = String((row.original as Record<string, unknown>).id)
+        const id = String((row.original as EntryRow).id)
         return (
           <Checkbox
             checked={selectedRowIds?.has(id) ?? false}
@@ -219,7 +238,8 @@ export function DataTable<T>({
   const table = useReactTable({
     data,
     columns: augmentedColumns,
-    state: { sorting, columnVisibility, columnPinning, columnSizing },
+    state: { sorting, columnVisibility, columnPinning, columnSizing, columnOrder },
+    onColumnOrderChange: setColumnOrder,
     onSortingChange: (updater) => {
       const next = typeof updater === 'function' ? updater(sorting) : updater
       setSorting(next)
@@ -321,7 +341,7 @@ export function DataTable<T>({
           endCol: grid.activeCell.col,
         }
         e.preventDefault()
-        await copyToClipboard(data as Record<string, unknown>[], colIds, range)
+        await copyToClipboard(data as EntryRow[], colIds, range)
         return
       }
 
@@ -335,7 +355,7 @@ export function DataTable<T>({
 
           const updates = buildPasteUpdates(
             parsed,
-            data as Record<string, unknown>[],
+            data as EntryRow[],
             colIds,
             grid.activeCell.row,
             grid.activeCell.col,
@@ -407,6 +427,36 @@ export function DataTable<T>({
     }
   }, [data])
 
+  // Column DnD reorder
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
+    useSensor(KeyboardSensor),
+  )
+
+  const headerIds = useMemo(
+    () => table.getVisibleFlatColumns().map((c) => c.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [table.getVisibleFlatColumns().length, columnOrder],
+  )
+
+  const handleColumnDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      const allIds = table.getVisibleFlatColumns().map((c) => c.id)
+      const oldIndex = allIds.indexOf(String(active.id))
+      const newIndex = allIds.indexOf(String(over.id))
+      if (oldIndex === -1 || newIndex === -1) return
+
+      const newOrder = [...allIds]
+      newOrder.splice(oldIndex, 1)
+      newOrder.splice(newIndex, 0, String(active.id))
+      setColumnOrder(newOrder)
+    },
+    [table],
+  )
+
   // Virtual scrolling — only activate when row count exceeds threshold.
   const ROW_HEIGHT = 41
   const VIRTUAL_THRESHOLD = 40
@@ -440,41 +490,43 @@ export function DataTable<T>({
             컬럼
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>표시할 컬럼</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {table
-              .getAllColumns()
-              .filter((col) => col.getCanHide())
-              .map((col) => (
-                <DropdownMenuCheckboxItem
-                  key={col.id}
-                  checked={col.getIsVisible()}
-                  onCheckedChange={(value) => col.toggleVisibility(!!value)}
-                >
-                  <span className="flex items-center justify-between w-full">
-                    {String(col.columnDef.header ?? col.id)}
-                    <button
-                      type="button"
-                      className="ml-2 text-muted-foreground hover:text-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const isPinned = col.getIsPinned()
-                        if (isPinned) {
-                          col.pin(false)
-                        } else {
-                          col.pin('left')
-                        }
-                      }}
-                    >
-                      {col.getIsPinned() ? (
-                        <PinOffIcon className="h-3 w-3" />
-                      ) : (
-                        <PinIcon className="h-3 w-3" />
-                      )}
-                    </button>
-                  </span>
-                </DropdownMenuCheckboxItem>
-              ))}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>표시할 컬럼</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {table
+                .getAllColumns()
+                .filter((col) => col.getCanHide())
+                .map((col) => (
+                  <DropdownMenuCheckboxItem
+                    key={col.id}
+                    checked={col.getIsVisible()}
+                    onCheckedChange={(value) => col.toggleVisibility(!!value)}
+                  >
+                    <span className="flex items-center justify-between w-full">
+                      {String(col.columnDef.header ?? col.id)}
+                      <button
+                        type="button"
+                        className="ml-2 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const isPinned = col.getIsPinned()
+                          if (isPinned) {
+                            col.pin(false)
+                          } else {
+                            col.pin('left')
+                          }
+                        }}
+                      >
+                        {col.getIsPinned() ? (
+                          <PinOffIcon className="h-3 w-3" />
+                        ) : (
+                          <PinIcon className="h-3 w-3" />
+                        )}
+                      </button>
+                    </span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -491,19 +543,27 @@ export function DataTable<T>({
       >
         <Table style={{ width: table.getCenterTotalSize() }} role="grid" aria-rowcount={total ?? data.length}>
           <TableHeader role="rowgroup" className="bg-stone-50/80">
+            <DndContext
+              sensors={dndSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleColumnDragEnd}
+            >
             {table.getHeaderGroups().map((group) => (
               <TableRow key={group.id} role="row" className="hover:bg-transparent">
+                <SortableContext items={headerIds} strategy={horizontalListSortingStrategy}>
                 {group.headers.map((header, headerIdx) => {
                   const canSort = header.column.getCanSort()
                   const sortDir = header.column.getIsSorted()
                   const isPinned = header.column.getIsPinned()
-                  // Check if this is the last pinned-left column to draw a separator.
                   const pinnedLeftCols = columnPinning.left ?? []
                   const isLastPinnedLeft = isPinned === 'left' && headerIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
+                  const isSystemCol = header.column.id === '_select' || header.column.id === '_actions'
 
                   return (
-                    <TableHead
+                    <SortableTableHead
                       key={header.id}
+                      id={header.column.id}
+                      disabled={!!isPinned || isSystemCol}
                       role="columnheader"
                       aria-sort={sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : canSort ? 'none' : undefined}
                       className={`relative group ${isPinned ? 'bg-stone-50' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-border' : ''}`}
@@ -545,11 +605,13 @@ export function DataTable<T>({
                       >
                         <div className="absolute right-0 top-1/4 h-1/2 w-px border-r border-dashed border-border group-hover/resize:border-foreground/50 transition-colors" />
                       </div>
-                    </TableHead>
+                    </SortableTableHead>
                   )
                 })}
+                </SortableContext>
               </TableRow>
             ))}
+            </DndContext>
           </TableHeader>
           <TableBody
             ref={tableBodyRef}
@@ -566,14 +628,14 @@ export function DataTable<T>({
               (useVirtual ? rowVirtualizer.getVirtualItems() : visibleRows.map((_, i) => ({ index: i, start: 0, size: ROW_HEIGHT }))).map((virtualItem) => {
                 const rowIdx = virtualItem.index
                 const row = visibleRows[rowIdx]
-                const rowId = String((row.original as Record<string, unknown>).id ?? row.id)
+                const rowId = String((row.original as EntryRow).id ?? row.id)
                 const isNewRow = newRowId != null && rowId === newRowId
                 return (
                 <TableRow
                   key={row.id}
                   role="row"
                   aria-rowindex={(page - 1) * limit + rowIdx + 2}
-                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as Record<string, unknown>)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
+                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
                   style={useVirtual ? {
                     position: 'absolute',
                     top: 0,
@@ -629,12 +691,12 @@ export function DataTable<T>({
                         }}
                       >
                         {onCellEdit ? (() => {
-                          const cellRowId = String((row.original as Record<string, unknown>).id ?? row.id)
+                          const cellRowId = String((row.original as EntryRow).id ?? row.id)
                           const cellKey = `${cellRowId}:${colId}`
                           const saveState = cellSaveState?.get(cellKey)
                           return (
                           <GridCell
-                            rawValue={(row.original as Record<string, unknown>)[colId]}
+                            rawValue={(row.original as EntryRow)[colId]}
                             columnId={colId}
                             rowId={cellRowId}
                             isActive={isActive}
@@ -870,6 +932,58 @@ export function DataTable<T>({
         </div>
       )}
     </div>
+  )
+}
+
+// Sortable header cell for column DnD reorder.
+function SortableTableHead({
+  id,
+  disabled,
+  children,
+  className,
+  style,
+  ...props
+}: {
+  id: string
+  disabled?: boolean
+  children: React.ReactNode
+  className?: string
+  style?: React.CSSProperties
+} & React.HTMLAttributes<HTMLTableCellElement>) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled })
+
+  const mergedStyle: React.CSSProperties = {
+    ...style,
+    transform: CSS.Transform.toString(transform ? { ...transform, scaleX: 1, scaleY: 1 } : null),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  }
+
+  return (
+    <TableHead
+      ref={setNodeRef}
+      style={mergedStyle}
+      className={className}
+      {...props}
+    >
+      {!disabled && (
+        <span
+          {...attributes}
+          {...listeners}
+          className="absolute left-0 top-0 flex h-full w-4 cursor-grab items-center justify-center opacity-0 group-hover:opacity-60 transition-opacity active:cursor-grabbing"
+        >
+          <GripVertical className="h-3 w-3" />
+        </span>
+      )}
+      {children}
+    </TableHead>
   )
 }
 

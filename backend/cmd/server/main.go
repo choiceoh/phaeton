@@ -136,7 +136,7 @@ func run() int {
 	// Notification subscriber.
 	commentHandler := handler.NewCommentHandler(pool, cache, bus)
 	notifHandler := handler.NewNotificationHandler(pool)
-	handler.SubscribeNotifications(pool, bus)
+	handler.SubscribeNotifications(pool, bus, cache)
 
 	// Automation engine.
 	wp := workerpool.New(0)
@@ -227,7 +227,8 @@ func run() int {
 
 		// Start sync runner and automation scheduler in background.
 		go syncRunner.Start(ctx)
-		autoScheduler.Start()
+		autoEngine.SetBaseContext(ctx)
+		autoScheduler.Start(ctx)
 
 		logging.PrintBanner(os.Stderr, logging.BannerInfo{
 			Version: version,

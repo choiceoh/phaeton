@@ -29,7 +29,7 @@ export function useAutomationRunToasts(collectionId: string | undefined) {
     queryKey: [...queryKeys.automations.runs(firstId ?? ''), 'toast-poll'],
     queryFn: () => api.getList<AutomationRun>(`/schema/automations/${firstId}/runs`),
     enabled: !!firstId,
-    refetchInterval: 15000,
+    refetchInterval: (query) => (query.state.error ? false : 15000),
   })
 
   useEffect(() => {

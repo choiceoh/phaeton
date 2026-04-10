@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react'
 import { WifiOff } from 'lucide-react'
 
+import { queryClient } from '@/lib/queryClient'
+
 export function OfflineBanner() {
   const [offline, setOffline] = useState(!navigator.onLine)
 
   useEffect(() => {
     const goOffline = () => setOffline(true)
-    const goOnline = () => setOffline(false)
+    const goOnline = () => {
+      setOffline(false)
+      queryClient.invalidateQueries()
+    }
     window.addEventListener('offline', goOffline)
     window.addEventListener('online', goOnline)
     return () => {

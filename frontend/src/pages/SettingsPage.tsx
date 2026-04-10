@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import ErrorState from '@/components/common/ErrorState'
 import PageHeader from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -174,7 +175,7 @@ function WebhookSection() {
   const [page, setPage] = useState(1)
   const qc = useQueryClient()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.webhooks.list({ page }),
     queryFn: () => api.getList<WebhookEvent>(`/webhooks?page=${page}&limit=20`),
   })
@@ -215,7 +216,9 @@ function WebhookSection() {
         </div>
         <Separator className="mb-4" />
 
-        {isLoading ? (
+        {isError ? (
+          <ErrorState error={error} onRetry={() => refetch()} />
+        ) : isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-10 w-full" />

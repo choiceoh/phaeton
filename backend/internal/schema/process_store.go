@@ -90,7 +90,7 @@ func (s *Store) listProcessTransitions(ctx context.Context, processID string) ([
 		return nil, fmt.Errorf("invalid process ID %q: %w", processID, err)
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, process_id, from_status_id, to_status_id, label, allowed_roles, created_at
+		SELECT id, process_id, from_status_id, to_status_id, label, allowed_roles, allowed_user_ids, created_at
 		FROM _meta.process_transitions
 		WHERE process_id = $1
 		ORDER BY created_at`, pUID)
@@ -108,7 +108,7 @@ func (s *Store) listProcessTransitions(ctx context.Context, processID string) ([
 			from pgtype.UUID
 			to   pgtype.UUID
 		)
-		if err := rows.Scan(&id, &pid, &from, &to, &pt.Label, &pt.AllowedRoles, &pt.CreatedAt); err != nil {
+		if err := rows.Scan(&id, &pid, &from, &to, &pt.Label, &pt.AllowedRoles, &pt.AllowedUserIDs, &pt.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan process transition: %w", err)
 		}
 		pt.ID = uuidStr(id)
@@ -117,6 +117,9 @@ func (s *Store) listProcessTransitions(ctx context.Context, processID string) ([
 		pt.ToStatusID = uuidStr(to)
 		if pt.AllowedRoles == nil {
 			pt.AllowedRoles = []string{}
+		}
+		if pt.AllowedUserIDs == nil {
+			pt.AllowedUserIDs = []string{}
 		}
 		out = append(out, pt)
 	}
@@ -195,13 +198,22 @@ func (s *Store) SaveProcessTx(ctx context.Context, tx pgx.Tx, collectionID strin
 		if roles == nil {
 			roles = []string{}
 		}
+		userIDs := t.AllowedUserIDs
+		if userIDs == nil {
+			userIDs = []string{}
+		}
+		// Convert string user IDs to pgtype.UUID slice for the UUID[] column.
+		pgUserIDs := make([]pgtype.UUID, len(userIDs))
+		for j, uid := range userIDs {
+			pgUserIDs[j], _ = parseUUID(uid)
+		}
 		var tid pgtype.UUID
 		var pt ProcessTransition
 		err := tx.QueryRow(ctx, `
-			INSERT INTO _meta.process_transitions (process_id, from_status_id, to_status_id, label, allowed_roles)
-			VALUES ($1, $2, $3, $4, $5)
+			INSERT INTO _meta.process_transitions (process_id, from_status_id, to_status_id, label, allowed_roles, allowed_user_ids)
+			VALUES ($1, $2, $3, $4, $5, $6)
 			RETURNING id, created_at`,
-			procID, fromUID, toUID, t.Label, roles,
+			procID, fromUID, toUID, t.Label, roles, pgUserIDs,
 		).Scan(&tid, &pt.CreatedAt)
 		if err != nil {
 			return Process{}, fmt.Errorf("insert transition[%d]: %w", i, err)
@@ -212,6 +224,7 @@ func (s *Store) SaveProcessTx(ctx context.Context, tx pgx.Tx, collectionID strin
 		pt.ToStatusID = statusIDs[t.ToIndex]
 		pt.Label = t.Label
 		pt.AllowedRoles = roles
+		pt.AllowedUserIDs = userIDs
 		proc.Transitions[i] = pt
 	}
 

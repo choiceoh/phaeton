@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router'
 
-import { Bell } from 'lucide-react'
+import { ArrowRightLeft, Bell, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +10,7 @@ import { useSSE } from '@/hooks/useSSE'
 
 export default function NotificationBell() {
   useSSE()
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const { data: unread } = useUnreadCount()
   const { data: notifData } = useNotifications()
@@ -16,6 +18,15 @@ export default function NotificationBell() {
   const markAllRead = useMarkAllRead()
 
   const count = unread?.count ?? 0
+
+  function handleClick(n: { id: string; is_read: boolean; type: string; ref_collection_id?: string; ref_record_id?: string }) {
+    if (!n.is_read) markRead.mutate(n.id)
+    // Deep link to entry for state_change and comment notifications.
+    if (n.ref_collection_id && n.ref_record_id) {
+      setOpen(false)
+      navigate(`/apps/${n.ref_collection_id}?entry=${n.ref_record_id}`)
+    }
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -52,11 +63,17 @@ export default function NotificationBell() {
                 className={`w-full border-b p-3 text-left text-sm hover:bg-muted/50 ${
                   !n.is_read ? 'bg-blue-50' : ''
                 }`}
-                onClick={() => {
-                  if (!n.is_read) markRead.mutate(n.id)
-                }}
+                onClick={() => handleClick(n)}
               >
-                <div className="font-medium">{n.title}</div>
+                <div className="flex items-center gap-1.5 font-medium">
+                  {n.type === 'state_change' && (
+                    <ArrowRightLeft className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  )}
+                  {n.type === 'comment' && (
+                    <MessageSquare className="h-3.5 w-3.5 text-gray-500 shrink-0" />
+                  )}
+                  {n.title}
+                </div>
                 {n.body && (
                   <div className="mt-0.5 truncate text-xs text-muted-foreground">
                     {n.body}

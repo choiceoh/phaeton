@@ -30,7 +30,8 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import { isLayoutType } from '@/lib/constants'
-import type { Field, Process } from '@/lib/types'
+import type { Field, Process, SubColumn } from '@/lib/types'
+import { extractRelationId, extractRelationIds, getChoices, getDisplayType, getFieldOptions, getVisibilityRules, isExpandedRecord } from '@/lib/fieldGuards'
 
 interface Props {
   fields: Field[]
@@ -124,8 +125,9 @@ export default function EntryForm({
     // Number range validation
     if ((field.field_type === 'number' || field.field_type === 'integer') && val != null && val !== '') {
       const num = Number(val)
-      const minVal = field.options?.min as number | undefined
-      const maxVal = field.options?.max as number | undefined
+      const numOpts = getFieldOptions(field, 'number')
+      const minVal = numOpts?.min
+      const maxVal = numOpts?.max
       if (minVal != null && num < minVal) {
         setErrors((prev) => ({ ...prev, [field.slug]: `최소 ${minVal} 이상이어야 합니다` }))
         setValidated((prev) => { const next = new Set(prev); next.delete(field.slug); return next })
@@ -187,15 +189,29 @@ export default function EntryForm({
           {availableTransitions.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {availableTransitions.map((t, i) => (
-                <Button
-                  key={i}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setValue('_status', t.to_status)}
-                >
-                  {t.label} → {t.to_status}
-                </Button>
+                <div key={i} className="flex flex-col items-start">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={() => setValue('_status', t.to_status)}
+                  >
+                    {t.label}
+                    <span className="text-muted-foreground">→</span>
+                    <span
+                      className="inline-block rounded px-1.5 py-0.5 text-xs text-white"
+                      style={{ backgroundColor: t.to_color || '#6b7280' }}
+                    >
+                      {t.to_status}
+                    </span>
+                  </Button>
+                  {t.allowed_user_names && t.allowed_user_names.length > 0 && (
+                    <span className="mt-0.5 text-[10px] text-muted-foreground">
+                      {t.allowed_user_names.join(', ')} 승인 가능
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -210,9 +226,7 @@ export default function EntryForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
         {fields.map((field) => {
           // Conditional visibility: evaluate visibility_rules against current data.
-          const visRules = field.options?.visibility_rules as
-            | { field_slug: string; operator: string; value?: string }[]
-            | undefined
+          const visRules = getVisibilityRules(field)
           if (visRules && visRules.length > 0) {
             const allPass = visRules.every((rule) => {
               const fieldVal = data[rule.field_slug]
@@ -337,17 +351,15 @@ function extractValue(value: unknown, field: Field): unknown {
   if (field.field_type === 'relation') {
     // M:N: value is an array of UUIDs or expanded objects.
     if (field.relation?.relation_type === 'many_to_many' && Array.isArray(value)) {
-      return value.map((v) =>
-        typeof v === 'object' && v !== null ? (v as Record<string, unknown>).id : v,
-      )
+      return extractRelationIds(value)
     }
     // 1:1/1:N: value is a UUID or expanded object.
     if (typeof value === 'object' && !Array.isArray(value)) {
-      return (value as Record<string, unknown>).id
+      return extractRelationId(value)
     }
   }
-  if (field.field_type === 'user' && typeof value === 'object') {
-    return (value as Record<string, unknown>).id
+  if (field.field_type === 'user' && isExpandedRecord(value)) {
+    return value.id
   }
   return value
 }
@@ -357,13 +369,13 @@ function LayoutElement({ field }: { field: Field }) {
     case 'label':
       return (
         <p className="text-sm text-muted-foreground">
-          {(field.options?.content as string) || field.label}
+          {getFieldOptions(field, 'label')?.content || field.label}
         </p>
       )
     case 'line':
       return <hr className="my-2" />
     case 'spacer':
-      return <div style={{ height: (field.options?.height as number) || 24 }} />
+      return <div style={{ height: getFieldOptions(field, 'spacer')?.height || 24 }} />
     default:
       return null
   }
@@ -406,7 +418,7 @@ function FieldInput({
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
-          rows={(field.options?.rows as number) || Math.max(4, h * 2)}
+          rows={getFieldOptions(field, 'textarea')?.rows || Math.max(4, h * 2)}
           required={field.is_required}
           autoFocus={autoFocus}
         />
@@ -423,7 +435,7 @@ function FieldInput({
         />
       )
     case 'text': {
-      const textDisplay = field.options?.display_type as string | undefined
+      const textDisplay = getDisplayType(field)
       if (h > 1) {
         return (
           <Textarea
@@ -454,9 +466,10 @@ function FieldInput({
     }
     case 'number':
     case 'integer': {
-      const displayType = field.options?.display_type as string | undefined
+      const displayType = getDisplayType(field)
+      const numOpts2 = getFieldOptions(field, 'number')
       if (displayType === 'rating') {
-        const max = (field.options?.max_rating as number) || 5
+        const max = numOpts2?.max_rating || 5
         const current = (value as number) || 0
         return (
           <div className="flex items-center gap-1 pt-1">
@@ -497,7 +510,7 @@ function FieldInput({
         )
       }
       const prefix = displayType === 'currency'
-        ? (field.options?.currency_code as string) === 'USD' ? '$' : '₩'
+        ? numOpts2?.currency_code === 'USD' ? '$' : '₩'
         : undefined
       const suffix = displayType === 'percent' ? '%' : undefined
       return (
@@ -550,8 +563,8 @@ function FieldInput({
         </div>
       )
     case 'select': {
-      const choices = (field.options?.choices as string[]) || []
-      const display = field.options?.display as string | undefined
+      const choices = getChoices(field)
+      const display = getFieldOptions(field, 'select')?.display
       if (display === 'radio') {
         return (
           <div className="space-y-1">
@@ -586,7 +599,7 @@ function FieldInput({
       )
     }
     case 'multiselect': {
-      const choices = (field.options?.choices as string[]) || []
+      const choices = getChoices(field)
       const selected = (value as string[]) || []
       return (
         <Popover>
@@ -701,12 +714,6 @@ function FieldInput({
 
 // -- TableAreaInput: inline repeating table within the form --
 
-interface SubColumn {
-  key: string
-  label: string
-  type: 'text' | 'number' | 'select'
-  choices?: string[]
-}
 
 function TableAreaInput({
   field,
@@ -717,7 +724,7 @@ function TableAreaInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
-  const subColumns: SubColumn[] = (field.options?.sub_columns as SubColumn[]) || [
+  const subColumns: SubColumn[] = getFieldOptions(field, 'table')?.sub_columns || [
     { key: 'col1', label: '항목', type: 'text' },
     { key: 'col2', label: '값', type: 'text' },
   ]

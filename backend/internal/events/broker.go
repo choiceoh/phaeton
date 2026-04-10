@@ -39,10 +39,16 @@ func (b *Broker) Subscribe() (ch <-chan []byte, unsub func()) {
 	b.mu.Unlock()
 	return c, func() {
 		b.mu.Lock()
-		delete(b.clients, c)
+		_, exists := b.clients[c]
+		if exists {
+			delete(b.clients, c)
+			close(c)
+		}
 		b.mu.Unlock()
-		// Drain channel to avoid goroutine leaks.
-		for range c {
+		// Drain remaining buffered messages so senders aren't stuck.
+		if exists {
+			for range c {
+			}
 		}
 	}
 }
@@ -73,13 +79,14 @@ func (b *Broker) Broadcast(msg SSEMessage) {
 }
 
 // Close disconnects all SSE clients by closing their channels.
+// Safe to call even if some clients already unsubscribed.
 func (b *Broker) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for c := range b.clients {
 		close(c)
-		delete(b.clients, c)
 	}
+	b.clients = make(map[chan []byte]struct{})
 }
 
 // ClientCount returns the number of connected SSE clients.

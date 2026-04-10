@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tansta
 
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
-import type { AggregateResult, TotalsResult } from '@/lib/types'
+import type { AggregateResult, EntryRow, TotalsResult } from '@/lib/types'
 
 // QueryParams describes the URL query string options accepted by the
 // dynamic List endpoint. Kept generic so callers can build any combination.
@@ -12,10 +12,12 @@ export interface EntryListParams {
   sort?: string // e.g. "-created_at" or "name,-due_date"
   expand?: string // comma-separated relation field slugs
   filters?: Record<string, string> // { status: "eq:active", capacity: "gte:100" }
+  /** JSON-serialized FilterGroup for AND/OR filter groups */
+  _filter?: string
 }
 
 export interface EntryListResult {
-  data: Record<string, unknown>[]
+  data: EntryRow[]
   total: number
   page: number
   limit: number
@@ -28,7 +30,9 @@ function buildQueryString(params: EntryListParams): string {
   if (params.limit) search.set('limit', String(params.limit))
   if (params.sort) search.set('sort', params.sort)
   if (params.expand) search.set('expand', params.expand)
-  if (params.filters) {
+  if (params._filter) {
+    search.set('_filter', params._filter)
+  } else if (params.filters) {
     for (const [key, value] of Object.entries(params.filters)) {
       if (value) search.set(key, value)
     }
@@ -44,7 +48,7 @@ export function useEntries(slug: string | undefined, params: EntryListParams = {
   return useQuery({
     queryKey: queryKeys.entries.list(slug ?? '', params as Record<string, unknown>),
     queryFn: () =>
-      api.getList<Record<string, unknown>>(`/data/${slug}${buildQueryString(params)}`),
+      api.getList<EntryRow>(`/data/${slug}${buildQueryString(params)}`),
     enabled: !!slug,
     placeholderData: keepPreviousData,
   })
@@ -54,7 +58,7 @@ export function useEntry(slug: string | undefined, id: string | undefined, expan
   return useQuery({
     queryKey: queryKeys.entries.detail(slug ?? '', id ?? ''),
     queryFn: () =>
-      api.get<Record<string, unknown>>(
+      api.get<EntryRow>(
         `/data/${slug}/${id}${expand ? `?expand=${expand}` : ''}`,
       ),
     enabled: !!slug && !!id,
@@ -65,7 +69,7 @@ export function useCreateEntry(slug: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      api.post<Record<string, unknown>>(`/data/${slug}`, body),
+      api.post<EntryRow>(`/data/${slug}`, body),
     onMutate: async (body) => {
       const collectionKey = queryKeys.entries.collection(slug)
       await qc.cancelQueries({ queryKey: collectionKey })
@@ -104,7 +108,7 @@ export function useUpdateEntry(slug: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
-      api.patch<Record<string, unknown>>(`/data/${slug}/${id}`, body),
+      api.patch<EntryRow>(`/data/${slug}/${id}`, body),
     onMutate: async ({ id, body }) => {
       const collectionKey = queryKeys.entries.collection(slug)
       await qc.cancelQueries({ queryKey: collectionKey })
@@ -145,7 +149,7 @@ export function useBatchUpdateEntry(slug: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (updates: { id: string; fields: Record<string, unknown>; _version?: number }[]) =>
-      api.patch<Record<string, unknown>[]>(`/data/${slug}/batch`, { updates }),
+      api.patch<EntryRow[]>(`/data/${slug}/batch`, { updates }),
     onMutate: async (updates) => {
       const collectionKey = queryKeys.entries.collection(slug)
       await qc.cancelQueries({ queryKey: collectionKey })
@@ -297,7 +301,7 @@ export function useCollectionCount(slug: string | undefined) {
   return useQuery({
     queryKey: [...queryKeys.entries.all, slug, 'count'],
     queryFn: async () => {
-      const res = await api.getList<Record<string, unknown>>(`/data/${slug}?limit=1`)
+      const res = await api.getList<EntryRow>(`/data/${slug}?limit=1`)
       return res.total
     },
     enabled: !!slug,
@@ -338,7 +342,7 @@ export function useSimilarRecords(slug: string | undefined, query: string, field
 // ---------------------------------------------------------------------------
 
 export interface CalendarSpan {
-  entry: Record<string, unknown>
+  entry: EntryRow
   label: string
   startCol: number
   colSpan: number
@@ -352,7 +356,7 @@ export interface CalendarWeek {
   end: string
   days: string[]
   spans: CalendarSpan[]
-  singles: Record<string, Record<string, unknown>[]>
+  singles: Record<string, EntryRow[]>
 }
 
 export interface CalendarViewResult {
@@ -445,7 +449,7 @@ export interface KanbanColumn {
   value: string
   label: string
   color?: string
-  entries: Record<string, unknown>[]
+  entries: EntryRow[]
 }
 
 export interface KanbanViewResult {
@@ -544,6 +548,7 @@ export interface AvailableTransition {
   label: string
   to_status: string
   to_color: string
+  allowed_user_names?: string[]
 }
 
 export interface TransitionsResult {

@@ -20,11 +20,13 @@ export interface TransitionDraft {
   to_index: number
   label: string
   allowed_roles: string[]
+  allowed_user_ids: string[]
 }
 
 interface Props {
   statuses: StatusDraft[]
   transitions: TransitionDraft[]
+  users?: { id: string; name: string }[]
   onAddTransition: (from: number, to: number) => void
   onRemoveTransition: (index: number) => void
   onUpdateTransition: (index: number, patch: Partial<TransitionDraft>) => void
@@ -58,6 +60,7 @@ const ARROW_SIZE = 7
 export default function ProcessFlowDiagram({
   statuses,
   transitions,
+  users = [],
   onAddTransition,
   onRemoveTransition,
   onUpdateTransition,
@@ -602,7 +605,7 @@ export default function ProcessFlowDiagram({
               className="h-8 text-sm"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground whitespace-nowrap">허용 역할:</span>
             {ALL_ROLES.map((role) => (
               <label key={role.value} className="flex items-center gap-1 text-xs">
@@ -618,10 +621,29 @@ export default function ProcessFlowDiagram({
                 {role.label}
               </label>
             ))}
-            {selectedTrans.allowed_roles.length === 0 && (
-              <span className="text-xs text-muted-foreground">(비어있으면 전체 허용)</span>
-            )}
           </div>
+          {users.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">허용 사용자:</span>
+              {users.map((u) => (
+                <label key={u.id} className="flex items-center gap-1 text-xs">
+                  <Checkbox
+                    checked={selectedTrans.allowed_user_ids.includes(u.id)}
+                    onCheckedChange={(checked) => {
+                      const next = checked
+                        ? [...selectedTrans.allowed_user_ids, u.id]
+                        : selectedTrans.allowed_user_ids.filter((id) => id !== u.id)
+                      onUpdateTransition(selectedTransition, { allowed_user_ids: next })
+                    }}
+                  />
+                  {u.name}
+                </label>
+              ))}
+            </div>
+          )}
+          {selectedTrans.allowed_roles.length === 0 && selectedTrans.allowed_user_ids.length === 0 && (
+            <p className="text-xs text-muted-foreground">역할과 사용자가 모두 비어있으면 누구나 전환 가능</p>
+          )}
         </div>
       )}
     </div>

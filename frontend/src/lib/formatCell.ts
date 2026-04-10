@@ -1,4 +1,5 @@
 import type { Field } from '@/lib/types'
+import { isExpandedRecord, getDisplayLabel, getFieldOptions, getDisplayType } from '@/lib/fieldGuards'
 
 export function formatCell(value: unknown, field: Field): string {
   if (value == null) return '-'
@@ -7,22 +8,15 @@ export function formatCell(value: unknown, field: Field): string {
     if (Array.isArray(value)) {
       if (value.length === 0) return '-'
       return value.map((v) => {
-        if (typeof v === 'object' && v !== null) {
-          const obj = v as Record<string, unknown>
-          return String(obj.name ?? obj.title ?? obj.label ?? obj.id ?? '?')
-        }
+        if (isExpandedRecord(v)) return getDisplayLabel(v)
         return String(v)
       }).join(', ')
     }
     // 1:1/1:N: single expanded object.
-    if (typeof value === 'object' && value !== null) {
-      const obj = value as Record<string, unknown>
-      return String(obj.name ?? obj.title ?? obj.label ?? obj.id ?? '?')
-    }
+    if (isExpandedRecord(value)) return getDisplayLabel(value)
   }
-  if (field.field_type === 'user' && typeof value === 'object') {
-    const obj = value as Record<string, unknown>
-    return String(obj.name ?? obj.email ?? obj.id ?? '?')
+  if (field.field_type === 'user' && isExpandedRecord(value)) {
+    return String(value.name ?? value.email ?? value.id ?? '?')
   }
   if (field.field_type === 'boolean') return value ? '✓' : '-'
   if (field.field_type === 'date' || field.field_type === 'datetime') {
@@ -42,13 +36,14 @@ export function formatCell(value: unknown, field: Field): string {
     return '-'
   }
 
-  const displayType = field.options?.display_type as string | undefined
+  const displayType = getDisplayType(field)
 
   // Number display subtypes
   if ((field.field_type === 'number' || field.field_type === 'integer') && displayType) {
+    const numOpts = getFieldOptions(field, 'number')
     const num = Number(value)
     if (displayType === 'currency') {
-      const code = (field.options?.currency_code as string) || 'KRW'
+      const code = numOpts?.currency_code || 'KRW'
       try {
         return num.toLocaleString('ko-KR', { style: 'currency', currency: code })
       } catch {
@@ -57,7 +52,7 @@ export function formatCell(value: unknown, field: Field): string {
     }
     if (displayType === 'percent') return `${num}%`
     if (displayType === 'rating') {
-      const max = (field.options?.max_rating as number) || 5
+      const max = numOpts?.max_rating || 5
       return '★'.repeat(Math.min(num, max)) + '☆'.repeat(Math.max(0, max - num))
     }
     if (displayType === 'progress') return `${num}%`
@@ -75,11 +70,12 @@ export function formatCell(value: unknown, field: Field): string {
 
   // Formula fields: format based on result_type in options.
   if (field.field_type === 'formula') {
-    const resultType = field.options?.result_type as string | undefined
+    const formulaOpts = getFieldOptions(field, 'formula')
+    const resultType = formulaOpts?.result_type
     if (resultType === 'number' || resultType === 'integer') {
       const num = Number(value)
       if (!isNaN(num)) {
-        const precision = (field.options?.precision as number) ?? undefined
+        const precision = formulaOpts?.precision
         return precision !== undefined
           ? num.toLocaleString('ko-KR', { minimumFractionDigits: precision, maximumFractionDigits: precision })
           : num.toLocaleString('ko-KR')

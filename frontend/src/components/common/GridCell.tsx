@@ -102,7 +102,7 @@ export default function GridCell({
 
     // Select — dropdown.
     if (fieldType === 'select') {
-      const choices = ((fieldOptions?.choices ?? []) as string[])
+      const choices = (Array.isArray(fieldOptions?.choices) ? fieldOptions.choices : []) as string[]
       return (
         <Select
           defaultValue={rawValue == null ? '' : String(rawValue)}

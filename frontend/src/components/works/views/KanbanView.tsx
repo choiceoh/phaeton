@@ -13,14 +13,16 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { Ban, LayoutGrid, Loader2, Plus } from 'lucide-react'
+import { Ban, ChevronRight, ChevronDown, LayoutGrid, Loader2, Plus } from 'lucide-react'
 
 import EmptyState from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useKanbanView, type KanbanColumn } from '@/hooks/useEntries'
-import type { Field } from '@/lib/types'
+import { formatCell } from '@/lib/formatCell'
+import { isLayoutType } from '@/lib/constants'
+import type { EntryRow, Field } from '@/lib/types'
 
 interface Props {
   slug: string
@@ -28,24 +30,26 @@ interface Props {
   fields: Field[]
   filters?: Record<string, string>
   onCardClick: (entry: Record<string, unknown>) => void
-  onCardMove?: (entryId: string, newValue: string) => void
+  onCardMove?: (entryId: string, newValue: string, oldValue: string) => void
   onAddEntry?: () => void
 }
 
 function SortableCard({
   entry,
   titleField,
+  cardFields,
   onClick,
   justDropped,
   justCancelled,
-  focused,
+  isFocused,
 }: {
   entry: Record<string, unknown>
   titleField: Field | undefined
+  cardFields: Field[]
   onClick: () => void
   justDropped?: boolean
   justCancelled?: boolean
-  focused?: boolean
+  isFocused?: boolean
 }) {
   const id = String(entry.id)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -55,10 +59,8 @@ function SortableCard({
   const cardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (focused) {
-      cardRef.current?.scrollIntoView({ block: 'nearest' })
-    }
-  }, [focused])
+    if (isFocused) cardRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [isFocused])
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -75,9 +77,8 @@ function SortableCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`cursor-grab p-3 transition-colors hover:bg-accent active:cursor-grabbing ${justDropped ? 'animate-scale-bounce' : justCancelled ? 'animate-spring-back' : ''} ${focused ? 'ring-2 ring-ring' : ''}`}
+      className={`cursor-grab p-3 transition-colors hover:bg-accent active:cursor-grabbing ${justDropped ? 'animate-scale-bounce' : justCancelled ? 'animate-spring-back' : ''} ${isFocused ? 'ring-2 ring-primary ring-offset-1' : ''}`}
       onClick={(e) => {
-        // Only fire click if it wasn't a drag.
         if (!isDragging) {
           e.stopPropagation()
           onClick()
@@ -89,6 +90,17 @@ function SortableCard({
           ? String(entry[titleField.slug] || '제목 없음')
           : `#${String(entry.id).slice(0, 8)}`}
       </p>
+      {/* Additional field summaries */}
+      {cardFields.map((f) => {
+        const val = entry[f.slug]
+        if (val == null || val === '') return null
+        return (
+          <p key={f.slug} className="mt-0.5 truncate text-xs text-muted-foreground">
+            <span className="font-medium">{f.label}:</span>{' '}
+            {formatCell(val, f)}
+          </p>
+        )
+      })}
       <p className="mt-1 text-xs text-muted-foreground">
         {entry.created_at
           ? new Date(entry.created_at as string).toLocaleDateString('ko')
@@ -101,29 +113,63 @@ function SortableCard({
 function DroppableColumn({
   column,
   titleField,
+  cardFields,
   onCardClick,
   droppedId,
   cancelledId,
   dropState,
   isDropTarget,
-  focusedEntryId,
+  collapsed,
+  onToggleCollapse,
+  focusedCardId,
 }: {
   column: KanbanColumn
   titleField: Field | undefined
+  cardFields: Field[]
   onCardClick: (entry: Record<string, unknown>) => void
   droppedId?: string | null
   cancelledId?: string | null
   dropState: 'idle' | 'allowed' | 'blocked'
   isDropTarget?: boolean
-  focusedEntryId?: string | null
+  collapsed: boolean
+  onToggleCollapse: () => void
+  focusedCardId?: string | null
 }) {
   const ids = column.entries.map((e) => String(e.id))
+  const count = column.entries.length
+
+  if (collapsed) {
+    return (
+      <div className="min-w-[48px] flex-shrink-0 snap-center">
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            className="rounded p-0.5 hover:bg-accent"
+            onClick={onToggleCollapse}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <Badge variant="secondary" className="py-2" style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)' }}>
+            {column.label}
+          </Badge>
+          <span className="text-xs text-muted-foreground">{count}</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-w-[240px] flex-shrink-0 snap-center">
       <div className="mb-2 flex items-center gap-2">
+        <button
+          type="button"
+          className="rounded p-0.5 hover:bg-accent"
+          onClick={onToggleCollapse}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
         <Badge variant="secondary">{column.label}</Badge>
-        <span className="text-xs text-muted-foreground">{column.entries.length}</span>
+        <span className="text-xs text-muted-foreground">{count}</span>
         {dropState === 'blocked' && (
           <Ban className="h-3.5 w-3.5 text-muted-foreground/50" />
         )}
@@ -143,10 +189,11 @@ function DroppableColumn({
               key={String(entry.id)}
               entry={entry}
               titleField={titleField}
+              cardFields={cardFields}
               onClick={() => onCardClick(entry)}
               justDropped={droppedId === String(entry.id)}
               justCancelled={cancelledId === String(entry.id)}
-              focused={focusedEntryId === String(entry.id)}
+              isFocused={focusedCardId === String(entry.id)}
             />
           ))}
           {column.entries.length === 0 && (
@@ -187,60 +234,40 @@ export default function KanbanView({
   }, [serverAllowedMoves])
 
   const choices = columns.map((c) => c.value)
+
+  // Card fields: first 3 non-layout, non-title, non-groupField visible fields
   const titleField = fields.find((f) => f.field_type === 'text')
+  const cardFields = useMemo(() => {
+    return fields
+      .filter((f) =>
+        !isLayoutType(f.field_type) &&
+        f.slug !== titleField?.slug &&
+        f.slug !== groupField.slug &&
+        f.field_type !== 'file' &&
+        f.field_type !== 'json',
+      )
+      .slice(0, 3)
+  }, [fields, titleField?.slug, groupField.slug])
+
   const [activeEntry, setActiveEntry] = useState<Record<string, unknown> | null>(null)
   const [droppedId, setDroppedId] = useState<string | null>(null)
   const [cancelledId, setCancelledId] = useState<string | null>(null)
   const [fromColumn, setFromColumn] = useState<string | null>(null)
   const [overColumnValue, setOverColumnValue] = useState<string | null>(null)
-  const [focusedPos, setFocusedPos] = useState<{ col: number; row: number } | null>(null)
-  const boardRef = useRef<HTMLDivElement>(null)
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set())
 
-  const handleBoardKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (columns.length === 0) return
-      const pos = focusedPos ?? { col: 0, row: 0 }
+  // Keyboard navigation state
+  const [focusedCol, setFocusedCol] = useState<number>(-1)
+  const [focusedCard, setFocusedCard] = useState<number>(-1)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-      let nextCol = pos.col
-      let nextRow = pos.row
-
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault()
-          nextRow = Math.min(pos.row + 1, (columns[pos.col]?.entries.length ?? 1) - 1)
-          break
-        case 'ArrowUp':
-          e.preventDefault()
-          nextRow = Math.max(pos.row - 1, 0)
-          break
-        case 'ArrowRight':
-          e.preventDefault()
-          nextCol = Math.min(pos.col + 1, columns.length - 1)
-          nextRow = Math.min(pos.row, (columns[nextCol]?.entries.length ?? 1) - 1)
-          break
-        case 'ArrowLeft':
-          e.preventDefault()
-          nextCol = Math.max(pos.col - 1, 0)
-          nextRow = Math.min(pos.row, (columns[nextCol]?.entries.length ?? 1) - 1)
-          break
-        case 'Enter': {
-          e.preventDefault()
-          const entry = columns[pos.col]?.entries[pos.row]
-          if (entry) onCardClick(entry)
-          return
-        }
-        case 'Escape':
-          setFocusedPos(null)
-          return
-        default:
-          return
-      }
-
-      if (nextRow < 0) nextRow = 0
-      setFocusedPos({ col: nextCol, row: nextRow })
-    },
-    [columns, focusedPos, onCardClick],
-  )
+  const focusedCardId = useMemo(() => {
+    if (focusedCol < 0 || focusedCard < 0) return null
+    const col = columns[focusedCol]
+    if (!col) return null
+    const entry = col.entries[focusedCard]
+    return entry ? String(entry.id) : null
+  }, [focusedCol, focusedCard, columns])
 
   useEffect(() => {
     if (!droppedId) return
@@ -258,7 +285,6 @@ export default function KanbanView({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   )
 
-  // Compute which columns are allowed/blocked during drag
   const columnDropStates = useMemo(() => {
     const states = new Map<string, 'idle' | 'allowed' | 'blocked'>()
     if (!fromColumn || !allowedMoves) {
@@ -274,7 +300,6 @@ export default function KanbanView({
       } else if (allowed) {
         states.set(c.value, 'blocked')
       } else {
-        // No restriction map for this source → all allowed
         states.set(c.value, 'allowed')
       }
     })
@@ -284,14 +309,13 @@ export default function KanbanView({
   function findColumnValue(entryId: string): string | undefined {
     for (const col of columns) {
       if (col.entries.some((e) => String(e.id) === entryId)) return col.value
-      // The over target might be the column id itself.
       if (col.value === entryId) return col.value
     }
     return undefined
   }
 
   function handleDragStart(event: DragStartEvent) {
-    const entry = event.active.data.current?.entry as Record<string, unknown> | undefined
+    const entry = event.active.data.current?.entry as EntryRow | undefined
     setActiveEntry(entry ?? null)
     if (entry) {
       const col = findColumnValue(String(entry.id))
@@ -324,9 +348,7 @@ export default function KanbanView({
     const overId = String(over.id)
 
     const fromCol = findColumnValue(activeId)
-    // over can be a card id or a column (SortableContext) id.
     let toCol = findColumnValue(overId)
-    // If overId matches a column value directly, use that.
     if (choices.includes(overId) || overId === '__none__') {
       toCol = overId
     }
@@ -346,8 +368,56 @@ export default function KanbanView({
     }
 
     setDroppedId(activeId)
-    onCardMove(activeId, toCol === '__none__' ? '' : toCol)
+    onCardMove(activeId, toCol === '__none__' ? '' : toCol, fromCol ?? '')
   }
+
+  // Keyboard navigation handler
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (columns.length === 0) return
+    const { key } = e
+
+    if (key === 'ArrowRight') {
+      e.preventDefault()
+      setFocusedCol((prev) => {
+        const next = Math.min(prev + 1, columns.length - 1)
+        setFocusedCard(0)
+        return next
+      })
+    } else if (key === 'ArrowLeft') {
+      e.preventDefault()
+      setFocusedCol((prev) => {
+        const next = Math.max(prev - 1, 0)
+        setFocusedCard(0)
+        return next
+      })
+    } else if (key === 'ArrowDown') {
+      e.preventDefault()
+      setFocusedCard((prev) => {
+        const col = columns[focusedCol]
+        if (!col) return prev
+        return Math.min(prev + 1, col.entries.length - 1)
+      })
+    } else if (key === 'ArrowUp') {
+      e.preventDefault()
+      setFocusedCard((prev) => Math.max(prev - 1, 0))
+    } else if (key === 'Enter') {
+      e.preventDefault()
+      const col = columns[focusedCol]
+      if (col) {
+        const entry = col.entries[focusedCard]
+        if (entry) onCardClick(entry)
+      }
+    }
+  }, [columns, focusedCol, focusedCard, onCardClick])
+
+  const toggleCollapse = useCallback((value: string) => {
+    setCollapsedColumns((prev) => {
+      const next = new Set(prev)
+      if (next.has(value)) next.delete(value)
+      else next.add(value)
+      return next
+    })
+  }, [])
 
   if (isLoading) {
     return (
@@ -356,10 +426,6 @@ export default function KanbanView({
       </div>
     )
   }
-
-  const focusedEntryId = focusedPos
-    ? String(columns[focusedPos.col]?.entries[focusedPos.row]?.id ?? '')
-    : null
 
   const totalEntries = columns.reduce((sum, c) => sum + c.entries.length, 0)
   if (totalEntries === 0) {
@@ -386,23 +452,27 @@ export default function KanbanView({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
-        ref={boardRef}
+        ref={containerRef}
+        className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4 sm:snap-none animate-fade-in focus:outline-none"
         tabIndex={0}
-        onKeyDown={handleBoardKeyDown}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4 sm:snap-none animate-fade-in outline-none"
+        onKeyDown={handleKeyDown}
       >
-        {columns.map((col) => (
+        {columns.map((col, ci) => (
           <DroppableColumn
             key={col.value}
             column={col}
             titleField={titleField}
+            cardFields={cardFields}
             onCardClick={onCardClick}
             droppedId={droppedId}
             cancelledId={cancelledId}
             dropState={columnDropStates.get(col.value) ?? 'idle'}
             isDropTarget={overColumnValue === col.value}
-            focusedEntryId={focusedEntryId}
+            collapsed={collapsedColumns.has(col.value)}
+            onToggleCollapse={() => toggleCollapse(col.value)}
+            focusedCardId={focusedCol === ci ? focusedCardId : null}
           />
         ))}
       </div>
