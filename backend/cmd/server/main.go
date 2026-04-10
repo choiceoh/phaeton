@@ -120,11 +120,12 @@ func run() int {
 	// Forward bus events to SSE broker.
 	bus.Subscribe(func(_ context.Context, ev events.Event) {
 		sseBroker.Broadcast(events.SSEMessage{
-			Type:         string(ev.Type),
-			CollectionID: ev.CollectionID,
-			RecordID:     ev.RecordID,
-			ActorUserID:  ev.ActorUserID,
-			ActorName:    ev.ActorName,
+			Type:           string(ev.Type),
+			CollectionID:   ev.CollectionID,
+			CollectionSlug: ev.CollectionSlug,
+			RecordID:       ev.RecordID,
+			ActorUserID:    ev.ActorUserID,
+			ActorName:      ev.ActorName,
 		})
 	})
 
