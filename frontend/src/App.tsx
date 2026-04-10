@@ -14,6 +14,7 @@ import ProcessPage from '@/pages/ProcessPage'
 import RelationshipPage from '@/pages/RelationshipPage'
 import SettingsPage from '@/pages/SettingsPage'
 import AppViewPage from '@/pages/AppViewPage'
+import EntryPage from '@/pages/EntryPage'
 import LoginPage from '@/pages/LoginPage'
 import MigrationHistoryPage from '@/pages/MigrationHistoryPage'
 import NotFoundPage from '@/pages/NotFoundPage'
@@ -32,6 +33,8 @@ export default function App() {
         <Route path="/apps/relationships" element={<RelationshipPage />} />
         <Route path="/apps/new" element={<AppBuilderPage />} />
         <Route path="/apps/:appId" element={<AppViewPage />} />
+        <Route path="/apps/:appId/entries/new" element={<EntryPage />} />
+        <Route path="/apps/:appId/entries/:entryId" element={<EntryPage />} />
         <Route path="/apps/:appId/dashboard" element={<DashboardPage />} />
         <Route path="/apps/:appId/interface" element={<InterfaceDesignerPage />} />
         <Route path="/apps/:appId/settings" element={<AppSettingsPage />} />
