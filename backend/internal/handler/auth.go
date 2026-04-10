@@ -525,9 +525,11 @@ func UpdateMe(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		var input struct {
-			Name   *string `json:"name"`
-			Phone  *string `json:"phone"`
-			Avatar *string `json:"avatar"`
+			Name     *string `json:"name"`
+			Phone    *string `json:"phone"`
+			Avatar   *string `json:"avatar"`
+			Position *string `json:"position"`
+			Title    *string `json:"title"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			apierr.BadRequest("invalid request body").Write(w)
@@ -556,6 +558,16 @@ func UpdateMe(pool *pgxpool.Pool) http.HandlerFunc {
 		if input.Avatar != nil {
 			sets = append(sets, fmt.Sprintf("avatar = $%d", n))
 			args = append(args, *input.Avatar)
+			n++
+		}
+		if input.Position != nil {
+			sets = append(sets, fmt.Sprintf("position = $%d", n))
+			args = append(args, *input.Position)
+			n++
+		}
+		if input.Title != nil {
+			sets = append(sets, fmt.Sprintf("title = $%d", n))
+			args = append(args, *input.Title)
 			n++
 		}
 
