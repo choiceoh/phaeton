@@ -215,6 +215,60 @@ func checkUserExists(ctx context.Context, pool *pgxpool.Pool, id string) error {
 	return nil
 }
 
+// checkTransitions verifies that any select field changes on a process-enabled
+// collection comply with the defined transition rules.
+func checkTransitions(
+	oldRow map[string]any,
+	body map[string]any,
+	fields []schema.Field,
+	userRole string,
+) error {
+	for _, f := range fields {
+		if f.FieldType != schema.FieldSelect {
+			continue
+		}
+		newVal, changing := body[f.Slug]
+		if !changing {
+			continue
+		}
+
+		transitions, err := schema.ExtractTransitions(f.Options)
+		if err != nil || len(transitions) == 0 {
+			continue
+		}
+
+		newStr, _ := newVal.(string)
+		oldStr, _ := oldRow[f.Slug].(string)
+		if newStr == oldStr {
+			continue
+		}
+
+		// Find a matching transition rule.
+		allowed := false
+		for _, t := range transitions {
+			if t.From == oldStr && t.To == newStr {
+				for _, r := range t.AllowedRoles {
+					if r == userRole {
+						allowed = true
+						break
+					}
+				}
+				if !allowed {
+					return fmt.Errorf("%w: role %q cannot transition %q from %q to %q",
+						schema.ErrInvalidInput, userRole, f.Slug, oldStr, newStr)
+				}
+				break
+			}
+		}
+		// If transitions are defined but no rule matches this from→to, block it.
+		if !allowed {
+			return fmt.Errorf("%w: transition %q → %q is not defined for field %q",
+				schema.ErrInvalidInput, oldStr, newStr, f.Slug)
+		}
+	}
+	return nil
+}
+
 // checkRelationTarget confirms the referenced row exists and is not soft-deleted.
 func checkRelationTarget(ctx context.Context, pool *pgxpool.Pool, cache *schema.Cache, targetCollectionID, id string) error {
 	target, ok := cache.CollectionByID(targetCollectionID)

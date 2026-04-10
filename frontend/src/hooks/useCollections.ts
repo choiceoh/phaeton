@@ -40,6 +40,18 @@ export function useCreateCollection() {
   })
 }
 
+export function useUpdateCollection(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: Partial<Pick<Collection, 'label' | 'description' | 'icon' | 'sort_order' | 'process_enabled'>>) =>
+      api.patch<Collection>(`/schema/collections/${id}`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.collections.detail(id) })
+      qc.invalidateQueries({ queryKey: queryKeys.collections.list() })
+    },
+  })
+}
+
 export function useDeleteCollection() {
   const qc = useQueryClient()
   return useMutation({
