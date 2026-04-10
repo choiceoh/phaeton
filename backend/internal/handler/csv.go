@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -148,6 +149,12 @@ func (h *DynHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 		byLabel[f.Label] = f
 	}
 
+	// Optional: AI-provided column mapping (header → slug).
+	var aiMap map[string]string
+	if cm := r.FormValue("column_map"); cm != "" {
+		_ = json.Unmarshal([]byte(cm), &aiMap)
+	}
+
 	type colMapping struct {
 		idx   int
 		field schema.Field
@@ -163,6 +170,13 @@ func (h *DynHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 			mappings = append(mappings, colMapping{idx: i, field: f})
 		} else if f, ok := byLabel[h]; ok {
 			mappings = append(mappings, colMapping{idx: i, field: f})
+		} else if aiMap != nil {
+			// Fall back to AI-provided mapping.
+			if slug, ok := aiMap[h]; ok {
+				if f, ok := bySlug[slug]; ok {
+					mappings = append(mappings, colMapping{idx: i, field: f})
+				}
+			}
 		}
 		// Skip unrecognized columns silently.
 	}

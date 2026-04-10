@@ -320,13 +320,13 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 		r.Patch("/api/users/{id}", handler.UpdateUser(cfg.pool))
 
 		// Subsidiaries.
-		r.Get("/api/subsidiaries", handler.ListSubsidiaries(pool))
-		r.Get("/api/subsidiaries/{id}", handler.GetSubsidiary(pool))
+		r.Get("/api/subsidiaries", handler.ListSubsidiaries(cfg.pool))
+		r.Get("/api/subsidiaries/{id}", handler.GetSubsidiary(cfg.pool))
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRole("director"))
-			r.Post("/api/subsidiaries", handler.CreateSubsidiary(pool))
-			r.Patch("/api/subsidiaries/{id}", handler.UpdateSubsidiary(pool))
-			r.Delete("/api/subsidiaries/{id}", handler.DeleteSubsidiary(pool))
+			r.Post("/api/subsidiaries", handler.CreateSubsidiary(cfg.pool))
+			r.Patch("/api/subsidiaries/{id}", handler.UpdateSubsidiary(cfg.pool))
+			r.Delete("/api/subsidiaries/{id}", handler.DeleteSubsidiary(cfg.pool))
 		})
 
 		// Departments.
@@ -407,6 +407,8 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 		r.Route("/api/data", func(r chi.Router) {
 			r.Use(middleware.CollectionAccess(cfg.pool))
 			r.Get("/{slug}", cfg.dynH.List)
+			r.Get("/{slug}/defaults", cfg.dynH.GetDefaults)
+			r.Get("/{slug}/similar", cfg.dynH.SimilarRecords)
 			r.Get("/{slug}/aggregate", cfg.dynH.Aggregate)
 			r.Post("/{slug}/aggregate/batch", cfg.dynH.BatchAggregate)
 			r.Get("/{slug}/export.csv", cfg.dynH.ExportCSV)
@@ -446,6 +448,11 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 		r.Post("/api/ai/chat", cfg.aiH.Chat)
 		r.Post("/api/ai/generate-slug", cfg.aiH.GenerateSlug)
 		r.Post("/api/ai/build-automation/{id}", cfg.aiH.BuildAutomation)
+		r.Post("/api/ai/build-formula/{slug}", cfg.aiH.BuildFormula)
+		r.Post("/api/ai/build-filter/{slug}", cfg.aiH.BuildFilter)
+		r.Post("/api/ai/prefill/{slug}", cfg.aiH.Prefill)
+		r.Post("/api/ai/map-csv-columns/{slug}", cfg.aiH.MapCSVColumns)
+		r.Post("/api/ai/build-chart/{id}", cfg.aiH.BuildChart)
 
 		// Notifications
 		r.Get("/api/notifications", cfg.notifH.List)

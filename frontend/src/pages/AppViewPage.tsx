@@ -60,12 +60,14 @@ import {
   useCreateEntry,
   useDeleteEntry,
   useEntries,
+  useEntryDefaults,
   useUpdateEntry,
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
-import { ApiError, formatError } from '@/lib/api'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
+import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { FilterCondition, SavedView } from '@/lib/types'
@@ -183,6 +185,8 @@ export default function AppViewPage() {
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
+  const { data: entryDefaults } = useEntryDefaults(collection?.slug)
+  const aiAvailable = useAIAvailable()
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
@@ -563,11 +567,15 @@ export default function AppViewPage() {
   const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !collection) return
-    const formData = new FormData()
-    formData.append('file', file)
     setImportingCSV(true)
     const toastId = toast.loading('CSV 가져오는 중...')
-    try {
+
+    const doImport = async (columnMap?: Record<string, string>) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      if (columnMap) {
+        formData.append('column_map', JSON.stringify(columnMap))
+      }
       const res = await fetch(`/api/data/${collection.slug}/import`, {
         method: 'POST',
         body: formData,
@@ -577,7 +585,39 @@ export default function AppViewPage() {
         const body = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(body.error || body.message || res.statusText)
       }
-      const result = await res.json()
+      return res.json()
+    }
+
+    try {
+      let result: any
+      try {
+        result = await doImport()
+      } catch (err) {
+        // If column matching failed and AI is available, try AI mapping.
+        const msg = err instanceof Error ? err.message : ''
+        if (msg.includes('no CSV columns matched') && aiAvailable) {
+          toast.loading('컬럼 자동 매핑 중...', { id: toastId })
+          // Read CSV headers from the file.
+          const text = await file.text()
+          const firstLine = text.split('\n')[0]?.replace(/^\xef\xbb\xbf/, '') ?? ''
+          const headers = firstLine.split(',').map((h) => h.trim().replace(/^"|"$/g, ''))
+          if (headers.length > 0) {
+            const columnMap = await api.post<Record<string, string>>(
+              `/ai/map-csv-columns/${collection.slug}`,
+              { headers },
+            )
+            if (Object.keys(columnMap).length > 0) {
+              result = await doImport(columnMap)
+            } else {
+              throw err
+            }
+          } else {
+            throw err
+          }
+        } else {
+          throw err
+        }
+      }
       const count = result.data?.imported ?? 0
       toast.success(`${count}건 가져왔습니다`, { id: toastId })
       setImportedCount(count)
@@ -589,7 +629,7 @@ export default function AppViewPage() {
       setImportingCSV(false)
       e.target.value = ''
     }
-  }, [collection, refetch])
+  }, [collection, refetch, aiAvailable])
 
   const dateFields = useMemo(
     () => collection?.fields?.filter((f) => f.field_type === 'date' || f.field_type === 'datetime') ?? [],
@@ -810,6 +850,7 @@ export default function AppViewPage() {
           <FilterBuilder
             fields={collection.fields ?? []}
             conditions={filterConditions}
+            slug={collection.slug}
             onChange={(conds) => {
               setFilterConditions(conds)
               setPage(1)
@@ -1203,7 +1244,7 @@ export default function AppViewPage() {
         onClose={() => setSheetOpen(false)}
         fields={collection.fields ?? []}
         slug={collection.slug}
-        initialData={editEntry}
+        initialData={editEntry ?? (entryDefaults && Object.keys(entryDefaults).length > 0 ? entryDefaults : undefined)}
         onSubmit={handleSubmit}
         submitting={createEntry.isPending || updateEntry.isPending}
         title={editEntry ? `${TERM.record} 편집` : TERM.newRecord}
