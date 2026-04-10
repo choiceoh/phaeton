@@ -86,6 +86,7 @@ import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
+import { useConflictAwareUpdate } from '@/hooks/useConflictAwareUpdate'
 import { useRetryToast } from '@/hooks/useRetryToast'
 import { useUndoToast } from '@/hooks/useUndoToast'
 import { api, ApiError, formatError } from '@/lib/api'
@@ -239,6 +240,7 @@ export default function AppViewPage() {
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
   const undoToast = useUndoToast()
   const retryToast = useRetryToast()
+  const onConflictError = useConflictAwareUpdate(refetch)
 
   // Multi-select state for bulk operations.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
@@ -654,14 +656,7 @@ export default function AppViewPage() {
       { id: entryId, body: updates },
       {
         onSuccess: () => toast.success('일정이 변경되었습니다'),
-        onError: (err) => {
-          if (err instanceof ApiError && err.isConflict()) {
-            toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
-            refetch()
-          } else {
-            toast.error(formatError(err))
-          }
-        },
+        onError: (err) => onConflictError(err),
       },
     )
   }
@@ -675,14 +670,7 @@ export default function AppViewPage() {
         { id: entryId, body: data },
         {
           onSuccess: () => toast.success('수정되었습니다'),
-          onError: (err) => {
-            if (err instanceof ApiError && err.isConflict()) {
-              toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
-              refetch()
-            } else {
-              toast.error(formatError(err))
-            }
-          },
+          onError: (err) => onConflictError(err),
         },
       )
     } else {
@@ -708,14 +696,7 @@ export default function AppViewPage() {
             () => updateEntry.mutate({ id: entryId, body: { [selectField.slug]: newValue } }),
           )
         },
-        onError: (err) => {
-          if (err instanceof ApiError && err.isConflict()) {
-            toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
-            refetch()
-          } else {
-            retryToast(err, () => handleCardMove(entryId, newValue, oldValue))
-          }
-        },
+        onError: (err) => onConflictError(err, () => retryToast(err, () => handleCardMove(entryId, newValue, oldValue))),
       },
     )
   }
@@ -734,14 +715,7 @@ export default function AppViewPage() {
             () => updateEntry.mutate({ id: entryId, body: { _status: newValue } }),
           )
         },
-        onError: (err) => {
-          if (err instanceof ApiError && err.isConflict()) {
-            toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
-            refetch()
-          } else {
-            toast.error(formatError(err))
-          }
-        },
+        onError: (err) => onConflictError(err),
       },
     )
   }
@@ -825,14 +799,7 @@ export default function AppViewPage() {
         setSelectedRowIds(new Set())
         setBulkEditOpen(false)
       },
-      onError: (err) => {
-        if (err instanceof ApiError && err.isConflict()) {
-          toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
-          refetch()
-        } else {
-          toast.error(formatError(err))
-        }
-      },
+      onError: (err) => onConflictError(err),
     })
   }
 

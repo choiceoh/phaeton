@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -21,6 +22,14 @@ import (
 	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
+
+// querier is satisfied by both *pgxpool.Pool and pgx.Tx, allowing
+// helpers like syncM2MLinks to run inside or outside a transaction.
+type querier interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
 
 // DynHandler serves the Dynamic API (/api/data/...).
 // It builds SQL queries at runtime based on the meta-table cache.
@@ -343,7 +352,14 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
-	rows, err := h.pool.Query(r.Context(), sql, args...)
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	rows, err := tx.Query(r.Context(), sql, args...)
 	if err != nil {
 		handleErr(w, r, err)
 		return
@@ -370,12 +386,17 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 			if !exists {
 				continue
 			}
-			if err := h.syncM2MLinks(r.Context(), col.Slug, f, recID, ids); err != nil {
+			if err := h.syncM2MLinks(r.Context(), tx, col.Slug, f, recID, ids); err != nil {
 				handleErr(w, r, err)
 				return
 			}
 			records[0][f.Slug] = ids
 		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		handleErr(w, r, err)
+		return
 	}
 
 	// Record change history.
@@ -587,7 +608,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		if !exists {
 			continue
 		}
-		if err := h.syncM2MLinks(r.Context(), col.Slug, f, id, ids); err != nil {
+		if err := h.syncM2MLinks(r.Context(), h.pool, col.Slug, f, id, ids); err != nil {
 			handleErr(w, r, err)
 			return
 		}
@@ -2178,7 +2199,7 @@ func m2mJunctionInfo(ownerSlug string, f schema.Field, cache *schema.Cache) (jun
 
 // syncM2MLinks replaces all links for a record in a junction table.
 // It deletes existing links and inserts the new set.
-func (h *DynHandler) syncM2MLinks(ctx context.Context, ownerSlug string, f schema.Field, recordID string, targetIDs []string) error {
+func (h *DynHandler) syncM2MLinks(ctx context.Context, db querier, ownerSlug string, f schema.Field, recordID string, targetIDs []string) error {
 	junc, ownerCol, targetCol, ok := m2mJunctionInfo(ownerSlug, f, h.cache)
 	if !ok {
 		return fmt.Errorf("m2m: cannot resolve junction for field %q", f.Slug)
@@ -2188,7 +2209,7 @@ func (h *DynHandler) syncM2MLinks(ctx context.Context, ownerSlug string, f schem
 
 	// Delete existing links.
 	delSQL := fmt.Sprintf("DELETE FROM %s WHERE %q = $1", qTable, ownerCol)
-	if _, err := h.pool.Exec(ctx, delSQL, recordID); err != nil {
+	if _, err := db.Exec(ctx, delSQL, recordID); err != nil {
 		return fmt.Errorf("m2m delete: %w", err)
 	}
 
@@ -2205,7 +2226,7 @@ func (h *DynHandler) syncM2MLinks(ctx context.Context, ownerSlug string, f schem
 	}
 	insSQL := fmt.Sprintf("INSERT INTO %s (%q, %q) VALUES %s ON CONFLICT DO NOTHING",
 		qTable, ownerCol, targetCol, strings.Join(vals, ", "))
-	if _, err := h.pool.Exec(ctx, insSQL, args...); err != nil {
+	if _, err := db.Exec(ctx, insSQL, args...); err != nil {
 		return fmt.Errorf("m2m insert: %w", err)
 	}
 	return nil
