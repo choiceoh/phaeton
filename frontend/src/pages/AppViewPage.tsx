@@ -12,6 +12,7 @@ import {
   Power,
   PowerOff,
   Search,
+  Trash2,
   Upload,
   X,
   Ellipsis,
@@ -52,6 +53,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
   useBatchUpdateEntry,
+  useBulkDeleteEntries,
   useCreateEntry,
   useDeleteEntry,
   useEntries,
@@ -114,15 +116,27 @@ export default function AppViewPage() {
   const createSavedView = useCreateSavedView(collection?.id ?? '')
   const deleteSavedView = useDeleteSavedView(collection?.id ?? '')
 
-  // Build sort param from either column header sorting or sort panel.
+  // Build sort param — only one source is active at a time.
   const sortParam = useMemo(() => {
-    // Sort panel takes precedence if set.
     if (sortItems.length > 0) {
       return sortItems.map((s) => `${s.desc ? '-' : ''}${s.field}`).join(',')
     }
     if (sorting.length === 0) return undefined
     return sorting.map((s) => `${s.desc ? '-' : ''}${s.id}`).join(',')
   }, [sorting, sortItems])
+
+  // When column header sort changes, clear sort panel.
+  const handleHeaderSortChange = useCallback((next: SortingState) => {
+    setSorting(next)
+    if (next.length > 0) setSortItems([])
+  }, [])
+
+  // When sort panel changes, clear column header sort.
+  const handleSortPanelChange = useCallback((items: SortItem[]) => {
+    setSortItems(items)
+    if (items.length > 0) setSorting([])
+    setPage(1)
+  }, [])
 
   // Build filters from conditions + search text.
   const filters = useMemo(() => {
@@ -159,6 +173,11 @@ export default function AppViewPage() {
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
+  const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
+
+  // Multi-select state for bulk operations.
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
   // Detect views.
   const selectField = useMemo(
@@ -200,8 +219,10 @@ export default function AppViewPage() {
       if (values.length === 0) continue
       const sum = values.reduce((a, b) => a + b, 0)
       const avg = sum / values.length
+      const isAllOnePage = list?.total != null && list.data.length >= list.total
+      const scopeLabel = isAllOnePage ? '' : ' (현재 페이지)'
       summary[f.slug] = {
-        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })}`,
+        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })}${scopeLabel}`,
         value: sum,
       }
     }
@@ -240,7 +261,6 @@ export default function AppViewPage() {
     cols.push(
       ...collection.fields
         .filter((f) => !isLayoutType(f.field_type))
-        .slice(0, 8)
         .map((f) => ({
           id: f.slug,
           header: f.label,
@@ -427,6 +447,19 @@ export default function AppViewPage() {
     })
   }
 
+  function handleBulkDelete() {
+    const ids = Array.from(selectedRowIds)
+    if (ids.length === 0) return
+    bulkDelete.mutate(ids, {
+      onSuccess: () => {
+        toast.success(`${ids.length}건 삭제되었습니다`)
+        setSelectedRowIds(new Set())
+        setBulkDeleteOpen(false)
+      },
+      onError: (err) => toast.error(formatError(err)),
+    })
+  }
+
   const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !collection) return
@@ -606,10 +639,7 @@ export default function AppViewPage() {
           <SortPanel
             fields={collection.fields ?? []}
             sorts={sortItems}
-            onChange={(items) => {
-              setSortItems(items)
-              setPage(1)
-            }}
+            onChange={handleSortPanelChange}
           />
           {sortItems.length > 0 && (
             <Button
@@ -816,6 +846,30 @@ export default function AppViewPage() {
           )}
 
           <TabsContent value="list" className="mt-0">
+            {selectedRowIds.size > 0 && (
+              <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+                <span className="font-medium">{selectedRowIds.size}건 선택</span>
+                <RoleGate roles={['director', 'pm']}>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-7 gap-1"
+                    onClick={() => setBulkDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    일괄 삭제
+                  </Button>
+                </RoleGate>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => setSelectedRowIds(new Set())}
+                >
+                  선택 해제
+                </Button>
+              </div>
+            )}
             <DataTable
               columns={columns}
               data={list.data}
@@ -824,7 +878,7 @@ export default function AppViewPage() {
               limit={limit}
               onPageChange={setPage}
               onLimitChange={setLimit}
-              onSortChange={setSorting}
+              onSortChange={handleHeaderSortChange}
               onRowClick={handleEntryClick}
               onCellEdit={handleCellEdit}
               onBatchCellEdit={handleBatchCellEdit}
@@ -833,6 +887,9 @@ export default function AppViewPage() {
               emptyDescription={TERM.noRecordsDesc}
               summaryRow={summaryRow}
               toolbar={tableToolbar}
+              selectable
+              selectedRowIds={selectedRowIds}
+              onSelectionChange={setSelectedRowIds}
             />
           </TabsContent>
 
@@ -904,6 +961,17 @@ export default function AppViewPage() {
         confirmLabel="삭제"
         onConfirm={handleDelete}
         loading={deleteEntry.isPending}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => !open && setBulkDeleteOpen(false)}
+        title={`${selectedRowIds.size}건의 ${TERM.record}를 삭제하시겠습니까?`}
+        description="삭제된 데이터는 휴지통에서 복구할 수 있습니다."
+        variant="destructive"
+        confirmLabel={`${selectedRowIds.size}건 삭제`}
+        onConfirm={handleBulkDelete}
+        loading={bulkDelete.isPending}
       />
     </div>
   )

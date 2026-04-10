@@ -107,6 +107,16 @@ export function useDeleteEntry(slug: string) {
   })
 }
 
+export function useBulkDeleteEntries(slug: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => api.del<{ deleted: number }>(`/data/${slug}/bulk`, { ids }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entries.all })
+    },
+  })
+}
+
 // useAggregate fetches aggregate data (count/sum/avg/min/max) for a collection.
 export function useAggregate(
   slug: string | undefined,
