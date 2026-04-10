@@ -1,6 +1,7 @@
 package atomicfile
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,7 +20,7 @@ func TestWriteFileBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	if string(got) != string(data) {
+	if !bytes.Equal(got, data) {
 		t.Errorf("content = %q, want %q", got, data)
 	}
 }

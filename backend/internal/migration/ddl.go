@@ -307,10 +307,6 @@ func GenerateDropStatusColumn(tableSlug string) (up, down []string) {
 
 // ---------- internal helpers ----------
 
-func columnDef(f schema.Field) string {
-	return columnDefWithTable("", f)
-}
-
 func columnDefWithTable(tableSlug string, f schema.Field) string {
 	qCol := quoteIdentSingle(f.Slug)
 	pgType := FieldTypeToPG(f.FieldType)

@@ -80,7 +80,7 @@ func (h *AIHandler) resolveListCollections(ctx context.Context) (string, error) 
 		if c.Description != "" {
 			desc = " — " + c.Description
 		}
-		sb.WriteString(fmt.Sprintf("- %s (slug: %s)%s\n", c.Label, c.Slug, desc))
+		fmt.Fprintf(&sb, "- %s (slug: %s)%s\n", c.Label, c.Slug, desc)
 	}
 	return sb.String(), nil
 }
@@ -99,7 +99,7 @@ func (h *AIHandler) resolveListUsers(ctx context.Context) (string, error) {
 		if err := rows.Scan(&id, &name, &email); err != nil {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("- %s (id: %s, email: %s)\n", name, id, email))
+		fmt.Fprintf(&sb, "- %s (id: %s, email: %s)\n", name, id, email)
 	}
 	if sb.Len() == 0 {
 		return "사용자가 없습니다.", nil
@@ -114,9 +114,9 @@ func (h *AIHandler) resolveGetCollectionFields(ctx context.Context, slug string)
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("## %s (%s)\n", col.Label, col.Slug))
+	fmt.Fprintf(&sb, "## %s (%s)\n", col.Label, col.Slug)
 	if col.Description != "" {
-		sb.WriteString(fmt.Sprintf("설명: %s\n", col.Description))
+		fmt.Fprintf(&sb, "설명: %s\n", col.Description)
 	}
 	if col.ProcessEnabled {
 		sb.WriteString("프로세스(워크플로): 활성화됨\n")
@@ -134,7 +134,7 @@ func (h *AIHandler) resolveGetCollectionFields(ctx context.Context, slug string)
 		if f.IsRequired {
 			req = " [필수]"
 		}
-		sb.WriteString(fmt.Sprintf("- %s (slug: %q, type: %s)%s%s\n", f.Label, f.Slug, f.FieldType, req, opts))
+		fmt.Fprintf(&sb, "- %s (slug: %q, type: %s)%s%s\n", f.Label, f.Slug, f.FieldType, req, opts)
 	}
 	return sb.String(), nil
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -151,5 +152,5 @@ func createDiff(row map[string]any, fields []schema.Field) map[string]any {
 func jsonEqual(a, b any) bool {
 	aj, _ := json.Marshal(a)
 	bj, _ := json.Marshal(b)
-	return string(aj) == string(bj)
+	return bytes.Equal(aj, bj)
 }

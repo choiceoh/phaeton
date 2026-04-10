@@ -221,8 +221,8 @@ func (h *AIHandler) queryAppData(ctx context.Context, slug string, limit int, fi
 
 	// Format results as readable text for AI.
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("## %s (%s) 데이터 조회 결과 — 전체 %d건 중 %d건 표시\n\n",
-		col.Label, col.Slug, total, len(records)))
+	fmt.Fprintf(&sb, "## %s (%s) 데이터 조회 결과 — 전체 %d건 중 %d건 표시\n\n",
+		col.Label, col.Slug, total, len(records))
 
 	if len(records) == 0 {
 		sb.WriteString("(데이터 없음)\n")
@@ -241,7 +241,7 @@ func (h *AIHandler) queryAppData(ctx context.Context, slug string, limit int, fi
 	}
 
 	for i, rec := range records {
-		sb.WriteString(fmt.Sprintf("### 데이터 %d\n", i+1))
+		fmt.Fprintf(&sb, "### 데이터 %d\n", i+1)
 		for _, colName := range selectCols {
 			label := labelMap[colName]
 			if label == "" {
@@ -262,7 +262,7 @@ func (h *AIHandler) queryAppData(ctx context.Context, slug string, limit int, fi
 			default:
 				valStr = fmt.Sprintf("%v", v)
 			}
-			sb.WriteString(fmt.Sprintf("- %s: %s\n", label, valStr))
+			fmt.Fprintf(&sb, "- %s: %s\n", label, valStr)
 		}
 		sb.WriteString("\n")
 	}

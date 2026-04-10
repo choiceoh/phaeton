@@ -909,7 +909,10 @@ export default function AppViewPage() {
       onSuccess: () => {
         setDeleteId(null)
         if (deletedRow) {
-          const { id: _id, _version: _v, created_at: _ca, updated_at: _ua, _optimistic: _o, ...rest } = deletedRow as Record<string, unknown>
+          const row = deletedRow as Record<string, unknown>
+          const rest = Object.fromEntries(
+            Object.entries(row).filter(([k]) => !['id', '_version', 'created_at', 'updated_at', '_optimistic'].includes(k)),
+          )
           undoToast.push(
             '삭제되었습니다',
             () => { createEntry.mutate(rest) },

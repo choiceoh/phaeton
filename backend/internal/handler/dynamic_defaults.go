@@ -51,7 +51,6 @@ func (h *DynHandler) GetDefaults(w http.ResponseWriter, r *http.Request) {
 	// Build a query that fetches mode (most frequent value) for select fields,
 	// and the most recent value for other field types.
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	const recentLimit = 20
 
 	var selectParts []string
 	for _, f := range targets {

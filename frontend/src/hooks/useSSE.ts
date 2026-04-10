@@ -33,7 +33,7 @@ export function useSSE() {
   const qc = useQueryClient()
   const { data: me } = useCurrentUser()
   const meRef = useRef(me)
-  meRef.current = me
+  useEffect(() => { meRef.current = me }, [me])
 
   const retryDelay = useRef(1000)
 

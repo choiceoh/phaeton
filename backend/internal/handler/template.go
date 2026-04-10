@@ -41,31 +41,31 @@ type AppTemplate struct {
 }
 
 type TemplateCollection struct {
-	Slug         string              `json:"slug"`
-	Label        string              `json:"label"`
-	Description  string              `json:"description,omitempty"`
-	Icon         string              `json:"icon,omitempty"`
+	Slug         string               `json:"slug"`
+	Label        string               `json:"label"`
+	Description  string               `json:"description,omitempty"`
+	Icon         string               `json:"icon,omitempty"`
 	AccessConfig *schema.AccessConfig `json:"access_config,omitempty"`
 }
 
 type TemplateField struct {
-	Slug         string          `json:"slug"`
-	Label        string          `json:"label"`
-	FieldType    schema.FieldType `json:"field_type"`
-	IsRequired   bool            `json:"is_required"`
-	IsUnique     bool            `json:"is_unique"`
-	IsIndexed    bool            `json:"is_indexed"`
-	DefaultValue json.RawMessage `json:"default_value,omitempty"`
-	Options      json.RawMessage `json:"options,omitempty"`
-	Width        int16           `json:"width"`
-	Height       int16           `json:"height"`
+	Slug         string            `json:"slug"`
+	Label        string            `json:"label"`
+	FieldType    schema.FieldType  `json:"field_type"`
+	IsRequired   bool              `json:"is_required"`
+	IsUnique     bool              `json:"is_unique"`
+	IsIndexed    bool              `json:"is_indexed"`
+	DefaultValue json.RawMessage   `json:"default_value,omitempty"`
+	Options      json.RawMessage   `json:"options,omitempty"`
+	Width        int16             `json:"width"`
+	Height       int16             `json:"height"`
 	Relation     *TemplateRelation `json:"relation,omitempty"`
 }
 
 type TemplateRelation struct {
-	TargetCollectionSlug string             `json:"target_collection_slug"`
+	TargetCollectionSlug string              `json:"target_collection_slug"`
 	RelationType         schema.RelationType `json:"relation_type"`
-	OnDelete             string             `json:"on_delete,omitempty"`
+	OnDelete             string              `json:"on_delete,omitempty"`
 }
 
 type TemplateView struct {
@@ -77,16 +77,16 @@ type TemplateView struct {
 }
 
 type TemplateProcess struct {
-	IsEnabled   bool                          `json:"is_enabled"`
-	Statuses    []schema.SaveProcessStatusIn  `json:"statuses"`
+	IsEnabled   bool                             `json:"is_enabled"`
+	Statuses    []schema.SaveProcessStatusIn     `json:"statuses"`
 	Transitions []schema.SaveProcessTransitionIn `json:"transitions"`
 }
 
 type TemplateAutomation struct {
-	Name          string          `json:"name"`
-	IsEnabled     bool            `json:"is_enabled"`
-	TriggerType   string          `json:"trigger_type"`
-	TriggerConfig json.RawMessage `json:"trigger_config,omitempty"`
+	Name          string              `json:"name"`
+	IsEnabled     bool                `json:"is_enabled"`
+	TriggerType   string              `json:"trigger_type"`
+	TriggerConfig json.RawMessage     `json:"trigger_config,omitempty"`
 	Conditions    []templateCondition `json:"conditions,omitempty"`
 	Actions       []templateAction    `json:"actions,omitempty"`
 }
@@ -379,8 +379,6 @@ func (h *TemplateHandler) ImportTemplate(w http.ResponseWriter, r *http.Request)
 	// Separate relation and non-relation fields.
 	var normalFields []schema.CreateFieldIn
 	var selfRefFields []TemplateField
-	var externalRelFields []TemplateField
-
 	for _, tf := range tpl.Fields {
 		if tf.Relation == nil {
 			normalFields = append(normalFields, toCreateFieldIn(tf, nil))
@@ -402,7 +400,6 @@ func (h *TemplateHandler) ImportTemplate(w http.ResponseWriter, r *http.Request)
 			normalFields = append(normalFields, toCreateFieldIn(downgraded, nil))
 			continue
 		}
-		externalRelFields = append(externalRelFields, tf)
 		normalFields = append(normalFields, toCreateFieldIn(tf, &schema.CreateRelIn{
 			TargetCollectionID: targetCol.ID,
 			RelationType:       tf.Relation.RelationType,
@@ -515,7 +512,7 @@ func (h *TemplateHandler) ImportTemplate(w http.ResponseWriter, r *http.Request)
 		"collection_id": col.ID,
 		"slug":          col.Slug,
 		"warnings":      warnings,
-		"has_data_loss":  hasDataLoss,
+		"has_data_loss": hasDataLoss,
 	})
 }
 

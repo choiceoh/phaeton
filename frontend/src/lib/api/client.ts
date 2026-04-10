@@ -122,7 +122,9 @@ async function uploadFile(file: File): Promise<UploadResult> {
 export const api = {
   get: <T>(path: string, opts?: RequestOptions) => request<T>('GET', path, undefined, opts),
   getList: <T>(path: string, opts?: RequestOptions) =>
-    request<ListEnvelope<T>>('GET', path, undefined, { ...opts, raw: true }),
+    request<ListEnvelope<T>>('GET', path, undefined, { ...opts, raw: true }).then(
+      (res) => ({ ...res, data: res.data ?? [] }),
+    ),
   post: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>('POST', path, body, opts),
   patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>

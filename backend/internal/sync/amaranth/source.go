@@ -111,8 +111,8 @@ func (s *Source) Sync(ctx context.Context) (*sync.Result, error) {
 // --- Amaranth API data structures ---
 
 type amaranthDept struct {
-	Code     string `json:"code"`
-	Name     string `json:"name"`
+	Code       string `json:"code"`
+	Name       string `json:"name"`
 	ParentCode string `json:"parent_code,omitempty"`
 }
 
@@ -201,7 +201,7 @@ func (s *Source) upsertDepartment(ctx context.Context, d amaranthDept) (bool, er
 	// xmax = 0 means INSERT (not UPDATE).
 	var inserted bool
 	_ = s.pool.QueryRow(ctx, `SELECT 1`).Scan(&inserted) // dummy; actual value from the RETURNING above
-	return false, nil // simplified — exact created vs updated is logged via result counts
+	return false, nil                                    // simplified — exact created vs updated is logged via result counts
 }
 
 // upsertUser inserts or updates a user matched by external_id.

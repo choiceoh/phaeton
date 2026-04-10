@@ -32,9 +32,13 @@ export default function CoachMark({ storageKey, steps }: Props) {
   }, [current, steps])
 
   useEffect(() => {
-    updateRect()
+    // Defer initial measurement to avoid synchronous setState in effect
+    const frame = requestAnimationFrame(() => updateRect())
     window.addEventListener('resize', updateRect)
-    return () => window.removeEventListener('resize', updateRect)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('resize', updateRect)
+    }
   }, [updateRect])
 
   function dismiss() {

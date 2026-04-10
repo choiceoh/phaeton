@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Plus, Trash2, X } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -76,7 +76,9 @@ export default function ProcessFlowDiagram({
   const [selectedTransition, setSelectedTransition] = useState<number | null>(null)
 
   // Initialize positions when statuses change
-  useEffect(() => {
+  const [prevStatusCount, setPrevStatusCount] = useState(statuses.length)
+  if (statuses.length !== prevStatusCount) {
+    setPrevStatusCount(statuses.length)
     const centerY = PADDING + 80
     setPositions(
       statuses.map((_, i) => ({
@@ -86,7 +88,7 @@ export default function ProcessFlowDiagram({
     )
     setConnectFrom(null)
     setSelectedTransition(null)
-  }, [statuses.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   // SVG dimensions
   const svgW = useMemo(() => {

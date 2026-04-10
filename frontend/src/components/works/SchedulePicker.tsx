@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { Label } from '@/components/ui/label'
 import {
@@ -122,7 +122,9 @@ export default function SchedulePicker({ value, onChange }: Props) {
     : ''
 
   // Sync from external value changes (e.g. edit mode)
-  useEffect(() => {
+  const [syncedValue, setSyncedValue] = useState(value)
+  if (value !== syncedValue) {
+    setSyncedValue(value)
     const p = parseCron(value)
     setFrequency(p.frequency)
     setHour(p.hour)
@@ -130,7 +132,7 @@ export default function SchedulePicker({ value, onChange }: Props) {
     setWeekdays(p.weekdays)
     setMonthDay(p.monthDay)
     if (p.frequency === 'custom') setCustomCron(value)
-  }, [value])
+  }
 
   const buildCron = useCallback(
     (freq: FrequencyType, h: number, m: number, wd: string[], md: number, custom: string) => {

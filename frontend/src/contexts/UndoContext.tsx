@@ -20,6 +20,19 @@ export function UndoProvider({ children }: { children: React.ReactNode }) {
   const stack = useRef<UndoEntry[]>([])
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
+  const executeUndo = useCallback((id: string) => {
+    const entry = stack.current.find((e) => e.id === id)
+    if (!entry) return
+    stack.current = stack.current.filter((e) => e.id !== id)
+    const timer = timers.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      timers.current.delete(id)
+    }
+    entry.undo()
+    toast.success('되돌렸습니다')
+  }, [])
+
   const push = useCallback((description: string, undoFn: () => void) => {
     const id = `undo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
     const entry: UndoEntry = { id, description, undo: undoFn }
@@ -43,20 +56,7 @@ export function UndoProvider({ children }: { children: React.ReactNode }) {
     }, UNDO_DURATION + 500)
 
     timers.current.set(id, timer)
-  }, [])
-
-  function executeUndo(id: string) {
-    const entry = stack.current.find((e) => e.id === id)
-    if (!entry) return
-    stack.current = stack.current.filter((e) => e.id !== id)
-    const timer = timers.current.get(id)
-    if (timer) {
-      clearTimeout(timer)
-      timers.current.delete(id)
-    }
-    entry.undo()
-    toast.success('되돌렸습니다')
-  }
+  }, [executeUndo])
 
   // Global Ctrl+Z handler: undo the most recent action
   useEffect(() => {
