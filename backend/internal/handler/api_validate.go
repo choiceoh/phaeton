@@ -43,8 +43,8 @@ func validatePayload(
 			}
 			continue
 		}
-		// `created_by` is the only system column the client may set.
-		if k == "created_by" {
+		// System columns the client may set.
+		if k == "created_by" || k == "_status" {
 			continue
 		}
 		return fmt.Errorf("%w: unknown field %q", schema.ErrInvalidInput, k)

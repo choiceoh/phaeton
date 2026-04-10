@@ -10,6 +10,7 @@ import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
+import { Badge } from '@/components/ui/badge'
 import KanbanView from '@/components/works/views/KanbanView'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -20,6 +21,7 @@ import {
   useEntries,
   useUpdateEntry,
 } from '@/hooks/useEntries'
+import { useProcess } from '@/hooks/useProcess'
 import { formatError } from '@/lib/api'
 import { formatCell } from '@/lib/formatCell'
 
@@ -35,6 +37,7 @@ export default function AppViewPage() {
 
   const { data: collection, isLoading: colLoading, isError: colError, error: colErr } =
     useCollection(appId)
+  const { data: process } = useProcess(appId)
 
   // Build expand string from all relation fields so we get labels not UUIDs.
   const expand = useMemo(() => {
@@ -75,12 +78,41 @@ export default function AppViewPage() {
   // field slug; relation columns prefer the expanded object's `name`/`title`.
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
     if (!collection?.fields) return []
-    const cols: ColumnDef<Record<string, unknown>>[] = collection.fields.slice(0, 8).map((f) => ({
-      id: f.slug,
-      header: f.label,
-      enableSorting: true,
-      cell: ({ row }) => formatCell(row.original[f.slug], f),
-    }))
+    const cols: ColumnDef<Record<string, unknown>>[] = []
+
+    // Process status column (first if enabled).
+    if (process?.is_enabled && process.statuses?.length) {
+      cols.push({
+        id: '_status',
+        header: '상태',
+        enableSorting: true,
+        cell: ({ row }) => {
+          const statusName = row.original._status as string
+          if (!statusName) return <span className="text-muted-foreground">미설정</span>
+          const statusDef = process.statuses.find((s) => s.name === statusName)
+          return (
+            <Badge
+              style={{
+                backgroundColor: statusDef?.color ?? '#6b7280',
+                color: '#fff',
+              }}
+            >
+              {statusName}
+            </Badge>
+          )
+        },
+      })
+    }
+
+    cols.push(
+      ...collection.fields.slice(0, 8).map((f) => ({
+        id: f.slug,
+        header: f.label,
+        enableSorting: true,
+        cell: ({ row }: { row: { original: Record<string, unknown> } }) =>
+          formatCell(row.original[f.slug], f),
+      })),
+    )
     cols.push({
       id: 'created_at',
       header: '작성일',
@@ -112,7 +144,7 @@ export default function AppViewPage() {
       ),
     })
     return cols
-  }, [collection])
+  }, [collection, process])
 
   if (colLoading) return <LoadingState />
   if (colError) return <ErrorState error={colErr} />
@@ -225,6 +257,7 @@ export default function AppViewPage() {
         onSubmit={handleSubmit}
         submitting={createEntry.isPending || updateEntry.isPending}
         title={editEntry ? '항목 편집' : '새 항목'}
+        process={process}
       />
 
       <ConfirmDialog

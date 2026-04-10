@@ -91,6 +91,37 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			on_delete            VARCHAR(15) NOT NULL DEFAULT 'SET NULL'
 		)`,
 
+		// --- _meta.processes ---
+		`CREATE TABLE IF NOT EXISTS _meta.processes (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID UNIQUE NOT NULL REFERENCES _meta.collections(id) ON DELETE CASCADE,
+			is_enabled      BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+
+		// --- _meta.process_statuses ---
+		`CREATE TABLE IF NOT EXISTS _meta.process_statuses (
+			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			process_id  UUID NOT NULL REFERENCES _meta.processes(id) ON DELETE CASCADE,
+			name        VARCHAR(255) NOT NULL,
+			color       VARCHAR(31) NOT NULL DEFAULT '#6b7280',
+			sort_order  INTEGER NOT NULL DEFAULT 0,
+			is_initial  BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+
+		// --- _meta.process_transitions ---
+		`CREATE TABLE IF NOT EXISTS _meta.process_transitions (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			process_id      UUID NOT NULL REFERENCES _meta.processes(id) ON DELETE CASCADE,
+			from_status_id  UUID NOT NULL REFERENCES _meta.process_statuses(id) ON DELETE CASCADE,
+			to_status_id    UUID NOT NULL REFERENCES _meta.process_statuses(id) ON DELETE CASCADE,
+			label           VARCHAR(255) NOT NULL,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+
 		// --- _history.schema_migrations ---
 		`CREATE TABLE IF NOT EXISTS _history.schema_migrations (
 			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

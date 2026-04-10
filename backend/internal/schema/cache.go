@@ -16,17 +16,19 @@ import (
 // This avoids the pointer-stability issue that would arise if we stored them as
 // slice elements and resized the slice.
 type Cache struct {
-	mu     sync.RWMutex
-	store  *Store
-	byID   map[string]Collection
-	bySlug map[string]Collection
+	mu        sync.RWMutex
+	store     *Store
+	byID      map[string]Collection
+	bySlug    map[string]Collection
+	processes map[string]Process // keyed by collection_id
 }
 
 func NewCache(store *Store) *Cache {
 	return &Cache{
-		store:  store,
-		byID:   make(map[string]Collection),
-		bySlug: make(map[string]Collection),
+		store:     store,
+		byID:      make(map[string]Collection),
+		bySlug:    make(map[string]Collection),
+		processes: make(map[string]Process),
 	}
 }
 
@@ -52,9 +54,22 @@ func (c *Cache) Load(ctx context.Context) error {
 		bySlug[collections[i].Slug] = collections[i]
 	}
 
+	// Load process configs for all collections.
+	procs := make(map[string]Process, len(collections))
+	for _, col := range collections {
+		proc, err := c.store.GetProcess(ctx, col.ID)
+		if err != nil {
+			return fmt.Errorf("cache load process for %s: %w", col.Slug, err)
+		}
+		if proc.ID != "" {
+			procs[col.ID] = proc
+		}
+	}
+
 	c.mu.Lock()
 	c.byID = byID
 	c.bySlug = bySlug
+	c.processes = procs
 	c.mu.Unlock()
 	return nil
 }
@@ -147,4 +162,36 @@ func (c *Cache) Fields(collectionID string) []Field {
 	out := make([]Field, len(col.Fields))
 	copy(out, col.Fields)
 	return out
+}
+
+// ProcessByCollectionID returns the process config for a collection.
+func (c *Cache) ProcessByCollectionID(collectionID string) (Process, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	p, ok := c.processes[collectionID]
+	return p, ok
+}
+
+// ReloadProcess refreshes the process config for a single collection from the DB.
+func (c *Cache) ReloadProcess(ctx context.Context, collectionID string) error {
+	proc, err := c.store.GetProcess(ctx, collectionID)
+	if err != nil {
+		return fmt.Errorf("reload process %s: %w", collectionID, err)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if proc.ID != "" {
+		c.processes[collectionID] = proc
+	} else {
+		delete(c.processes, collectionID)
+	}
+	return nil
+}
+
+// RemoveProcess deletes a process from the cache.
+func (c *Cache) RemoveProcess(collectionID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.processes, collectionID)
 }

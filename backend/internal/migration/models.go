@@ -24,6 +24,8 @@ const (
 	OpAddField             Operation = "add_field"
 	OpAlterField           Operation = "alter_field"
 	OpDropField            Operation = "drop_field"
+	OpEnableProcess        Operation = "enable_process"
+	OpDisableProcess       Operation = "disable_process"
 )
 
 // Migration is the persisted record in _history.schema_migrations.

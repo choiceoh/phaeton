@@ -1,5 +1,5 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import type { Field } from '@/lib/types'
+import type { Field, Process } from '@/lib/types'
 
 import EntryForm from './EntryForm'
 
@@ -11,6 +11,7 @@ interface Props {
   onSubmit: (data: Record<string, unknown>) => void
   submitting?: boolean
   title?: string
+  process?: Process
 }
 
 export default function EntrySheet({
@@ -21,6 +22,7 @@ export default function EntrySheet({
   onSubmit,
   submitting,
   title,
+  process,
 }: Props) {
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -38,6 +40,7 @@ export default function EntrySheet({
             }}
             onCancel={onClose}
             submitting={submitting}
+            process={process}
           />
         </div>
       </SheetContent>
