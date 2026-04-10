@@ -118,7 +118,7 @@ export default function GalleryView({ imageField, fields, entries, onEntryClick 
                   </p>
                 )
               })}
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {entry.created_at
                   ? new Date(entry.created_at as string).toLocaleDateString('ko')
                   : ''}

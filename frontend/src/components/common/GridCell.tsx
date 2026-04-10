@@ -1,4 +1,4 @@
-import { CheckIcon, Loader2Icon, Pencil } from 'lucide-react'
+import { CheckIcon, Loader2Icon, Pencil, XCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Checkbox } from '@/components/ui/checkbox'
@@ -25,6 +25,7 @@ interface GridCellProps {
   editable: boolean
   saving?: boolean
   saved?: boolean
+  error?: boolean
   fieldType?: FieldType
   fieldOptions?: Record<string, unknown>
   onSave: (value: unknown) => void
@@ -43,6 +44,7 @@ export default function GridCell({
   editable,
   saving,
   saved,
+  error,
   fieldType,
   fieldOptions,
   onSave,
@@ -216,6 +218,7 @@ export default function GridCell({
           isActive && 'ring-2 ring-primary ring-inset',
           isSelected && !isActive && 'bg-primary/10',
           saved && 'animate-cell-saved',
+          error && 'ring-2 ring-destructive ring-inset animate-shake',
         )}
         onClick={(e) => {
           e.stopPropagation()
@@ -243,6 +246,11 @@ export default function GridCell({
             <CheckIcon className="size-3.5 text-foreground/70" />
           </span>
         )}
+        {error && !saving && (
+          <span className="absolute right-0.5 top-1/2 -translate-y-1/2">
+            <XCircle className="size-3.5 text-destructive" />
+          </span>
+        )}
       </div>
     )
   }
@@ -255,6 +263,7 @@ export default function GridCell({
         isActive && 'ring-2 ring-primary ring-inset',
         isSelected && !isActive && 'bg-primary/10',
         saved && 'animate-cell-saved',
+        error && 'ring-2 ring-destructive ring-inset animate-shake',
       )}
       onClick={(e) => {
         e.stopPropagation()
@@ -276,7 +285,12 @@ export default function GridCell({
           <CheckIcon className="size-3.5 text-foreground/70" />
         </span>
       )}
-      {editable && !isActive && !saving && !saved && (
+      {error && !saving && (
+        <span className="absolute right-0.5 top-1/2 -translate-y-1/2">
+          <XCircle className="size-3.5 text-destructive" />
+        </span>
+      )}
+      {editable && !isActive && !saving && !saved && !error && (
         <Pencil className="absolute right-0.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/50 opacity-0 group-hover/cell:opacity-100 pointer-events-none" />
       )}
     </div>

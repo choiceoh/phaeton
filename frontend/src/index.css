@@ -134,6 +134,12 @@
     letter-spacing: -0.011em;
     }
 
+  /* Ensure all interactive elements have visible focus indicators */
+  [role="button"]:focus-visible,
+  a:not([class*="focus-visible"]):focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background rounded-sm;
+  }
+
   /* Premium scrollbar */
   ::-webkit-scrollbar {
     width: 5px;

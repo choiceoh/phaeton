@@ -341,6 +341,7 @@ function ConditionRow({
           field={field}
           value={cond.value}
           onChange={(v) => onUpdate({ value: v })}
+          isEmpty={!cond.value}
         />
       )}
 
@@ -349,6 +350,7 @@ function ConditionRow({
         size="sm"
         className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
         onClick={onRemove}
+        aria-label="조건 삭제"
       >
         <Trash2 className="h-4 w-4" />
       </Button>
@@ -439,10 +441,12 @@ function ValueInput({
   field,
   value,
   onChange,
+  isEmpty,
 }: {
   field?: Field
   value: string
   onChange: (v: string) => void
+  isEmpty?: boolean
 }) {
   const ft = field?.field_type
 
@@ -504,7 +508,7 @@ function ValueInput({
     return (
       <Input
         type="number"
-        className="w-[160px] h-8 text-sm"
+        className={`w-[160px] h-8 text-sm ${isEmpty ? 'border-destructive/50' : ''}`}
         placeholder="값 입력"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -514,7 +518,7 @@ function ValueInput({
 
   return (
     <Input
-      className="w-[160px] h-8 text-sm"
+      className={`w-[160px] h-8 text-sm ${isEmpty ? 'border-destructive/50' : ''}`}
       placeholder="값 입력"
       value={value}
       onChange={(e) => onChange(e.target.value)}

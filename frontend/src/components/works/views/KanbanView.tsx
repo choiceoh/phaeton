@@ -56,6 +56,11 @@ function SortableCard({
     id,
     data: { entry },
   })
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isFocused) cardRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [isFocused])
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -65,7 +70,10 @@ function SortableCard({
 
   return (
     <Card
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node)
+        ;(cardRef as React.MutableRefObject<HTMLDivElement | null>).current = node
+      }}
       style={style}
       {...attributes}
       {...listeners}
