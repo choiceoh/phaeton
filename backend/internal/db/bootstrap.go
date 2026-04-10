@@ -309,6 +309,22 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_automation_runs_collection ON _history.automation_runs(collection_id, created_at DESC)`,
 	)
 
+	// --- charts ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.charts (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID NOT NULL REFERENCES _meta.collections(id) ON DELETE CASCADE,
+			name            VARCHAR(255) NOT NULL,
+			chart_type      VARCHAR(31) NOT NULL DEFAULT 'bar',
+			config          JSONB NOT NULL DEFAULT '{}',
+			sort_order      INTEGER NOT NULL DEFAULT 0,
+			created_by      UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_charts_collection ON _meta.charts(collection_id)`,
+	)
+
 	// --- incremental schema evolution (safe for existing deployments) ---
 	alters := []string{
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS process_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
