@@ -128,13 +128,14 @@ func (h *CommentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Publish event for notifications.
 	if h.bus != nil {
 		h.bus.Publish(r.Context(), events.Event{
-			Type:         events.EventComment,
-			CollectionID: col.ID,
-			RecordID:     recordID,
-			ActorUserID:  user.UserID,
-			ActorName:    user.Name,
-			Title:        fmt.Sprintf("%s님이 댓글을 남겼습니다", user.Name),
-			Body:         body.Body,
+			Type:           events.EventComment,
+			CollectionID:   col.ID,
+			CollectionSlug: col.Slug,
+			RecordID:       recordID,
+			ActorUserID:    user.UserID,
+			ActorName:      user.Name,
+			Title:          fmt.Sprintf("%s님이 댓글을 남겼습니다", user.Name),
+			Body:           body.Body,
 		})
 	}
 

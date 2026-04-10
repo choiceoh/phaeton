@@ -364,12 +364,13 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Publish automation event.
 	if recID, ok := records[0]["id"].(string); ok {
 		h.bus.Publish(r.Context(), events.Event{
-			Type:         events.EventRecordCreate,
-			CollectionID: col.ID,
-			RecordID:     recID,
-			ActorUserID:  user.UserID,
-			ActorName:    user.Name,
-			NewRecord:    records[0],
+			Type:           events.EventRecordCreate,
+			CollectionID:   col.ID,
+			CollectionSlug: col.Slug,
+			RecordID:       recID,
+			ActorUserID:    user.UserID,
+			ActorName:      user.Name,
+			NewRecord:      records[0],
 		})
 	}
 
@@ -578,13 +579,14 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Publish automation event.
 	ev := events.Event{
-		Type:         events.EventRecordUpdate,
-		CollectionID: col.ID,
-		RecordID:     id,
-		ActorUserID:  user.UserID,
-		ActorName:    user.Name,
-		OldRecord:    oldRow,
-		NewRecord:    records[0],
+		Type:           events.EventRecordUpdate,
+		CollectionID:   col.ID,
+		CollectionSlug: col.Slug,
+		RecordID:       id,
+		ActorUserID:    user.UserID,
+		ActorName:      user.Name,
+		OldRecord:      oldRow,
+		NewRecord:      records[0],
 	}
 	// Detect status change.
 	if oldStatus, _ := oldRow["_status"].(string); oldStatus != "" {
@@ -1403,11 +1405,12 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	// Publish automation event.
 	h.bus.Publish(r.Context(), events.Event{
-		Type:         events.EventRecordDelete,
-		CollectionID: col.ID,
-		RecordID:     id,
-		ActorUserID:  user.UserID,
-		ActorName:    user.Name,
+		Type:           events.EventRecordDelete,
+		CollectionID:   col.ID,
+		CollectionSlug: col.Slug,
+		RecordID:       id,
+		ActorUserID:    user.UserID,
+		ActorName:      user.Name,
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

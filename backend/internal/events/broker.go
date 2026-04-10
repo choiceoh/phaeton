@@ -7,11 +7,12 @@ import (
 
 // SSEMessage is the payload sent to SSE clients.
 type SSEMessage struct {
-	Type         string `json:"type"`
-	CollectionID string `json:"collection_id"`
-	RecordID     string `json:"record_id,omitempty"`
-	ActorUserID  string `json:"actor_user_id,omitempty"`
-	ActorName    string `json:"actor_name,omitempty"`
+	Type           string `json:"type"`
+	CollectionID   string `json:"collection_id"`
+	CollectionSlug string `json:"collection_slug,omitempty"`
+	RecordID       string `json:"record_id,omitempty"`
+	ActorUserID    string `json:"actor_user_id,omitempty"`
+	ActorName      string `json:"actor_name,omitempty"`
 }
 
 // Broker fans out events to connected SSE clients.
