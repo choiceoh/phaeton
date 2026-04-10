@@ -31,6 +31,12 @@ export const queryKeys = {
       [...queryKeys.process.all, collectionId] as const,
   },
 
+  views: {
+    all: ['views'] as const,
+    list: (collectionId: string) =>
+      [...queryKeys.views.all, collectionId, 'list'] as const,
+  },
+
   migrations: {
     all: ['migrations'] as const,
     history: (collectionId?: string) =>

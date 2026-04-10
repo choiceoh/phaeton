@@ -4,6 +4,7 @@ import RelationCombobox from '@/components/common/RelationCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -234,11 +235,10 @@ function FieldInput({
       )
     case 'date':
       return (
-        <Input
-          type="date"
-          value={(value as string)?.slice(0, 10) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          required={field.is_required}
+        <DatePicker
+          value={(value as string)?.slice(0, 10) || undefined}
+          onChange={(v) => onChange(v ?? null)}
+          placeholder="날짜 선택"
         />
       )
     case 'datetime':

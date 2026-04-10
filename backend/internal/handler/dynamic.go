@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
@@ -34,6 +35,9 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_view") {
 		return
 	}
 
@@ -135,6 +139,9 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_view") {
+		return
+	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	procEnabled := h.hasProcessEnabled(col.ID)
@@ -174,6 +181,9 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_create") {
 		return
 	}
 
@@ -268,6 +278,9 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_edit") {
 		return
 	}
 
@@ -374,6 +387,9 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_view") {
 		return
 	}
 
@@ -484,6 +500,9 @@ func (h *DynHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_create") {
+		return
+	}
 
 	var bodies []map[string]any
 	if err := readJSON(r, &bodies); err != nil {
@@ -572,6 +591,9 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_delete") {
+		return
+	}
 
 	var body struct {
 		IDs []string `json:"ids"`
@@ -650,6 +672,9 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_delete") {
+		return
+	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	sql := fmt.Sprintf("UPDATE %s SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL", qTable)
@@ -667,6 +692,25 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---
+
+// checkAccess verifies the current user is allowed the given operation
+// on the collection's access_config. Returns false and writes a 403 if denied.
+func (h *DynHandler) checkAccess(w http.ResponseWriter, r *http.Request, col schema.Collection, operation string) bool {
+	user, ok := middleware.GetUser(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return false
+	}
+	// Directors always have full access.
+	if user.Role == "director" {
+		return true
+	}
+	if !col.AccessConfig.AllowsRole(operation, user.Role) {
+		writeError(w, http.StatusForbidden, "access denied for this collection")
+		return false
+	}
+	return true
+}
 
 func (h *DynHandler) resolveCollection(w http.ResponseWriter, slug string) (schema.Collection, []schema.Field, bool) {
 	col, ok := h.cache.CollectionBySlug(slug)

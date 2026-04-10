@@ -49,6 +49,13 @@ export interface Field {
   relation?: Relation
 }
 
+export interface AccessConfig {
+  entry_view?: string[]
+  entry_create?: string[]
+  entry_edit?: string[]
+  entry_delete?: string[]
+}
+
 export interface Collection {
   id: string
   slug: string
@@ -57,6 +64,7 @@ export interface Collection {
   icon?: string
   is_system: boolean
   sort_order: number
+  access_config: AccessConfig
   created_at: string
   updated_at: string
   created_by?: string
@@ -146,6 +154,37 @@ export interface SaveProcessReq {
   is_enabled: boolean
   statuses: { name: string; color: string; sort_order: number; is_initial: boolean }[]
   transitions: { from_index: number; to_index: number; label: string }[]
+}
+
+// --- Views ---
+
+export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery'
+
+export interface View {
+  id: string
+  collection_id: string
+  name: string
+  view_type: ViewType
+  config: Record<string, unknown>
+  sort_order: number
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateViewReq {
+  name: string
+  view_type: ViewType
+  config?: Record<string, unknown>
+  sort_order?: number
+  is_default?: boolean
+}
+
+export interface UpdateViewReq {
+  name?: string
+  config?: Record<string, unknown>
+  sort_order?: number
+  is_default?: boolean
 }
 
 // --- Envelope responses ---
