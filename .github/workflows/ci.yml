@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -17,6 +19,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
+
+      - name: Check gofmt
+        run: |
+          cd backend
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files not formatted with gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
@@ -79,7 +91,7 @@ jobs:
         run: cd frontend && npm run lint
 
       - name: Vitest
-        run: cd frontend && npm run test
+        run: cd frontend && npx vitest run --coverage.enabled --coverage.reporter=text
 
       - name: Build frontend
         run: cd frontend && npm run build
