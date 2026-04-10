@@ -114,9 +114,9 @@ func (h *AIHandler) resolveGetCollectionFields(ctx context.Context, slug string)
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("## %s (%s)\n", col.Label, col.Slug))
+	fmt.Fprintf(&sb, "## %s (%s)\n", col.Label, col.Slug)
 	if col.Description != "" {
-		sb.WriteString(fmt.Sprintf("설명: %s\n", col.Description))
+		fmt.Fprintf(&sb, "설명: %s\n", col.Description)
 	}
 	if col.ProcessEnabled {
 		sb.WriteString("프로세스(워크플로): 활성화됨\n")
@@ -134,7 +134,7 @@ func (h *AIHandler) resolveGetCollectionFields(ctx context.Context, slug string)
 		if f.IsRequired {
 			req = " [필수]"
 		}
-		sb.WriteString(fmt.Sprintf("- %s (slug: %q, type: %s)%s%s\n", f.Label, f.Slug, f.FieldType, req, opts))
+		fmt.Fprintf(&sb, "- %s (slug: %q, type: %s)%s%s\n", f.Label, f.Slug, f.FieldType, req, opts)
 	}
 	return sb.String(), nil
 }
