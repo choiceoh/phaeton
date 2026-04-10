@@ -71,6 +71,7 @@ interface Props<T> {
   emptyDescription?: string
   summaryRow?: Record<string, { label: string; value: string | number }>
   toolbar?: React.ReactNode
+  initialColumnVisibility?: VisibilityState
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -93,9 +94,10 @@ export function DataTable<T>({
   emptyDescription,
   summaryRow,
   toolbar,
+  initialColumnVisibility,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
   const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
     left: [],
     right: [],
