@@ -107,7 +107,8 @@ function PaletteButton({ icon: Icon, label, entry }: { icon: LucideIcon, label: 
     <div
       draggable
       onDragStart={handleDragStart}
-      className="flex w-full cursor-grab items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent active:cursor-grabbing"
+      className="flex w-full cursor-grab items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      tabIndex={0}
     >
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span>{label}</span>
