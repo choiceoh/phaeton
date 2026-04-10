@@ -27,6 +27,7 @@ import (
 	"github.com/choiceoh/phaeton/backend/internal/infra/workerpool"
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/migration"
+	"github.com/choiceoh/phaeton/backend/internal/notify"
 	"github.com/choiceoh/phaeton/backend/internal/samlsp"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 	"github.com/choiceoh/phaeton/backend/internal/sync"
@@ -168,6 +169,20 @@ func run() int {
 		logger.Info("amaranth sync registered")
 	}
 
+	// Email + Report handler (optional — enabled when SMTP env vars are set).
+	var reportHandler *handler.ReportHandler
+	if smtpCfg := notify.SMTPConfigFromEnv(); smtpCfg != nil {
+		emailNotifier := notify.NewEmailNotifier(*smtpCfg, func(ctx context.Context, userID string) (string, error) {
+			var email string
+			err := pool.QueryRow(ctx, "SELECT email FROM auth.users WHERE id = $1", userID).Scan(&email)
+			return email, err
+		})
+		reportHandler = handler.NewReportHandler(dynHandler, emailNotifier)
+		logger.Info("SMTP email configured", "host", smtpCfg.Host)
+	} else {
+		reportHandler = handler.NewReportHandler(dynHandler, nil)
+	}
+
 	// Router.
 	r := buildRouter(routerConfig{
 		pool:         pool,
@@ -184,6 +199,7 @@ func run() int {
 		chartH:       chartHandler,
 		templateH:    templateHandler,
 		sseH:         sseHandler,
+		reportH:      reportHandler,
 		logger:       logger,
 		loginLimiter: loginLimiter,
 		apiLimiter:   apiLimiter,
@@ -257,6 +273,7 @@ type routerConfig struct {
 	chartH       *handler.ChartHandler
 	templateH    *handler.TemplateHandler
 	sseH         *handler.SSEHandler
+	reportH      *handler.ReportHandler
 	logger       *slog.Logger
 	loginLimiter *middleware.RateLimiter
 	apiLimiter   *middleware.APILimiter
@@ -407,11 +424,14 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 		r.Route("/api/data", func(r chi.Router) {
 			r.Use(middleware.CollectionAccess(cfg.pool))
 			r.Get("/{slug}", cfg.dynH.List)
+			r.Get("/{slug}/totals", cfg.dynH.Totals)
 			r.Get("/{slug}/defaults", cfg.dynH.GetDefaults)
 			r.Get("/{slug}/similar", cfg.dynH.SimilarRecords)
 			r.Get("/{slug}/aggregate", cfg.dynH.Aggregate)
 			r.Post("/{slug}/aggregate/batch", cfg.dynH.BatchAggregate)
 			r.Get("/{slug}/export.csv", cfg.dynH.ExportCSV)
+			r.Get("/{slug}/export.pdf", cfg.dynH.ExportPDF)
+			r.Post("/{slug}/email-report", cfg.reportH.EmailReport)
 			r.Get("/{slug}/{id}", cfg.dynH.Get)
 
 			// Write: director, pm, engineer.

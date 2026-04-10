@@ -91,6 +91,90 @@ func TestBuildRLSClause_DepartmentMode_NoDeptFallsBackToCreator(t *testing.T) {
 	}
 }
 
+func TestBuildRLSClause_SubsidiaryMode(t *testing.T) {
+	col := schema.Collection{
+		AccessConfig: schema.AccessConfig{
+			RLSMode: "subsidiary",
+		},
+	}
+	args := []any{}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx := context.WithValue(r.Context(), middleware.ExportedUserContextKey, middleware.UserClaims{
+		UserID:       "user-100",
+		Role:         "viewer",
+		SubsidiaryID: "sub-200",
+	})
+	r = r.WithContext(ctx)
+
+	clause := buildRLSClause(r, col, &args, "")
+	if clause == "" {
+		t.Fatal("expected RLS clause for subsidiary mode")
+	}
+	if len(args) != 1 {
+		t.Fatalf("expected 1 arg, got %d", len(args))
+	}
+	if args[0] != "sub-200" {
+		t.Fatalf("expected sub-200, got %v", args[0])
+	}
+}
+
+func TestBuildRLSClause_SubsidiaryMode_NoSubFallsBackToCreator(t *testing.T) {
+	col := schema.Collection{
+		AccessConfig: schema.AccessConfig{
+			RLSMode: "subsidiary",
+		},
+	}
+	args := []any{}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx := context.WithValue(r.Context(), middleware.ExportedUserContextKey, middleware.UserClaims{
+		UserID: "user-300",
+		Role:   "viewer",
+	})
+	r = r.WithContext(ctx)
+
+	clause := buildRLSClause(r, col, &args, "")
+	if clause == "" {
+		t.Fatal("expected RLS clause")
+	}
+	if args[0] != "user-300" {
+		t.Fatalf("expected creator fallback user-300, got %v", args[0])
+	}
+}
+
+func TestBuildRLSClause_FilterMode(t *testing.T) {
+	col := schema.Collection{
+		AccessConfig: schema.AccessConfig{
+			RLSMode: "filter",
+			RLSFilters: []schema.RLSFilter{
+				{Field: "region", Op: "eq", Value: "$user.subsidiary_id"},
+				{Field: "status", Op: "neq", Value: "draft"},
+			},
+		},
+	}
+	args := []any{}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx := context.WithValue(r.Context(), middleware.ExportedUserContextKey, middleware.UserClaims{
+		UserID:       "user-filter",
+		Role:         "viewer",
+		SubsidiaryID: "sub-abc",
+	})
+	r = r.WithContext(ctx)
+
+	clause := buildRLSClause(r, col, &args, "")
+	if clause == "" {
+		t.Fatal("expected RLS clause for filter mode")
+	}
+	if len(args) != 2 {
+		t.Fatalf("expected 2 args, got %d", len(args))
+	}
+	if args[0] != "sub-abc" {
+		t.Fatalf("expected resolved subsidiary sub-abc, got %v", args[0])
+	}
+	if args[1] != "draft" {
+		t.Fatalf("expected literal draft, got %v", args[1])
+	}
+}
+
 func TestBuildRLSClause_WithPrefix(t *testing.T) {
 	col := schema.Collection{
 		AccessConfig: schema.AccessConfig{

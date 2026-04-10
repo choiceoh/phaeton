@@ -84,12 +84,27 @@ const (
 //   - ""/"none": no row filtering (default)
 //   - "creator": viewers see only rows they created
 //   - "department": viewers see rows created by users in their department
+//   - "subsidiary": viewers see rows created by users in their subsidiary
+//   - "filter": custom field-based filters (see RLSFilters)
 type AccessConfig struct {
-	EntryView   []string `json:"entry_view,omitempty"`
-	EntryCreate []string `json:"entry_create,omitempty"`
-	EntryEdit   []string `json:"entry_edit,omitempty"`
-	EntryDelete []string `json:"entry_delete,omitempty"`
-	RLSMode     string   `json:"rls_mode,omitempty"`
+	EntryView   []string    `json:"entry_view,omitempty"`
+	EntryCreate []string    `json:"entry_create,omitempty"`
+	EntryEdit   []string    `json:"entry_edit,omitempty"`
+	EntryDelete []string    `json:"entry_delete,omitempty"`
+	RLSMode     string      `json:"rls_mode,omitempty"`
+	RLSFilters  []RLSFilter `json:"rls_filters,omitempty"`
+}
+
+// RLSFilter defines a custom field-based row filter for RLS "filter" mode.
+// Field is the column slug in the dynamic table.
+// Op is the comparison operator: eq, neq, in, contains.
+// Value is the literal value to compare against, or a user attribute reference:
+//
+//	$user.id, $user.department_id, $user.subsidiary_id
+type RLSFilter struct {
+	Field string `json:"field"`
+	Op    string `json:"op"`
+	Value string `json:"value"`
 }
 
 // AllowsRole checks whether the given role is allowed the specified operation.
