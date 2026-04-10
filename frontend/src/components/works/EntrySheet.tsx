@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
+import { useAIPrefill } from '@/hooks/useAI'
 import { useRecordHistory } from '@/hooks/useHistory'
 import { useComments, useCreateComment, useDeleteComment } from '@/hooks/useComments'
 import { useCurrentUser } from '@/hooks/useAuth'
@@ -45,6 +49,11 @@ export default function EntrySheet({
   const isEdit = !!recordId
   const [tab, setTab] = useState<string>('form')
   const [commentBody, setCommentBody] = useState('')
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [prefillData, setPrefillData] = useState<Record<string, unknown> | null>(null)
+  const aiAvailable = useAIAvailable()
+  const prefill = useAIPrefill(slug)
+  const formKeyRef = useRef(0)
 
   const { data: currentUser } = useCurrentUser()
 
@@ -79,6 +88,7 @@ export default function EntrySheet({
                 <EntryForm
                   fields={fields}
                   initialData={initialData}
+                  slug={slug}
                   onSubmit={(data) => {
                     onSubmit(data)
                     onClose()
@@ -173,17 +183,64 @@ export default function EntrySheet({
               </TabsContent>
             </Tabs>
           ) : (
-            <EntryForm
-              fields={fields}
-              initialData={initialData}
-              onSubmit={(data) => {
-                onSubmit(data)
-                onClose()
-              }}
-              onCancel={onClose}
-              submitting={submitting}
-              process={process}
-            />
+            <>
+              {aiAvailable && slug && (
+                <div className="mb-3 flex gap-1">
+                  <Input
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && aiPrompt.trim() && !prefill.isPending) {
+                        prefill.mutate(aiPrompt.trim(), {
+                          onSuccess: (res) => {
+                            setPrefillData({ ...initialData, ...res })
+                            formKeyRef.current++
+                            setAiPrompt('')
+                          },
+                        })
+                      }
+                    }}
+                    placeholder="한 줄로 입력하세요..."
+                    className="h-8 text-sm"
+                    disabled={prefill.isPending}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 shrink-0"
+                    disabled={!aiPrompt.trim() || prefill.isPending}
+                    onClick={() => {
+                      prefill.mutate(aiPrompt.trim(), {
+                        onSuccess: (res) => {
+                          setPrefillData({ ...initialData, ...res })
+                          formKeyRef.current++
+                          setAiPrompt('')
+                        },
+                      })
+                    }}
+                  >
+                    {prefill.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '채우기'}
+                  </Button>
+                </div>
+              )}
+              <EntryForm
+                key={formKeyRef.current}
+                fields={fields}
+                initialData={prefillData ?? initialData}
+                slug={slug}
+                onSubmit={(data) => {
+                  onSubmit(data)
+                  onClose()
+                  setPrefillData(null)
+                }}
+                onCancel={() => {
+                  onClose()
+                  setPrefillData(null)
+                }}
+                submitting={submitting}
+                process={process}
+              />
+            </>
           )}
         </div>
       </SheetContent>

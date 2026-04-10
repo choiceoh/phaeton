@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Loader2, Sparkles } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -10,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
+import { useAIBuildFormula } from '@/hooks/useAI'
 import { api } from '@/lib/api'
 import type { Field } from '@/lib/types'
 
@@ -61,6 +65,10 @@ export default function FormulaEditor({
   const [preview, setPreview] = useState<FormulaPreviewResult | null>(null)
   const [loading, setLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const [aiMode, setAiMode] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const aiAvailable = useAIAvailable()
+  const buildFormula = useAIBuildFormula(slug)
 
   // Available field slugs for autocomplete hint.
   const dataFields = fields.filter(
@@ -104,13 +112,73 @@ export default function FormulaEditor({
     <div className="space-y-3">
       {/* Expression input */}
       <div className="space-y-1">
-        <Label className="text-xs font-semibold text-muted-foreground">수식</Label>
-        <Input
-          value={expression}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="=price * quantity"
-          className="font-mono text-sm"
-        />
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-semibold text-muted-foreground">수식</Label>
+          {aiAvailable && slug && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-6 gap-1 px-2 text-xs"
+              onClick={() => {
+                setAiMode(!aiMode)
+                setAiPrompt('')
+              }}
+            >
+              <Sparkles className="h-3 w-3" />
+              {aiMode ? '직접 입력' : 'AI 생성'}
+            </Button>
+          )}
+        </div>
+        {aiMode ? (
+          <div className="flex gap-1">
+            <Input
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && aiPrompt.trim() && !buildFormula.isPending) {
+                  buildFormula.mutate(aiPrompt.trim(), {
+                    onSuccess: (res) => {
+                      onChange(res.expression)
+                      setAiMode(false)
+                      setAiPrompt('')
+                    },
+                  })
+                }
+              }}
+              placeholder="예: 단가 곱하기 수량에서 할인 빼기"
+              className="text-sm"
+              disabled={buildFormula.isPending}
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 shrink-0"
+              disabled={!aiPrompt.trim() || buildFormula.isPending}
+              onClick={() => {
+                buildFormula.mutate(aiPrompt.trim(), {
+                  onSuccess: (res) => {
+                    onChange(res.expression)
+                    setAiMode(false)
+                    setAiPrompt('')
+                  },
+                })
+              }}
+            >
+              {buildFormula.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '생성'}
+            </Button>
+          </div>
+        ) : (
+          <Input
+            value={expression}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="=price * quantity"
+            className="font-mono text-sm"
+          />
+        )}
+        {buildFormula.isError && (
+          <p className="text-xs text-destructive">AI 수식 생성에 실패했습니다</p>
+        )}
       </div>
 
       {/* Result type */}

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -27,6 +28,9 @@ import {
 } from '@/lib/constants'
 import type { Collection, Field, FieldType } from '@/lib/types'
 
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
+import { useAIGenerateSlug } from '@/hooks/useAI'
+
 import type { FieldDraft } from './FieldPreview'
 import FormulaEditor from './FormulaEditor'
 
@@ -42,6 +46,22 @@ interface Props {
 }
 
 export default function FieldProperties({ field, collections, siblingFields, onChange, collectionSlug, allFields }: Props) {
+  const aiAvailable = useAIAvailable()
+  const generateSlug = useAIGenerateSlug()
+  const slugDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const requestAutoSlug = useCallback((label: string, currentField: FieldDraft) => {
+    if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current)
+    if (!label.trim() || !aiAvailable || currentField.slug) return
+    slugDebounceRef.current = setTimeout(() => {
+      generateSlug.mutate(label.trim(), {
+        onSuccess: (res) => {
+          onChange({ ...currentField, label, slug: res.slug })
+        },
+      })
+    }, 500)
+  }, [aiAvailable, generateSlug, onChange])
+
   if (!field) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -129,16 +149,24 @@ export default function FieldProperties({ field, collections, siblingFields, onC
         </div>
         <section className="space-y-2">
           <Label className="text-xs font-semibold text-muted-foreground">이름</Label>
-          <Input value={field.label} onChange={(e) => update({ label: e.target.value })} />
+          <Input value={field.label} onChange={(e) => {
+            update({ label: e.target.value })
+            requestAutoSlug(e.target.value, { ...field, label: e.target.value })
+          }} />
         </section>
         <Separator />
         <section className="space-y-2">
           <Label className="text-xs font-semibold text-muted-foreground">영문 ID</Label>
-          <Input
-            value={field.slug}
-            onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-            placeholder="snake_case"
-          />
+          <div className="relative">
+            <Input
+              value={field.slug}
+              onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+              placeholder="자동 생성됨"
+            />
+            {generateSlug.isPending && (
+              <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+            )}
+          </div>
         </section>
         {field.field_type === 'label' && (
           <>
@@ -187,7 +215,10 @@ export default function FieldProperties({ field, collections, siblingFields, onC
 
         <section className="space-y-2">
           <Label className="text-xs font-semibold text-muted-foreground">이름</Label>
-          <Input value={field.label} onChange={(e) => update({ label: e.target.value })} />
+          <Input value={field.label} onChange={(e) => {
+            update({ label: e.target.value })
+            requestAutoSlug(e.target.value, { ...field, label: e.target.value })
+          }} />
         </section>
 
         <Separator />
@@ -251,11 +282,16 @@ export default function FieldProperties({ field, collections, siblingFields, onC
 
         <section className="space-y-2">
           <Label className="text-xs font-semibold text-muted-foreground">코드</Label>
-          <Input
-            value={field.slug}
-            onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-            placeholder="snake_case"
-          />
+          <div className="relative">
+            <Input
+              value={field.slug}
+              onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+              placeholder="자동 생성됨"
+            />
+            {generateSlug.isPending && (
+              <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+            )}
+          </div>
         </section>
       </div>
     )
@@ -304,7 +340,10 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             <Label className="text-xs font-semibold text-muted-foreground">이름</Label>
             <Input
               value={field.label}
-              onChange={(e) => update({ label: e.target.value })}
+              onChange={(e) => {
+                update({ label: e.target.value })
+                requestAutoSlug(e.target.value, { ...field, label: e.target.value })
+              }}
               placeholder="항목 이름"
             />
           </section>
@@ -913,11 +952,16 @@ export default function FieldProperties({ field, collections, siblingFields, onC
           {/* 코드 (Slug) */}
           <section className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground">코드</Label>
-            <Input
-              value={field.slug}
-              onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-              placeholder="snake_case"
-            />
+            <div className="relative">
+              <Input
+                value={field.slug}
+                onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                placeholder="자동 생성됨"
+              />
+              {generateSlug.isPending && (
+                <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               * 자동 계산 컴포넌트와 REST API 에서 사용됩니다. 영문, 숫자, 밑줄(_)만 입력 가능
             </p>

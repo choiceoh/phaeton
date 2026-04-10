@@ -1,5 +1,5 @@
-import { Plus, Trash2 } from 'lucide-react'
-import { useId } from 'react'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
+import { useAIBuildFilter } from '@/hooks/useAI'
 import {
   FILTER_OPERATORS,
   isLayoutType,
@@ -21,11 +23,15 @@ interface Props {
   fields: Field[]
   conditions: FilterCondition[]
   onChange: (conditions: FilterCondition[]) => void
+  slug?: string
 }
 
-export default function FilterBuilder({ fields, conditions, onChange }: Props) {
+export default function FilterBuilder({ fields, conditions, onChange, slug }: Props) {
   const idBase = useId()
   const dataFields = fields.filter((f) => !isLayoutType(f.field_type))
+  const aiAvailable = useAIAvailable()
+  const buildFilter = useAIBuildFilter(slug)
+  const [aiQuery, setAiQuery] = useState('')
 
   function addCondition() {
     const first = dataFields[0]
@@ -67,8 +73,52 @@ export default function FilterBuilder({ fields, conditions, onChange }: Props) {
     onChange(conditions.filter((c) => c.id !== id))
   }
 
+  function handleAIFilter() {
+    if (!aiQuery.trim() || buildFilter.isPending) return
+    buildFilter.mutate(aiQuery.trim(), {
+      onSuccess: (res) => {
+        const newConditions: FilterCondition[] = res.map((c, i) => ({
+          id: `${idBase}-ai-${Date.now()}-${i}`,
+          field: c.field,
+          operator: c.operator,
+          value: c.value ?? '',
+        }))
+        onChange(newConditions)
+        setAiQuery('')
+      },
+    })
+  }
+
   return (
     <div className="space-y-2">
+      {aiAvailable && slug && (
+        <>
+          <div className="flex gap-1">
+            <Input
+              value={aiQuery}
+              onChange={(e) => setAiQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAIFilter()}
+              placeholder="예: 이번 달 완료된 건 보여줘"
+              className="h-8 text-sm"
+              disabled={buildFilter.isPending}
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 shrink-0"
+              disabled={!aiQuery.trim() || buildFilter.isPending}
+              onClick={handleAIFilter}
+            >
+              {buildFilter.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '적용'}
+            </Button>
+          </div>
+          {conditions.length > 0 && (
+            <div className="border-b pb-1 mb-1">
+              <span className="text-[10px] text-muted-foreground">또는 직접 설정</span>
+            </div>
+          )}
+        </>
+      )}
       {conditions.map((cond) => {
         const field = dataFields.find((f) => f.slug === cond.field)
         const validOps = field ? operatorsForFieldType(field.field_type) : ['eq']

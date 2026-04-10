@@ -376,6 +376,8 @@ func buildRouter(
 		r.Route("/api/data", func(r chi.Router) {
 			r.Use(middleware.CollectionAccess(pool))
 			r.Get("/{slug}", dynH.List)
+			r.Get("/{slug}/defaults", dynH.GetDefaults)
+			r.Get("/{slug}/similar", dynH.SimilarRecords)
 			r.Get("/{slug}/aggregate", dynH.Aggregate)
 			r.Post("/{slug}/aggregate/batch", dynH.BatchAggregate)
 			r.Get("/{slug}/export.csv", dynH.ExportCSV)
@@ -415,6 +417,11 @@ func buildRouter(
 		r.Post("/api/ai/chat", aiH.Chat)
 		r.Post("/api/ai/generate-slug", aiH.GenerateSlug)
 		r.Post("/api/ai/build-automation/{id}", aiH.BuildAutomation)
+		r.Post("/api/ai/build-formula/{slug}", aiH.BuildFormula)
+		r.Post("/api/ai/build-filter/{slug}", aiH.BuildFilter)
+		r.Post("/api/ai/prefill/{slug}", aiH.Prefill)
+		r.Post("/api/ai/map-csv-columns/{slug}", aiH.MapCSVColumns)
+		r.Post("/api/ai/build-chart/{id}", aiH.BuildChart)
 
 		// Notifications
 		r.Get("/api/notifications", notifH.List)
