@@ -69,7 +69,7 @@ export default function EntryForm({
     return process.transitions
       .filter((t) => {
         if (t.from_status_id !== currentStatusObj.id) return false
-        if (t.allowed_roles.length > 0 && userRole && !t.allowed_roles.includes(userRole)) return false
+        if (t.allowed_roles.length > 0 && (!userRole || !t.allowed_roles.includes(userRole))) return false
         return true
       })
       .map((t) => {

@@ -53,7 +53,10 @@ func (s *Store) GetProcess(ctx context.Context, collectionID string) (Process, e
 }
 
 func (s *Store) listProcessStatuses(ctx context.Context, processID string) ([]ProcessStatus, error) {
-	pUID, _ := parseUUID(processID)
+	pUID, err := parseUUID(processID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid process ID %q: %w", processID, err)
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, process_id, name, color, sort_order, is_initial, created_at, updated_at
 		FROM _meta.process_statuses
@@ -82,7 +85,10 @@ func (s *Store) listProcessStatuses(ctx context.Context, processID string) ([]Pr
 }
 
 func (s *Store) listProcessTransitions(ctx context.Context, processID string) ([]ProcessTransition, error) {
-	pUID, _ := parseUUID(processID)
+	pUID, err := parseUUID(processID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid process ID %q: %w", processID, err)
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, process_id, from_status_id, to_status_id, label, allowed_roles, created_at
 		FROM _meta.process_transitions

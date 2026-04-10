@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -111,13 +112,16 @@ func recordChange(
 ) {
 	diffJSON, err := json.Marshal(diff)
 	if err != nil {
+		slog.Error("recordChange: marshal diff", "error", err, "collection", collectionID, "record", recordID)
 		return
 	}
-	_, _ = pool.Exec(ctx, `
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO _history.record_changes (collection_id, record_id, user_id, user_name, operation, diff)
 		VALUES ($1, $2, $3, $4, $5, $6)`,
 		collectionID, recordID, userID, userName, operation, diffJSON,
-	)
+	); err != nil {
+		slog.Error("recordChange: insert", "error", err, "collection", collectionID, "record", recordID)
+	}
 }
 
 // computeDiff compares old and new records and returns only changed fields.

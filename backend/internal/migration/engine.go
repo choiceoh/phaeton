@@ -320,8 +320,10 @@ func (e *Engine) AddField(ctx context.Context, collectionID string, req *schema.
 	if safety != Safe && !confirmed {
 		qTable := quoteIdent("data", col.Slug)
 		var count int64
-		e.pool.QueryRow(ctx,
-			fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE deleted_at IS NULL", qTable)).Scan(&count)
+		if err := e.pool.QueryRow(ctx,
+			fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE deleted_at IS NULL", qTable)).Scan(&count); err != nil {
+			return schema.Field{}, nil, fmt.Errorf("count rows for %s: %w", col.Slug, err)
+		}
 
 		tmpField := schema.Field{Slug: req.Slug, FieldType: req.FieldType, IsRequired: req.IsRequired, DefaultValue: req.DefaultValue}
 		ddlUp, ddlDown := GenerateAddColumn(col.Slug, tmpField)
@@ -527,9 +529,11 @@ func (e *Engine) PreviewDropField(ctx context.Context, fieldID string) (Preview,
 	qTable := quoteIdent("data", col.Slug)
 	qCol := quoteIdentSingle(f.Slug)
 	var nonNull int64
-	e.pool.QueryRow(ctx,
+	if err := e.pool.QueryRow(ctx,
 		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE deleted_at IS NULL AND %s IS NOT NULL", qTable, qCol),
-	).Scan(&nonNull)
+	).Scan(&nonNull); err != nil {
+		return Preview{}, fmt.Errorf("count non-null rows for %s.%s: %w", col.Slug, f.Slug, err)
+	}
 
 	ddlUp, ddlDown := GenerateDropColumn(col.Slug, f)
 	return Preview{
