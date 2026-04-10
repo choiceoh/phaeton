@@ -43,11 +43,13 @@ function SortableCard({
   titleField,
   onClick,
   justDropped,
+  justCancelled,
 }: {
   entry: Record<string, unknown>
   titleField: Field | undefined
   onClick: () => void
   justDropped?: boolean
+  justCancelled?: boolean
 }) {
   const id = String(entry.id)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -67,7 +69,7 @@ function SortableCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`cursor-grab p-3 transition-colors hover:bg-accent active:cursor-grabbing ${justDropped ? 'animate-scale-bounce' : ''}`}
+      className={`cursor-grab p-3 transition-colors hover:bg-accent active:cursor-grabbing ${justDropped ? 'animate-scale-bounce' : justCancelled ? 'animate-spring-back' : ''}`}
       onClick={(e) => {
         // Only fire click if it wasn't a drag.
         if (!isDragging) {
@@ -95,6 +97,7 @@ function DroppableColumn({
   titleField,
   onCardClick,
   droppedId,
+  cancelledId,
   dropState,
   isDropTarget,
 }: {
@@ -102,6 +105,7 @@ function DroppableColumn({
   titleField: Field | undefined
   onCardClick: (entry: Record<string, unknown>) => void
   droppedId?: string | null
+  cancelledId?: string | null
   dropState: 'idle' | 'allowed' | 'blocked'
   isDropTarget?: boolean
 }) {
@@ -133,6 +137,7 @@ function DroppableColumn({
               titleField={titleField}
               onClick={() => onCardClick(entry)}
               justDropped={droppedId === String(entry.id)}
+              justCancelled={cancelledId === String(entry.id)}
             />
           ))}
           {column.entries.length === 0 && (
@@ -159,6 +164,7 @@ export default function KanbanView({
   const titleField = fields.find((f) => f.field_type === 'text')
   const [activeEntry, setActiveEntry] = useState<Record<string, unknown> | null>(null)
   const [droppedId, setDroppedId] = useState<string | null>(null)
+  const [cancelledId, setCancelledId] = useState<string | null>(null)
   const [fromColumn, setFromColumn] = useState<string | null>(null)
   const [overColumnValue, setOverColumnValue] = useState<string | null>(null)
 
@@ -167,6 +173,12 @@ export default function KanbanView({
     const t = setTimeout(() => setDroppedId(null), 300)
     return () => clearTimeout(t)
   }, [droppedId])
+
+  useEffect(() => {
+    if (!cancelledId) return
+    const t = setTimeout(() => setCancelledId(null), 350)
+    return () => clearTimeout(t)
+  }, [cancelledId])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -236,11 +248,16 @@ export default function KanbanView({
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    const draggedId = activeEntry ? String(activeEntry.id) : null
     setActiveEntry(null)
     setFromColumn(null)
     setOverColumnValue(null)
     const { active, over } = event
-    if (!over || !onCardMove) return
+
+    if (!over || !onCardMove) {
+      if (draggedId) setCancelledId(draggedId)
+      return
+    }
 
     const activeId = String(active.id)
     const overId = String(over.id)
@@ -253,13 +270,16 @@ export default function KanbanView({
       toCol = overId
     }
 
-    if (!toCol || fromCol === toCol) return
+    if (!toCol || fromCol === toCol) {
+      if (draggedId) setCancelledId(draggedId)
+      return
+    }
 
     // Check permission
     if (allowedMoves && fromCol) {
       const allowed = allowedMoves.get(fromCol)
       if (allowed && !allowed.has(toCol)) {
-        // Blocked — do nothing
+        setCancelledId(activeId)
         return
       }
     }
@@ -300,6 +320,7 @@ export default function KanbanView({
             titleField={titleField}
             onCardClick={onCardClick}
             droppedId={droppedId}
+            cancelledId={cancelledId}
             dropState={columnDropStates.get(col.value) ?? 'idle'}
             isDropTarget={overColumnValue === col.value}
           />
