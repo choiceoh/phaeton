@@ -91,7 +91,7 @@ export default function AppBuilder() {
     setSelectedId(null)
   }
 
-  function handleAddField(fieldType: FieldType, presetOptions?: Record<string, unknown>) {
+  function handleAddField(fieldType: FieldType, presetOptions?: Record<string, unknown>, index?: number) {
     const id = `field_${++fieldCounter.current}`
     const draft: FieldDraft = {
       id,
@@ -105,7 +105,13 @@ export default function AppBuilder() {
       height: 1,
       options: presetOptions,
     }
-    setFields([...fields, draft])
+    if (index !== undefined) {
+      const updated = [...fields]
+      updated.splice(index, 0, draft)
+      setFields(updated)
+    } else {
+      setFields([...fields, draft])
+    }
     setSelectedId(id)
   }
 
@@ -174,7 +180,7 @@ export default function AppBuilder() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
         <div className="max-h-[calc(100vh-160px)] overflow-y-auto rounded-lg border p-3">
-          <FieldPalette onAdd={handleAddField} />
+          <FieldPalette />
           {selectedField && (
             <>
               <div className="my-3 border-t" />
@@ -215,6 +221,8 @@ export default function AppBuilder() {
             onSelect={setSelectedId}
             onReorder={setFields}
             onRemove={handleRemoveField}
+            onAdd={handleAddField}
+            onFieldChange={handleFieldChange}
           />
         </div>
       </div>
