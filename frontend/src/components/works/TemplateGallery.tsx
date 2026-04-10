@@ -52,7 +52,6 @@ export default function TemplateGallery() {
         <div className="flex items-center gap-2">
           <Button
             variant={selectedCategory === null ? 'default' : 'outline'}
-            size="sm"
             onClick={() => setSelectedCategory(null)}
           >
             전체
@@ -61,7 +60,6 @@ export default function TemplateGallery() {
             <Button
               key={cat}
               variant={selectedCategory === cat ? 'default' : 'outline'}
-              size="sm"
               onClick={() => setSelectedCategory(cat)}
             >
               {cat}
