@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { Trash2 } from 'lucide-react'
+
 import { FIELD_TYPE_LABELS, isLayoutType } from '@/lib/constants'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -221,7 +223,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                     <div className="col-span-full -mb-2 h-0.5 rounded bg-primary transition-all" />
                   )}
                   <div
-                    className={`cursor-pointer rounded-md px-1 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    className={`relative cursor-pointer rounded-md px-1 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                       selectedId === field.id ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
                     }`}
                     tabIndex={0}
@@ -233,6 +235,13 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                     onDrop={(e) => handleDrop(e, i)}
                   >
                     <LayoutPreview field={field} />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setRemoveTargetId(field.id) }}
+                      className="absolute top-1 right-1 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive [div:hover>&]:opacity-100"
+                      type="button"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               )
@@ -270,10 +279,10 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); setRemoveTargetId(field.id) }}
-                      className="text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive [div:hover>&]:opacity-100"
+                      className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive [div:hover>&]:opacity-100"
                       type="button"
                     >
-                      ×
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
