@@ -42,11 +42,11 @@ export default function RootLayout() {
             <NavLink to="/dashboard" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
               대시보드
             </NavLink>
-            <NavLink to="/admin/org" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
-              조직도
-            </NavLink>
             <NavLink to="/automations" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
               자동화
+            </NavLink>
+            <NavLink to="/admin/org" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
+              조직도
             </NavLink>
             {(user.role === 'director' || user.role === 'pm') && (
               <>
