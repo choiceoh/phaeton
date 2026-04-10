@@ -182,7 +182,9 @@ func TestBuildCollection_MissingDescription(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
-	var body struct{ Message string `json:"message"` }
+	var body struct {
+		Message string `json:"message"`
+	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if body.Message != "description is required" {
 		t.Errorf("error = %q", body.Message)
@@ -283,7 +285,9 @@ func TestBuildCollection_VLLMDown(t *testing.T) {
 	if w.Code != http.StatusBadGateway {
 		t.Errorf("status = %d, want %d (502 Bad Gateway)", w.Code, http.StatusBadGateway)
 	}
-	var body struct{ Message string `json:"message"` }
+	var body struct {
+		Message string `json:"message"`
+	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if !strings.Contains(body.Message, "AI 서버") {
 		t.Errorf("error should mention AI server, got %q", body.Message)
@@ -345,7 +349,9 @@ func TestBuildCollection_VLLMReturnsGarbage(t *testing.T) {
 	if w.Code != http.StatusBadGateway {
 		t.Errorf("status = %d, want 502 for unparseable AI response", w.Code)
 	}
-	var body struct{ Message string `json:"message"` }
+	var body struct {
+		Message string `json:"message"`
+	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if !strings.Contains(body.Message, "파싱") {
 		t.Errorf("error should mention parsing, got %q", body.Message)
