@@ -8,5 +8,6 @@ export function useUsers() {
   return useQuery({
     queryKey: queryKeys.auth.users(),
     queryFn: () => api.get<User[]>('/users'),
+    staleTime: 60_000,
   })
 }

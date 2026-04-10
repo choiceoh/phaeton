@@ -57,6 +57,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			created_by  UUID
 		)`,
 
+		// Upgrade: add access_config column for per-collection permissions.
+		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS access_config JSONB DEFAULT '{}'`,
+
 		// --- _meta.fields ---
 		`CREATE TABLE IF NOT EXISTS _meta.fields (
 			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -69,11 +72,17 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			is_indexed      BOOLEAN NOT NULL DEFAULT FALSE,
 			default_value   JSONB,
 			options         JSONB,
+			width           SMALLINT NOT NULL DEFAULT 6,
+			height          SMALLINT NOT NULL DEFAULT 1,
 			sort_order      INTEGER NOT NULL DEFAULT 0,
+			is_layout       BOOLEAN NOT NULL DEFAULT FALSE,
 			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 			UNIQUE(collection_id, slug)
 		)`,
+
+		// Upgrade: add is_layout column for existing installations.
+		`ALTER TABLE _meta.fields ADD COLUMN IF NOT EXISTS is_layout BOOLEAN NOT NULL DEFAULT FALSE`,
 
 		// --- _meta.relations ---
 		`CREATE TABLE IF NOT EXISTS _meta.relations (
@@ -83,6 +92,50 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			relation_type        VARCHAR(15) NOT NULL,
 			junction_table       VARCHAR(63),
 			on_delete            VARCHAR(15) NOT NULL DEFAULT 'SET NULL'
+		)`,
+
+		// --- _meta.processes ---
+		`CREATE TABLE IF NOT EXISTS _meta.processes (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID UNIQUE NOT NULL REFERENCES _meta.collections(id) ON DELETE CASCADE,
+			is_enabled      BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+
+		// --- _meta.process_statuses ---
+		`CREATE TABLE IF NOT EXISTS _meta.process_statuses (
+			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			process_id  UUID NOT NULL REFERENCES _meta.processes(id) ON DELETE CASCADE,
+			name        VARCHAR(255) NOT NULL,
+			color       VARCHAR(31) NOT NULL DEFAULT '#6b7280',
+			sort_order  INTEGER NOT NULL DEFAULT 0,
+			is_initial  BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+
+		// --- _meta.process_transitions ---
+		`CREATE TABLE IF NOT EXISTS _meta.process_transitions (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			process_id      UUID NOT NULL REFERENCES _meta.processes(id) ON DELETE CASCADE,
+			from_status_id  UUID NOT NULL REFERENCES _meta.process_statuses(id) ON DELETE CASCADE,
+			to_status_id    UUID NOT NULL REFERENCES _meta.process_statuses(id) ON DELETE CASCADE,
+			label           VARCHAR(255) NOT NULL,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+
+		// --- _meta.views ---
+		`CREATE TABLE IF NOT EXISTS _meta.views (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID NOT NULL REFERENCES _meta.collections(id) ON DELETE CASCADE,
+			name            VARCHAR(255) NOT NULL,
+			view_type       VARCHAR(31) NOT NULL DEFAULT 'list',
+			config          JSONB DEFAULT '{}',
+			sort_order      INTEGER NOT NULL DEFAULT 0,
+			is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 
 		// --- _history.schema_migrations ---

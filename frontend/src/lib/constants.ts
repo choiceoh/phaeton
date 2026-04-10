@@ -2,7 +2,7 @@ import type { FieldType } from './types'
 
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: '텍스트',
-  textarea: '장문 텍스트',
+  textarea: '멀티 텍스트',
   number: '숫자',
   integer: '정수',
   boolean: '불리언',
@@ -15,6 +15,9 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   user: '사용자',
   file: '파일',
   json: 'JSON',
+  label: '라벨',
+  line: '라인',
+  spacer: '공백',
 }
 
 export const FIELD_TYPE_ICONS: Record<FieldType, string> = {
@@ -32,7 +35,13 @@ export const FIELD_TYPE_ICONS: Record<FieldType, string> = {
   user: '👤',
   file: '📎',
   json: '{ }',
+  label: 'Lbl',
+  line: '━',
+  spacer: '⬜',
 }
+
+export const LAYOUT_FIELD_TYPES: FieldType[] = ['label', 'line', 'spacer']
+export const isLayoutType = (ft: FieldType) => LAYOUT_FIELD_TYPES.includes(ft)
 
 export const ROLE_LABELS: Record<string, string> = {
   director: '디렉터',
@@ -53,3 +62,27 @@ export const RELATION_TYPE_LABELS = {
   one_to_many: '1:N',
   many_to_many: 'N:M',
 }
+
+export const WIDTH_OPTIONS = [
+  { value: 1, label: '1/6' },
+  { value: 2, label: '1/3' },
+  { value: 3, label: '1/2' },
+  { value: 6, label: '전체' },
+]
+
+export const HEIGHT_OPTIONS = [
+  { value: 1, label: '1줄' },
+  { value: 2, label: '2줄' },
+  { value: 3, label: '3줄' },
+]
+
+export const VALIDATION_OPTIONS = [
+  { value: 'none', label: '모든 값 허용' },
+  { value: 'email', label: '이메일' },
+  { value: 'url', label: 'URL' },
+  { value: 'phone', label: '전화번호' },
+  { value: 'number_only', label: '숫자만' },
+  { value: 'alpha_only', label: '영문만' },
+  { value: 'alphanumeric', label: '영문+숫자' },
+  { value: 'regex', label: '정규식' },
+]

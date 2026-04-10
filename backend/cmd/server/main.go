@@ -74,13 +74,14 @@ func run() int {
 	// Schema & dynamic handlers (PR #53 — built-in dynamic handler).
 	schemaHandler := handler.NewSchemaHandler(store, cache, migEngine)
 	dynHandler := handler.NewDynHandler(pool, cache)
+	viewHandler := handler.NewViewHandler(store)
 
 	// Login rate limiter: 5 failures / 15 minutes → 30 minute lockout.
 	loginLimiter := middleware.NewRateLimiter(5, 15*60*1000, 30*60*1000)
 	defer loginLimiter.Close()
 
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, logger, loginLimiter)
+	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, logger, loginLimiter)
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -126,6 +127,7 @@ func buildRouter(
 	pool *pgxpool.Pool,
 	schemaH *handler.SchemaHandler,
 	dynH *handler.DynHandler,
+	viewH *handler.ViewHandler,
 	logger *slog.Logger,
 	loginLimiter *middleware.RateLimiter,
 ) *chi.Mux {
@@ -146,6 +148,7 @@ func buildRouter(
 
 	// Auth (public).
 	r.Post("/api/auth/login", handler.Login(pool, loginLimiter))
+	r.Post("/api/auth/logout", handler.Logout())
 
 	// Protected routes.
 	r.Group(func(r chi.Router) {
@@ -158,33 +161,59 @@ func buildRouter(
 
 		// Schema API — collection/field/migration management.
 		r.Route("/api/schema", func(r chi.Router) {
+			// Read-only: all authenticated users.
 			r.Get("/collections", schemaH.ListCollections)
-			r.Post("/collections", schemaH.CreateCollection)
 			r.Get("/collections/{id}", schemaH.GetCollection)
-			r.Patch("/collections/{id}", schemaH.UpdateCollection)
-			r.Delete("/collections/{id}", schemaH.DeleteCollection)
-
-			r.Post("/collections/{id}/fields", schemaH.AddField)
-			r.Patch("/fields/{fieldId}", schemaH.UpdateField)
-			r.Delete("/fields/{fieldId}", schemaH.DeleteField)
-
 			r.Get("/migrations/history", schemaH.MigrationHistory)
-			r.Post("/migrations/rollback/{migrationId}", schemaH.RollbackMigration)
+
+			// Write: director and pm only.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("director", "pm"))
+				r.Post("/collections", schemaH.CreateCollection)
+				r.Patch("/collections/{id}", schemaH.UpdateCollection)
+				r.Delete("/collections/{id}", schemaH.DeleteCollection)
+
+				r.Get("/collections/{id}/process", schemaH.GetProcess)
+				r.Put("/collections/{id}/process", schemaH.SaveProcess)
+
+				r.Post("/collections/{id}/fields", schemaH.AddField)
+				r.Patch("/fields/{fieldId}", schemaH.UpdateField)
+				r.Delete("/fields/{fieldId}", schemaH.DeleteField)
+
+				r.Post("/migrations/rollback/{migrationId}", schemaH.RollbackMigration)
+			})
+
+			// Views: read/write for all authenticated users.
+			r.Get("/collections/{id}/views", viewH.ListViews)
+			r.Post("/collections/{id}/views", viewH.CreateView)
+			r.Patch("/views/{viewId}", viewH.UpdateView)
+			r.Delete("/views/{viewId}", viewH.DeleteView)
 		})
 
 		// Dynamic API — auto-generated CRUD for data tables.
 		r.Route("/api/data", func(r chi.Router) {
+			// Read: all authenticated users.
 			r.Get("/{slug}", dynH.List)
-			r.Post("/{slug}", dynH.Create)
-			r.Post("/{slug}/bulk", dynH.BulkCreate)
-			r.Delete("/{slug}/bulk", dynH.BulkDelete)
 			r.Get("/{slug}/aggregate", dynH.Aggregate)
 			r.Get("/{slug}/export.csv", dynH.ExportCSV)
-			r.Post("/{slug}/import", dynH.ImportCSV)
 			r.Get("/{slug}/{id}", dynH.Get)
-			r.Patch("/{slug}/{id}", dynH.Update)
-			r.Delete("/{slug}/{id}", dynH.Delete)
+
+			// Write: director, pm, engineer.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("director", "pm", "engineer"))
+				r.Post("/{slug}", dynH.Create)
+				r.Post("/{slug}/bulk", dynH.BulkCreate)
+				r.Delete("/{slug}/bulk", dynH.BulkDelete)
+				r.Post("/{slug}/import", dynH.ImportCSV)
+				r.Patch("/{slug}/{id}", dynH.Update)
+				r.Delete("/{slug}/{id}", dynH.Delete)
+			})
 		})
+
+		// File upload & download (authenticated).
+		r.Post("/api/upload", handler.Upload)
+		r.Handle("/api/uploads/*", http.StripPrefix("/api/uploads/",
+			http.FileServer(http.Dir("uploads"))))
 	})
 
 	// SPA static files — catch-all for non-API routes.
@@ -236,4 +265,3 @@ func envOr(key, fallback string) string {
 	}
 	return fallback
 }
-

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
@@ -14,10 +14,9 @@ import FieldPalette from './FieldPalette'
 import FieldPreview, { type FieldDraft } from './FieldPreview'
 import FieldProperties from './FieldProperties'
 
-let fieldCounter = 0
-
 export default function AppBuilder() {
   const navigate = useNavigate()
+  const fieldCounter = useRef(0)
   const [slug, setSlug] = useState('')
   const [label, setLabel] = useState('')
   const [description, setDescription] = useState('')
@@ -30,8 +29,8 @@ export default function AppBuilder() {
 
   const selectedField = fields.find((f) => f.id === selectedId) || null
 
-  function handleAddField(fieldType: FieldType) {
-    const id = `field_${++fieldCounter}`
+  function handleAddField(fieldType: FieldType, presetOptions?: Record<string, unknown>) {
+    const id = `field_${++fieldCounter.current}`
     const draft: FieldDraft = {
       id,
       slug: '',
@@ -40,6 +39,9 @@ export default function AppBuilder() {
       is_required: false,
       is_unique: false,
       is_indexed: false,
+      width: 6,
+      height: 1,
+      options: presetOptions,
     }
     setFields([...fields, draft])
     setSelectedId(id)
@@ -78,6 +80,9 @@ export default function AppBuilder() {
         is_required: f.is_required,
         is_unique: f.is_unique,
         is_indexed: f.is_indexed,
+        default_value: f.default_value,
+        width: f.width,
+        height: f.height,
         options: f.options,
         relation: f.relation,
       })),

@@ -10,8 +10,11 @@ import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
+import { Badge } from '@/components/ui/badge'
+import KanbanView from '@/components/works/views/KanbanView'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
   useCreateEntry,
@@ -19,8 +22,9 @@ import {
   useEntries,
   useUpdateEntry,
 } from '@/hooks/useEntries'
+import { useProcess } from '@/hooks/useProcess'
 import { formatError } from '@/lib/api'
-import type { Field } from '@/lib/types'
+import { formatCell } from '@/lib/formatCell'
 
 const PAGE_SIZE = 20
 
@@ -36,6 +40,7 @@ export default function AppViewPage() {
 
   const { data: collection, isLoading: colLoading, isError: colError, error: colErr } =
     useCollection(appId)
+  const { data: process } = useProcess(appId)
 
   // Build expand string from all relation fields so we get labels not UUIDs.
   const expand = useMemo(() => {
@@ -72,16 +77,51 @@ export default function AppViewPage() {
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
 
+  // Detect whether a kanban view is possible (needs a select field).
+  const selectField = useMemo(
+    () => collection?.fields?.find((f) => f.field_type === 'select'),
+    [collection],
+  )
+
   // Build columns from collection.fields. Each column reads its value via the
   // field slug; relation columns prefer the expanded object's `name`/`title`.
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
     if (!collection?.fields) return []
-    const cols: ColumnDef<Record<string, unknown>>[] = collection.fields.slice(0, 8).map((f) => ({
-      id: f.slug,
-      header: f.label,
-      enableSorting: true,
-      cell: ({ row }) => formatCell(row.original[f.slug], f),
-    }))
+    const cols: ColumnDef<Record<string, unknown>>[] = []
+
+    // Process status column (first if enabled).
+    if (process?.is_enabled && process.statuses?.length) {
+      cols.push({
+        id: '_status',
+        header: '상태',
+        enableSorting: true,
+        cell: ({ row }) => {
+          const statusName = row.original._status as string
+          if (!statusName) return <span className="text-muted-foreground">미설정</span>
+          const statusDef = process.statuses.find((s) => s.name === statusName)
+          return (
+            <Badge
+              style={{
+                backgroundColor: statusDef?.color ?? '#6b7280',
+                color: '#fff',
+              }}
+            >
+              {statusName}
+            </Badge>
+          )
+        },
+      })
+    }
+
+    cols.push(
+      ...collection.fields.slice(0, 8).map((f) => ({
+        id: f.slug,
+        header: f.label,
+        enableSorting: true,
+        cell: ({ row }: { row: { original: Record<string, unknown> } }) =>
+          formatCell(row.original[f.slug], f),
+      })),
+    )
     cols.push({
       id: 'created_at',
       header: '작성일',
@@ -113,11 +153,27 @@ export default function AppViewPage() {
       ),
     })
     return cols
-  }, [collection])
+  }, [collection, process])
 
   if (colLoading) return <LoadingState />
   if (colError) return <ErrorState error={colErr} />
   if (!collection) return null
+
+  function handleEntryClick(entry: Record<string, unknown>) {
+    setEditEntry(entry)
+    setSheetOpen(true)
+  }
+
+  function handleCardMove(entryId: string, newValue: string) {
+    if (!selectField) return
+    updateEntry.mutate(
+      { id: entryId, body: { [selectField.slug]: newValue } },
+      {
+        onSuccess: () => toast.success('이동되었습니다'),
+        onError: (err) => toast.error(formatError(err)),
+      },
+    )
+  }
 
   function handleSubmit(data: Record<string, unknown>) {
     if (editEntry?.id) {
@@ -182,6 +238,8 @@ export default function AppViewPage() {
     }
   }, [collection, refetch])
 
+  const hasKanban = !!selectField
+
   return (
     <div>
       <PageHeader
@@ -239,21 +297,41 @@ export default function AppViewPage() {
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
       {list && (
-        <DataTable
-          columns={columns}
-          data={list.data}
-          total={list.total}
-          page={page}
-          limit={PAGE_SIZE}
-          onPageChange={setPage}
-          onSortChange={setSorting}
-          onRowClick={(row) => {
-            setEditEntry(row)
-            setSheetOpen(true)
-          }}
-          emptyTitle="아직 항목이 없습니다"
-          emptyDescription='"새 항목" 버튼을 눌러 첫 데이터를 입력하세요.'
-        />
+        <Tabs defaultValue="list">
+          {hasKanban && (
+            <TabsList className="mb-4">
+              <TabsTrigger value="list">목록</TabsTrigger>
+              <TabsTrigger value="kanban">칸반</TabsTrigger>
+            </TabsList>
+          )}
+
+          <TabsContent value="list" className="mt-0">
+            <DataTable
+              columns={columns}
+              data={list.data}
+              total={list.total}
+              page={page}
+              limit={PAGE_SIZE}
+              onPageChange={setPage}
+              onSortChange={setSorting}
+              onRowClick={handleEntryClick}
+              emptyTitle="아직 항목이 없습니다"
+              emptyDescription='"새 항목" 버튼을 눌러 첫 데이터를 입력하세요.'
+            />
+          </TabsContent>
+
+          {hasKanban && selectField && (
+            <TabsContent value="kanban" className="mt-0">
+              <KanbanView
+                groupField={selectField}
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onCardClick={handleEntryClick}
+                onCardMove={handleCardMove}
+              />
+            </TabsContent>
+          )}
+        </Tabs>
       )}
 
       <EntrySheet
@@ -264,6 +342,7 @@ export default function AppViewPage() {
         onSubmit={handleSubmit}
         submitting={createEntry.isPending || updateEntry.isPending}
         title={editEntry ? '항목 편집' : '새 항목'}
+        process={process}
       />
 
       <ConfirmDialog
@@ -280,26 +359,3 @@ export default function AppViewPage() {
   )
 }
 
-function formatCell(value: unknown, field: Field): string {
-  if (value == null) return '-'
-  // Expanded relation: backend returns the full object, not just the id
-  if (field.field_type === 'relation' && typeof value === 'object') {
-    const obj = value as Record<string, unknown>
-    return String(obj.name ?? obj.title ?? obj.label ?? obj.id ?? '?')
-  }
-  // Expanded user: backend auto-expands to {id, name, email}
-  if (field.field_type === 'user' && typeof value === 'object') {
-    const obj = value as Record<string, unknown>
-    return String(obj.name ?? obj.email ?? obj.id ?? '?')
-  }
-  if (field.field_type === 'boolean') return value ? '✓' : '-'
-  if (field.field_type === 'date' || field.field_type === 'datetime') {
-    return new Date(value as string).toLocaleDateString('ko')
-  }
-  if (field.field_type === 'time') return String(value)
-  if (field.field_type === 'multiselect' && Array.isArray(value)) {
-    return value.join(', ')
-  }
-  if (field.field_type === 'json') return JSON.stringify(value)
-  return String(value)
-}

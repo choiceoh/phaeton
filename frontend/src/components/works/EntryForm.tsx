@@ -4,6 +4,7 @@ import RelationCombobox from '@/components/common/RelationCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -14,7 +15,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import type { Field } from '@/lib/types'
+import { api } from '@/lib/api'
+import { isLayoutType } from '@/lib/constants'
+import type { Field, Process } from '@/lib/types'
 
 interface Props {
   fields: Field[]
@@ -22,6 +25,7 @@ interface Props {
   onSubmit: (data: Record<string, unknown>) => void
   onCancel: () => void
   submitting?: boolean
+  process?: Process
 }
 
 // EntryForm renders a dynamic form built from a collection's fields.
@@ -37,6 +41,7 @@ export default function EntryForm({
   onSubmit,
   onCancel,
   submitting,
+  process,
 }: Props) {
   const [data, setData] = useState<Record<string, unknown>>(initialData ?? {})
 
@@ -49,24 +54,89 @@ export default function EntryForm({
     onSubmit(data)
   }
 
+  // Process status transitions (only when editing an existing entry).
+  const currentStatus = initialData?._status as string | undefined
+  const availableTransitions = (() => {
+    if (!process?.is_enabled || !currentStatus || !initialData?.id) return []
+    const statusByName = new Map(process.statuses.map((s) => [s.name, s]))
+    const currentStatusObj = statusByName.get(currentStatus)
+    if (!currentStatusObj) return []
+    return process.transitions
+      .filter((t) => t.from_status_id === currentStatusObj.id)
+      .map((t) => {
+        const target = process.statuses.find((s) => s.id === t.to_status_id)
+        return { label: t.label, targetName: target?.name ?? '', targetColor: target?.color ?? '#6b7280' }
+      })
+  })()
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-4">
-        {fields.map((field) => (
-          <div key={field.id}>
-            <Label>
-              {field.label}
-              {field.is_required && <span className="ml-1 text-destructive">*</span>}
-            </Label>
-            <div className="mt-1">
-              <FieldInput
-                field={field}
-                value={extractValue(data[field.slug], field)}
-                onChange={(v) => setValue(field.slug, v)}
-              />
-            </div>
+      {/* Status transition UI */}
+      {process?.is_enabled && currentStatus && (
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">현재 상태:</span>
+            <span
+              className="inline-block rounded px-2 py-0.5 text-xs font-medium text-white"
+              style={{
+                backgroundColor:
+                  process.statuses.find((s) => s.name === currentStatus)?.color ?? '#6b7280',
+              }}
+            >
+              {currentStatus}
+            </span>
           </div>
-        ))}
+          {availableTransitions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {availableTransitions.map((t, i) => (
+                <Button
+                  key={i}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setValue('_status', t.targetName)}
+                >
+                  {t.label} → {t.targetName}
+                </Button>
+              ))}
+            </div>
+          )}
+          {typeof data._status === 'string' && data._status !== currentStatus && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              저장 시 상태가 <strong>{String(data._status)}</strong>(으)로 변경됩니다.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-6 gap-4">
+        {fields.map((field) => {
+          if (isLayoutType(field.field_type)) {
+            return (
+              <div key={field.id} style={{ gridColumn: 'span 6' }}>
+                <LayoutElement field={field} />
+              </div>
+            )
+          }
+          return (
+            <div
+              key={field.id}
+              style={{ gridColumn: `span ${field.width || 6}` }}
+            >
+              <Label>
+                {field.label}
+                {field.is_required && <span className="ml-1 text-destructive">*</span>}
+              </Label>
+              <div className="mt-1">
+                <FieldInput
+                  field={field}
+                  value={extractValue(data[field.slug], field)}
+                  onChange={(v) => setValue(field.slug, v)}
+                />
+              </div>
+            </div>
+          )
+        })}
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onCancel}>
@@ -94,6 +164,23 @@ function extractValue(value: unknown, field: Field): unknown {
   return value
 }
 
+function LayoutElement({ field }: { field: Field }) {
+  switch (field.field_type) {
+    case 'label':
+      return (
+        <p className="text-sm text-muted-foreground">
+          {(field.options?.content as string) || field.label}
+        </p>
+      )
+    case 'line':
+      return <hr className="my-2" />
+    case 'spacer':
+      return <div style={{ height: (field.options?.height as number) || 24 }} />
+    default:
+      return null
+  }
+}
+
 function FieldInput({
   field,
   value,
@@ -103,22 +190,40 @@ function FieldInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const h = field.height || 1
+
   switch (field.field_type) {
-    case 'text':
-      return (
-        <Input
-          value={(value as string) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          required={field.is_required}
-        />
-      )
     case 'textarea':
       return (
         <Textarea
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
+          rows={(field.options?.rows as number) || Math.max(4, h * 2)}
           required={field.is_required}
-          rows={4}
+        />
+      )
+    case 'time':
+      return (
+        <Input
+          type="time"
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
+        />
+      )
+    case 'text':
+      return h > 1 ? (
+        <Textarea
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
+          rows={h * 2}
+        />
+      ) : (
+        <Input
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
         />
       )
     case 'number':
@@ -133,11 +238,10 @@ function FieldInput({
       )
     case 'date':
       return (
-        <Input
-          type="date"
-          value={(value as string)?.slice(0, 10) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          required={field.is_required}
+        <DatePicker
+          value={(value as string)?.slice(0, 10) || undefined}
+          onChange={(v) => onChange(v ?? null)}
+          placeholder="날짜 선택"
         />
       )
     case 'datetime':
@@ -145,15 +249,6 @@ function FieldInput({
         <Input
           type="datetime-local"
           value={(value as string)?.slice(0, 16) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          required={field.is_required}
-        />
-      )
-    case 'time':
-      return (
-        <Input
-          type="time"
-          value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
           required={field.is_required}
         />
@@ -166,6 +261,25 @@ function FieldInput({
       )
     case 'select': {
       const choices = (field.options?.choices as string[]) || []
+      const display = field.options?.display as string | undefined
+      if (display === 'radio') {
+        return (
+          <div className="space-y-1">
+            {choices.map((c) => (
+              <label key={c} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name={field.slug}
+                  value={c}
+                  checked={value === c}
+                  onChange={() => onChange(c)}
+                />
+                {c}
+              </label>
+            ))}
+          </div>
+        )
+      }
       return (
         <Select value={(value as string) || ''} onValueChange={onChange}>
           <SelectTrigger>
@@ -213,14 +327,9 @@ function FieldInput({
         />
       )
     case 'user':
-      return (
-        <UserCombobox
-          value={value as string | undefined}
-          onChange={onChange}
-        />
-      )
+      return <UserCombobox value={value as string | undefined} onChange={onChange} />
     case 'file':
-      return <Input type="file" onChange={(e) => onChange(e.target.files?.[0]?.name)} />
+      return <FileInput value={value as string | undefined} onChange={onChange} />
     case 'json':
       return (
         <Textarea
@@ -232,7 +341,7 @@ function FieldInput({
               onChange(e.target.value)
             }
           }}
-          rows={4}
+          rows={Math.max(4, h * 2)}
         />
       )
     default:
@@ -240,4 +349,45 @@ function FieldInput({
         <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} />
       )
   }
+}
+
+function FileInput({
+  value,
+  onChange,
+}: {
+  value: string | undefined
+  onChange: (v: unknown) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const result = await api.upload(file)
+      onChange(result.url)
+    } catch {
+      onChange(undefined)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <Input type="file" onChange={handleFile} disabled={uploading} />
+      {uploading && <p className="text-xs text-muted-foreground">업로드 중...</p>}
+      {value && !uploading && (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-primary underline"
+        >
+          {value.split('/').pop()}
+        </a>
+      )}
+    </div>
+  )
 }

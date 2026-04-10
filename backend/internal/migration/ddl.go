@@ -37,6 +37,8 @@ func FieldTypeToPG(ft schema.FieldType) string {
 		return "UUID"
 	case schema.FieldJSON:
 		return "JSONB"
+	case schema.FieldLabel, schema.FieldLine, schema.FieldSpacer:
+		return "" // layout types have no DB column
 	default:
 		return "TEXT"
 	}
@@ -55,12 +57,16 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 	var colDefs []string
 	colDefs = append(colDefs, "id UUID PRIMARY KEY DEFAULT gen_random_uuid()")
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		colDefs = append(colDefs, columnDef(f))
 	}
 	colDefs = append(colDefs,
 		"created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
 		"updated_at TIMESTAMPTZ NOT NULL DEFAULT now()",
 		"created_by UUID",
+		"updated_by UUID",
 		"deleted_at TIMESTAMPTZ",
 	)
 
@@ -88,7 +94,11 @@ func GenerateDropTable(slug string) (up, down []string) {
 }
 
 // GenerateAddColumn produces DDL to add a column, plus any unique/index statements.
+// Layout fields produce no DDL.
 func GenerateAddColumn(tableSlug string, f schema.Field) (up, down []string) {
+	if f.FieldType.IsLayout() {
+		return nil, nil
+	}
 	qTable := quoteIdent("data", tableSlug)
 	qCol := quoteIdentSingle(f.Slug)
 	pgType := FieldTypeToPG(f.FieldType)
@@ -203,6 +213,22 @@ func GenerateJunctionTable(slugA, slugB, junctionName string) (up, down string) 
 		quoteIdentSingle(colA), quoteIdentSingle(colB),
 	)
 	down = fmt.Sprintf("DROP TABLE IF EXISTS %s", qTable)
+	return up, down
+}
+
+// GenerateAddStatusColumn produces DDL to add the _status column to a data table.
+func GenerateAddStatusColumn(tableSlug string) (up, down []string) {
+	qTable := quoteIdent("data", tableSlug)
+	up = []string{fmt.Sprintf("ALTER TABLE %s ADD COLUMN %q VARCHAR(255)", qTable, "_status")}
+	down = []string{fmt.Sprintf("ALTER TABLE %s DROP COLUMN IF EXISTS %q", qTable, "_status")}
+	return up, down
+}
+
+// GenerateDropStatusColumn produces DDL to drop the _status column.
+func GenerateDropStatusColumn(tableSlug string) (up, down []string) {
+	qTable := quoteIdent("data", tableSlug)
+	up = []string{fmt.Sprintf("ALTER TABLE %s DROP COLUMN IF EXISTS %q", qTable, "_status")}
+	down = []string{fmt.Sprintf("ALTER TABLE %s ADD COLUMN %q VARCHAR(255)", qTable, "_status")}
 	return up, down
 }
 

@@ -44,7 +44,7 @@ var pgReserved = map[string]bool{
 // autoColumns are injected by the engine into every data table.
 var autoColumns = map[string]bool{
 	"id": true, "created_at": true, "updated_at": true,
-	"created_by": true, "deleted_at": true,
+	"created_by": true, "updated_by": true, "deleted_at": true, "_status": true,
 }
 
 func ValidateSlug(slug string) error {
@@ -91,6 +91,10 @@ func ValidateFieldCreate(req *CreateFieldIn) error {
 	return validateFieldIn(req)
 }
 
+// validWidths and validHeights define the allowed layout grid values.
+var validWidths = map[int16]bool{1: true, 2: true, 3: true, 6: true}
+var validHeights = map[int16]bool{1: true, 2: true, 3: true}
+
 func validateFieldIn(f *CreateFieldIn) error {
 	if err := ValidateSlug(f.Slug); err != nil {
 		return err
@@ -100,6 +104,20 @@ func validateFieldIn(f *CreateFieldIn) error {
 	}
 	if err := ValidateFieldType(f.FieldType); err != nil {
 		return err
+	}
+	// Layout fields must not carry data constraints.
+	if f.FieldType.IsLayout() {
+		f.IsRequired = false
+		f.IsUnique = false
+		f.IsIndexed = false
+		f.DefaultValue = nil
+		return nil
+	}
+	if f.Width != 0 && !validWidths[f.Width] {
+		return fmt.Errorf("%w: width must be 1, 2, 3, or 6", ErrInvalidInput)
+	}
+	if f.Height != 0 && !validHeights[f.Height] {
+		return fmt.Errorf("%w: height must be 1, 2, or 3", ErrInvalidInput)
 	}
 	if f.FieldType == FieldRelation && f.Relation == nil {
 		return fmt.Errorf("%w: relation field requires relation config", ErrInvalidInput)

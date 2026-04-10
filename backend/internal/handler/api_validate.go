@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,6 +11,8 @@ import (
 	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
+
+var timeRe = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$`)
 
 // validatePayload checks user-supplied data against field definitions before
 // it reaches the database. It catches problems that PG would otherwise raise
@@ -33,17 +36,24 @@ func validatePayload(
 
 	// Reject unknown user-supplied fields (the API surface should match the schema).
 	for k := range body {
-		if _, ok := bySlug[k]; ok {
+		f, ok := bySlug[k]
+		if ok {
+			if f.FieldType.IsLayout() {
+				return fmt.Errorf("%w: layout field %q cannot hold data", schema.ErrInvalidInput, k)
+			}
 			continue
 		}
-		// `created_by` is the only system column the client may set.
-		if k == "created_by" {
+		// System columns the client may set.
+		if k == "created_by" || k == "_status" {
 			continue
 		}
 		return fmt.Errorf("%w: unknown field %q", schema.ErrInvalidInput, k)
 	}
 
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		v, present := body[f.Slug]
 
 		if !present {
@@ -74,7 +84,7 @@ func validatePayload(
 			}
 		}
 
-		// User: confirm the user exists in auth.users.
+		// User: confirm the referenced user exists.
 		if f.FieldType == schema.FieldUser {
 			id, ok := v.(string)
 			if !ok {
@@ -126,16 +136,6 @@ func validateFieldValue(f schema.Field, v any) error {
 		if _, err := time.Parse(time.RFC3339, s); err != nil {
 			return fmt.Errorf("%w: invalid datetime %q", schema.ErrInvalidInput, s)
 		}
-	case schema.FieldTime:
-		s, ok := v.(string)
-		if !ok {
-			return fmt.Errorf("%w: expected time string HH:MM or HH:MM:SS", schema.ErrInvalidInput)
-		}
-		if _, err := time.Parse("15:04", s); err != nil {
-			if _, err2 := time.Parse("15:04:05", s); err2 != nil {
-				return fmt.Errorf("%w: invalid time %q (expected HH:MM or HH:MM:SS)", schema.ErrInvalidInput, s)
-			}
-		}
 	case schema.FieldSelect:
 		s, ok := v.(string)
 		if !ok {
@@ -166,7 +166,15 @@ func validateFieldValue(f schema.Field, v any) error {
 				return fmt.Errorf("%w: %q is not in allowed choices %v", schema.ErrInvalidInput, s, choices)
 			}
 		}
-	case schema.FieldRelation, schema.FieldUser, schema.FieldFile:
+	case schema.FieldTime:
+		s, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("%w: expected time string HH:MM or HH:MM:SS", schema.ErrInvalidInput)
+		}
+		if !timeRe.MatchString(s) {
+			return fmt.Errorf("%w: invalid time %q (expected HH:MM or HH:MM:SS)", schema.ErrInvalidInput, s)
+		}
+	case schema.FieldRelation, schema.FieldFile, schema.FieldUser:
 		s, ok := v.(string)
 		if !ok {
 			return fmt.Errorf("%w: expected UUID string", schema.ErrInvalidInput)
@@ -196,8 +204,7 @@ func contains(haystack []string, needle string) bool {
 func checkUserExists(ctx context.Context, pool *pgxpool.Pool, id string) error {
 	var exists bool
 	err := pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = $1 AND is_active = true)`,
-		id,
+		`SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = $1)`, id,
 	).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("verify user: %w", err)
@@ -228,4 +235,3 @@ func checkRelationTarget(ctx context.Context, pool *pgxpool.Pool, cache *schema.
 	}
 	return nil
 }
-

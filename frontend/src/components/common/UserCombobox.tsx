@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils'
 
 interface Props {
   value: string | undefined
-  onChange: (value: string | null) => void
+  onChange: (value: unknown) => void
   placeholder?: string
   disabled?: boolean
 }
@@ -27,15 +27,12 @@ export default function UserCombobox({
   disabled,
 }: Props) {
   const [open, setOpen] = useState(false)
-  const { data: users } = useUsers()
+  const { data: users = [] } = useUsers()
 
-  const items = useMemo(() => {
-    if (!users) return []
-    return users.map((u) => ({
-      id: u.id,
-      label: `${u.name} (${u.email})`,
-    }))
-  }, [users])
+  const items = useMemo(
+    () => users.map((u) => ({ id: u.id, label: `${u.name} (${u.email})` })),
+    [users],
+  )
 
   const selectedLabel = items.find((item) => item.id === value)?.label ?? placeholder
 
@@ -50,7 +47,7 @@ export default function UserCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
         <Command>
-          <CommandInput placeholder="검색..." />
+          <CommandInput placeholder="이름 검색..." />
           <CommandList>
             <CommandEmpty>일치하는 사용자가 없습니다.</CommandEmpty>
             <CommandGroup>

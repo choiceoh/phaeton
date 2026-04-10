@@ -25,7 +25,7 @@ func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // ---------- Collection ----------
 
-const colCols = `id, slug, label, description, icon, is_system, sort_order, created_at, updated_at, created_by`
+const colCols = `id, slug, label, description, icon, is_system, sort_order, access_config, created_at, updated_at, created_by`
 
 func scanCollection(row pgx.Row) (Collection, error) {
 	var (
@@ -34,10 +34,11 @@ func scanCollection(row pgx.Row) (Collection, error) {
 		createdBy pgtype.UUID
 		desc      *string
 		icon      *string
+		acRaw     []byte
 	)
 	err := row.Scan(
 		&id, &c.Slug, &c.Label, &desc, &icon,
-		&c.IsSystem, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt, &createdBy,
+		&c.IsSystem, &c.SortOrder, &acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy,
 	)
 	if err != nil {
 		return Collection{}, err
@@ -49,6 +50,9 @@ func scanCollection(row pgx.Row) (Collection, error) {
 	}
 	if icon != nil {
 		c.Icon = *icon
+	}
+	if len(acRaw) > 0 {
+		_ = json.Unmarshal(acRaw, &c.AccessConfig)
 	}
 	return c, nil
 }
@@ -117,14 +121,18 @@ func (s *Store) GetCollectionBySlug(ctx context.Context, slug string) (Collectio
 // CreateCollectionTx inserts a collection row inside an existing transaction.
 func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCollectionReq) (Collection, error) {
 	var (
-		id  pgtype.UUID
-		c   Collection
+		id pgtype.UUID
+		c  Collection
 	)
+	var acJSON []byte
+	if req.AccessConfig != nil {
+		acJSON, _ = json.Marshal(req.AccessConfig)
+	}
 	err := tx.QueryRow(ctx, `
-		INSERT INTO _meta.collections (slug, label, description, icon)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO _meta.collections (slug, label, description, icon, access_config)
+		VALUES ($1, $2, $3, $4, COALESCE($5::jsonb, '{}'))
 		RETURNING id, created_at, updated_at`,
-		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon),
+		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), jsonOrNil(acJSON),
 	).Scan(&id, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return Collection{}, fmt.Errorf("insert collection: %w", err)
@@ -166,6 +174,12 @@ func (s *Store) UpdateCollection(ctx context.Context, id string, req *UpdateColl
 	if req.SortOrder != nil {
 		sets = append(sets, fmt.Sprintf("sort_order = $%d", argIdx))
 		args = append(args, *req.SortOrder)
+		argIdx++
+	}
+	if req.AccessConfig != nil {
+		sets = append(sets, fmt.Sprintf("access_config = $%d", argIdx))
+		acJSON, _ := json.Marshal(req.AccessConfig)
+		args = append(args, acJSON)
 		argIdx++
 	}
 
@@ -216,7 +230,7 @@ func (s *Store) ListFields(ctx context.Context, collectionID string) ([]Field, e
 	rows, err := s.pool.Query(ctx, `
 		SELECT f.id, f.collection_id, f.slug, f.label, f.field_type,
 		       f.is_required, f.is_unique, f.is_indexed,
-		       f.default_value, f.options, f.sort_order,
+		       f.default_value, f.options, f.width, f.height, f.sort_order, f.is_layout,
 		       f.created_at, f.updated_at,
 		       r.id, r.target_collection_id, r.relation_type, r.junction_table, r.on_delete
 		FROM _meta.fields f
@@ -247,7 +261,7 @@ func (s *Store) GetField(ctx context.Context, id string) (Field, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT f.id, f.collection_id, f.slug, f.label, f.field_type,
 		       f.is_required, f.is_unique, f.is_indexed,
-		       f.default_value, f.options, f.sort_order,
+		       f.default_value, f.options, f.width, f.height, f.sort_order, f.is_layout,
 		       f.created_at, f.updated_at,
 		       r.id, r.target_collection_id, r.relation_type, r.junction_table, r.on_delete
 		FROM _meta.fields f
@@ -273,15 +287,26 @@ func (s *Store) CreateFieldTx(ctx context.Context, tx pgx.Tx, collectionID strin
 	var fieldID pgtype.UUID
 	var f Field
 
+	isLayout := req.FieldType.IsLayout()
+	width := req.Width
+	if width == 0 {
+		width = 6
+	}
+	height := req.Height
+	if height == 0 {
+		height = 1
+	}
+
 	err = tx.QueryRow(ctx, `
 		INSERT INTO _meta.fields
-			(collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, sort_order)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			(collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, width, height, sort_order, is_layout)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id, created_at, updated_at`,
 		colUID, req.Slug, req.Label, string(req.FieldType),
 		req.IsRequired, req.IsUnique, req.IsIndexed,
 		jsonOrNil(req.DefaultValue), jsonOrNil(req.Options),
-		0, // sort_order default
+		width, height,
+		0, isLayout,
 	).Scan(&fieldID, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		return Field{}, fmt.Errorf("insert field: %w", err)
@@ -297,6 +322,9 @@ func (s *Store) CreateFieldTx(ctx context.Context, tx pgx.Tx, collectionID strin
 	f.IsIndexed = req.IsIndexed
 	f.DefaultValue = req.DefaultValue
 	f.Options = req.Options
+	f.Width = width
+	f.Height = height
+	f.IsLayout = isLayout
 
 	// Insert relation if present.
 	if req.Relation != nil {
@@ -353,6 +381,16 @@ func (s *Store) UpdateFieldTx(ctx context.Context, tx pgx.Tx, id string, req *Up
 	if req.Options != nil {
 		sets = append(sets, fmt.Sprintf("options = $%d", argIdx))
 		args = append(args, jsonOrNil(req.Options))
+		argIdx++
+	}
+	if req.Width != nil {
+		sets = append(sets, fmt.Sprintf("width = $%d", argIdx))
+		args = append(args, *req.Width)
+		argIdx++
+	}
+	if req.Height != nil {
+		sets = append(sets, fmt.Sprintf("height = $%d", argIdx))
+		args = append(args, *req.Height)
 		argIdx++
 	}
 
@@ -443,7 +481,7 @@ func scanFieldRow(row pgx.Row) (Field, error) {
 	err := row.Scan(
 		&fID, &colID, &f.Slug, &f.Label, &ft,
 		&f.IsRequired, &f.IsUnique, &f.IsIndexed,
-		&defV, &opts, &f.SortOrder,
+		&defV, &opts, &f.Width, &f.Height, &f.SortOrder, &f.IsLayout,
 		&f.CreatedAt, &f.UpdatedAt,
 		&rID, &rTarget, &rType, &rJunc, &rOnDel,
 	)
