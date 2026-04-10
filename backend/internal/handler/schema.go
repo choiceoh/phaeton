@@ -635,6 +635,8 @@ type availableTransition struct {
 	ToStatus         string   `json:"to_status"`
 	ToColor          string   `json:"to_color"`
 	AllowedUserNames []string `json:"allowed_user_names,omitempty"`
+	IsBlocked        bool     `json:"is_blocked,omitempty"`
+	BlockedReason    string   `json:"blocked_reason,omitempty"`
 }
 
 type transitionsResponse struct {
@@ -689,9 +691,6 @@ func (h *SchemaHandler) AvailableTransitions(w http.ResponseWriter, r *http.Requ
 				if t.FromStatusID != currentStatus.ID {
 					continue
 				}
-				if !isTransitionAllowed(t, user.Role, user.UserID) {
-					continue
-				}
 				toStatus := idToStatus[t.ToStatusID]
 				at := availableTransition{
 					ID:       t.ID,
@@ -704,6 +703,10 @@ func (h *SchemaHandler) AvailableTransitions(w http.ResponseWriter, r *http.Requ
 					if name, ok := userNames[uid]; ok {
 						at.AllowedUserNames = append(at.AllowedUserNames, name)
 					}
+				}
+				if !isTransitionAllowed(t, user.Role, user.UserID) {
+					at.IsBlocked = true
+					at.BlockedReason = buildBlockedReason(t, userNames)
 				}
 				transitions = append(transitions, at)
 			}
@@ -720,6 +723,33 @@ func (h *SchemaHandler) AvailableTransitions(w http.ResponseWriter, r *http.Requ
 		Transitions:  transitions,
 		AllowedMoves: allowedMoves,
 	})
+}
+
+// buildBlockedReason constructs a human-readable Korean reason for a blocked transition.
+func buildBlockedReason(t schema.ProcessTransition, userNames map[string]string) string {
+	roleLabels := map[string]string{
+		"director": "관리자",
+		"pm":       "운영자",
+		"engineer": "담당자",
+		"viewer":   "열람자",
+	}
+	var parts []string
+	for _, r := range t.AllowedRoles {
+		if label, ok := roleLabels[r]; ok {
+			parts = append(parts, label)
+		} else {
+			parts = append(parts, r)
+		}
+	}
+	for _, uid := range t.AllowedUserIDs {
+		if name, ok := userNames[uid]; ok {
+			parts = append(parts, name)
+		}
+	}
+	if len(parts) == 0 {
+		return "권한이 없습니다"
+	}
+	return strings.Join(parts, ", ") + "만 전환 가능"
 }
 
 // resolveUserNames batch-queries auth.users for a set of user IDs and returns a map of id→name.
