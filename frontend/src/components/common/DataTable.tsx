@@ -81,6 +81,7 @@ interface Props<T> {
   emptyTitle?: string
   emptyDescription?: string
   emptyAction?: React.ReactNode
+  emptyVariant?: 'empty' | 'no-results' | 'no-permission'
   summaryRow?: Record<string, { label: string; value: string | number }>
   /** Current aggregate function per column slug (for footer dropdown). */
   summaryFn?: Record<string, string>
@@ -124,6 +125,7 @@ export function DataTable<T>({
   emptyTitle = '데이터가 없습니다',
   emptyDescription,
   emptyAction,
+  emptyVariant,
   summaryRow,
   summaryFn,
   onSummaryFnChange,
@@ -531,7 +533,7 @@ export function DataTable<T>({
             {visibleRows.length === 0 ? (
               <TableRow role="row">
                 <TableCell role="gridcell" colSpan={columns.length}>
-                  <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />
+                  <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} variant={emptyVariant} />
                 </TableCell>
               </TableRow>
             ) : (

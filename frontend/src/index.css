@@ -184,6 +184,38 @@
   scrollbar-width: none;
 }
 
+/* Skeleton shimmer wave */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    oklch(0.96 0 0) 40%,
+    var(--muted) 80%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Button press feedback */
+[data-slot="button"]:not(:disabled):active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease-out;
+}
+
+/* Drag cancel spring-back */
+@keyframes spring-back {
+  0% { transform: scale(0.95) translateY(-4px); opacity: 0.6; }
+  50% { transform: scale(1.02) translateY(1px); opacity: 0.9; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.animate-spring-back {
+  animation: spring-back 0.3s ease-out both;
+}
+
 /* ─── Transition & animation utilities ─── */
 
 @keyframes fade-in {
@@ -413,11 +445,17 @@
   .animate-highlight-row,
   .animate-cell-saved,
   .animate-check-fade,
+  .animate-spring-back {
+    animation: none !important;
+  }
   .skeleton-shimmer {
     animation: none !important;
   }
   .dragging-source {
     transition: none !important;
+  }
+  [data-slot="button"]:active {
+    transform: none !important;
   }
   ::view-transition-old(root),
   ::view-transition-new(root) {
