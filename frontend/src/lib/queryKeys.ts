@@ -99,4 +99,11 @@ export const queryKeys = {
     list: (collectionId: string) =>
       [...queryKeys.charts.all, 'list', collectionId] as const,
   },
+  webhooks: {
+    all: ['webhooks'] as const,
+    list: (query?: Record<string, unknown>) =>
+      [...queryKeys.webhooks.all, 'list', query ?? {}] as const,
+    detail: (id: string) =>
+      [...queryKeys.webhooks.all, 'detail', id] as const,
+  },
 } as const

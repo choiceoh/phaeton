@@ -312,7 +312,7 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 	r.Post("/api/auth/logout", handler.Logout())
 
 	// Webhooks (public — HMAC-verified via WEBHOOK_SECRET).
-	webhookH := handler.NewWebhookHandler()
+	webhookH := handler.NewWebhookHandler(cfg.pool)
 	r.Post("/api/hooks/{topic}", webhookH.Receive)
 
 	// SAML SP endpoints (metadata + ACS).
@@ -479,6 +479,14 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 		r.Get("/api/notifications/unread-count", cfg.notifH.UnreadCount)
 		r.Patch("/api/notifications/{id}/read", cfg.notifH.MarkRead)
 		r.Post("/api/notifications/read-all", cfg.notifH.MarkAllRead)
+
+		// Webhook events (read/delete: director only).
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRole("director"))
+			r.Get("/api/webhooks", webhookH.List)
+			r.Get("/api/webhooks/{id}", webhookH.Get)
+			r.Delete("/api/webhooks/{id}", webhookH.Delete)
+		})
 
 		// SSE real-time events
 		r.Get("/api/events", cfg.sseH.Stream)

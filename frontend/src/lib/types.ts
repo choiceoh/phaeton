@@ -407,6 +407,17 @@ export interface CreateAutomationReq {
   actions: { action_type: ActionType, action_config: Record<string, unknown> }[]
 }
 
+// --- Webhook events ---
+
+export interface WebhookEvent {
+  id: string
+  topic: string
+  source: string
+  payload: Record<string, unknown>
+  processed: boolean
+  received_at: string
+}
+
 // --- Envelope responses ---
 
 export interface DataEnvelope<T> {
