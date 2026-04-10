@@ -122,54 +122,6 @@ Option rules:
 - Prefer specific field types over generic text (e.g. use date instead of text for dates, number for amounts).
 - Make critical identification fields required (is_required: true), but don't over-require.`
 
-// buildSystemPrompt constructs the full system prompt including existing app context.
-func (h *AIHandler) buildSystemPrompt(r *http.Request) string {
-	collections, err := h.store.ListCollections(r.Context())
-	if err != nil {
-		slog.Warn("ai: failed to list collections for context", "error", err)
-		return systemPromptBase
-	}
-	if len(collections) == 0 {
-		return systemPromptBase
-	}
-
-	var sb strings.Builder
-	sb.WriteString(systemPromptBase)
-	sb.WriteString("\n\n## Existing Apps in This Workspace\n")
-	sb.WriteString("Below are the apps already created in this workspace. Use them as reference to:\n")
-	sb.WriteString("- Match naming conventions and style used by this team.\n")
-	sb.WriteString("- Avoid creating duplicate apps.\n")
-	sb.WriteString("- Suggest relation fields when the new app logically connects to existing ones.\n")
-	sb.WriteString("- Understand the domain/industry context of this workspace.\n\n")
-
-	for _, col := range collections {
-		fields, err := h.store.ListFields(r.Context(), col.ID)
-		if err != nil {
-			slog.Warn("ai: failed to list fields", "collection", col.Slug, "error", err)
-			continue
-		}
-
-		sb.WriteString(fmt.Sprintf("### %s (%s)\n", col.Label, col.Slug))
-		if col.Description != "" {
-			sb.WriteString(fmt.Sprintf("설명: %s\n", col.Description))
-		}
-		sb.WriteString("필드:\n")
-		for _, f := range fields {
-			opts := ""
-			if len(f.Options) > 0 && string(f.Options) != "null" {
-				opts = fmt.Sprintf(" options=%s", string(f.Options))
-			}
-			req := ""
-			if f.IsRequired {
-				req = " [필수]"
-			}
-			sb.WriteString(fmt.Sprintf("- %s (%s, %s)%s%s\n", f.Label, f.Slug, f.FieldType, req, opts))
-		}
-		sb.WriteString("\n")
-	}
-
-	return sb.String()
-}
 
 const triagePrompt = `You are a requirements analyst for Phaeton, a no-code business app platform.
 The user wants to create a new app. Your job is to decide whether their description is clear enough to generate a good schema, or if you need to ask clarifying questions first.
@@ -211,23 +163,6 @@ Rules for questions:
 - Each question should have a unique "id" (q1, q2, q3).
 - Only ask questions that would significantly change the resulting schema.`
 
-const textCritiquePrompt = `You are reviewing a collection schema you previously generated for a no-code app platform.
-
-## Your Task
-Review the schema below and improve it. Check for:
-1. Missing important fields for the described business process.
-2. Wrong field types (e.g. text where date/number/select would be better).
-3. Poor select/multiselect choices — are they realistic for Korean business?
-4. Layout issues: fields that should be side-by-side (width 3+3) but are both width 6.
-5. Width sum per row should not exceed 6. Fields overflow to the next row if they do.
-6. Missing required flags on critical identification fields.
-7. Redundant or unnecessary fields.
-8. Section headers (label type) and separators (line type) for better form organization.
-
-## Rules
-- Output ONLY valid JSON with the same schema structure — no explanation.
-- Keep what is already good, only fix what needs improvement.
-- All labels and descriptions must remain in Korean.`
 
 const slugPrompt = `You are a slug generator for a no-code business app platform.
 The user will provide a Korean name (label) for a collection or field.
@@ -295,18 +230,8 @@ func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 	// Skip triage if user already provided answers (second round).
 	if len(req.Answers) == 0 {
 		slog.Info("ai build: step 0 - triage")
-		triageInput := req.Description
 
-		// Include existing app context so triage can avoid duplicate questions.
-		if collections, err := h.store.ListCollections(ctx); err == nil && len(collections) > 0 {
-			var names []string
-			for _, c := range collections {
-				names = append(names, fmt.Sprintf("%s(%s)", c.Label, c.Slug))
-			}
-			triageInput += "\n\n기존 워크스페이스 앱: " + strings.Join(names, ", ")
-		}
-
-		raw, err := h.client.Complete(ctx, triagePrompt, triageInput)
+		raw, err := h.client.Complete(ctx, triagePrompt, req.Description)
 		if err != nil {
 			slog.Warn("ai triage failed, proceeding to generation", "error", err)
 		} else if questions, ok := parseTriageResponse(raw); ok && len(questions) > 0 {
@@ -330,10 +255,9 @@ func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 		fullDescription = sb.String()
 	}
 
-	// ── Step 1: Initial generation ──
-	slog.Info("ai build: step 1 - generating initial schema")
-	systemPrompt := h.buildSystemPrompt(r)
-	raw, err := h.client.Complete(ctx, systemPrompt, fullDescription)
+	// ── Step 1: Generate schema ──
+	slog.Info("ai build: step 1 - generating schema")
+	raw, err := h.client.Complete(ctx, systemPromptBase, fullDescription)
 	if err != nil {
 		slog.Error("ai build step 1 failed", "error", err)
 		writeError(w, http.StatusBadGateway, "AI 서버 요청에 실패했습니다")
@@ -345,20 +269,6 @@ func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 		slog.Error("ai step 1 returned invalid JSON", "raw", raw, "error", err)
 		writeError(w, http.StatusBadGateway, "AI 응답을 파싱할 수 없습니다")
 		return
-	}
-
-	// ── Step 2: Text self-critique ──
-	slog.Info("ai build: step 2 - text self-critique")
-	schemaJSON, _ := json.MarshalIndent(result, "", "  ")
-	critiqueInput := fmt.Sprintf("사용자 요청: %s\n\n현재 스키마:\n%s", fullDescription, string(schemaJSON))
-
-	raw2, err := h.client.Complete(ctx, textCritiquePrompt, critiqueInput)
-	if err != nil {
-		slog.Warn("ai build step 2 failed, using step 1 result", "error", err)
-	} else if refined, err := parseAndSanitize(raw2); err != nil {
-		slog.Warn("ai step 2 returned invalid JSON, using step 1 result", "error", err)
-	} else {
-		result = refined
 	}
 
 	writeJSON(w, http.StatusOK, aiBuildEnvelope{Mode: "schema", Schema: &result})
