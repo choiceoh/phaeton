@@ -944,6 +944,21 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             </section>
           )}
 
+          {/* 조건부 표시 */}
+          {!isComputed && siblingFields && siblingFields.length > 0 && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">조건부 표시</Label>
+              <p className="text-xs text-muted-foreground">
+                다른 항목의 값에 따라 이 항목을 표시하거나 숨깁니다.
+              </p>
+              <VisibilityRuleEditor
+                rules={(opts.visibility_rules as VisibilityRule[]) || []}
+                siblingFields={siblingFields.filter((f) => f.slug !== field.slug && !isLayoutType(f.field_type) && !isComputedType(f.field_type))}
+                onChange={(rules) => updateOption('visibility_rules', rules.length > 0 ? rules : undefined)}
+              />
+            </section>
+          )}
+
           {/* 코드 (Slug) */}
           <section className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground">코드</Label>
@@ -1094,5 +1109,116 @@ function SubColumnEditor({
         <Plus className="h-3.5 w-3.5" /> 열 추가
       </button>
     </section>
+  )
+}
+
+// -- Visibility Rule Editor --
+
+interface VisibilityRule {
+  field_slug: string
+  operator: 'eq' | 'neq' | 'is_empty' | 'is_not_empty'
+  value?: string
+}
+
+const VISIBILITY_OPERATORS: { value: VisibilityRule['operator']; label: string }[] = [
+  { value: 'eq', label: '값이 같을 때' },
+  { value: 'neq', label: '값이 다를 때' },
+  { value: 'is_empty', label: '비어있을 때' },
+  { value: 'is_not_empty', label: '값이 있을 때' },
+]
+
+function VisibilityRuleEditor({
+  rules,
+  siblingFields,
+  onChange,
+}: {
+  rules: VisibilityRule[]
+  siblingFields: { slug: string; label: string; field_type: string; options?: Record<string, unknown> }[]
+  onChange: (rules: VisibilityRule[]) => void
+}) {
+  function addRule() {
+    onChange([...rules, { field_slug: '', operator: 'eq' as const, value: '' }])
+  }
+
+  function updateRule(index: number, patch: Partial<VisibilityRule>) {
+    onChange(rules.map((r, i) => (i === index ? { ...r, ...patch } as VisibilityRule : r)))
+  }
+
+  function removeRule(index: number) {
+    onChange(rules.filter((_, i) => i !== index))
+  }
+
+  return (
+    <div className="space-y-2">
+      {rules.map((rule, i) => {
+        const targetField = siblingFields.find((f) => f.slug === rule.field_slug)
+        const needsValue = rule.operator === 'eq' || rule.operator === 'neq'
+        const choices = targetField?.field_type === 'select'
+          ? (targetField.options?.choices as string[]) || []
+          : []
+
+        return (
+          <div key={i} className="space-y-1.5 rounded-md border p-2">
+            <div className="flex items-center gap-1">
+              <Select value={rule.field_slug} onValueChange={(v) => updateRule(i, { field_slug: v ?? '' })}>
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue placeholder="항목 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {siblingFields.map((f) => (
+                    <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <button
+                type="button"
+                className="shrink-0 text-xs text-muted-foreground hover:text-destructive"
+                onClick={() => removeRule(i)}
+              >
+                ×
+              </button>
+            </div>
+            <Select value={rule.operator} onValueChange={(v) => updateRule(i, { operator: v as VisibilityRule['operator'] })}>
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {VISIBILITY_OPERATORS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {needsValue && (
+              choices.length > 0 ? (
+                <Select value={rule.value || ''} onValueChange={(v) => updateRule(i, { value: v ?? '' })}>
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue placeholder="값 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {choices.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  className="h-7 text-xs"
+                  value={rule.value || ''}
+                  onChange={(e) => updateRule(i, { value: e.target.value })}
+                  placeholder="비교할 값"
+                />
+              )
+            )}
+          </div>
+        )
+      })}
+      <button
+        type="button"
+        className="text-xs text-primary hover:underline"
+        onClick={addRule}
+      >
+        + 조건 추가
+      </button>
+    </div>
   )
 }

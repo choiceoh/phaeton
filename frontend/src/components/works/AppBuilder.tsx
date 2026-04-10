@@ -272,7 +272,6 @@ export default function AppBuilder() {
         description="작성 중인 내용이 저장되지 않습니다."
         confirmLabel="나가기"
         cancelLabel="계속 작성"
-        variant="destructive"
         onConfirm={() => blocker.proceed?.()}
       />
 
