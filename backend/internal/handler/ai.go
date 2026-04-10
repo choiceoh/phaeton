@@ -102,84 +102,105 @@ Output ONLY valid JSON — no markdown fences, no explanation, no extra text.
 }
 
 ## Field Types & Options
-Valid field types: text, textarea, number, integer, boolean, date, datetime, time, select, multiselect, user, file, autonumber, relation, json, formula, lookup, rollup.
+Data field types: text, textarea, number, integer, boolean, date, datetime, time, select, multiselect, user, file, autonumber, relation, json, formula, lookup, rollup.
+Layout types (visual separator only, no data stored): label, line, spacer.
 
-Layout types (visual only, no data): label, line, spacer.
-
-Option rules:
-- select/multiselect → "options": {"choices": ["선택1", "선택2", ...]}. Provide realistic Korean business choices (e.g. status: ["대기", "진행중", "완료", "보류"]).
+Option rules per type:
+- select / multiselect → "options": {"choices": ["선택1", "선택2", ...]}. Always provide 3-6 realistic Korean choices.
 - number (currency) → "options": {"display_type": "currency", "currency_code": "KRW"}
+- number (percent) → "options": {"display_type": "percent"}
 - text (URL) → "options": {"display_type": "url"}
 - text (email) → "options": {"display_type": "email"}
 - text (phone) → "options": {"display_type": "phone"}
-- autonumber → "options": {"prefix": "XXX-", "start": 1} (auto-incrementing ID)
-- label → "options": {"text": "섹션 제목 텍스트"} (section header)
-- formula → "options": {"expression": "price * quantity"} (computed from other fields)
-- lookup → "options": {"relation_field": "relation_slug", "target_field": "target_slug"} (value from related record)
-- rollup → "options": {"relation_field": "relation_slug", "target_field": "target_slug", "function": "SUM"} (aggregate related records; functions: SUM/COUNT/AVG/MIN/MAX/COUNTA)
+- autonumber → "options": {"prefix": "XXX-", "start": 1}. Prefix should be a short uppercase abbreviation of the app (e.g. "BT-" for business trip, "PO-" for purchase order).
+- label → "options": {"text": "섹션 제목 텍스트"} (section header, bold text)
+- formula → "options": {"expression": "field_slug * other_slug"}. Reference other field slugs in the same schema.
+- lookup → "options": {"relation_field": "relation_slug", "target_field": "target_slug"}
+- rollup → "options": {"relation_field": "relation_slug", "target_field": "target_slug", "function": "SUM"} (functions: SUM/COUNT/AVG/MIN/MAX/COUNTA)
 
 ## Slug Rules
 - Start with lowercase letter, only [a-z0-9_], max 63 chars.
-- Reserved (do NOT use): id, created_at, updated_at, created_by, updated_by, deleted_at, _status.
+- Reserved (do NOT use as field slug): id, created_at, updated_at, created_by, updated_by, deleted_at, _status.
+- Slugs must be unique within the schema. Use descriptive names (e.g. start_date, end_date — not date1, date2).
 
 ## Layout Rules
-- width: 1 (1/6), 2 (1/3), 3 (1/2), 6 (full width). Default 6.
-- height: 1, 2, or 3 rows. Default 1. Use 2-3 for textarea.
-- Group related fields on the same row using width (e.g. two width=3 fields side by side).
-- Use "label" type fields as section headers to organize long forms.
-- Use "line" type for visual separation between sections.
+- width values: 2 (1/3), 3 (1/2), 4 (2/3), 6 (full width). Default 6.
+- Row grouping: consecutive fields whose widths sum to 6 appear on the same row.
+  Example: [width=3, width=3] → one row with two half-width fields.
+  Example: [width=2, width=2, width=2] → one row with three 1/3-width fields.
+- height: 1, 2, or 3 rows. Default 1. Use 2 for textarea, 3 for long descriptions.
+- Use "label" type as section headers and "line" type as separators to organize forms with 8+ fields.
 
 ## Design Guidelines
-- Design 5-15 fields that are practical and cover the key data points.
-- All labels and descriptions must be in Korean.
-- Think about what fields would actually be useful in a Korean business context.
-- Include a status field (select type) when the business process has workflow states.
-- Include a user field for "담당자" (assignee) when tasks/items need ownership.
-- Include date fields for deadlines or milestones when relevant.
-- For forms that will have many fields, use label/line layout types to create logical sections.
-- Prefer specific field types over generic text (e.g. use date instead of text for dates, number for amounts).
-- Make critical identification fields required (is_required: true), but don't over-require.`
+1. **Field count**: 6-12 fields for simple apps, 12-20 for complex workflows. Avoid under-designing or over-designing.
+2. **Language**: All labels and descriptions MUST be in Korean. Slugs are in English.
+3. **Structure pattern for workflow apps**:
+   - Start with an autonumber field for unique ID (e.g. "접수번호", "신청번호")
+   - Core identification fields (제목/이름/건명) near the top, required
+   - Related details grouped together (use label sections for 8+ field forms)
+   - Status field (select) for workflow state tracking
+   - User field for 담당자/신청자 assignment
+   - Date fields for 일정/마감일/시작일-종료일
+   - Amount/number fields with proper display_type (currency for 금액)
+   - Textarea for 비고/메모/특이사항 at the bottom
+4. **Smart defaults**:
+   - Status choices should reflect the actual workflow: ["신청", "검토중", "승인", "반려"] or ["대기", "진행중", "완료", "보류"]
+   - Priority choices: ["긴급", "높음", "보통", "낮음"]
+   - Boolean for yes/no toggles (e.g. 완료 여부, 승인 여부)
+   - Date pairs (시작일 + 종료일) on the same row with width=3 each
+5. **Korean business context**:
+   - 품의/결재 workflows need 기안자, 결재자, 결재일, 결재상태
+   - 거래처/고객 management needs 업체명, 사업자번호, 대표자, 연락처, 주소
+   - 재고/자산 tracking needs 품목명, 수량, 단가, 금액(formula), 위치
+   - 일정/프로젝트 management needs 제목, 시작일, 종료일, 진행률(number percent), 담당자
+
+## Example — "출장 신청서"
+{"slug":"business_trip_request","label":"출장 신청서","description":"임직원 출장 신청 및 승인 관리","fields":[{"slug":"request_no","label":"신청번호","field_type":"autonumber","is_required":false,"width":3,"height":1,"options":{"prefix":"BT-","start":1}},{"slug":"status","label":"처리상태","field_type":"select","is_required":true,"width":3,"height":1,"options":{"choices":["신청","검토중","승인","반려"]}},{"slug":"requester","label":"신청자","field_type":"user","is_required":true,"width":3,"height":1,"options":{}},{"slug":"department","label":"부서","field_type":"text","is_required":true,"width":3,"height":1,"options":{}},{"slug":"destination","label":"출장지","field_type":"text","is_required":true,"width":6,"height":1,"options":{}},{"slug":"start_date","label":"출장 시작일","field_type":"date","is_required":true,"width":3,"height":1,"options":{}},{"slug":"end_date","label":"출장 종료일","field_type":"date","is_required":true,"width":3,"height":1,"options":{}},{"slug":"purpose","label":"출장 목적","field_type":"textarea","is_required":true,"width":6,"height":2,"options":{}},{"slug":"estimated_cost","label":"예상 경비","field_type":"number","is_required":false,"width":3,"height":1,"options":{"display_type":"currency","currency_code":"KRW"}},{"slug":"transport","label":"교통수단","field_type":"select","is_required":false,"width":3,"height":1,"options":{"choices":["자가용","KTX","항공","버스","기타"]}},{"slug":"remarks","label":"비고","field_type":"textarea","is_required":false,"width":6,"height":2,"options":{}}]}`
 
 
 const triagePrompt = `You are a requirements analyst for Topworks, a no-code business app platform.
 The user wants to create a new app. Your job is to decide whether their description is clear enough to generate a good schema, or if you need to ask clarifying questions first.
 
-## Decision Criteria — Ask questions ONLY when:
-- The business process is ambiguous (could mean very different schemas)
-- Critical domain information is missing that would change the field design significantly
-- The scope is unclear (e.g. "관리" alone without specifying what)
+## Decision Rule: Default to PROCEED
+Most descriptions are clear enough. Only ask questions when ambiguity would lead to a fundamentally different schema.
 
-## DO NOT ask questions when:
-- The description is short but clear (e.g. "출장 신청서" → obvious what fields are needed)
-- Minor details are missing that you can reasonably assume
-- You can infer the domain from context
+### → Proceed (output {"mode": "proceed"}) when:
+- The description names a specific form/document (e.g. "출장 신청서", "견적서", "휴가 신청")
+- The description names a specific management target (e.g. "거래처 관리", "재고 관리", "프로젝트 관리")
+- The description is a common business process with well-known fields
+- Minor details are missing but can be reasonably assumed from Korean business convention
+- Short descriptions with clear intent (e.g. "회의록" → obvious structure)
+
+### → Ask questions (max 2-3) ONLY when:
+- The description is a single vague word like "관리" or "목록" without a subject
+- The business process could mean very different schemas (e.g. "인사 관리" could be 채용/급여/인사기록)
+- Industry-specific terms where the wrong assumption would produce useless fields
 
 ## Output Format
 Output ONLY valid JSON — no markdown, no explanation.
 
-If the description is clear enough:
+If clear enough:
 {"mode": "proceed"}
 
-If you need clarification (max 2-3 questions):
-{
-  "mode": "questions",
-  "questions": [
-    {
-      "id": "q1",
-      "question": "Korean question text",
-      "placeholder": "예: 답변 힌트",
-      "choices": ["선택1", "선택2"]
-    }
-  ]
-}
+If you need clarification:
+{"mode": "questions", "questions": [{"id": "q1", "question": "Korean question", "placeholder": "예: 힌트", "choices": ["선택1", "선택2"]}]}
 
-Rules for questions:
-- Max 3 questions. Be concise.
-- Questions must be in Korean.
-- Include "choices" array when there are obvious options (helps the user answer quickly).
+## Examples of proceed vs questions:
+- "출장 신청서" → {"mode": "proceed"} (well-known form)
+- "고객 관리" → {"mode": "proceed"} (standard CRM fields)
+- "재고 현황판" → {"mode": "proceed"} (inventory tracking is clear)
+- "회의실 예약" → {"mode": "proceed"} (booking system fields are obvious)
+- "관리" → questions (what are you managing?)
+- "우리팀 업무" → questions (too vague, need scope)
+- "인사" → questions (recruitment? payroll? records?)
+
+## Rules for questions:
+- Max 2-3 questions. Be concise and specific.
+- Questions MUST be in Korean.
+- Always include "choices" array with 2-4 common options to help the user pick quickly.
 - Include "placeholder" as a hint for free-text answers.
-- Each question should have a unique "id" (q1, q2, q3).
-- Only ask questions that would significantly change the resulting schema.`
+- Each question has a unique "id" (q1, q2, q3).
+- Focus questions on what would change the field structure, not cosmetic details.`
 
 
 const slugPrompt = `You are a slug generator for a no-code business app platform.
