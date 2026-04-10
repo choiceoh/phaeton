@@ -1,5 +1,9 @@
+import { useState } from 'react'
+
 import { FIELD_TYPE_LABELS, isLayoutType } from '@/lib/constants'
 import type { FieldType } from '@/lib/types'
+
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 
 export interface FieldDraft {
   id: string // client-local id
@@ -30,6 +34,8 @@ interface Props {
 }
 
 export default function FieldPreview({ fields, selectedId, onSelect, onReorder, onRemove }: Props) {
+  const [removeTargetId, setRemoveTargetId] = useState<string | null>(null)
+
   function handleDragStart(e: React.DragEvent, index: number) {
     e.dataTransfer.setData('text/plain', String(index))
   }
@@ -93,7 +99,7 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
                   {FIELD_TYPE_LABELS[field.field_type]}
                 </span>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onRemove(field.id) }}
+                  onClick={(e) => { e.stopPropagation(); setRemoveTargetId(field.id) }}
                   className="text-xs text-muted-foreground hover:text-destructive"
                   type="button"
                 >
@@ -107,6 +113,18 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
           </div>
         ))}
       </div>
+      <ConfirmDialog
+        open={!!removeTargetId}
+        onOpenChange={(open) => !open && setRemoveTargetId(null)}
+        title="항목을 제거하시겠습니까?"
+        description="이 항목이 목록에서 제거됩니다."
+        variant="destructive"
+        confirmLabel="제거"
+        onConfirm={() => {
+          if (removeTargetId) onRemove(removeTargetId)
+          setRemoveTargetId(null)
+        }}
+      />
     </div>
   )
 }

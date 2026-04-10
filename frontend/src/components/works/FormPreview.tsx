@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { FIELD_TYPE_LABELS, isLayoutType } from '@/lib/constants'
 
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,6 +32,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
   const resizeRef = useRef<{ fieldId: string, startX: number, startWidth: number } | null>(null)
   const [resizingId, setResizingId] = useState<string | null>(null)
   const [previewWidth, setPreviewWidth] = useState<number | null>(null)
+  const [removeTargetId, setRemoveTargetId] = useState<string | null>(null)
 
   const handleResizeStart = useCallback((e: React.MouseEvent, field: FieldDraft) => {
     e.preventDefault()
@@ -149,9 +151,10 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
               return (
                 <div
                   key={field.id}
-                  className={`col-span-full cursor-pointer rounded-md px-1 py-0.5 transition-colors ${
+                  className={`col-span-full cursor-pointer rounded-md px-1 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                     selectedId === field.id ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
                   }`}
+                  tabIndex={0}
                   onClick={() => onSelect(field.id)}
                   draggable
                   onDragStart={(e) => handleDragStart(e, i)}
@@ -168,9 +171,10 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
             return (
               <div
                 key={field.id}
-                className={`relative col-span-full ${smSpan[span] ?? 'sm:col-span-6'} cursor-pointer rounded-md p-2 transition-colors ${
+                className={`relative col-span-full ${smSpan[span] ?? 'sm:col-span-6'} cursor-pointer rounded-md p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   selectedId === field.id ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
                 } ${resizingId === field.id ? 'ring-2 ring-primary/50' : ''}`}
+                tabIndex={0}
                 onClick={() => onSelect(field.id)}
                 draggable={!resizingId}
                 onDragStart={(e) => handleDragStart(e, i)}
@@ -188,7 +192,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                       <span className="text-[10px] text-muted-foreground">{span}/6</span>
                     )}
                     <button
-                      onClick={(e) => { e.stopPropagation(); onRemove(field.id) }}
+                      onClick={(e) => { e.stopPropagation(); setRemoveTargetId(field.id) }}
                       className="text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive [div:hover>&]:opacity-100"
                       type="button"
                     >
@@ -225,6 +229,18 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={!!removeTargetId}
+        onOpenChange={(open) => !open && setRemoveTargetId(null)}
+        title="항목을 제거하시겠습니까?"
+        description="이 항목이 입력화면에서 제거됩니다."
+        variant="destructive"
+        confirmLabel="제거"
+        onConfirm={() => {
+          if (removeTargetId) onRemove(removeTargetId)
+          setRemoveTargetId(null)
+        }}
+      />
     </div>
   )
 }

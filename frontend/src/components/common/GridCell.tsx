@@ -67,9 +67,10 @@ export default function GridCell({
         onChange={(e) => setEditValue(e.target.value)}
         onBlur={commitEdit}
         onKeyDown={(e) => {
-          // Enter and Tab are handled by the grid navigation hook via container keydown.
-          // But blur-triggered commit handles the save.
-          if (e.key === 'Escape') {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            inputRef.current?.blur()
+          } else if (e.key === 'Escape') {
             e.preventDefault()
             onEditCancel()
           }

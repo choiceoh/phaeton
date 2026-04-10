@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useBlocker, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,6 +38,22 @@ export default function AppBuilder() {
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
   const selectedField = fields.find((f) => f.id === selectedId) || null
+
+  const isDirty = useMemo(
+    () => label.trim() !== '' || slug.trim() !== '' || description.trim() !== '' || fields.length > 0,
+    [label, slug, description, fields],
+  )
+
+  const blocker = useBlocker(isDirty)
+
+  useEffect(() => {
+    if (!isDirty) return
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault()
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isDirty])
 
   const requestSlug = useCallback((text: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -235,6 +252,17 @@ export default function AppBuilder() {
           {createCollection.isPending ? '저장 중...' : '저장'}
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(open) => { if (!open) blocker.reset?.() }}
+        title="저장하지 않고 나가시겠습니까?"
+        description="작성 중인 내용이 저장되지 않습니다."
+        confirmLabel="나가기"
+        cancelLabel="계속 작성"
+        variant="destructive"
+        onConfirm={() => blocker.proceed?.()}
+      />
     </div>
   )
 }
