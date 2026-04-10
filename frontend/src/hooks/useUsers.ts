@@ -59,7 +59,7 @@ export function useUpdateUser() {
 export function useUpdateMe() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: { name?: string; phone?: string; avatar?: string }) =>
+    mutationFn: (body: { name?: string; phone?: string; avatar?: string; position?: string; title?: string }) =>
       api.patch<{ status: string }>('/auth/me', body),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.auth.me() }),
   })
