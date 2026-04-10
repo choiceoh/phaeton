@@ -53,6 +53,9 @@ export default function RootLayout() {
               <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Topworks</span>
             </Link>
             <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto">
+              <NavLink to="/my-tasks" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+                내 업무
+              </NavLink>
               <NavLink to="/apps" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 앱
               </NavLink>

@@ -364,6 +364,9 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Delete("/api/departments/{id}", handler.DeleteDepartment(cfg.pool))
 		})
 
+		// My tasks (cross-collection, process-based).
+		r.Get("/api/my-tasks", cfg.schemaH.MyTasks)
+
 		// Global calendar (cross-collection).
 		r.Get("/api/calendar/events", cfg.schemaH.GlobalCalendarEvents)
 

@@ -18,6 +18,7 @@ import AppViewPage from '@/pages/AppViewPage'
 import EntryPage from '@/pages/EntryPage'
 import LoginPage from '@/pages/LoginPage'
 import MigrationHistoryPage from '@/pages/MigrationHistoryPage'
+import MyTasksPage from '@/pages/MyTasksPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import UsersPage from '@/pages/UsersPage'
 import ProfilePage from '@/pages/ProfilePage'
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/apps/:appId/settings" element={<ErrorBoundary><AppSettingsPage /></ErrorBoundary>} />
         <Route path="/apps/:appId/process" element={<ErrorBoundary><ProcessPage /></ErrorBoundary>} />
         <Route path="/apps/:appId/automations" element={<ErrorBoundary><AutomationsPage /></ErrorBoundary>} />
+        <Route path="/my-tasks" element={<ErrorBoundary><MyTasksPage /></ErrorBoundary>} />
         <Route path="/dashboard" element={<ErrorBoundary><GlobalDashboardPage /></ErrorBoundary>} />
         <Route path="/calendar" element={<ErrorBoundary><GlobalCalendarPage /></ErrorBoundary>} />
         <Route path="/automations" element={<ErrorBoundary><GlobalAutomationsPage /></ErrorBoundary>} />

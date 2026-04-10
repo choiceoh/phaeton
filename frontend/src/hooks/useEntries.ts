@@ -482,6 +482,29 @@ export function useKanbanView(
 }
 
 // ---------------------------------------------------------------------------
+// My Tasks (cross-collection, process-based)
+// ---------------------------------------------------------------------------
+
+export interface MyTaskItem {
+  id: string
+  label: string
+  status: string
+  createdAt: string
+  collectionId: string
+  collectionLabel: string
+  collectionSlug: string
+  collectionIcon?: string
+}
+
+export function useMyTasks() {
+  return useQuery({
+    queryKey: ['myTasks'],
+    queryFn: () => api.get<MyTaskItem[]>('/my-tasks'),
+    staleTime: 30_000,
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Global Calendar (cross-collection)
 // ---------------------------------------------------------------------------
 
