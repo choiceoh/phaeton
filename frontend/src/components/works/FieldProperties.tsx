@@ -256,9 +256,9 @@ export default function FieldProperties({ field, collections, onChange }: Props)
         </>
       )}
 
-      {/* ── 폭 / 높이 ── */}
+      {/* ── 폭 / 높이 (그리드 사이즈) ── */}
       <section className="space-y-2">
-        <Label className="text-xs font-semibold text-muted-foreground">입력 너비 조절</Label>
+        <Label className="text-xs font-semibold text-muted-foreground">그리드 크기</Label>
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Label className="text-xs">폭</Label>
@@ -297,6 +297,49 @@ export default function FieldProperties({ field, collections, onChange }: Props)
             </Select>
           </div>
         </div>
+      </section>
+
+      <Separator />
+
+      {/* ── 입력 너비 조절 (입력 박스 크기) ── */}
+      <section className="space-y-2">
+        <Label className="text-xs font-semibold text-muted-foreground">입력 너비 조절</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={0}
+            className="w-20"
+            value={(opts.input_width as number) ?? 100}
+            onChange={(e) => updateOption('input_width', Number(e.target.value))}
+          />
+          <div className="flex items-center gap-1 rounded-md border p-0.5">
+            <button
+              type="button"
+              className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                (opts.input_width_unit || '%') === 'px'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted'
+              }`}
+              onClick={() => updateOption('input_width_unit', 'px')}
+            >
+              PX
+            </button>
+            <button
+              type="button"
+              className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                (opts.input_width_unit || '%') === '%'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted'
+              }`}
+              onClick={() => updateOption('input_width_unit', '%')}
+            >
+              %
+            </button>
+          </div>
+        </div>
+        {(opts.input_width_unit || '%') === '%' && (
+          <p className="text-xs text-muted-foreground">* 퍼센트(%) 입력시 비율로 지정</p>
+        )}
       </section>
 
       <Separator />
