@@ -68,6 +68,8 @@ var compatMatrix = map[schema.FieldType]map[schema.FieldType]compatEntry{
 	schema.FieldTime: {
 		schema.FieldText: {convAlways, ""},
 	},
+	// Autonumber cannot be converted to/from any other type.
+	schema.FieldAutonumber: {},
 }
 
 // CheckCompat returns whether a type change from→to is possible.

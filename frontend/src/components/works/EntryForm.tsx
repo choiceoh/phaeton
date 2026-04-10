@@ -207,31 +207,99 @@ function FieldInput({
           required={field.is_required}
         />
       )
-    case 'text':
-      return h > 1 ? (
-        <Textarea
-          value={(value as string) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          required={field.is_required}
-          rows={h * 2}
-        />
-      ) : (
-        <Input
-          value={(value as string) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          required={field.is_required}
-        />
-      )
-    case 'number':
-    case 'integer':
+    case 'text': {
+      const textDisplay = field.options?.display_type as string | undefined
+      if (h > 1) {
+        return (
+          <Textarea
+            value={(value as string) || ''}
+            onChange={(e) => onChange(e.target.value)}
+            required={field.is_required}
+            rows={h * 2}
+          />
+        )
+      }
+      const inputType = textDisplay === 'email' ? 'email'
+        : textDisplay === 'url' ? 'url'
+        : textDisplay === 'phone' ? 'tel'
+        : 'text'
       return (
         <Input
-          type="number"
-          value={value === null || value === undefined ? '' : (value as number)}
-          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+          type={inputType}
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
           required={field.is_required}
         />
       )
+    }
+    case 'number':
+    case 'integer': {
+      const displayType = field.options?.display_type as string | undefined
+      if (displayType === 'rating') {
+        const max = (field.options?.max_rating as number) || 5
+        const current = (value as number) || 0
+        return (
+          <div className="flex items-center gap-1 pt-1">
+            {Array.from({ length: max }, (_, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`text-lg ${i < current ? 'text-yellow-500' : 'text-muted-foreground/30'}`}
+                onClick={() => onChange(i + 1 === current ? 0 : i + 1)}
+              >
+                ★
+              </button>
+            ))}
+          </div>
+        )
+      }
+      if (displayType === 'progress') {
+        const num = (value as number) ?? 0
+        return (
+          <div className="space-y-1">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={value === null || value === undefined ? '' : num}
+              onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+              required={field.is_required}
+            />
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${Math.min(100, Math.max(0, num))}%` }}
+              />
+            </div>
+          </div>
+        )
+      }
+      const prefix = displayType === 'currency'
+        ? (field.options?.currency_code as string) === 'USD' ? '$' : '₩'
+        : undefined
+      const suffix = displayType === 'percent' ? '%' : undefined
+      return (
+        <div className="relative">
+          {prefix && (
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+              {prefix}
+            </span>
+          )}
+          <Input
+            type="number"
+            value={value === null || value === undefined ? '' : (value as number)}
+            onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+            required={field.is_required}
+            className={prefix ? 'pl-8' : suffix ? 'pr-8' : ''}
+          />
+          {suffix && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+              {suffix}
+            </span>
+          )}
+        </div>
+      )
+    }
     case 'date':
       return (
         <Input
@@ -321,6 +389,14 @@ function FieldInput({
           targetCollectionId={field.relation.target_collection_id}
           value={value as string | undefined}
           onChange={onChange}
+        />
+      )
+    case 'autonumber':
+      return (
+        <Input
+          value={value != null ? String(value) : '(자동 생성)'}
+          disabled
+          className="bg-muted"
         />
       )
     case 'user':

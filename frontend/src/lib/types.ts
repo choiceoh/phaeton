@@ -14,6 +14,7 @@ export type FieldType =
   | 'file'
   | 'json'
   | 'user'
+  | 'autonumber'
   | 'label'
   | 'line'
   | 'spacer'

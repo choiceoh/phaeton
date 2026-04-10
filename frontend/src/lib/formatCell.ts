@@ -19,5 +19,37 @@ export function formatCell(value: unknown, field: Field): string {
     return s.length > 100 ? s.slice(0, 100) + '...' : s
   }
   if (field.field_type === 'json') return JSON.stringify(value)
+
+  const displayType = field.options?.display_type as string | undefined
+
+  // Number display subtypes
+  if ((field.field_type === 'number' || field.field_type === 'integer') && displayType) {
+    const num = Number(value)
+    if (displayType === 'currency') {
+      const code = (field.options?.currency_code as string) || 'KRW'
+      try {
+        return num.toLocaleString('ko-KR', { style: 'currency', currency: code })
+      } catch {
+        return `${code} ${num.toLocaleString('ko-KR')}`
+      }
+    }
+    if (displayType === 'percent') return `${num}%`
+    if (displayType === 'rating') {
+      const max = (field.options?.max_rating as number) || 5
+      return '★'.repeat(Math.min(num, max)) + '☆'.repeat(Math.max(0, max - num))
+    }
+    if (displayType === 'progress') return `${num}%`
+  }
+
+  // Text display subtypes
+  if (field.field_type === 'text' && displayType) {
+    const s = String(value)
+    if (displayType === 'url') return s
+    if (displayType === 'email') return s
+    if (displayType === 'phone') return s
+  }
+
+  if (field.field_type === 'autonumber') return String(value)
+
   return String(value)
 }
