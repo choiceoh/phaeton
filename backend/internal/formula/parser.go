@@ -148,12 +148,12 @@ func lex(input string) ([]token, error) {
 
 // Parser converts a token stream into a safe PostgreSQL expression.
 type Parser struct {
-	tokens   []token
-	pos      int
-	slugs    map[string]bool // valid field slugs for this collection
-	refSlugs []string        // referenced field slugs (output)
-	crossRefs []string       // cross-collection relation slugs referenced
-	resolver RelationResolver
+	tokens    []token
+	pos       int
+	slugs     map[string]bool // valid field slugs for this collection
+	refSlugs  []string        // referenced field slugs (output)
+	crossRefs []string        // cross-collection relation slugs referenced
+	resolver  RelationResolver
 }
 
 func (p *Parser) peek() token {
@@ -453,12 +453,12 @@ func (p *Parser) parseIF() (string, error) {
 // parseCrossCollectionFunc handles LOOKUP, SUMREL, AVGREL, MINREL, MAXREL, COUNTREL.
 //
 // Syntax:
-//   LOOKUP(relation_field, target_field)
-//     → (SELECT "target_field" FROM target_table WHERE id = "relation_field")
 //
-//   SUMREL(relation_field, target_field)
-//     → (SELECT COALESCE(SUM("target_field"), 0) FROM target_table WHERE "reverse_col" = "id")
+//	LOOKUP(relation_field, target_field)
+//	  → (SELECT "target_field" FROM target_table WHERE id = "relation_field")
 //
+//	SUMREL(relation_field, target_field)
+//	  → (SELECT COALESCE(SUM("target_field"), 0) FROM target_table WHERE "reverse_col" = "id")
 func (p *Parser) parseCrossCollectionFunc(name string) (string, error) {
 	if p.resolver == nil {
 		return "", fmt.Errorf("%s requires cross-collection support (resolver not available)", name)

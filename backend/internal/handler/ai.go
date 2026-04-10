@@ -163,7 +163,6 @@ Option rules per type:
 ## Example — "출장 신청서"
 {"slug":"business_trip_request","label":"출장 신청서","description":"임직원 출장 신청 및 승인 관리","fields":[{"slug":"request_no","label":"신청번호","field_type":"autonumber","is_required":false,"width":3,"height":1,"options":{"prefix":"BT-","start":1}},{"slug":"status","label":"처리상태","field_type":"select","is_required":true,"width":3,"height":1,"options":{"choices":["신청","검토중","승인","반려"]}},{"slug":"requester","label":"신청자","field_type":"user","is_required":true,"width":3,"height":1,"options":{}},{"slug":"department","label":"부서","field_type":"text","is_required":true,"width":3,"height":1,"options":{}},{"slug":"destination","label":"출장지","field_type":"text","is_required":true,"width":6,"height":1,"options":{}},{"slug":"start_date","label":"출장 시작일","field_type":"date","is_required":true,"width":3,"height":1,"options":{}},{"slug":"end_date","label":"출장 종료일","field_type":"date","is_required":true,"width":3,"height":1,"options":{}},{"slug":"purpose","label":"출장 목적","field_type":"textarea","is_required":true,"width":6,"height":2,"options":{}},{"slug":"estimated_cost","label":"예상 경비","field_type":"number","is_required":false,"width":3,"height":1,"options":{"display_type":"currency","currency_code":"KRW"}},{"slug":"transport","label":"교통수단","field_type":"select","is_required":false,"width":3,"height":1,"options":{"choices":["자가용","KTX","항공","버스","기타"]}},{"slug":"remarks","label":"비고","field_type":"textarea","is_required":false,"width":6,"height":2,"options":{}}]}`
 
-
 const triagePrompt = `You are a requirements analyst for Topworks, a no-code business app platform.
 The user wants to create a new app. Your job is to decide whether their description is clear enough to generate a good schema, or if you need to ask clarifying questions first.
 
@@ -210,7 +209,6 @@ If you need clarification:
 - Include "placeholder" as a hint for free-text answers.
 - Each question has a unique "id" (q1, q2, q3).
 - Focus questions on what would change the field structure, not cosmetic details.`
-
 
 const slugPrompt = `You are a slug generator for a no-code business app platform.
 The user will provide a Korean name (label) for a collection or field.
@@ -298,7 +296,7 @@ func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 		sb.WriteString(req.Description)
 		sb.WriteString("\n\n추가 정보:\n")
 		for qID, answer := range req.Answers {
-			sb.WriteString(fmt.Sprintf("- %s: %s\n", qID, answer))
+			fmt.Fprintf(&sb, "- %s: %s\n", qID, answer)
 		}
 		fullDescription = sb.String()
 	}
@@ -419,4 +417,3 @@ done:
 	}
 	return s[start:]
 }
-

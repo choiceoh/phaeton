@@ -77,8 +77,8 @@ func TestValidateFieldValueDatetime(t *testing.T) {
 func TestValidateFieldValueTime(t *testing.T) {
 	f := schema.Field{FieldType: schema.FieldTime}
 	cases := []struct {
-		val  string
-		ok   bool
+		val string
+		ok  bool
 	}{
 		{"09:30", true},
 		{"23:59:59", true},

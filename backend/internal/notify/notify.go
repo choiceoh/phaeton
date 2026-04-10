@@ -74,6 +74,6 @@ func (d *Dispatcher) SendBulk(ctx context.Context, userIDs []string, msg Message
 // NoopNotifier is a no-op implementation for development/testing.
 type NoopNotifier struct{}
 
-func (NoopNotifier) Name() string                                                { return "noop" }
-func (NoopNotifier) Send(_ context.Context, _ string, _ Message) error           { return nil }
-func (NoopNotifier) SendBulk(_ context.Context, _ []string, _ Message) error     { return nil }
+func (NoopNotifier) Name() string                                            { return "noop" }
+func (NoopNotifier) Send(_ context.Context, _ string, _ Message) error       { return nil }
+func (NoopNotifier) SendBulk(_ context.Context, _ []string, _ Message) error { return nil }

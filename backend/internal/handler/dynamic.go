@@ -82,7 +82,12 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Text search: ?q=term searches across all text/textarea fields.
 	searchClause, searchArgs := BuildSearchClause(
 		params.Get("q"), fields,
-		func() string { if len(sortJoins) > 0 { return qTable }; return "" }(),
+		func() string {
+			if len(sortJoins) > 0 {
+				return qTable
+			}
+			return ""
+		}(),
 		len(args)+1,
 	)
 	where += " " + searchClause
@@ -93,7 +98,10 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	colRole := middleware.GetCollectionRole(r.Context())
 	if colRole == "viewer" {
 		rlsClause = buildRLSClause(r, col, &args, func() string {
-			if len(sortJoins) > 0 { return qTable }; return ""
+			if len(sortJoins) > 0 {
+				return qTable
+			}
+			return ""
 		}())
 	}
 
@@ -293,7 +301,6 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 			colNames = append(colNames, `"_status"`)
 			placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
 			args = append(args, initStatus)
-			idx++
 		}
 	}
 
@@ -522,7 +529,6 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if colRole == "viewer" {
 		args = append(args, user.UserID)
 		rlsClause = fmt.Sprintf(" AND created_by = $%d", idx)
-		idx++
 	}
 
 	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL%s%s RETURNING %s",
@@ -1317,7 +1323,6 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 		if u.Version != nil {
 			args = append(args, *u.Version)
 			versionClause = fmt.Sprintf(` AND "_version" = $%d`, idx)
-			idx++
 		}
 
 		sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL%s RETURNING %s",
@@ -1626,8 +1631,7 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 
 // selectColOpts holds optional parameters for column generation.
 type selectColOpts struct {
-	cache  *schema.Cache
-	fields []schema.Field // all fields (needed for resolver)
+	cache *schema.Cache
 }
 
 func buildSelectCols(fields []schema.Field, hasStatus bool, opts *selectColOpts) string {

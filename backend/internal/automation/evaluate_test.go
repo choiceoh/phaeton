@@ -112,10 +112,10 @@ func TestMatchTriggerConfig_NonStatusChange(t *testing.T) {
 
 func TestMatchTriggerConfig_StatusChange(t *testing.T) {
 	tests := []struct {
-		name       string
-		cfg        TriggerStatusConfig
-		from, to   string
-		wantMatch  bool
+		name      string
+		cfg       TriggerStatusConfig
+		from, to  string
+		wantMatch bool
 	}{
 		{
 			name:      "exact match",

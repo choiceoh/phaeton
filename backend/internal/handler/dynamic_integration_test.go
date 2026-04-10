@@ -120,7 +120,9 @@ func TestDynIntegration_CRUD(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("list empty: status = %d, body = %s", w.Code, w.Body.String())
 		}
-		var env struct{ Total int64 `json:"total"` }
+		var env struct {
+			Total int64 `json:"total"`
+		}
 		json.Unmarshal(w.Body.Bytes(), &env)
 		if env.Total != 0 {
 			t.Errorf("expected total=0, got %d", env.Total)
@@ -201,7 +203,9 @@ func TestDynIntegration_CRUD(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		var env struct {
-			Data struct{ Title string `json:"title"` } `json:"data"`
+			Data struct {
+				Title string `json:"title"`
+			} `json:"data"`
 		}
 		json.Unmarshal(w.Body.Bytes(), &env)
 		if env.Data.Title != "보고서 수정" {
@@ -216,7 +220,9 @@ func TestDynIntegration_CRUD(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		var env struct{ Total int64 `json:"total"` }
+		var env struct {
+			Total int64 `json:"total"`
+		}
 		json.Unmarshal(w.Body.Bytes(), &env)
 		if env.Total != 1 {
 			t.Errorf("expected total=1, got %d", env.Total)
@@ -242,7 +248,9 @@ func TestDynIntegration_CRUD(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		var env struct{ Total int64 `json:"total"` }
+		var env struct {
+			Total int64 `json:"total"`
+		}
 		json.Unmarshal(w.Body.Bytes(), &env)
 		if env.Total != 0 {
 			t.Errorf("expected total=0 after delete, got %d", env.Total)
@@ -381,7 +389,9 @@ func TestDynIntegration_List_Search(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	var env struct{ Total int64 `json:"total"` }
+	var env struct {
+		Total int64 `json:"total"`
+	}
 	json.Unmarshal(w.Body.Bytes(), &env)
 	if env.Total != 2 {
 		t.Errorf("search total = %d, want 2 (사과, 사과주스)", env.Total)
