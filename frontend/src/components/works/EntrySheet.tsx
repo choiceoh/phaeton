@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -45,6 +45,7 @@ export default function EntrySheet({
   const isEdit = !!recordId
   const [tab, setTab] = useState<string>('form')
   const [commentBody, setCommentBody] = useState('')
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const { data: currentUser } = useCurrentUser()
 
@@ -63,13 +64,13 @@ export default function EntrySheet({
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) { onClose(); setTab('form') } }}>
-      <SheetContent className="w-full overflow-y-auto sm:w-[480px] sm:max-w-lg">
+      <SheetContent ref={contentRef} className="w-full overflow-y-auto sm:w-[480px] sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>{title || '새 항목'}</SheetTitle>
         </SheetHeader>
         <div className="mt-4">
           {isEdit ? (
-            <Tabs value={tab} onValueChange={setTab}>
+            <Tabs value={tab} onValueChange={(v) => { setTab(v); contentRef.current?.scrollTo(0, 0) }}>
               <TabsList>
                 <TabsTrigger value="form">편집</TabsTrigger>
                 <TabsTrigger value="comments">댓글</TabsTrigger>

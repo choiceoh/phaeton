@@ -36,7 +36,7 @@ export default function ListView({ fields, entries, onRowClick }: Props) {
       const sum = values.reduce((a, b) => a + b, 0)
       const avg = sum / values.length
       summary[f.slug] = {
-        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })} (현재 페이지)`,
+        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })}`,
         value: sum,
       }
     }
