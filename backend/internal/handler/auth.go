@@ -41,8 +41,11 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 
+	SubsidiaryID *string `json:"subsidiary_id,omitempty"`
+
 	// Joined fields (populated by detail/list queries).
 	DepartmentName *string `json:"department_name,omitempty"`
+	SubsidiaryName *string `json:"subsidiary_name,omitempty"`
 }
 
 // Role constants.
@@ -97,12 +100,12 @@ func Login(pool *pgxpool.Pool, limiter *middleware.RateLimiter) http.HandlerFunc
 		var user User
 		err := pool.QueryRow(r.Context(),
 			`SELECT id, email, name, password, role, is_active,
-			        external_id, department_id, position, title, phone, avatar,
+			        external_id, department_id, subsidiary_id, position, title, phone, avatar,
 			        joined_at::text
 			 FROM auth.users WHERE LOWER(email) = $1`,
 			email,
 		).Scan(&user.ID, &user.Email, &user.Name, &user.Password, &user.Role, &user.IsActive,
-			&user.ExternalID, &user.DepartmentID, &user.Position, &user.Title, &user.Phone, &user.Avatar,
+			&user.ExternalID, &user.DepartmentID, &user.SubsidiaryID, &user.Position, &user.Title, &user.Phone, &user.Avatar,
 			&user.JoinedAt)
 
 		if err != nil {
@@ -183,11 +186,11 @@ func Me(pool *pgxpool.Pool) http.HandlerFunc {
 		var user User
 		err := pool.QueryRow(r.Context(),
 			`SELECT id, email, name, role, is_active,
-			        external_id, department_id, position, title, phone, avatar,
+			        external_id, department_id, subsidiary_id, position, title, phone, avatar,
 			        joined_at::text, created_at, updated_at
 			 FROM auth.users WHERE id = $1`, claims.UserID,
 		).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &user.IsActive,
-			&user.ExternalID, &user.DepartmentID, &user.Position, &user.Title, &user.Phone, &user.Avatar,
+			&user.ExternalID, &user.DepartmentID, &user.SubsidiaryID, &user.Position, &user.Title, &user.Phone, &user.Avatar,
 			&user.JoinedAt, &user.CreatedAt, &user.UpdatedAt)
 		if err != nil {
 			slog.Error("me: query failed", "error", err)
@@ -217,6 +220,7 @@ func CreateUser(pool *pgxpool.Pool) http.HandlerFunc {
 			Password     string  `json:"password"`
 			Role         string  `json:"role"`
 			DepartmentID *string `json:"department_id"`
+			SubsidiaryID *string `json:"subsidiary_id"`
 			Position     *string `json:"position"`
 			Title        *string `json:"title"`
 			Phone        *string `json:"phone"`
@@ -248,17 +252,20 @@ func CreateUser(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// Normalize empty department_id to nil.
+		// Normalize empty IDs to nil.
 		if input.DepartmentID != nil && *input.DepartmentID == "" {
 			input.DepartmentID = nil
+		}
+		if input.SubsidiaryID != nil && *input.SubsidiaryID == "" {
+			input.SubsidiaryID = nil
 		}
 
 		var id string
 		err = pool.QueryRow(r.Context(),
-			`INSERT INTO auth.users (email, name, password, role, department_id, position, title, phone, joined_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+			`INSERT INTO auth.users (email, name, password, role, department_id, subsidiary_id, position, title, phone, joined_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
 			email, input.Name, string(hash), input.Role,
-			input.DepartmentID, input.Position, input.Title, input.Phone, input.JoinedAt,
+			input.DepartmentID, input.SubsidiaryID, input.Position, input.Title, input.Phone, input.JoinedAt,
 		).Scan(&id)
 		if err != nil {
 			var pgErr *pgconn.PgError
@@ -280,16 +287,30 @@ func CreateUser(pool *pgxpool.Pool) http.HandlerFunc {
 func ListUsers(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := `SELECT u.id, u.email, u.name, u.role, u.is_active,
-		             u.external_id, u.department_id, u.position, u.title, u.phone, u.avatar, u.joined_at,
+		             u.external_id, u.department_id, u.subsidiary_id,
+		             u.position, u.title, u.phone, u.avatar, u.joined_at,
 		             u.created_at, u.updated_at,
-		             d.name AS department_name
+		             d.name AS department_name,
+		             s.name AS subsidiary_name
 		      FROM auth.users u
-		      LEFT JOIN auth.departments d ON d.id = u.department_id`
+		      LEFT JOIN auth.departments d ON d.id = u.department_id
+		      LEFT JOIN auth.subsidiaries s ON s.id = u.subsidiary_id`
 
 		var args []any
+		var wheres []string
+		argN := 1
 		if deptID := r.URL.Query().Get("department_id"); deptID != "" {
-			q += ` WHERE u.department_id = $1`
+			wheres = append(wheres, fmt.Sprintf("u.department_id = $%d", argN))
 			args = append(args, deptID)
+			argN++
+		}
+		if subID := r.URL.Query().Get("subsidiary_id"); subID != "" {
+			wheres = append(wheres, fmt.Sprintf("u.subsidiary_id = $%d", argN))
+			args = append(args, subID)
+			argN++
+		}
+		if len(wheres) > 0 {
+			q += " WHERE " + strings.Join(wheres, " AND ")
 		}
 		q += ` ORDER BY u.name`
 
@@ -306,9 +327,10 @@ func ListUsers(pool *pgxpool.Pool) http.HandlerFunc {
 			var u User
 			if err := rows.Scan(
 				&u.ID, &u.Email, &u.Name, &u.Role, &u.IsActive,
-				&u.ExternalID, &u.DepartmentID, &u.Position, &u.Title, &u.Phone, &u.Avatar, &u.JoinedAt,
+				&u.ExternalID, &u.DepartmentID, &u.SubsidiaryID,
+				&u.Position, &u.Title, &u.Phone, &u.Avatar, &u.JoinedAt,
 				&u.CreatedAt, &u.UpdatedAt,
-				&u.DepartmentName,
+				&u.DepartmentName, &u.SubsidiaryName,
 			); err != nil {
 				slog.Warn("list users: scan row failed", "error", err)
 				continue
@@ -329,17 +351,21 @@ func GetUser(pool *pgxpool.Pool) http.HandlerFunc {
 		var u User
 		err := pool.QueryRow(r.Context(),
 			`SELECT u.id, u.email, u.name, u.role, u.is_active,
-			        u.external_id, u.department_id, u.position, u.title, u.phone, u.avatar, u.joined_at,
+			        u.external_id, u.department_id, u.subsidiary_id,
+			        u.position, u.title, u.phone, u.avatar, u.joined_at,
 			        u.created_at, u.updated_at,
-			        d.name AS department_name
+			        d.name AS department_name,
+			        s.name AS subsidiary_name
 			 FROM auth.users u
 			 LEFT JOIN auth.departments d ON d.id = u.department_id
+			 LEFT JOIN auth.subsidiaries s ON s.id = u.subsidiary_id
 			 WHERE u.id = $1`, id,
 		).Scan(
 			&u.ID, &u.Email, &u.Name, &u.Role, &u.IsActive,
-			&u.ExternalID, &u.DepartmentID, &u.Position, &u.Title, &u.Phone, &u.Avatar, &u.JoinedAt,
+			&u.ExternalID, &u.DepartmentID, &u.SubsidiaryID,
+			&u.Position, &u.Title, &u.Phone, &u.Avatar, &u.JoinedAt,
 			&u.CreatedAt, &u.UpdatedAt,
-			&u.DepartmentName,
+			&u.DepartmentName, &u.SubsidiaryName,
 		)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -375,6 +401,7 @@ func UpdateUser(pool *pgxpool.Pool) http.HandlerFunc {
 			Role         *string `json:"role"`
 			IsActive     *bool   `json:"is_active"`
 			DepartmentID *string `json:"department_id"`
+			SubsidiaryID *string `json:"subsidiary_id"`
 			Position     *string `json:"position"`
 			Title        *string `json:"title"`
 			Phone        *string `json:"phone"`
@@ -421,6 +448,13 @@ func UpdateUser(pool *pgxpool.Pool) http.HandlerFunc {
 				addSet("department_id", nil)
 			} else {
 				addSet("department_id", *input.DepartmentID)
+			}
+		}
+		if input.SubsidiaryID != nil {
+			if *input.SubsidiaryID == "" {
+				addSet("subsidiary_id", nil)
+			} else {
+				addSet("subsidiary_id", *input.SubsidiaryID)
 			}
 		}
 		if input.Position != nil {
@@ -620,6 +654,9 @@ func generateToken(user User) (string, error) {
 	}
 	if user.DepartmentID != nil {
 		claims["departmentId"] = *user.DepartmentID
+	}
+	if user.SubsidiaryID != nil {
+		claims["subsidiaryId"] = *user.SubsidiaryID
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))

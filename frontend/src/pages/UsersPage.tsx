@@ -9,18 +9,21 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useDepartments } from '@/hooks/useDepartments'
+import { useSubsidiaries } from '@/hooks/useSubsidiaries'
 import { useUsers, useUpdateUser } from '@/hooks/useUsers'
 import { formatError } from '@/lib/api'
 import { ROLE_LABELS } from '@/lib/constants'
-import type { User, Department } from '@/lib/types'
+import type { User, Department, Subsidiary } from '@/lib/types'
 
 import UserFormDialog from '@/components/admin/UserFormDialog'
 import DepartmentPanel from '@/components/admin/DepartmentPanel'
+import SubsidiaryPanel from '@/components/admin/SubsidiaryPanel'
 
 export default function UsersPage() {
   const { data: currentUser } = useCurrentUser()
   const { data: users, isLoading } = useUsers()
   const { data: departments } = useDepartments()
+  const { data: subsidiaries } = useSubsidiaries()
   const updateUser = useUpdateUser()
 
   const [editingUser, setEditingUser] = useState<User | null>(null)
@@ -31,6 +34,9 @@ export default function UsersPage() {
   const deptMap = new Map<string, Department>()
   departments?.forEach((d) => deptMap.set(d.id, d))
 
+  const subMap = new Map<string, Subsidiary>()
+  subsidiaries?.forEach((s) => subMap.set(s.id, s))
+
   const columns: ColumnDef<User, unknown>[] = [
     { accessorKey: 'name', header: '이름' },
     { accessorKey: 'email', header: '이메일' },
@@ -38,6 +44,14 @@ export default function UsersPage() {
       accessorKey: 'role',
       header: '역할',
       cell: ({ getValue }) => ROLE_LABELS[getValue() as string] ?? getValue(),
+    },
+    {
+      accessorKey: 'subsidiary_id',
+      header: '계열사',
+      cell: ({ getValue }) => {
+        const id = getValue() as string | null
+        return id ? subMap.get(id)?.name ?? '-' : '-'
+      },
     },
     {
       accessorKey: 'department_id',
@@ -67,7 +81,7 @@ export default function UsersPage() {
     <div className="space-y-6">
       <PageHeader
         title="사용자 관리"
-        description="사용자 계정과 부서를 관리합니다"
+        description="사용자 계정, 계열사, 부서를 관리합니다"
         actions={
           isDirector ? (
             <Button onClick={() => setShowCreate(true)}>사용자 추가</Button>
@@ -83,12 +97,18 @@ export default function UsersPage() {
           onRowClick={(user) => isDirector && setEditingUser(user)}
         />
 
-        {isDirector && <DepartmentPanel />}
+        {isDirector && (
+          <div className="space-y-4">
+            <SubsidiaryPanel />
+            <DepartmentPanel />
+          </div>
+        )}
       </div>
 
       {showCreate && (
         <UserFormDialog
           departments={departments ?? []}
+          subsidiaries={subsidiaries ?? []}
           onClose={() => setShowCreate(false)}
         />
       )}
@@ -97,6 +117,7 @@ export default function UsersPage() {
         <UserFormDialog
           user={editingUser}
           departments={departments ?? []}
+          subsidiaries={subsidiaries ?? []}
           onClose={() => setEditingUser(null)}
           onToggleActive={() => {
             updateUser.mutate(
