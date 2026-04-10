@@ -106,7 +106,7 @@ describe('EntryForm', () => {
       expect(screen.getByText('상태')).toBeInTheDocument()
     })
 
-    it('renders multiselect field with choices in popover', async () => {
+    it('renders multiselect field with popover trigger', async () => {
       const user = userEvent.setup()
       renderForm({
         fields: [
@@ -119,11 +119,13 @@ describe('EntryForm', () => {
         ],
       })
 
+      // The field label should be visible
       expect(screen.getByText('태그')).toBeInTheDocument()
+      // The popover trigger shows placeholder text when nothing is selected
+      expect(screen.getByText('선택...')).toBeInTheDocument()
 
-      // Open the popover trigger to reveal choices
-      const trigger = screen.getByText('선택...')
-      await user.click(trigger)
+      // Open the popover to reveal choices
+      await user.click(screen.getByText('선택...'))
 
       await waitFor(() => {
         expect(screen.getByText('긴급')).toBeInTheDocument()
