@@ -335,6 +335,17 @@ export default function AppViewPage() {
     return cols
   }, [collection, process, processVisible])
 
+  // Default: hide columns beyond the first 8 data fields.
+  const initialColumnVisibility = useMemo<Record<string, boolean>>(() => {
+    if (!collection?.fields) return {}
+    const dataFields = collection.fields.filter((f) => !isLayoutType(f.field_type))
+    const vis: Record<string, boolean> = {}
+    dataFields.forEach((f, i) => {
+      if (i >= 8) vis[f.slug] = false
+    })
+    return vis
+  }, [collection])
+
   // Inline edit handler.
   const handleCellEdit = useCallback(
     (event: CellEditEvent) => {
@@ -912,6 +923,7 @@ export default function AppViewPage() {
               emptyDescription={TERM.noRecordsDesc}
               summaryRow={summaryRow}
               toolbar={tableToolbar}
+              initialColumnVisibility={initialColumnVisibility}
               highlightRows={importedCount}
               selectable
               selectedRowIds={selectedRowIds}

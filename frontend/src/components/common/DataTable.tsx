@@ -73,6 +73,7 @@ interface Props<T> {
   emptyDescription?: string
   summaryRow?: Record<string, { label: string; value: string | number }>
   toolbar?: React.ReactNode
+  initialColumnVisibility?: VisibilityState
   /** Number of top rows to highlight (e.g. after CSV import). */
   highlightRows?: number
   /** Enable row selection with checkboxes */
@@ -103,13 +104,14 @@ export function DataTable<T>({
   emptyDescription,
   summaryRow,
   toolbar,
+  initialColumnVisibility,
   highlightRows = 0,
   selectable,
   selectedRowIds,
   onSelectionChange,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
   const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
     left: [],
     right: [],

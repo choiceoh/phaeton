@@ -1,5 +1,7 @@
+import { GanttChart } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import EmptyState from '@/components/common/EmptyState'
 import type { Field } from '@/lib/types'
 
 const DAY_WIDTH = 36
@@ -369,6 +371,16 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
       left: startIdx * DAY_WIDTH + 2,
       width: Math.max((endIdx - startIdx + 1) * DAY_WIDTH - 4, 8),
     }
+  }
+
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        icon={<GanttChart className="h-10 w-10" />}
+        title="간트 차트에 표시할 데이터가 없습니다"
+        description="날짜 필드가 있는 데이터를 추가하면 타임라인에 표시됩니다."
+      />
+    )
   }
 
   return (
