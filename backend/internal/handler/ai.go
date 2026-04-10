@@ -23,7 +23,8 @@ func NewAIHandler(client *ai.Client, store *schema.Store) *AIHandler {
 }
 
 type aiBuildRequest struct {
-	Description string `json:"description"`
+	Description string            `json:"description"`
+	Answers     map[string]string `json:"answers,omitempty"` // question_id → answer (second round)
 }
 
 type aiBuildField struct {
@@ -36,13 +37,32 @@ type aiBuildField struct {
 	Options    map[string]interface{} `json:"options,omitempty"`
 }
 
-type aiBuildResponse struct {
+// aiBuildQuestion is a clarifying question the AI wants to ask.
+type aiBuildQuestion struct {
+	ID          string   `json:"id"`
+	Question    string   `json:"question"`
+	Placeholder string   `json:"placeholder,omitempty"`
+	Choices     []string `json:"choices,omitempty"` // optional: predefined choices
+}
+
+// aiBuildEnvelope wraps both question and schema responses.
+// If Questions is non-empty the frontend should show them; otherwise Schema is the result.
+type aiBuildEnvelope struct {
+	Mode      string            `json:"mode"` // "questions" | "schema"
+	Questions []aiBuildQuestion `json:"questions,omitempty"`
+	Schema    *aiBuildSchema    `json:"schema,omitempty"`
+}
+
+type aiBuildSchema struct {
 	Slug        string         `json:"slug"`
 	Label       string         `json:"label"`
 	Description string         `json:"description"`
 	Icon        string         `json:"icon,omitempty"`
 	Fields      []aiBuildField `json:"fields"`
 }
+
+// legacy flat response used internally for AI JSON parsing
+type aiBuildResponse = aiBuildSchema
 
 const systemPromptBase = `You are a schema designer for Phaeton, a no-code business app platform used by a Korean company.
 The user will describe a business process or data they want to manage. You must generate a collection (app) schema as JSON.
@@ -151,7 +171,82 @@ func (h *AIHandler) buildSystemPrompt(r *http.Request) string {
 	return sb.String()
 }
 
+const triagePrompt = `You are a requirements analyst for Phaeton, a no-code business app platform.
+The user wants to create a new app. Your job is to decide whether their description is clear enough to generate a good schema, or if you need to ask clarifying questions first.
+
+## Decision Criteria — Ask questions ONLY when:
+- The business process is ambiguous (could mean very different schemas)
+- Critical domain information is missing that would change the field design significantly
+- The scope is unclear (e.g. "관리" alone without specifying what)
+
+## DO NOT ask questions when:
+- The description is short but clear (e.g. "출장 신청서" → obvious what fields are needed)
+- Minor details are missing that you can reasonably assume
+- You can infer the domain from context
+
+## Output Format
+Output ONLY valid JSON — no markdown, no explanation.
+
+If the description is clear enough:
+{"mode": "proceed"}
+
+If you need clarification (max 2-3 questions):
+{
+  "mode": "questions",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Korean question text",
+      "placeholder": "예: 답변 힌트",
+      "choices": ["선택1", "선택2"]
+    }
+  ]
+}
+
+Rules for questions:
+- Max 3 questions. Be concise.
+- Questions must be in Korean.
+- Include "choices" array when there are obvious options (helps the user answer quickly).
+- Include "placeholder" as a hint for free-text answers.
+- Each question should have a unique "id" (q1, q2, q3).
+- Only ask questions that would significantly change the resulting schema.`
+
+const textCritiquePrompt = `You are reviewing a collection schema you previously generated for a no-code app platform.
+
+## Your Task
+Review the schema below and improve it. Check for:
+1. Missing important fields for the described business process.
+2. Wrong field types (e.g. text where date/number/select would be better).
+3. Poor select/multiselect choices — are they realistic for Korean business?
+4. Layout issues: fields that should be side-by-side (width 3+3) but are both width 6.
+5. Width sum per row should not exceed 6. Fields overflow to the next row if they do.
+6. Missing required flags on critical identification fields.
+7. Redundant or unnecessary fields.
+8. Section headers (label type) and separators (line type) for better form organization.
+
+## Rules
+- Output ONLY valid JSON with the same schema structure — no explanation.
+- Keep what is already good, only fix what needs improvement.
+- All labels and descriptions must remain in Korean.`
+
+const visualCritiquePrompt = `You are looking at a screenshot of a form that was generated for a no-code business app platform.
+The user's original request and the current JSON schema are provided below.
+
+## Your Task
+Look at the screenshot carefully and evaluate the visual layout:
+1. Are fields grouped logically? Related fields should be near each other.
+2. Is the width distribution good? Short fields (dates, numbers) can be width 2-3 side by side. Long text fields should be width 6.
+3. Are section headers (label type) placed appropriately to divide the form into logical groups?
+4. Does the overall form look clean, professional, and easy to fill out?
+5. Is the field order intuitive? (identification first, then details, then status/meta at the end)
+
+## Rules
+- Output ONLY the improved JSON schema — no explanation, no markdown fences.
+- Keep what is already good, only fix layout/ordering issues you see in the screenshot.
+- All labels and descriptions must remain in Korean.`
+
 // BuildCollection generates a collection schema from a natural-language description.
+// Flow: triage (questions?) → generate → text self-critique → visual screenshot critique.
 func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 	var req aiBuildRequest
 	if err := readJSON(r, &req); err != nil {
@@ -163,25 +258,129 @@ func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt := h.buildSystemPrompt(r)
-	raw, err := h.client.Complete(r.Context(), prompt, req.Description)
+	ctx := r.Context()
+
+	// ── Step 0: Triage — ask clarifying questions if needed ──
+	// Skip triage if user already provided answers (second round).
+	if len(req.Answers) == 0 {
+		slog.Info("ai build: step 0 - triage")
+		triageInput := req.Description
+
+		// Include existing app context so triage can avoid duplicate questions.
+		if collections, err := h.store.ListCollections(ctx); err == nil && len(collections) > 0 {
+			var names []string
+			for _, c := range collections {
+				names = append(names, fmt.Sprintf("%s(%s)", c.Label, c.Slug))
+			}
+			triageInput += "\n\n기존 워크스페이스 앱: " + strings.Join(names, ", ")
+		}
+
+		raw, err := h.client.Complete(ctx, triagePrompt, triageInput)
+		if err != nil {
+			slog.Warn("ai triage failed, proceeding to generation", "error", err)
+		} else if questions, ok := parseTriageResponse(raw); ok && len(questions) > 0 {
+			writeJSON(w, http.StatusOK, aiBuildEnvelope{
+				Mode:      "questions",
+				Questions: questions,
+			})
+			return
+		}
+	}
+
+	// Build the full description including answers if present.
+	fullDescription := req.Description
+	if len(req.Answers) > 0 {
+		var sb strings.Builder
+		sb.WriteString(req.Description)
+		sb.WriteString("\n\n추가 정보:\n")
+		for qID, answer := range req.Answers {
+			sb.WriteString(fmt.Sprintf("- %s: %s\n", qID, answer))
+		}
+		fullDescription = sb.String()
+	}
+
+	// ── Step 1: Initial generation ──
+	slog.Info("ai build: step 1 - generating initial schema")
+	systemPrompt := h.buildSystemPrompt(r)
+	raw, err := h.client.Complete(ctx, systemPrompt, fullDescription)
 	if err != nil {
-		slog.Error("ai build-collection failed", "error", err)
+		slog.Error("ai build step 1 failed", "error", err)
 		writeError(w, http.StatusBadGateway, "AI 서버 요청에 실패했습니다")
 		return
 	}
 
-	// Extract JSON from the response (handle potential markdown fences).
-	jsonStr := extractJSON(raw)
-
-	var result aiBuildResponse
-	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		slog.Error("ai returned invalid JSON", "raw", raw, "error", err)
+	result, err := parseAndSanitize(raw)
+	if err != nil {
+		slog.Error("ai step 1 returned invalid JSON", "raw", raw, "error", err)
 		writeError(w, http.StatusBadGateway, "AI 응답을 파싱할 수 없습니다")
 		return
 	}
 
-	// Sanitize: ensure slug is valid.
+	// ── Step 2: Text self-critique ──
+	slog.Info("ai build: step 2 - text self-critique")
+	schemaJSON, _ := json.MarshalIndent(result, "", "  ")
+	critiqueInput := fmt.Sprintf("사용자 요청: %s\n\n현재 스키마:\n%s", fullDescription, string(schemaJSON))
+
+	raw2, err := h.client.Complete(ctx, textCritiquePrompt, critiqueInput)
+	if err != nil {
+		slog.Warn("ai build step 2 failed, using step 1 result", "error", err)
+	} else if refined, err := parseAndSanitize(raw2); err != nil {
+		slog.Warn("ai step 2 returned invalid JSON, using step 1 result", "error", err)
+	} else {
+		result = refined
+	}
+
+	// ── Step 3: Visual screenshot critique ──
+	slog.Info("ai build: step 3 - visual screenshot critique")
+	imgB64, err := renderFormScreenshotBase64(ctx, result)
+	if err != nil {
+		slog.Warn("ai build step 3 screenshot failed, using step 2 result", "error", err)
+		writeJSON(w, http.StatusOK, aiBuildEnvelope{Mode: "schema", Schema: &result})
+		return
+	}
+
+	schemaJSON, _ = json.MarshalIndent(result, "", "  ")
+	visualInput := fmt.Sprintf("사용자 요청: %s\n\n현재 스키마:\n%s", fullDescription, string(schemaJSON))
+
+	raw3, err := h.client.CompleteWithImage(ctx, visualCritiquePrompt, visualInput, imgB64)
+	if err != nil {
+		slog.Warn("ai build step 3 vision failed, using step 2 result", "error", err)
+	} else if refined, err := parseAndSanitize(raw3); err != nil {
+		slog.Warn("ai step 3 returned invalid JSON, using step 2 result", "error", err)
+	} else {
+		result = refined
+	}
+
+	writeJSON(w, http.StatusOK, aiBuildEnvelope{Mode: "schema", Schema: &result})
+}
+
+// triageResult is the shape returned by the triage prompt.
+type triageResult struct {
+	Mode      string            `json:"mode"`
+	Questions []aiBuildQuestion `json:"questions,omitempty"`
+}
+
+// parseTriageResponse attempts to parse a triage JSON response.
+// Returns questions and true if the AI wants to ask, or nil and false to proceed.
+func parseTriageResponse(raw string) ([]aiBuildQuestion, bool) {
+	jsonStr := extractJSON(raw)
+	var tr triageResult
+	if err := json.Unmarshal([]byte(jsonStr), &tr); err != nil {
+		return nil, false
+	}
+	if tr.Mode == "questions" && len(tr.Questions) > 0 {
+		return tr.Questions, true
+	}
+	return nil, false
+}
+
+// parseAndSanitize extracts JSON from AI output, parses it, and sanitizes slugs.
+func parseAndSanitize(raw string) (aiBuildResponse, error) {
+	jsonStr := extractJSON(raw)
+	var result aiBuildResponse
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		return aiBuildResponse{}, err
+	}
 	result.Slug = sanitizeSlug(result.Slug)
 	for i := range result.Fields {
 		result.Fields[i].Slug = sanitizeSlug(result.Fields[i].Slug)
@@ -192,8 +391,7 @@ func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {
 			result.Fields[i].Height = 1
 		}
 	}
-
-	writeJSON(w, http.StatusOK, result)
+	return result, nil
 }
 
 var slugRe = regexp.MustCompile(`[^a-z0-9_]`)

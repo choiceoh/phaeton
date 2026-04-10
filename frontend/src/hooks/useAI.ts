@@ -12,7 +12,14 @@ export interface AIBuildField {
   options?: Record<string, unknown>
 }
 
-export interface AIBuildResult {
+export interface AIBuildQuestion {
+  id: string
+  question: string
+  placeholder?: string
+  choices?: string[]
+}
+
+export interface AIBuildSchema {
   slug: string
   label: string
   description: string
@@ -20,9 +27,23 @@ export interface AIBuildResult {
   fields: AIBuildField[]
 }
 
+export interface AIBuildEnvelope {
+  mode: 'questions' | 'schema'
+  questions?: AIBuildQuestion[]
+  schema?: AIBuildSchema
+}
+
+/** For backwards compat */
+export type AIBuildResult = AIBuildSchema
+
+interface AIBuildInput {
+  description: string
+  answers?: Record<string, string>
+}
+
 export function useAIBuildCollection() {
   return useMutation({
-    mutationFn: (description: string) =>
-      api.post<AIBuildResult>('/ai/build-collection', { description }),
+    mutationFn: (input: AIBuildInput) =>
+      api.post<AIBuildEnvelope>('/ai/build-collection', input),
   })
 }

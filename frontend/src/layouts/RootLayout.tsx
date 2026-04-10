@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 
+import AIChatPanel from '@/components/common/AIChatPanel'
 import LoadingState from '@/components/common/LoadingState'
 import NotificationBell from '@/components/common/NotificationBell'
 import { Button } from '@/components/ui/button'
@@ -63,6 +64,7 @@ export default function RootLayout() {
       <main className="mx-auto max-w-7xl p-6">
         <Outlet />
       </main>
+      <AIChatPanel />
     </div>
   )
 }
