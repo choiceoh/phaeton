@@ -279,7 +279,13 @@ export default function AutomationsPage() {
   return (
     <div>
       <PageHeader
-        title={`${collection.label} > 자동화`}
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label, href: `/apps/${collection.id}` },
+          { label: '설정', href: `/apps/${collection.id}/settings` },
+          { label: '자동화' },
+        ]}
+        title="자동화"
         actions={
           <div className="flex gap-2">
             {!formOpen && (
@@ -308,7 +314,7 @@ export default function AutomationsPage() {
             <h3 className="font-semibold">{editingId ? '자동화 수정' : '새 자동화'}</h3>
 
             {/* Name + enabled */}
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-2">
               <div className="flex-1">
                 <Label>이름</Label>
                 <Input
@@ -343,7 +349,7 @@ export default function AutomationsPage() {
 
             {/* Status change config */}
             {triggerType === 'status_change' && statuses.length > 0 && (
-              <div className="flex gap-3">
+              <div className="flex gap-2">
                 <div className="flex-1">
                   <Label>이전 상태 (선택)</Label>
                   <Select value={fromStatus} onValueChange={(v) => setFromStatus(v ?? '')}>
@@ -505,7 +511,7 @@ export default function AutomationsPage() {
                       {a.action_type === 'send_notification' && (
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <div>
-                            <Label className="text-xs">누구에게 보낼까요?</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">누구에게 보낼까요?</Label>
                             <Select
                               value={(a.action_config.recipient as string) ?? 'record_creator'}
                               onValueChange={(v) => updateActionConfig(idx, 'recipient', v)}
@@ -522,7 +528,7 @@ export default function AutomationsPage() {
                           </div>
                           {a.action_config.recipient === 'specific_user' && (
                             <div>
-                              <Label className="text-xs">받을 사용자</Label>
+                              <Label className="text-xs font-semibold text-muted-foreground">받을 사용자</Label>
                               <UserCombobox
                                 value={(a.action_config.user_id as string) ?? ''}
                                 onChange={(v) => updateActionConfig(idx, 'user_id', v ?? '')}
@@ -531,7 +537,7 @@ export default function AutomationsPage() {
                           )}
                           {a.action_config.recipient === 'field_ref' && (
                             <div>
-                              <Label className="text-xs">어떤 필드의 사용자에게?</Label>
+                              <Label className="text-xs font-semibold text-muted-foreground">어떤 필드의 사용자에게?</Label>
                               <Select
                                 value={(a.action_config.field_slug as string) ?? ''}
                                 onValueChange={(v) => updateActionConfig(idx, 'field_slug', v)}
@@ -548,7 +554,7 @@ export default function AutomationsPage() {
                             </div>
                           )}
                           <div>
-                            <Label className="text-xs">알림 제목</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">알림 제목</Label>
                             <Input
                               value={(a.action_config.title as string) ?? ''}
                               onChange={(e) => updateActionConfig(idx, 'title', e.target.value)}
@@ -556,7 +562,7 @@ export default function AutomationsPage() {
                             />
                           </div>
                           <div>
-                            <Label className="text-xs">알림 내용</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">알림 내용</Label>
                             <Input
                               value={(a.action_config.body as string) ?? ''}
                               onChange={(e) => updateActionConfig(idx, 'body', e.target.value)}
@@ -569,7 +575,7 @@ export default function AutomationsPage() {
                       {a.action_type === 'update_field' && (
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <Label className="text-xs">변경할 필드</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">변경할 필드</Label>
                             <Select
                               value={(a.action_config.field_slug as string) ?? ''}
                               onValueChange={(v) => updateActionConfig(idx, 'field_slug', v)}
@@ -585,7 +591,7 @@ export default function AutomationsPage() {
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-xs">변경할 값</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">변경할 값</Label>
                             <Input
                               value={(a.action_config.value as string) ?? ''}
                               onChange={(e) => updateActionConfig(idx, 'value', e.target.value)}
@@ -597,7 +603,7 @@ export default function AutomationsPage() {
 
                       {a.action_type === 'call_webhook' && (
                         <div>
-                          <Label className="text-xs">연결할 주소 (URL)</Label>
+                          <Label className="text-xs font-semibold text-muted-foreground">연결할 주소 (URL)</Label>
                           <Input
                             value={(a.action_config.url as string) ?? ''}
                             onChange={(e) => updateActionConfig(idx, 'url', e.target.value)}
@@ -638,7 +644,7 @@ export default function AutomationsPage() {
                 className="flex items-center justify-between p-3 cursor-pointer hover:bg-accent/50"
                 onClick={() => handleEdit(a.id)}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <span className="font-medium">{a.name}</span>

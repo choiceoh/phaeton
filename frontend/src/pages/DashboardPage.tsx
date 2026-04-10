@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import {
   BarChart,
   Bar,
@@ -19,7 +19,6 @@ import {
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
-import { Button } from '@/components/ui/button'
 import { useCollection } from '@/hooks/useCollections'
 import { useAggregate, useCollectionCount } from '@/hooks/useEntries'
 import type { Field } from '@/lib/types'
@@ -50,13 +49,13 @@ export default function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title={`${collection.label} 대시보드`}
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label, href: `/apps/${collection.id}` },
+          { label: '대시보드' },
+        ]}
+        title="대시보드"
         description="데이터를 한눈에 요약합니다"
-        actions={
-          <Link to={`/apps/${collection.id}`}>
-            <Button variant="outline">목록으로</Button>
-          </Link>
-        }
       />
 
       {/* Summary cards */}
