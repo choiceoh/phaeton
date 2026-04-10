@@ -31,6 +31,7 @@ export const queryKeys = {
 
   entries: {
     all: ['entries'] as const,
+    collection: (slug: string) => [...queryKeys.entries.all, slug] as const,
     list: (slug: string, query?: Record<string, unknown>) =>
       [...queryKeys.entries.all, slug, 'list', query ?? {}] as const,
     detail: (slug: string, id: string) =>

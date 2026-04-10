@@ -64,6 +64,11 @@ export default function EntryForm({
 
   // Similar records detection: track the first text field value with debounce.
   const isNew = !initialData?.id
+
+  // First editable field slug — used to autoFocus on new entry creation.
+  const firstEditableSlug = isNew
+    ? fields.find((f) => !isLayoutType(f.field_type) && !['formula', 'autonumber', 'lookup', 'rollup'].includes(f.field_type))?.slug
+    : undefined
   const firstTextField = isNew ? fields.find((f) => f.field_type === 'text') : undefined
   const [similarQuery, setSimilarQuery] = useState('')
   const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -73,13 +78,13 @@ export default function EntryForm({
     firstTextField?.slug,
   )
 
+  const firstTextFieldValue = firstTextField ? String(data[firstTextField.slug] ?? '') : ''
   useEffect(() => {
     if (!firstTextField || !isNew) return
-    const val = String(data[firstTextField.slug] ?? '')
     if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
-    similarDebounceRef.current = setTimeout(() => setSimilarQuery(val), 800)
+    similarDebounceRef.current = setTimeout(() => setSimilarQuery(firstTextFieldValue), 800)
     return () => { if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current) }
-  }, [data, firstTextField, isNew])
+  }, [firstTextFieldValue, firstTextField, isNew])
 
   function setValue(name: string, value: unknown) {
     setData((prev) => ({ ...prev, [name]: value }))
@@ -230,6 +235,7 @@ export default function EntryForm({
                   value={extractValue(data[field.slug], field)}
                   onChange={(v) => setValue(field.slug, v)}
                   onBlur={() => handleBlur(field)}
+                  autoFocus={field.slug === firstEditableSlug}
                 />
                 {errors[field.slug] && (
                   <p key={shakeKey} className="mt-1 text-xs text-destructive animate-shake animate-fade-in">{errors[field.slug]}</p>
@@ -309,11 +315,13 @@ function FieldInput({
   value,
   onChange,
   onBlur,
+  autoFocus,
 }: {
   field: Field
   value: unknown
   onChange: (v: unknown) => void
   onBlur?: () => void
+  autoFocus?: boolean
 }) {
   const h = field.height || 1
 
@@ -326,6 +334,7 @@ function FieldInput({
           onBlur={onBlur}
           rows={(field.options?.rows as number) || Math.max(4, h * 2)}
           required={field.is_required}
+          autoFocus={autoFocus}
         />
       )
     case 'time':
@@ -362,6 +371,7 @@ function FieldInput({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           required={field.is_required}
+          autoFocus={autoFocus}
         />
       )
     }
@@ -602,7 +612,7 @@ function FieldInput({
       )
     default:
       return (
-        <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
+        <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} autoFocus={autoFocus} />
       )
   }
 }

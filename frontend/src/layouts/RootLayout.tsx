@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 
 import AIChatPanel from '@/components/common/AIChatPanel'
@@ -21,9 +21,13 @@ export default function RootLayout() {
     if (isError) navigate('/login', { replace: true })
   }, [isError, navigate])
 
-  // Scroll to top on page navigation.
+  // Scroll to top only when the base path changes (not on query/hash changes).
+  const prevPathRef = useRef(pathname)
   useEffect(() => {
-    window.scrollTo(0, 0)
+    if (prevPathRef.current !== pathname) {
+      window.scrollTo(0, 0)
+      prevPathRef.current = pathname
+    }
   }, [pathname])
 
   if (isLoading) return <LoadingState />
