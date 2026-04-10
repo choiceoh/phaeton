@@ -171,6 +171,33 @@ func (h *SchemaHandler) DeleteField(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// --- Process ---
+
+func (h *SchemaHandler) GetProcess(w http.ResponseWriter, r *http.Request) {
+	collectionID := chi.URLParam(r, "id")
+	proc, err := h.engine.GetProcess(r.Context(), collectionID)
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, proc)
+}
+
+func (h *SchemaHandler) SaveProcess(w http.ResponseWriter, r *http.Request) {
+	collectionID := chi.URLParam(r, "id")
+	var req schema.SaveProcessReq
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	proc, err := h.engine.SaveProcess(r.Context(), collectionID, &req)
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, proc)
+}
+
 // --- Migrations ---
 
 func (h *SchemaHandler) MigrationHistory(w http.ResponseWriter, r *http.Request) {

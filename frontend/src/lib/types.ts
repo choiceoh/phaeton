@@ -104,6 +104,39 @@ export interface Preview {
   warnings?: string[]
 }
 
+// --- Process (workflow) ---
+
+export interface ProcessStatus {
+  id: string
+  process_id: string
+  name: string
+  color: string
+  sort_order: number
+  is_initial: boolean
+}
+
+export interface ProcessTransition {
+  id: string
+  process_id: string
+  from_status_id: string
+  to_status_id: string
+  label: string
+}
+
+export interface Process {
+  id: string
+  collection_id: string
+  is_enabled: boolean
+  statuses: ProcessStatus[]
+  transitions: ProcessTransition[]
+}
+
+export interface SaveProcessReq {
+  is_enabled: boolean
+  statuses: { name: string; color: string; sort_order: number; is_initial: boolean }[]
+  transitions: { from_index: number; to_index: number; label: string }[]
+}
+
 // --- Envelope responses ---
 
 export interface DataEnvelope<T> {

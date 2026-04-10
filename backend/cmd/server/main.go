@@ -164,6 +164,9 @@ func buildRouter(
 			r.Patch("/collections/{id}", schemaH.UpdateCollection)
 			r.Delete("/collections/{id}", schemaH.DeleteCollection)
 
+			r.Get("/collections/{id}/process", schemaH.GetProcess)
+			r.Put("/collections/{id}/process", schemaH.SaveProcess)
+
 			r.Post("/collections/{id}/fields", schemaH.AddField)
 			r.Patch("/fields/{fieldId}", schemaH.UpdateField)
 			r.Delete("/fields/{fieldId}", schemaH.DeleteField)

@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import type { Field } from '@/lib/types'
+import type { Field, Process } from '@/lib/types'
 
 interface Props {
   fields: Field[]
@@ -21,6 +21,7 @@ interface Props {
   onSubmit: (data: Record<string, unknown>) => void
   onCancel: () => void
   submitting?: boolean
+  process?: Process
 }
 
 // EntryForm renders a dynamic form built from a collection's fields.
@@ -36,6 +37,7 @@ export default function EntryForm({
   onSubmit,
   onCancel,
   submitting,
+  process,
 }: Props) {
   const [data, setData] = useState<Record<string, unknown>>(initialData ?? {})
 
@@ -48,8 +50,61 @@ export default function EntryForm({
     onSubmit(data)
   }
 
+  // Process status transitions (only when editing an existing entry).
+  const currentStatus = initialData?._status as string | undefined
+  const availableTransitions = (() => {
+    if (!process?.is_enabled || !currentStatus || !initialData?.id) return []
+    const statusByName = new Map(process.statuses.map((s) => [s.name, s]))
+    const currentStatusObj = statusByName.get(currentStatus)
+    if (!currentStatusObj) return []
+    return process.transitions
+      .filter((t) => t.from_status_id === currentStatusObj.id)
+      .map((t) => {
+        const target = process.statuses.find((s) => s.id === t.to_status_id)
+        return { label: t.label, targetName: target?.name ?? '', targetColor: target?.color ?? '#6b7280' }
+      })
+  })()
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Status transition UI */}
+      {process?.is_enabled && currentStatus && (
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">현재 상태:</span>
+            <span
+              className="inline-block rounded px-2 py-0.5 text-xs font-medium text-white"
+              style={{
+                backgroundColor:
+                  process.statuses.find((s) => s.name === currentStatus)?.color ?? '#6b7280',
+              }}
+            >
+              {currentStatus}
+            </span>
+          </div>
+          {availableTransitions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {availableTransitions.map((t, i) => (
+                <Button
+                  key={i}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setValue('_status', t.targetName)}
+                >
+                  {t.label} → {t.targetName}
+                </Button>
+              ))}
+            </div>
+          )}
+          {typeof data._status === 'string' && data._status !== currentStatus && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              저장 시 상태가 <strong>{String(data._status)}</strong>(으)로 변경됩니다.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="space-y-4">
         {fields.map((field) => (
           <div key={field.id}>

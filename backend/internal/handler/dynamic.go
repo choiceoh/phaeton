@@ -93,11 +93,12 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch page. Qualify SELECT columns with the table name when joins are present.
+	procEnabled := h.hasProcessEnabled(col.ID)
 	var selectCols string
 	if joinClause != "" {
-		selectCols = qualifySelectCols(fields, qTable)
+		selectCols = qualifySelectCols(fields, qTable, procEnabled)
 	} else {
-		selectCols = buildSelectCols(fields)
+		selectCols = buildSelectCols(fields, procEnabled)
 	}
 	dataSQL := fmt.Sprintf("SELECT %s FROM %s%s WHERE %s %s %s LIMIT %d OFFSET %d",
 		selectCols, qTable, joinClause, deletedClause, where, orderBy, limit, offset)
@@ -136,7 +137,8 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields)
+	procEnabled := h.hasProcessEnabled(col.ID)
+	selectCols := buildSelectCols(fields, procEnabled)
 	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1 AND deleted_at IS NULL", selectCols, qTable)
 
 	rows, err := h.pool.Query(r.Context(), sql, id)
@@ -210,8 +212,19 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		idx++
 	}
 
+	// Process: inject initial status for new entries.
+	procEnabled := h.hasProcessEnabled(col.ID)
+	if procEnabled {
+		if initStatus := h.initialStatusName(col.ID); initStatus != "" {
+			colNames = append(colNames, `"_status"`)
+			placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+			args = append(args, initStatus)
+			idx++
+		}
+	}
+
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields)
+	selectCols := buildSelectCols(fields, procEnabled)
 
 	var sql string
 	if len(colNames) == 0 {
@@ -280,9 +293,44 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		idx++
 	}
 
+	// Process: validate and apply status transition.
+	procEnabled := h.hasProcessEnabled(col.ID)
+	if newStatus, ok := body["_status"]; ok && newStatus != nil {
+		if !procEnabled {
+			writeError(w, http.StatusBadRequest, "이 컬렉션에는 프로세스가 활성화되지 않았습니다")
+			return
+		}
+		newStatusStr, ok := newStatus.(string)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "_status는 문자열이어야 합니다")
+			return
+		}
+		// Fetch current status.
+		qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+		var currentStatus *string
+		err := h.pool.QueryRow(r.Context(),
+			fmt.Sprintf(`SELECT "_status" FROM %s WHERE id = $1 AND deleted_at IS NULL`, qTable), id,
+		).Scan(&currentStatus)
+		if err != nil {
+			handleErr(w, r, err)
+			return
+		}
+		fromStatus := ""
+		if currentStatus != nil {
+			fromStatus = *currentStatus
+		}
+		if err := h.validateStatusTransition(col.ID, fromStatus, newStatusStr); err != nil {
+			handleErr(w, r, err)
+			return
+		}
+		sets = append(sets, fmt.Sprintf("%q = $%d", "_status", idx))
+		args = append(args, newStatusStr)
+		idx++
+	}
+
 	args = append(args, id)
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields)
+	selectCols := buildSelectCols(fields, procEnabled)
 
 	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL RETURNING %s",
 		qTable, strings.Join(sets, ", "), idx, selectCols)
@@ -463,7 +511,17 @@ func (h *DynHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields)
+	bulkProcEnabled := h.hasProcessEnabled(col.ID)
+	selectCols := buildSelectCols(fields, bulkProcEnabled)
+
+	// Inject initial status for bulk create if process is enabled.
+	if bulkProcEnabled {
+		if initStatus := h.initialStatusName(col.ID); initStatus != "" {
+			for i := range bodies {
+				bodies[i]["_status"] = initStatus
+			}
+		}
+	}
 
 	created := make([]map[string]any, 0, len(bodies))
 	for i, body := range bodies {
@@ -566,6 +624,12 @@ func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []stri
 		cols = append(cols, `"created_by"`)
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
 		args = append(args, cb)
+		idx++
+	}
+	if st, ok := body["_status"]; ok {
+		cols = append(cols, `"_status"`)
+		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+		args = append(args, st)
 	}
 	return cols, placeholders, args
 }
@@ -607,25 +671,94 @@ func (h *DynHandler) resolveCollection(w http.ResponseWriter, slug string) (sche
 	return col, fields, true
 }
 
-func buildSelectCols(fields []schema.Field) string {
+// hasProcessEnabled checks if the collection has an active process workflow.
+func (h *DynHandler) hasProcessEnabled(collectionID string) bool {
+	p, ok := h.cache.ProcessByCollectionID(collectionID)
+	return ok && p.IsEnabled
+}
+
+// initialStatusName returns the name of the initial status for a collection's process.
+func (h *DynHandler) initialStatusName(collectionID string) string {
+	p, ok := h.cache.ProcessByCollectionID(collectionID)
+	if !ok {
+		return ""
+	}
+	for _, s := range p.Statuses {
+		if s.IsInitial {
+			return s.Name
+		}
+	}
+	return ""
+}
+
+// validateStatusTransition checks if a status transition is allowed.
+func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus string) error {
+	p, ok := h.cache.ProcessByCollectionID(collectionID)
+	if !ok || !p.IsEnabled {
+		return fmt.Errorf("%w: 이 컬렉션에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
+	}
+
+	// Build status ID lookup.
+	nameToID := make(map[string]string, len(p.Statuses))
+	for _, s := range p.Statuses {
+		nameToID[s.Name] = s.ID
+	}
+
+	fromID, ok := nameToID[fromStatus]
+	if !ok {
+		return fmt.Errorf("%w: 현재 상태 %q를 찾을 수 없습니다", schema.ErrInvalidInput, fromStatus)
+	}
+	toID, ok := nameToID[toStatus]
+	if !ok {
+		return fmt.Errorf("%w: 대상 상태 %q를 찾을 수 없습니다", schema.ErrInvalidInput, toStatus)
+	}
+
+	for _, t := range p.Transitions {
+		if t.FromStatusID == fromID && t.ToStatusID == toID {
+			return nil // transition allowed
+		}
+	}
+
+	// Build list of allowed transitions for the error message.
+	var allowed []string
+	for _, t := range p.Transitions {
+		if t.FromStatusID == fromID {
+			for _, s := range p.Statuses {
+				if s.ID == t.ToStatusID {
+					allowed = append(allowed, fmt.Sprintf("%s (%s)", s.Name, t.Label))
+				}
+			}
+		}
+	}
+	return fmt.Errorf("%w: %q → %q 전이가 허용되지 않습니다. 허용: %v",
+		schema.ErrInvalidInput, fromStatus, toStatus, allowed)
+}
+
+func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 	cols := []string{`"id"`}
 	for _, f := range fields {
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
 	}
 	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"deleted_at"`)
+	if len(hasStatus) > 0 && hasStatus[0] {
+		cols = append(cols, `"_status"`)
+	}
 	return strings.Join(cols, ", ")
 }
 
 // qualifySelectCols returns the same column list but each column qualified
 // with the given table prefix and aliased back to its bare name so the
 // row scanner sees the same field names.
-func qualifySelectCols(fields []schema.Field, prefix string) string {
+func qualifySelectCols(fields []schema.Field, prefix string, hasStatus ...bool) string {
 	cols := []string{fmt.Sprintf(`%s.%q AS %q`, prefix, "id", "id")}
 	for _, f := range fields {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
 	}
 	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "deleted_at"} {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, sysCol, sysCol))
+	}
+	if len(hasStatus) > 0 && hasStatus[0] {
+		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, "_status", "_status"))
 	}
 	return strings.Join(cols, ", ")
 }

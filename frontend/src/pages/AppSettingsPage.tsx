@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -253,6 +253,20 @@ export default function AppSettingsPage() {
             ))}
           </div>
         </section>
+
+        <RoleGate roles={['director', 'pm']}>
+          <section>
+            <h2 className="text-lg font-semibold">프로세스</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              항목의 상태 흐름(워크플로우)을 정의합니다.
+            </p>
+            <Link to={`/apps/${collection.id}/process`}>
+              <Button variant="outline" size="sm" className="mt-2">
+                프로세스 설정
+              </Button>
+            </Link>
+          </section>
+        </RoleGate>
 
         <RoleGate roles={['director']}>
           <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">

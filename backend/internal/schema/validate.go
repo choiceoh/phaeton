@@ -44,7 +44,7 @@ var pgReserved = map[string]bool{
 // autoColumns are injected by the engine into every data table.
 var autoColumns = map[string]bool{
 	"id": true, "created_at": true, "updated_at": true,
-	"created_by": true, "deleted_at": true,
+	"created_by": true, "deleted_at": true, "_status": true,
 }
 
 func ValidateSlug(slug string) error {

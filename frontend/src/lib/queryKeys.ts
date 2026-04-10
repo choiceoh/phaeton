@@ -25,6 +25,12 @@ export const queryKeys = {
       [...queryKeys.entries.all, slug, 'detail', id] as const,
   },
 
+  process: {
+    all: ['process'] as const,
+    detail: (collectionId: string) =>
+      [...queryKeys.process.all, collectionId] as const,
+  },
+
   migrations: {
     all: ['migrations'] as const,
     history: (collectionId?: string) =>

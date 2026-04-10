@@ -202,6 +202,22 @@ func GenerateJunctionTable(slugA, slugB, junctionName string) (up, down string) 
 	return up, down
 }
 
+// GenerateAddStatusColumn produces DDL to add the _status column to a data table.
+func GenerateAddStatusColumn(tableSlug string) (up, down []string) {
+	qTable := quoteIdent("data", tableSlug)
+	up = []string{fmt.Sprintf("ALTER TABLE %s ADD COLUMN %q VARCHAR(255)", qTable, "_status")}
+	down = []string{fmt.Sprintf("ALTER TABLE %s DROP COLUMN IF EXISTS %q", qTable, "_status")}
+	return up, down
+}
+
+// GenerateDropStatusColumn produces DDL to drop the _status column.
+func GenerateDropStatusColumn(tableSlug string) (up, down []string) {
+	qTable := quoteIdent("data", tableSlug)
+	up = []string{fmt.Sprintf("ALTER TABLE %s DROP COLUMN IF EXISTS %q", qTable, "_status")}
+	down = []string{fmt.Sprintf("ALTER TABLE %s ADD COLUMN %q VARCHAR(255)", qTable, "_status")}
+	return up, down
+}
+
 // ---------- internal helpers ----------
 
 func columnDef(f schema.Field) string {
