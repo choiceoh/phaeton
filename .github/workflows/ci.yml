@@ -24,8 +24,39 @@ jobs:
           version: latest
           working-directory: backend
 
-      - name: Go tests
+      - name: Go tests (unit)
         run: cd backend && go test -short ./...
+
+      - name: Build Go binary
+        run: cd backend && go build ./cmd/server
+
+  integration-test-go:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: phaeton
+          POSTGRES_PASSWORD: phaeton
+          POSTGRES_DB: phaeton_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U phaeton"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+
+      - name: Go tests (integration)
+        env:
+          DATABASE_URL: postgres://phaeton:phaeton@localhost:5432/phaeton_test?sslmode=disable
+        run: cd backend && go test -count=1 ./...
 
   lint-and-test-ui:
     runs-on: ubuntu-latest
@@ -41,8 +72,14 @@ jobs:
       - name: Install dependencies
         run: cd frontend && npm ci
 
+      - name: TypeScript type check
+        run: cd frontend && npx tsc --noEmit
+
       - name: ESLint
         run: cd frontend && npm run lint
 
       - name: Vitest
         run: cd frontend && npm run test
+
+      - name: Build frontend
+        run: cd frontend && npm run build
