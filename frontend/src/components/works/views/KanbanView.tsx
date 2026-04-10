@@ -22,7 +22,7 @@ import { Card } from '@/components/ui/card'
 import { useKanbanView, type KanbanColumn } from '@/hooks/useEntries'
 import { formatCell } from '@/lib/formatCell'
 import { isLayoutType } from '@/lib/constants'
-import type { Field } from '@/lib/types'
+import type { EntryRow, Field } from '@/lib/types'
 
 interface Props {
   slug: string
@@ -307,7 +307,7 @@ export default function KanbanView({
   }
 
   function handleDragStart(event: DragStartEvent) {
-    const entry = event.active.data.current?.entry as Record<string, unknown> | undefined
+    const entry = event.active.data.current?.entry as EntryRow | undefined
     setActiveEntry(entry ?? null)
     if (entry) {
       const col = findColumnValue(String(entry.id))

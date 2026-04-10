@@ -64,7 +64,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 
 import EmptyState from './EmptyState'
 import GridCell from './GridCell'
-import type { FieldType } from '@/lib/types'
+import type { EntryRow, FieldType } from '@/lib/types'
 
 export interface FieldMeta {
   fieldType: FieldType
@@ -196,7 +196,7 @@ export function DataTable<T>({
       enableHiding: false,
       size: 40,
       header: () => {
-        const allIds = data.map((d) => String((d as Record<string, unknown>).id))
+        const allIds = data.map((d) => String((d as EntryRow).id))
         const allSelected = allIds.length > 0 && allIds.every((id) => selectedRowIds?.has(id))
         return (
           <Checkbox
@@ -216,7 +216,7 @@ export function DataTable<T>({
         )
       },
       cell: ({ row }) => {
-        const id = String((row.original as Record<string, unknown>).id)
+        const id = String((row.original as EntryRow).id)
         return (
           <Checkbox
             checked={selectedRowIds?.has(id) ?? false}
@@ -340,7 +340,7 @@ export function DataTable<T>({
           endCol: grid.activeCell.col,
         }
         e.preventDefault()
-        await copyToClipboard(data as Record<string, unknown>[], colIds, range)
+        await copyToClipboard(data as EntryRow[], colIds, range)
         return
       }
 
@@ -354,7 +354,7 @@ export function DataTable<T>({
 
           const updates = buildPasteUpdates(
             parsed,
-            data as Record<string, unknown>[],
+            data as EntryRow[],
             colIds,
             grid.activeCell.row,
             grid.activeCell.col,
@@ -627,14 +627,14 @@ export function DataTable<T>({
               (useVirtual ? rowVirtualizer.getVirtualItems() : visibleRows.map((_, i) => ({ index: i, start: 0, size: ROW_HEIGHT }))).map((virtualItem) => {
                 const rowIdx = virtualItem.index
                 const row = visibleRows[rowIdx]
-                const rowId = String((row.original as Record<string, unknown>).id ?? row.id)
+                const rowId = String((row.original as EntryRow).id ?? row.id)
                 const isNewRow = newRowId != null && rowId === newRowId
                 return (
                 <TableRow
                   key={row.id}
                   role="row"
                   aria-rowindex={(page - 1) * limit + rowIdx + 2}
-                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as Record<string, unknown>)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
+                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
                   style={useVirtual ? {
                     position: 'absolute',
                     top: 0,
@@ -690,12 +690,12 @@ export function DataTable<T>({
                         }}
                       >
                         {onCellEdit ? (() => {
-                          const cellRowId = String((row.original as Record<string, unknown>).id ?? row.id)
+                          const cellRowId = String((row.original as EntryRow).id ?? row.id)
                           const cellKey = `${cellRowId}:${colId}`
                           const saveState = cellSaveState?.get(cellKey)
                           return (
                           <GridCell
-                            rawValue={(row.original as Record<string, unknown>)[colId]}
+                            rawValue={(row.original as EntryRow)[colId]}
                             columnId={colId}
                             rowId={cellRowId}
                             isActive={isActive}
