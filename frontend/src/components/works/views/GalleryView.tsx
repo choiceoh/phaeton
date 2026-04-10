@@ -1,7 +1,8 @@
-import { ImageOff } from 'lucide-react'
+import { ImageOff, LayoutGrid } from 'lucide-react'
 import { useMemo } from 'react'
 
 import { Card } from '@/components/ui/card'
+import EmptyState from '@/components/common/EmptyState'
 import type { Field } from '@/lib/types'
 import { formatCell } from '@/lib/formatCell'
 import { isLayoutType } from '@/lib/constants'
@@ -95,8 +96,12 @@ export default function GalleryView({ imageField, fields, entries, onEntryClick 
       })}
 
       {entries.length === 0 && (
-        <div className="col-span-full rounded border-2 border-dashed p-8 text-center text-sm text-muted-foreground">
-          데이터가 없습니다
+        <div className="col-span-full">
+          <EmptyState
+            icon={<LayoutGrid className="h-10 w-10" />}
+            title="데이터가 없습니다"
+            description="새 데이터를 추가하면 갤러리에 카드로 표시됩니다."
+          />
         </div>
       )}
     </div>

@@ -1,3 +1,4 @@
+import { Pencil } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Input } from '@/components/ui/input'
@@ -32,6 +33,7 @@ export default function GridCell({
   onDoubleClick,
 }: GridCellProps) {
   const [editValue, setEditValue] = useState('')
+  const [saved, setSaved] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -49,6 +51,8 @@ export default function GridCell({
     const newValue = editValue === '' ? null : editValue
     if (String(rawValue ?? '') !== String(newValue ?? '')) {
       onSave(newValue)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 800)
     }
     onEditCancel()
   }
@@ -79,9 +83,11 @@ export default function GridCell({
   return (
     <div
       className={cn(
-        'min-h-[28px] px-1 -mx-1 rounded-sm cursor-cell',
+        'group/cell relative min-h-[28px] px-1 -mx-1 rounded-sm',
+        editable ? 'cursor-cell' : 'cursor-default',
         isActive && 'ring-2 ring-primary ring-inset',
         isSelected && !isActive && 'bg-primary/10',
+        saved && 'animate-cell-saved',
       )}
       onClick={(e) => {
         e.stopPropagation()
@@ -93,6 +99,9 @@ export default function GridCell({
       }}
     >
       {children}
+      {editable && !isActive && (
+        <Pencil className="absolute right-0.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/50 opacity-0 group-hover/cell:opacity-100 pointer-events-none" />
+      )}
     </div>
   )
 }

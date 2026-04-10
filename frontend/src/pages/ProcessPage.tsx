@@ -175,17 +175,18 @@ export default function ProcessPage() {
   return (
     <div>
       <PageHeader
-        title={`${collection.label} > 프로세스 관리`}
-        actions={
-          <Link to={`/apps/${collection.id}/settings`}>
-            <Button variant="outline">관리 홈으로 이동</Button>
-          </Link>
-        }
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label, href: `/apps/${collection.id}` },
+          { label: '설정', href: `/apps/${collection.id}/settings` },
+          { label: '프로세스' },
+        ]}
+        title="프로세스 관리"
       />
 
       <div className="space-y-6">
         {/* Toggle */}
-        <label className="flex items-center gap-3 text-sm">
+        <label className="flex items-center gap-2 text-sm">
           <Checkbox
             checked={!isEnabled}
             onCheckedChange={(c) => setIsEnabled(!c)}
@@ -216,7 +217,7 @@ export default function ProcessPage() {
                 <h2 className="mb-2 text-sm font-semibold">상태 ({statuses.length})</h2>
                 <div className="space-y-2">
                   {statuses.map((s, idx) => (
-                    <Card key={idx} className="flex items-center gap-3 p-3">
+                    <Card key={idx} className="flex items-center gap-2 p-3">
                       <div
                         className="h-4 w-4 rounded-full flex-shrink-0"
                         style={{ backgroundColor: s.color }}
@@ -360,7 +361,7 @@ export default function ProcessPage() {
         )}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-3 border-t pt-4">
+        <div className="flex items-center gap-2 border-t pt-4">
           <Button onClick={handleSave} disabled={saveProcess.isPending}>
             {saveProcess.isPending ? '저장 중...' : '저장'}
           </Button>

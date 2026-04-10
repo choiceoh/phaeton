@@ -40,6 +40,8 @@ import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
 import { buildPasteUpdates, copyToClipboard, parseTSV } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
 
+import { Checkbox } from '@/components/ui/checkbox'
+
 import EmptyState from './EmptyState'
 import GridCell from './GridCell'
 
@@ -71,6 +73,15 @@ interface Props<T> {
   emptyDescription?: string
   summaryRow?: Record<string, { label: string; value: string | number }>
   toolbar?: React.ReactNode
+  initialColumnVisibility?: VisibilityState
+  /** Number of top rows to highlight (e.g. after CSV import). */
+  highlightRows?: number
+  /** Enable row selection with checkboxes */
+  selectable?: boolean
+  /** Currently selected row IDs (controlled) */
+  selectedRowIds?: Set<string>
+  /** Called when selection changes */
+  onSelectionChange?: (ids: Set<string>) => void
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -93,18 +104,70 @@ export function DataTable<T>({
   emptyDescription,
   summaryRow,
   toolbar,
+  initialColumnVisibility,
+  highlightRows = 0,
+  selectable,
+  selectedRowIds,
+  onSelectionChange,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
   const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
     left: [],
     right: [],
   })
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({})
 
+  // Prepend checkbox column when selectable.
+  const augmentedColumns = useMemo(() => {
+    if (!selectable) return columns
+    const checkCol: ColumnDef<T, unknown> = {
+      id: '_select',
+      enableSorting: false,
+      enableHiding: false,
+      size: 40,
+      header: () => {
+        const allIds = data.map((d) => String((d as Record<string, unknown>).id))
+        const allSelected = allIds.length > 0 && allIds.every((id) => selectedRowIds?.has(id))
+        return (
+          <Checkbox
+            checked={allSelected}
+            onCheckedChange={(checked) => {
+              if (checked) {
+                const next = new Set(selectedRowIds)
+                allIds.forEach((id) => next.add(id))
+                onSelectionChange?.(next)
+              } else {
+                const next = new Set(selectedRowIds)
+                allIds.forEach((id) => next.delete(id))
+                onSelectionChange?.(next)
+              }
+            }}
+          />
+        )
+      },
+      cell: ({ row }) => {
+        const id = String((row.original as Record<string, unknown>).id)
+        return (
+          <Checkbox
+            checked={selectedRowIds?.has(id) ?? false}
+            onCheckedChange={(checked) => {
+              const next = new Set(selectedRowIds)
+              if (checked) next.add(id)
+              else next.delete(id)
+              onSelectionChange?.(next)
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        )
+      },
+    }
+    return [checkCol, ...columns]
+  }, [selectable, columns, data, selectedRowIds, onSelectionChange])
+
   const table = useReactTable({
     data,
-    columns,
+    columns: augmentedColumns,
     state: { sorting, columnVisibility, columnPinning, columnSizing },
     onSortingChange: (updater) => {
       const next = typeof updater === 'function' ? updater(sorting) : updater
@@ -385,7 +448,7 @@ export function DataTable<T>({
               visibleRows.map((row, rowIdx) => (
                 <TableRow
                   key={row.id}
-                  className={onRowClick && !onCellEdit ? 'cursor-pointer' : ''}
+                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''}`}
                   onClick={() => {
                     // Only trigger row click if no cell is active (user clicking outside grid cells).
                     if (!grid.activeCell && onRowClick) {

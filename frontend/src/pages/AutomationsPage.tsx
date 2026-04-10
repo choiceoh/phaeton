@@ -3,7 +3,9 @@ import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { Plus, Trash2, Zap } from 'lucide-react'
 
+import UserCombobox from '@/components/common/UserCombobox'
 import AIAutomationDialog from '@/components/works/AIAutomationDialog'
+import SchedulePicker from '@/components/works/SchedulePicker'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
@@ -41,24 +43,24 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
   record_updated: '레코드 수정',
   record_deleted: '레코드 삭제',
   status_change: '상태 변경',
-  schedule: '스케줄 (크론)',
+  schedule: '정해진 시간에 반복',
   form_submit: '폼 제출',
 }
 
 const ACTION_LABELS: Record<ActionType, string> = {
-  send_notification: '알림 발송',
-  update_field: '필드 값 업데이트',
-  call_webhook: 'Webhook 호출',
+  send_notification: '알림 보내기',
+  update_field: '필드 값 자동 변경',
+  call_webhook: '외부 서비스에 알리기',
 }
 
 const OPERATOR_LABELS: Record<ConditionOperator, string> = {
-  equals: '같음',
-  not_equals: '같지 않음',
-  contains: '포함',
-  gt: '초과',
-  lt: '미만',
-  is_empty: '비어있음',
-  is_not_empty: '비어있지 않음',
+  equals: '과(와) 같으면',
+  not_equals: '과(와) 다르면',
+  contains: '을(를) 포함하면',
+  gt: '보다 크면',
+  lt: '보다 작으면',
+  is_empty: '비어있으면',
+  is_not_empty: '값이 있으면',
 }
 
 interface ConditionDraft {
@@ -277,7 +279,13 @@ export default function AutomationsPage() {
   return (
     <div>
       <PageHeader
-        title={`${collection.label} > 자동화`}
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label, href: `/apps/${collection.id}` },
+          { label: '설정', href: `/apps/${collection.id}/settings` },
+          { label: '자동화' },
+        ]}
+        title="자동화"
         actions={
           <div className="flex gap-2">
             {!formOpen && (
@@ -306,7 +314,7 @@ export default function AutomationsPage() {
             <h3 className="font-semibold">{editingId ? '자동화 수정' : '새 자동화'}</h3>
 
             {/* Name + enabled */}
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-2">
               <div className="flex-1">
                 <Label>이름</Label>
                 <Input
@@ -341,7 +349,7 @@ export default function AutomationsPage() {
 
             {/* Status change config */}
             {triggerType === 'status_change' && statuses.length > 0 && (
-              <div className="flex gap-3">
+              <div className="flex gap-2">
                 <div className="flex-1">
                   <Label>이전 상태 (선택)</Label>
                   <Select value={fromStatus} onValueChange={(v) => setFromStatus(v ?? '')}>
@@ -377,17 +385,10 @@ export default function AutomationsPage() {
             {/* Schedule config */}
             {triggerType === 'schedule' && (
               <div className="space-y-3">
-                <div>
-                  <Label>크론 표현식</Label>
-                  <Input
-                    value={cronExpr}
-                    onChange={(e) => setCronExpr(e.target.value)}
-                    placeholder="0 9 * * *  (매일 오전 9시)"
-                  />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    형식: 분 시 일 월 요일 (예: 0 9 * * 1-5 = 평일 9시)
-                  </p>
-                </div>
+                <SchedulePicker
+                  value={cronExpr}
+                  onChange={setCronExpr}
+                />
                 <div>
                   <Label>타임존</Label>
                   <Select value={cronTimezone} onValueChange={(v) => v && setCronTimezone(v)}>
@@ -395,11 +396,9 @@ export default function AutomationsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Asia/Seoul">Asia/Seoul (KST)</SelectItem>
-                      <SelectItem value="UTC">UTC</SelectItem>
-                      <SelectItem value="America/New_York">America/New_York (EST)</SelectItem>
-                      <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
-                      <SelectItem value="Asia/Tokyo">Asia/Tokyo (JST)</SelectItem>
+                      <SelectItem value="Asia/Seoul">한국 표준시 (KST)</SelectItem>
+                      <SelectItem value="UTC">세계 표준시 (UTC)</SelectItem>
+                      <SelectItem value="Asia/Tokyo">일본 표준시 (JST)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -512,7 +511,7 @@ export default function AutomationsPage() {
                       {a.action_type === 'send_notification' && (
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <div>
-                            <Label className="text-xs">수신자</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">누구에게 보낼까요?</Label>
                             <Select
                               value={(a.action_config.recipient as string) ?? 'record_creator'}
                               onValueChange={(v) => updateActionConfig(idx, 'recipient', v)}
@@ -522,24 +521,23 @@ export default function AutomationsPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="record_creator">레코드 작성자</SelectItem>
-                                <SelectItem value="specific_user">특정 사용자</SelectItem>
-                                <SelectItem value="field_ref">필드 참조</SelectItem>
+                                <SelectItem value="specific_user">지정한 사용자</SelectItem>
+                                <SelectItem value="field_ref">담당자 필드에서 가져오기</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
                           {a.action_config.recipient === 'specific_user' && (
                             <div>
-                              <Label className="text-xs">사용자 ID</Label>
-                              <Input
+                              <Label className="text-xs font-semibold text-muted-foreground">받을 사용자</Label>
+                              <UserCombobox
                                 value={(a.action_config.user_id as string) ?? ''}
-                                onChange={(e) => updateActionConfig(idx, 'user_id', e.target.value)}
-                                placeholder="UUID"
+                                onChange={(v) => updateActionConfig(idx, 'user_id', v ?? '')}
                               />
                             </div>
                           )}
                           {a.action_config.recipient === 'field_ref' && (
                             <div>
-                              <Label className="text-xs">사용자 필드</Label>
+                              <Label className="text-xs font-semibold text-muted-foreground">어떤 필드의 사용자에게?</Label>
                               <Select
                                 value={(a.action_config.field_slug as string) ?? ''}
                                 onValueChange={(v) => updateActionConfig(idx, 'field_slug', v)}
@@ -556,17 +554,19 @@ export default function AutomationsPage() {
                             </div>
                           )}
                           <div>
-                            <Label className="text-xs">제목</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">알림 제목</Label>
                             <Input
                               value={(a.action_config.title as string) ?? ''}
                               onChange={(e) => updateActionConfig(idx, 'title', e.target.value)}
+                              placeholder="예: 새 요청이 등록되었습니다"
                             />
                           </div>
                           <div>
-                            <Label className="text-xs">내용</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">알림 내용</Label>
                             <Input
                               value={(a.action_config.body as string) ?? ''}
                               onChange={(e) => updateActionConfig(idx, 'body', e.target.value)}
+                              placeholder="예: 확인 후 처리해주세요"
                             />
                           </div>
                         </div>
@@ -575,7 +575,7 @@ export default function AutomationsPage() {
                       {a.action_type === 'update_field' && (
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <Label className="text-xs">필드</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">변경할 필드</Label>
                             <Select
                               value={(a.action_config.field_slug as string) ?? ''}
                               onValueChange={(v) => updateActionConfig(idx, 'field_slug', v)}
@@ -591,10 +591,11 @@ export default function AutomationsPage() {
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-xs">값</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">변경할 값</Label>
                             <Input
                               value={(a.action_config.value as string) ?? ''}
                               onChange={(e) => updateActionConfig(idx, 'value', e.target.value)}
+                              placeholder="예: 완료"
                             />
                           </div>
                         </div>
@@ -602,7 +603,7 @@ export default function AutomationsPage() {
 
                       {a.action_type === 'call_webhook' && (
                         <div>
-                          <Label className="text-xs">URL</Label>
+                          <Label className="text-xs font-semibold text-muted-foreground">연결할 주소 (URL)</Label>
                           <Input
                             value={(a.action_config.url as string) ?? ''}
                             onChange={(e) => updateActionConfig(idx, 'url', e.target.value)}
@@ -643,7 +644,7 @@ export default function AutomationsPage() {
                 className="flex items-center justify-between p-3 cursor-pointer hover:bg-accent/50"
                 onClick={() => handleEdit(a.id)}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <span className="font-medium">{a.name}</span>
