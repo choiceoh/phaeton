@@ -5,11 +5,13 @@ import { api } from '@/lib/api'
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  images?: string[] // data-URLs for multimodal messages
 }
 
 interface ChatRequest {
   message: string
   history: ChatMessage[]
+  images?: string[]
 }
 
 interface ChatResponse {

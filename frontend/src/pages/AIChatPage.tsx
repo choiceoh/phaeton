@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Loader2, MessageCircle, RotateCcw, Send } from 'lucide-react'
+import { ImagePlus, Loader2, MessageCircle, RotateCcw, Send, X } from 'lucide-react'
 import Markdown from 'react-markdown'
 
 import { Button } from '@/components/ui/button'
@@ -18,9 +18,11 @@ const HINTS = [
 export default function AIChatPage() {
   const aiAvailable = useAIAvailable()
   const [input, setInput] = useState('')
+  const [images, setImages] = useState<string[]>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const chatMutation = useAIChat()
   const pendingRef = useRef(0)
@@ -39,19 +41,36 @@ export default function AIChatPage() {
     inputRef.current?.focus()
   }, [])
 
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files) return
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue
+      const reader = new FileReader()
+      reader.onload = () => {
+        setImages((prev) => [...prev, reader.result as string])
+      }
+      reader.readAsDataURL(file)
+    }
+    e.target.value = ''
+  }
+
   function handleSend(text?: string) {
     const msg = (text ?? input).trim()
-    if (!msg || chatMutation.isPending) return
+    if (!msg && images.length === 0) return
+    if (chatMutation.isPending) return
 
-    const userMsg: ChatMessage = { role: 'user', content: msg }
+    const currentImages = images.length > 0 ? [...images] : undefined
+    const userMsg: ChatMessage = { role: 'user', content: msg || '이 이미지를 분석해 주세요.', images: currentImages }
     const newMessages = [...messages, userMsg]
     setMessages(newMessages)
     setInput('')
+    setImages([])
     if (inputRef.current) inputRef.current.style.height = ''
 
     const seq = ++pendingRef.current
     chatMutation.mutate(
-      { message: msg, history: messages },
+      { message: userMsg.content, history: messages, images: currentImages },
       {
         onSuccess: (data) => {
           if (seq !== pendingRef.current) return
@@ -104,7 +123,7 @@ export default function AIChatPage() {
       {messages.length > 0 && (
         <div className="flex items-center justify-end py-2">
           <button
-            onClick={() => { pendingRef.current++; setMessages([]); setInput('') }}
+            onClick={() => { pendingRef.current++; setMessages([]); setInput(''); setImages([]) }}
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600"
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -148,6 +167,13 @@ export default function AIChatPage() {
                       : 'bg-stone-100 text-stone-800'
                   }`}
                 >
+                  {msg.role === 'user' && msg.images && msg.images.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-1.5">
+                      {msg.images.map((src, j) => (
+                        <img key={j} src={src} alt="" className="max-h-40 rounded border border-white/20 object-cover" />
+                      ))}
+                    </div>
+                  )}
                   {msg.role === 'assistant' ? (
                     <div className="prose prose-sm prose-stone max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                       <Markdown>{msg.content}</Markdown>
@@ -173,7 +199,36 @@ export default function AIChatPage() {
 
       {/* Input area */}
       <div className="border-t border-stone-200 pt-4 pb-2">
+        {images.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {images.map((src, i) => (
+              <div key={i} className="group relative">
+                <img src={src} alt="" className="h-16 w-16 rounded-md border border-stone-200 object-cover" />
+                <button
+                  onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
+                  className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-stone-800 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-400 transition-colors hover:bg-stone-50 hover:text-stone-600"
+          >
+            <ImagePlus className="h-4.5 w-4.5" />
+          </button>
           <textarea
             ref={inputRef}
             value={input}
@@ -185,7 +240,7 @@ export default function AIChatPage() {
           />
           <Button
             onClick={() => handleSend()}
-            disabled={!input.trim() || chatMutation.isPending}
+            disabled={(!input.trim() && images.length === 0) || chatMutation.isPending}
             className="h-11 w-11 shrink-0 p-0"
           >
             <Send className="h-4 w-4" />

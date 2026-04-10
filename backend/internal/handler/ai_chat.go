@@ -14,6 +14,7 @@ import (
 type aiChatRequest struct {
 	Message string           `json:"message"`
 	History []ai.ChatMessage `json:"history,omitempty"`
+	Images  []string         `json:"images,omitempty"` // image data-URLs for current message
 }
 
 type aiChatResponse struct {
@@ -59,7 +60,7 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	resolve := h.newChatToolResolver(ctx)
 
-	reply, err := h.client.CompleteWithTools(ctx, chatSystemPrompt, req.History, req.Message, chatTools, resolve)
+	reply, err := h.client.CompleteWithTools(ctx, chatSystemPrompt, req.History, req.Message, chatTools, resolve, req.Images...)
 	if err != nil {
 		slog.Error("ai chat failed", "error", err)
 		writeError(w, http.StatusBadGateway, "AI 서버 요청에 실패했습니다")
