@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -118,6 +119,8 @@ func (h *DynHandler) resolveLookup(
 	targetFieldSlug := opts.TargetField
 	values, err := batchFetchField(ctx, h.pool, targetCol.Slug, targetFieldSlug, ids)
 	if err != nil {
+		slog.Warn("resolveRelation: batch fetch failed",
+			"field", f.Slug, "target", targetCol.Slug, "error", err)
 		for _, row := range records {
 			row[f.Slug] = nil
 		}
@@ -387,6 +390,7 @@ func batchFetchField(ctx context.Context, pool *pgxpool.Pool, tableSlug, fieldSl
 	for rows.Next() {
 		vals, err := rows.Values()
 		if err != nil {
+			slog.Warn("batchFetchField: skipping row", "error", err)
 			continue
 		}
 		if len(vals) >= 2 {
@@ -396,6 +400,9 @@ func batchFetchField(ctx context.Context, pool *pgxpool.Pool, tableSlug, fieldSl
 				result[idStr] = val
 			}
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -456,6 +463,7 @@ func batchRollup(
 	for rows.Next() {
 		vals, err := rows.Values()
 		if err != nil {
+			slog.Warn("batchRollup: skipping row", "error", err)
 			continue
 		}
 		if len(vals) >= 2 {
@@ -467,6 +475,9 @@ func batchRollup(
 				}
 			}
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }

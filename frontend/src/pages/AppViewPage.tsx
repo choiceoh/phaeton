@@ -951,7 +951,7 @@ export default function AppViewPage() {
     if (view.filter_config && Object.keys(view.filter_config).length > 0) {
       const config = view.filter_config as Record<string, unknown>
       // New format: filter_config has a "logic" key
-      if ('logic' in config && 'conditions' in config) {
+      if ('logic' in config && 'conditions' in config && Array.isArray((config as Record<string, unknown>).conditions)) {
         const fg = config as unknown as FilterGroup
         // Re-assign IDs to prevent collisions
         let idx = 0
