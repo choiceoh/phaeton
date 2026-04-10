@@ -15,8 +15,9 @@ import type { CreateCollectionReq, FieldType } from '@/lib/types'
 
 import AIBuildDialog from './AIBuildDialog'
 import FieldPalette from './FieldPalette'
-import FieldPreview, { type FieldDraft } from './FieldPreview'
+import { type FieldDraft } from './FieldPreview'
 import FieldProperties from './FieldProperties'
+import FormPreview from './FormPreview'
 
 export default function AppBuilder() {
   const navigate = useNavigate()
@@ -208,7 +209,7 @@ export default function AppBuilder() {
               </div>
             </div>
           </div>
-          <FieldPreview
+          <FormPreview
             fields={fields}
             selectedId={selectedId}
             onSelect={setSelectedId}
