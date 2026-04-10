@@ -1,18 +1,37 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import {
+  ArrowDownUp,
+  Calendar,
+  Download,
+  Filter,
+  Power,
+  PowerOff,
+  Search,
+  X,
+} from 'lucide-react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
-import { DataTable } from '@/components/common/DataTable'
+import { type CellEditEvent, DataTable } from '@/components/common/DataTable'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
-import { Badge } from '@/components/ui/badge'
+import FilterBuilder from '@/components/works/FilterBuilder'
+import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import KanbanView from '@/components/works/views/KanbanView'
+import CalendarView from '@/components/works/views/CalendarView'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
@@ -23,33 +42,76 @@ import {
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
 import { formatError } from '@/lib/api'
+import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
+import type { FilterCondition } from '@/lib/types'
 
-const PAGE_SIZE = 20
+const DEFAULT_LIMIT = 20
 
 export default function AppViewPage() {
   const { appId } = useParams()
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(DEFAULT_LIMIT)
   const [sorting, setSorting] = useState<SortingState>([])
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editEntry, setEditEntry] = useState<Record<string, unknown> | undefined>()
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
+  // Filter state
+  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
+
+  // Sort panel state (separate from column header sorting)
+  const [sortItems, setSortItems] = useState<SortItem[]>([])
+
+  // Search state
+  const [searchText, setSearchText] = useState('')
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  // Process toggle (frontend-only)
+  const [processVisible, setProcessVisible] = useState(true)
+
   const { data: collection, isLoading: colLoading, isError: colError, error: colErr } =
     useCollection(appId)
   const { data: process } = useProcess(appId)
 
-  // Build expand string from all relation fields so we get labels not UUIDs.
+  // Build expand string from all relation fields.
   const expand = useMemo(() => {
     if (!collection?.fields) return undefined
     const rels = collection.fields.filter((f) => f.field_type === 'relation').map((f) => f.slug)
     return rels.length > 0 ? rels.join(',') : undefined
   }, [collection])
 
+  // Build sort param from either column header sorting or sort panel.
   const sortParam = useMemo(() => {
+    // Sort panel takes precedence if set.
+    if (sortItems.length > 0) {
+      return sortItems.map((s) => `${s.desc ? '-' : ''}${s.field}`).join(',')
+    }
     if (sorting.length === 0) return undefined
     return sorting.map((s) => `${s.desc ? '-' : ''}${s.id}`).join(',')
-  }, [sorting])
+  }, [sorting, sortItems])
+
+  // Build filters from conditions + search text.
+  const filters = useMemo(() => {
+    const f: Record<string, string> = {}
+    for (const cond of filterConditions) {
+      if (cond.operator === 'is_null') {
+        f[cond.field] = 'is_null:'
+      } else if (cond.value) {
+        f[cond.field] = `${cond.operator}:${cond.value}`
+      }
+    }
+    // Search: find first text/textarea field, apply like filter.
+    if (searchText) {
+      const textField = collection?.fields?.find(
+        (fld) => fld.field_type === 'text' || fld.field_type === 'textarea',
+      )
+      if (textField) {
+        f[textField.slug] = `like:${searchText}`
+      }
+    }
+    return Object.keys(f).length > 0 ? f : undefined
+  }, [filterConditions, searchText, collection])
 
   const {
     data: list,
@@ -59,29 +121,61 @@ export default function AppViewPage() {
     refetch,
   } = useEntries(collection?.slug, {
     page,
-    limit: PAGE_SIZE,
+    limit,
     sort: sortParam,
     expand,
+    filters,
   })
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
 
-  // Detect whether a kanban view is possible (needs a select field).
+  // Detect views.
   const selectField = useMemo(
     () => collection?.fields?.find((f) => f.field_type === 'select'),
     [collection],
   )
+  const dateField = useMemo(
+    () => collection?.fields?.find((f) => f.field_type === 'date' || f.field_type === 'datetime'),
+    [collection],
+  )
 
-  // Build columns from collection.fields. Each column reads its value via the
-  // field slug; relation columns prefer the expanded object's `name`/`title`.
+  // Numeric fields for summary row.
+  const numericFields = useMemo(
+    () =>
+      collection?.fields?.filter(
+        (f) => f.field_type === 'number' || f.field_type === 'integer',
+      ) ?? [],
+    [collection],
+  )
+
+  // Compute summary row from current page data.
+  const summaryRow = useMemo(() => {
+    if (numericFields.length === 0 || !list?.data?.length) return undefined
+    const summary: Record<string, { label: string; value: string | number }> = {}
+    for (const f of numericFields) {
+      const values = list.data
+        .map((e) => Number(e[f.slug]))
+        .filter((n) => !isNaN(n))
+      if (values.length === 0) continue
+      const sum = values.reduce((a, b) => a + b, 0)
+      const avg = sum / values.length
+      summary[f.slug] = {
+        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })}`,
+        value: sum,
+      }
+    }
+    return Object.keys(summary).length > 0 ? summary : undefined
+  }, [numericFields, list])
+
+  // Build columns from collection.fields.
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
     if (!collection?.fields) return []
     const cols: ColumnDef<Record<string, unknown>>[] = []
 
-    // Process status column (first if enabled).
-    if (process?.is_enabled && process.statuses?.length) {
+    // Process status column (first if enabled and visible).
+    if (processVisible && process?.is_enabled && process.statuses?.length) {
       cols.push({
         id: '_status',
         header: '상태',
@@ -105,18 +199,23 @@ export default function AppViewPage() {
     }
 
     cols.push(
-      ...collection.fields.slice(0, 8).map((f) => ({
-        id: f.slug,
-        header: f.label,
-        enableSorting: true,
-        cell: ({ row }: { row: { original: Record<string, unknown> } }) =>
-          formatCell(row.original[f.slug], f),
-      })),
+      ...collection.fields
+        .filter((f) => !isLayoutType(f.field_type))
+        .slice(0, 8)
+        .map((f) => ({
+          id: f.slug,
+          header: f.label,
+          enableSorting: true,
+          size: f.field_type === 'textarea' ? 250 : 150,
+          cell: ({ row }: { row: { original: Record<string, unknown> } }) =>
+            formatCell(row.original[f.slug], f),
+        })),
     )
     cols.push({
       id: 'created_at',
       header: '작성일',
       enableSorting: true,
+      size: 100,
       cell: ({ row }) => {
         const v = row.original.created_at
         if (!v) return '-'
@@ -128,6 +227,7 @@ export default function AppViewPage() {
       header: '',
       enableSorting: false,
       enableHiding: false,
+      size: 60,
       cell: ({ row }) => (
         <RoleGate roles={['director', 'pm']}>
           <Button
@@ -144,7 +244,62 @@ export default function AppViewPage() {
       ),
     })
     return cols
-  }, [collection, process])
+  }, [collection, process, processVisible])
+
+  // Inline edit handler.
+  const handleCellEdit = useCallback(
+    (event: CellEditEvent) => {
+      updateEntry.mutate(
+        { id: event.rowId, body: { [event.columnId]: event.value } },
+        {
+          onSuccess: () => toast.success('수정되었습니다'),
+          onError: (err) => toast.error(formatError(err)),
+        },
+      )
+    },
+    [updateEntry],
+  )
+
+  // Search with debounce.
+  function handleSearchInput(value: string) {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(() => {
+      setSearchText(value)
+      setPage(1)
+    }, 300)
+  }
+
+  // CSV export.
+  function handleCsvExport() {
+    if (!list?.data?.length || !collection?.fields) return
+    const visibleFields = collection.fields.filter((f) => !isLayoutType(f.field_type))
+    const headers = [...visibleFields.map((f) => f.label), '작성일']
+    const rows = list.data.map((entry) => [
+      ...visibleFields.map((f) => {
+        const val = formatCell(entry[f.slug], f)
+        // Escape commas and quotes in CSV
+        if (String(val).includes(',') || String(val).includes('"')) {
+          return `"${String(val).replace(/"/g, '""')}"`
+        }
+        return val
+      }),
+      entry.created_at ? new Date(entry.created_at as string).toLocaleDateString('ko') : '',
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((r) => r.join(',')),
+    ].join('\n')
+
+    const bom = '\uFEFF' // UTF-8 BOM for Korean Excel compat
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${collection.slug}_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   if (colLoading) return <LoadingState />
   if (colError) return <ErrorState error={colErr} />
@@ -184,6 +339,139 @@ export default function AppViewPage() {
   }
 
   const hasKanban = !!selectField
+  const hasCalendar = !!dateField
+
+  // Toolbar rendered inside DataTable.
+  const tableToolbar = (
+    <div className="flex items-center gap-2 flex-wrap">
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          className="h-8 w-[200px] pl-8 text-sm"
+          placeholder="검색..."
+          defaultValue=""
+          onChange={(e) => handleSearchInput(e.target.value)}
+        />
+        {searchText && (
+          <button
+            type="button"
+            className="absolute right-2 top-1/2 -translate-y-1/2"
+            onClick={() => {
+              setSearchText('')
+              setPage(1)
+            }}
+          >
+            <X className="h-3 w-3 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+
+      {/* Filter popover */}
+      <Popover>
+        <PopoverTrigger
+          className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
+        >
+            <Filter className="h-3.5 w-3.5" />
+            필터
+            {filterConditions.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+                {filterConditions.length}
+              </Badge>
+            )}
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-auto min-w-[420px] p-3">
+          <div className="mb-2 text-sm font-medium">필터 조건</div>
+          <FilterBuilder
+            fields={collection.fields ?? []}
+            conditions={filterConditions}
+            onChange={(conds) => {
+              setFilterConditions(conds)
+              setPage(1)
+            }}
+          />
+          {filterConditions.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2 text-destructive"
+              onClick={() => {
+                setFilterConditions([])
+                setPage(1)
+              }}
+            >
+              전체 해제
+            </Button>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {/* Sort popover */}
+      <Popover>
+        <PopoverTrigger
+          className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
+        >
+            <ArrowDownUp className="h-3.5 w-3.5" />
+            정렬
+            {sortItems.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+                {sortItems.length}
+              </Badge>
+            )}
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-auto min-w-[360px] p-3">
+          <div className="mb-2 text-sm font-medium">정렬 설정</div>
+          <SortPanel
+            fields={collection.fields ?? []}
+            sorts={sortItems}
+            onChange={(items) => {
+              setSortItems(items)
+              setPage(1)
+            }}
+          />
+          {sortItems.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2 text-destructive"
+              onClick={() => setSortItems([])}
+            >
+              전체 해제
+            </Button>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {/* CSV Export */}
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1"
+        onClick={handleCsvExport}
+        disabled={!list?.data?.length}
+      >
+        <Download className="h-3.5 w-3.5" />
+        CSV
+      </Button>
+
+      {/* Process ON/OFF toggle */}
+      {process?.is_enabled && (
+        <Button
+          variant={processVisible ? 'default' : 'outline'}
+          size="sm"
+          className="h-8 gap-1"
+          onClick={() => setProcessVisible(!processVisible)}
+        >
+          {processVisible ? (
+            <Power className="h-3.5 w-3.5" />
+          ) : (
+            <PowerOff className="h-3.5 w-3.5" />
+          )}
+          프로세스
+        </Button>
+      )}
+    </div>
+  )
 
   return (
     <div>
@@ -203,7 +491,7 @@ export default function AppViewPage() {
                 setSheetOpen(true)
               }}
             >
-              새 항목
+              {TERM.newRecord}
             </Button>
           </>
         }
@@ -214,10 +502,16 @@ export default function AppViewPage() {
 
       {list && (
         <Tabs defaultValue="list">
-          {hasKanban && (
+          {(hasKanban || hasCalendar) && (
             <TabsList className="mb-4">
               <TabsTrigger value="list">목록</TabsTrigger>
-              <TabsTrigger value="kanban">칸반</TabsTrigger>
+              {hasKanban && <TabsTrigger value="kanban">칸반</TabsTrigger>}
+              {hasCalendar && (
+                <TabsTrigger value="calendar" className="gap-1">
+                  <Calendar className="h-3.5 w-3.5" />
+                  캘린더
+                </TabsTrigger>
+              )}
             </TabsList>
           )}
 
@@ -227,12 +521,16 @@ export default function AppViewPage() {
               data={list.data}
               total={list.total}
               page={page}
-              limit={PAGE_SIZE}
+              limit={limit}
               onPageChange={setPage}
+              onLimitChange={setLimit}
               onSortChange={setSorting}
               onRowClick={handleEntryClick}
-              emptyTitle="아직 항목이 없습니다"
-              emptyDescription='"새 항목" 버튼을 눌러 첫 데이터를 입력하세요.'
+              onCellEdit={handleCellEdit}
+              emptyTitle={TERM.noRecords}
+              emptyDescription={TERM.noRecordsDesc}
+              summaryRow={summaryRow}
+              toolbar={tableToolbar}
             />
           </TabsContent>
 
@@ -246,6 +544,17 @@ export default function AppViewPage() {
               />
             </TabsContent>
           )}
+
+          {hasCalendar && dateField && (
+            <TabsContent value="calendar" className="mt-0">
+              <CalendarView
+                dateField={dateField}
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onEntryClick={handleEntryClick}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       )}
 
@@ -256,15 +565,15 @@ export default function AppViewPage() {
         initialData={editEntry}
         onSubmit={handleSubmit}
         submitting={createEntry.isPending || updateEntry.isPending}
-        title={editEntry ? '항목 편집' : '새 항목'}
+        title={editEntry ? `${TERM.record} 편집` : TERM.newRecord}
         process={process}
       />
 
       <ConfirmDialog
         open={!!deleteId}
         onOpenChange={(open) => !open && setDeleteId(null)}
-        title="항목을 삭제하시겠습니까?"
-        description="삭제된 항목은 휴지통에서 복구할 수 있습니다."
+        title={`${TERM.record}를 삭제하시겠습니까?`}
+        description="삭제된 데이터는 휴지통에서 복구할 수 있습니다."
         variant="destructive"
         confirmLabel="삭제"
         onConfirm={handleDelete}
@@ -273,4 +582,3 @@ export default function AppViewPage() {
     </div>
   )
 }
-
