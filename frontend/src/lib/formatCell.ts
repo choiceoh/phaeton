@@ -55,5 +55,12 @@ export function formatCell(value: unknown, field: Field): string {
 
   if (field.field_type === 'autonumber') return String(value)
 
+  // Computed fields: format numbers nicely, pass through strings.
+  if (field.field_type === 'formula' || field.field_type === 'rollup') {
+    if (typeof value === 'number') return value.toLocaleString('ko-KR')
+    return String(value)
+  }
+  if (field.field_type === 'lookup') return String(value)
+
   return String(value)
 }

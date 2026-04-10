@@ -408,6 +408,16 @@ function FieldInput({
           className="bg-muted"
         />
       )
+    case 'formula':
+    case 'lookup':
+    case 'rollup':
+      return (
+        <Input
+          value={value != null ? String(value) : '(자동 계산)'}
+          disabled
+          className="bg-muted"
+        />
+      )
     case 'user':
       return <UserCombobox value={value as string | undefined} onChange={onChange} />
     case 'file':

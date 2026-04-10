@@ -113,6 +113,17 @@ func validateFieldIn(f *CreateFieldIn) error {
 		f.DefaultValue = nil
 		return nil
 	}
+	// Computed fields: no DB column, no data constraints.
+	if f.FieldType.IsComputed() {
+		f.IsRequired = false
+		f.IsUnique = false
+		f.IsIndexed = false
+		f.DefaultValue = nil
+		if err := validateComputedOptions(f); err != nil {
+			return err
+		}
+		return nil
+	}
 	// Autonumber: auto-managed, normalize constraints.
 	if f.FieldType == FieldAutonumber {
 		f.IsRequired = false
@@ -209,6 +220,49 @@ func ValidateTransitions(transitions []Transition, choices []string) error {
 			if !validRoles[role] {
 				return fmt.Errorf("%w: transitions[%d] invalid role %q", ErrInvalidInput, i, role)
 			}
+		}
+	}
+	return nil
+}
+
+// validateComputedOptions checks that computed field options are well-formed.
+func validateComputedOptions(f *CreateFieldIn) error {
+	if len(f.Options) == 0 || string(f.Options) == "null" {
+		return fmt.Errorf("%w: computed field %q requires options", ErrInvalidInput, f.Slug)
+	}
+	var opts map[string]any
+	if err := json.Unmarshal(f.Options, &opts); err != nil {
+		return fmt.Errorf("%w: invalid options JSON: %v", ErrInvalidInput, err)
+	}
+
+	switch f.FieldType {
+	case FieldFormula:
+		expr, _ := opts["expression"].(string)
+		if strings.TrimSpace(expr) == "" {
+			return fmt.Errorf("%w: formula field %q requires options.expression", ErrInvalidInput, f.Slug)
+		}
+	case FieldLookup:
+		relField, _ := opts["relation_field"].(string)
+		targetField, _ := opts["target_field"].(string)
+		if relField == "" {
+			return fmt.Errorf("%w: lookup field %q requires options.relation_field", ErrInvalidInput, f.Slug)
+		}
+		if targetField == "" {
+			return fmt.Errorf("%w: lookup field %q requires options.target_field", ErrInvalidInput, f.Slug)
+		}
+	case FieldRollup:
+		relField, _ := opts["relation_field"].(string)
+		targetField, _ := opts["target_field"].(string)
+		fn, _ := opts["function"].(string)
+		if relField == "" {
+			return fmt.Errorf("%w: rollup field %q requires options.relation_field", ErrInvalidInput, f.Slug)
+		}
+		if targetField == "" {
+			return fmt.Errorf("%w: rollup field %q requires options.target_field", ErrInvalidInput, f.Slug)
+		}
+		validFns := map[string]bool{"SUM": true, "COUNT": true, "AVG": true, "MIN": true, "MAX": true, "COUNTA": true}
+		if !validFns[strings.ToUpper(fn)] {
+			return fmt.Errorf("%w: rollup field %q function must be one of SUM/COUNT/AVG/MIN/MAX/COUNTA", ErrInvalidInput, f.Slug)
 		}
 	}
 	return nil

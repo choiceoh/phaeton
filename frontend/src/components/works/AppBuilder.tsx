@@ -155,7 +155,7 @@ export default function AppBuilder() {
           {selectedField && (
             <>
               <div className="my-3 border-t" />
-              <FieldProperties field={selectedField} collections={collections} onChange={handleFieldChange} />
+              <FieldProperties field={selectedField} collections={collections} siblingFields={fields} onChange={handleFieldChange} />
             </>
           )}
         </div>

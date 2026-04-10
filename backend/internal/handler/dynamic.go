@@ -152,6 +152,9 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Auto-expand user fields.
 	h.expandUserFields(r.Context(), records, fields)
 
+	// Resolve computed fields (formula, lookup, rollup).
+	h.resolveComputedFields(r.Context(), records, fields)
+
 	writeList(w, records, total, page, limit)
 }
 
@@ -210,6 +213,9 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Auto-expand user fields.
 	h.expandUserFields(r.Context(), records, fields)
 
+	// Resolve computed fields (formula, lookup, rollup).
+	h.resolveComputedFields(r.Context(), records, fields)
+
 	writeJSON(w, http.StatusOK, records[0])
 }
 
@@ -242,7 +248,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 	idx := 1
 	for _, f := range fields {
-		if f.FieldType.IsLayout() {
+		if f.FieldType.NoColumn() {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -314,6 +320,9 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		recordChange(r.Context(), h.pool, col.ID, recID, user.UserID, user.Name, "create", diff)
 	}
 
+	// Resolve computed fields for the created record.
+	h.resolveComputedFields(r.Context(), records, fields)
+
 	writeJSON(w, http.StatusCreated, records[0])
 }
 
@@ -362,7 +371,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 	idx := 1
 	for _, f := range fields {
-		if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
+		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -438,6 +447,9 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if len(diff) > 0 {
 		recordChange(r.Context(), h.pool, col.ID, id, user.UserID, user.Name, "update", diff)
 	}
+
+	// Resolve computed fields for the updated record.
+	h.resolveComputedFields(r.Context(), records, fields)
 
 	writeJSON(w, http.StatusOK, records[0])
 }
@@ -795,7 +807,7 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []string, placeholders []string, args []any) {
 	idx := 1
 	for _, f := range fields {
-		if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
+		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -951,7 +963,7 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 	cols := []string{`"id"`}
 	for _, f := range fields {
-		if f.FieldType.IsLayout() {
+		if f.FieldType.NoColumn() {
 			continue
 		}
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
@@ -969,7 +981,7 @@ func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 func qualifySelectCols(fields []schema.Field, prefix string, hasStatus ...bool) string {
 	cols := []string{fmt.Sprintf(`%s.%q AS %q`, prefix, "id", "id")}
 	for _, f := range fields {
-		if f.FieldType.IsLayout() {
+		if f.FieldType.NoColumn() {
 			continue
 		}
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
