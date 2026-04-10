@@ -73,7 +73,7 @@
 | **캘린더 뷰** | 일간/주간/월간 전환. 단일날짜 또는 기간 설정. 색상별 항목 구분 |
 | **리포트** | 차트/카드/데이터/텍스트/사진 5가지 구성요소. PDF 내보내기, 메일 공유 |
 
-> **참고**: 칸반 뷰 없음 — 한국 기업 사용자는 칸반에 익숙하지 않아 수요가 낮음. Phaeton에서도 후순위(P3)로 분류
+> **참고**: 다우 Works는 칸반 뷰 없음. Phaeton은 칸반 뷰 구현 완료 (@dnd-kit 기반)
 
 ### 1.5 프로세스 (상태 머신)
 
@@ -382,24 +382,31 @@ Phaeton은 PostgreSQL 네이티브 아키텍처로 이 한계를 구조적으로
 **뷰 관리**:
 | 기능 | 상태 |
 |------|------|
-| _meta.views CRUD API | 완료 (list/kanban/calendar/gallery 타입) |
-| _meta.saved_views 테이블 | 생성됨 (핸들러 미구현 — 필터 저장 API 없음) |
+| _meta.views CRUD API | 완료 (list/kanban/calendar/gallery/form 타입) |
+| _meta.saved_views CRUD API | 완료 (saved_views.go 핸들러 구현) |
 
 #### 프론트엔드 — 거의 완성
 
-**페이지 (11개)**:
+**페이지 (18개)**:
 | 페이지 | 파일 | 상태 |
 |--------|------|------|
 | 로그인 | LoginPage.tsx | 완료 |
 | 앱 목록 | AppListPage.tsx | 완료 (온보딩 가이드 + 빈 상태 위저드) |
-| 앱 빌더 | AppBuilderPage.tsx | 스텁 (최소 구현) |
-| 앱 뷰 | AppViewPage.tsx | 완료 (756줄, 필터/검색/정렬/인라인편집/CSV/뷰전환) |
+| 앱 빌더 | AppBuilderPage.tsx | 완료 (3패널 빌더) |
+| 앱 뷰 | AppViewPage.tsx | 완료 (필터/검색/정렬/인라인편집/CSV/뷰전환) |
 | 앱 설정 | AppSettingsPage.tsx | 완료 (필드 관리 + 멤버 접근 제어) |
+| 앱 대시보드 | DashboardPage.tsx | 완료 |
+| 전체 대시보드 | GlobalDashboardPage.tsx | 완료 |
+| 앱별 자동화 | AutomationsPage.tsx | 완료 |
+| 전체 자동화 | GlobalAutomationsPage.tsx | 완료 |
 | 프로세스 | ProcessPage.tsx | 완료 (상태 머신 UI + 전이 설정) |
-| 프로필 | ProfilePage.tsx | 완료 (프로필 편집 + 비밀번호 변경) |
+| 인터페이스 디자이너 | InterfaceDesignerPage.tsx | 완료 |
 | 조직도 | OrgChartPage.tsx | 완료 (트리 뷰 + 사용자 패널) |
-| 사용자 관리 | UsersPage.tsx | 완료 (목록 + 부서 배정 + 추가/편집) |
+| 앱 관계 시각화 | RelationshipPage.tsx | 완료 |
 | 마이그레이션 이력 | MigrationHistoryPage.tsx | 완료 |
+| 사용자 관리 | UsersPage.tsx | 완료 (목록 + 부서 배정 + 추가/편집) |
+| 설정 | SettingsPage.tsx | 완료 |
+| 프로필 | ProfilePage.tsx | 완료 (프로필 편집 + 비밀번호 변경) |
 | 404 | NotFoundPage.tsx | 완료 |
 
 **뷰 (views/)**:
@@ -408,8 +415,12 @@ Phaeton은 PostgreSQL 네이티브 아키텍처로 이 한계를 구조적으로
 | 리스트 뷰 | 완료 | 인라인 편집 (더블클릭), 정렬, 필터 |
 | 칸반 뷰 | 완료 | @dnd-kit 드래그 앤 드롭 |
 | 캘린더 뷰 | 완료 | 월 그리드, 날짜별 그룹핑, 오늘 하이라이트 |
-| 뷰 탭 | 완료 | 리스트/칸반/캘린더 동적 전환 |
-| 갤러리 뷰 | 타입만 정의 | 컴포넌트 미구현 |
+| 갤러리 뷰 | 완료 | 카드 그리드 레이아웃 |
+| 간트 뷰 | 완료 | 시작일/종료일 기반 타임라인 |
+| 폼 뷰 | 완료 | 독립 폼 입력 |
+| 차트 패널 | 완료 | Recharts 기반 |
+| 뷰 탭 | 완료 | 전체 뷰 타입 동적 전환 |
+| 뷰 가이드 | 완료 | 뷰 사용 안내 |
 
 **핵심 UI 기능**:
 | 기능 | 상태 |
@@ -417,15 +428,27 @@ Phaeton은 PostgreSQL 네이티브 아키텍처로 이 한계를 구조적으로
 | 필터 빌더 (FilterBuilder) | 완료 (필드별 연산자, AND 조건, 동적 입력) |
 | 검색 바 | 완료 (300ms 디바운스, ?q= 파라미터) |
 | CSV 내보내기 | 완료 (필터/정렬 반영) |
-| CSV 가져오기 | 완료 (파일 업로드 UI) |
+| CSV 가져오기 | 완료 (CSVImportPreview 미리보기 포함) |
+| 스프레드시트 입력 | 완료 (SpreadsheetInput 엑셀 기능) |
+| 일괄 편집 | 완료 (BulkEditPanel) |
 | 인라인 편집 | 완료 (InlineEditCell, 더블클릭 → Enter/blur 저장) |
 | 댓글 탭 | 완료 (EntrySheet 내 탭, 추가/삭제) |
 | 변경이력 탭 | 완료 (EntrySheet 내 탭, diff 표시) |
-| 온보딩 가이드 | 완료 (3단계 위저드, EmptyState 컴포넌트) |
+| 온보딩 가이드 | 완료 (CoachMark + SetupChecklist + ViewGuide) |
 | 조직도 트리 | 완료 (OrgTree + DepartmentPanel) |
+| 프로세스 흐름도 | 완료 (ProcessFlowDiagram) |
+| 앱 관계 그래프 | 완료 (RelationshipGraph) |
+| 커맨드 팔레트 | 완료 (CommandPalette) |
+| 단축키 도움말 | 완료 (HotkeyHelpDialog) |
+| 아이콘 선택기 | 완료 (IconPicker) |
+| PDF 내보내기 | 완료 (pdf.go 핸들러) |
 
-**React Query 훅 (12개)**:
-useCollections, useEntries, useProcess, useAuth, useMigrations, useUsers, useComments, useDepartments, useMembers, useViews, useHistory, useNotifications
+**React Query 훅 (28개)**:
+useAuth, useEntries, useViews, useAI, useAIChat, useAIAutomation, useAIHealth,
+useAutomations, useAutomationRunToasts, useCharts, useCollections, useComments,
+useDepartments, useGridNavigation, useHistory, useHotkeys, useMembers, useMigrations,
+useNotifications, useProcess, useRelationshipGraph, useRetryToast, useSavedViews,
+useSSE, useSubsidiaries, useUndoToast, useUnsavedChanges, useUsers
 
 ---
 
@@ -493,16 +516,15 @@ useCollections, useEntries, useProcess, useAuth, useMigrations, useUsers, useCom
 > **현재 상태**: 모든 인터페이스/프레임워크가 준비 완료.
 > 더존 API 문서 수령 즉시 **어댑터만 끼워넣으면** 연동 가능.
 
-#### P0 — 핵심 (다우오피스 Works 기본 기능 달성) — ✅ 거의 완료
+#### P0 — 핵심 (다우오피스 Works 기본 기능 달성) — ✅ 완료
 
-> 필드 19종, 뷰 3종(리스트+칸반+캘린더), 인라인 편집, 필터 빌더, 검색,
-> CSV 임포트/내보내기, 프로세스, 댓글, 변경이력 — 대부분 구현 완료.
+> 필드 19종, 뷰 6종(리스트+칸반+캘린더+갤러리+간트+폼), 인라인 편집, 필터 빌더, 검색,
+> CSV 임포트/내보내기, 스프레드시트 입력, 프로세스, 댓글, 변경이력, 필터 저장,
+> 3패널 앱 빌더 — 모두 구현 완료.
 
 **남은 P0 작업**:
 | 항목 | 현재 | 목표 |
 |------|------|------|
-| AppBuilderPage | 스텁 (최소 구현) | 3패널 빌더 완성 (FieldPalette+Preview+Properties는 있음) |
-| 필터 저장 API | DB 테이블만 있음 (saved_views) | 핸들러 구현 → 필터 저장/불러오기/공유 |
 | 리스트뷰 열 고정/리사이즈 | 미구현 | 고정 열 + 드래그 리사이즈 |
 | 리스트뷰 합계/평균 행 | 미구현 | 숫자 필드 하단 집계 행 (Aggregate API 있음) |
 
@@ -530,56 +552,68 @@ useCollections, useEntries, useProcess, useAuth, useMigrations, useUsers, useCom
 | 메신저 알림 | Notifier 인터페이스 ✅ | 아마란스 메신저 어댑터 구현 (API 스펙 대기) |
 | 전자결재 | Webhook 수신 ✅ | 기안 어댑터 + 결재 콜백 처리 (API 스펙 대기) |
 
-#### P2 — 차별화 (Airtable/Monday.com급 고급 기능)
+#### P2 — 차별화 (Airtable/Monday.com급 고급 기능) — ✅ 대부분 완료
 
 **고급 필드 타입** (rating/progress/currency는 number display로 이미 구현):
-| 필드 | 설명 | 참고 플랫폼 |
-|------|------|-----------|
-| formula | 같은 테이블 필드 기반 계산식 | Airtable, NocoDB |
-| lookup | 연결 레코드의 특정 필드 참조 | Airtable, NocoDB |
-| rollup | 연결 레코드 집계 (SUM/AVG/COUNT) | Airtable, NocoDB |
+| 필드 | 설명 | 상태 |
+|------|------|------|
+| formula | 같은 테이블 필드 기반 계산식 | ✅ 완료 (FormulaEditor + AI 수식 생성) |
+| computed | 계산 필드 | ✅ 완료 (computed.go) |
+| lookup | 연결 레코드의 특정 필드 참조 | 미구현 |
+| rollup | 연결 레코드 집계 (SUM/AVG/COUNT) | 미구현 |
 
-**고급 뷰**:
-| 뷰 | 설명 |
+**고급 뷰** — ✅ 모두 완료:
+| 뷰 | 상태 |
 |----|------|
-| 간트 뷰 | 좌측 리스트 + 우측 타임라인 바, 의존성 표시 |
-| 갤러리 뷰 | 이미지/카드 기반 레코드 표시 |
-| 대시보드 | 차트 위젯 조합 (막대/원형/꺾은선), 숫자 요약 |
+| 간트 뷰 | ✅ 완료 (GanttView.tsx) |
+| 갤러리 뷰 | ✅ 완료 (GalleryView.tsx) |
+| 폼 뷰 | ✅ 완료 (FormView.tsx) |
+| 대시보드 | ✅ 완료 (DashboardPage + GlobalDashboardPage) |
 
-**차트 시스템**:
-| 기능 | 설명 |
+**차트 시스템** — ✅ 완료:
+| 기능 | 상태 |
 |------|------|
-| 차트 타입 | 세로 막대 / 가로 막대 / 꺾은선 / 원형 / 도넛 |
-| 집계 | 개수 / 합계 / 평균 |
-| 그룹 | 선택형 필드 기준 그룹핑 |
-| 배치 | 앱 홈 상단 또는 대시보드 |
+| 차트 타입 (막대/꺾은선/원형/도넛) | ✅ 완료 (ChartPanel + Recharts) |
+| 집계 (개수/합계/평균) | ✅ 완료 (Aggregate API) |
+| AI 차트 생성 | ✅ 완료 (ai_chart.go) |
+| 차트 CRUD | ✅ 완료 (charts.go + chart_store.go) |
 
-**자동화 (기초)**:
-| 기능 | 설명 |
+**자동화** — ✅ 완료:
+| 기능 | 상태 |
 |------|------|
-| 트리거 | 레코드 생성/수정/삭제, 상태 변경, 스케줄 |
-| 액션 | 알림 발송, 필드 값 업데이트, Webhook 호출 |
-| 조건 | if/else 분기 |
+| 트리거 (생성/수정/삭제/상태변경/스케줄) | ✅ 완료 |
+| 액션 (알림/필드업데이트/Webhook/레코드생성) | ✅ 완료 |
+| 조건 분기 | ✅ 완료 (evaluate.go) |
+| AI 자동화 생성 | ✅ 완료 (AIAutomationDialog + ai_automation.go) |
+| 스케줄러 | ✅ 완료 (scheduler.go) |
+| 실행 로그 | ✅ 완료 (run_log.go) |
 
-**템플릿**:
-| 기능 | 설명 |
+**템플릿** — ✅ 완료:
+| 기능 | 상태 |
 |------|------|
-| 샘플 앱 | 카테고리별 사전 구성 앱 (총무/인사/영업/재무 등) |
-| 앱 내보내기/가져오기 | 앱 구조를 파일로 내보내기/가져오기 |
+| 템플릿 갤러리 | ✅ 완료 (TemplateGallery + templates.ts) |
+| 앱 내보내기/가져오기 | 미구현 |
 
-#### P3 — 장기 (엔터프라이즈)
+**남은 P2 작업**:
+- lookup/rollup 필드 타입
+- 앱 내보내기/가져오기
 
-| 기능 | 설명 | 참고 플랫폼 |
-|------|------|-----------|
-| 칸반 뷰 | 상태 기반 드래그 앤 드롭 보드 (한국 사용자 인지도 낮음, 후순위) | Airtable, Monday, ClickUp |
-| 멀티폼 | 메인폼 + 하위폼(최대 20개), 폼별 접근 권한 | 다우 Works |
-| 테이블 영역 | 폼 내 인라인 반복 입력 테이블 | 다우 Works |
-| Interface Designer | 커스텀 대시보드/인터페이스 빌더 | Airtable |
-| AI 필드 | AI 기반 텍스트 자동 생성 | Airtable |
-| 고급 자동화 | 다단계 워크플로우, 외부 서비스 통합 | Airtable, Monday |
-| 모바일 앱 | 네이티브 모바일 지원 | AppSheet |
-| 오프라인 | 오프라인 데이터 캐시 + 동기화 | AppSheet |
-| 감사 로그 | 전체 작업 감사 추적 | 전체 |
+#### P3 — 장기 (엔터프라이즈) — 부분 완료
+
+| 기능 | 상태 | 비고 |
+|------|------|------|
+| 칸반 뷰 | ✅ 완료 | @dnd-kit 드래그 앤 드롭 |
+| Interface Designer | ✅ 완료 | InterfaceDesignerPage.tsx |
+| AI 기능 | ✅ 완료 | 앱 생성, 챗, 자동화, 차트, 필터, 수식, CSV, 사전입력 |
+| 앱 관계 시각화 | ✅ 완료 | RelationshipPage + RelationshipGraph |
+| 오프라인 감지 | ✅ 완료 | OfflineBanner |
+| PDF 내보내기 | ✅ 완료 | pdf.go |
+| 부서/자회사 관리 | ✅ 완료 | department.go + subsidiary.go |
+| 멀티폼 | 미구현 | 메인폼 + 하위폼, 폼별 접근 권한 |
+| 테이블 영역 | 미구현 | 폼 내 인라인 반복 입력 테이블 |
+| 고급 자동화 | 미구현 | 다단계 워크플로우, 외부 서비스 통합 |
+| 모바일 앱 | 미구현 | 네이티브 모바일 지원 |
+| 감사 로그 | 미구현 | 전체 작업 감사 추적 |
 
 ---
 
