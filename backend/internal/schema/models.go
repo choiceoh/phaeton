@@ -30,6 +30,12 @@ const (
 
 	FieldAutonumber FieldType = "autonumber"
 
+	// Computed types — stored in _meta.fields but produce no DB column.
+	// Values are calculated at read time from other fields/relations.
+	FieldFormula FieldType = "formula"
+	FieldLookup  FieldType = "lookup"
+	FieldRollup  FieldType = "rollup"
+
 	// Layout types — stored in _meta.fields for ordering but produce no DB column.
 	FieldLabel  FieldType = "label"
 	FieldLine   FieldType = "line"
@@ -41,6 +47,7 @@ var validFieldTypes = map[FieldType]bool{
 	FieldBoolean: true, FieldDate: true, FieldDatetime: true, FieldTime: true,
 	FieldSelect: true, FieldMultiselect: true, FieldRelation: true,
 	FieldFile: true, FieldJSON: true, FieldUser: true, FieldAutonumber: true,
+	FieldFormula: true, FieldLookup: true, FieldRollup: true,
 	FieldLabel: true, FieldLine: true, FieldSpacer: true,
 }
 
@@ -49,6 +56,16 @@ func (ft FieldType) Valid() bool { return validFieldTypes[ft] }
 // IsLayout returns true for field types that are purely visual (no DB column).
 func (ft FieldType) IsLayout() bool {
 	return ft == FieldLabel || ft == FieldLine || ft == FieldSpacer
+}
+
+// IsComputed returns true for field types that are calculated at read time (no DB column).
+func (ft FieldType) IsComputed() bool {
+	return ft == FieldFormula || ft == FieldLookup || ft == FieldRollup
+}
+
+// NoColumn returns true for field types that do not produce a DB column.
+func (ft FieldType) NoColumn() bool {
+	return ft.IsLayout() || ft.IsComputed()
 }
 
 // RelationType for inter-collection references.
@@ -62,11 +79,16 @@ const (
 
 // AccessConfig defines per-collection role-based permissions.
 // Each key maps an operation to a list of allowed roles.
+// RLSMode controls row-level visibility for non-owner roles:
+//   - ""/"none": no row filtering (default)
+//   - "creator": viewers see only rows they created
+//   - "department": viewers see rows created by users in their department
 type AccessConfig struct {
 	EntryView   []string `json:"entry_view,omitempty"`
 	EntryCreate []string `json:"entry_create,omitempty"`
 	EntryEdit   []string `json:"entry_edit,omitempty"`
 	EntryDelete []string `json:"entry_delete,omitempty"`
+	RLSMode     string   `json:"rls_mode,omitempty"`
 }
 
 // AllowsRole checks whether the given role is allowed the specified operation.
@@ -257,4 +279,39 @@ type UpdateViewReq struct {
 	Config    json.RawMessage `json:"config,omitempty"`
 	SortOrder *int            `json:"sort_order,omitempty"`
 	IsDefault *bool           `json:"is_default,omitempty"`
+}
+
+// --- Saved View ---
+
+// SavedView persists a user's filter/sort/visibility configuration for a collection.
+type SavedView struct {
+	ID            string          `json:"id"`
+	CollectionID  string          `json:"collection_id"`
+	Name          string          `json:"name"`
+	FilterConfig  json.RawMessage `json:"filter_config"`
+	SortConfig    string          `json:"sort_config"`
+	VisibleFields json.RawMessage `json:"visible_fields,omitempty"`
+	IsDefault     bool            `json:"is_default"`
+	IsPublic      bool            `json:"is_public"`
+	CreatedBy     *string         `json:"created_by,omitempty"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
+type CreateSavedViewReq struct {
+	Name          string          `json:"name"`
+	FilterConfig  json.RawMessage `json:"filter_config,omitempty"`
+	SortConfig    string          `json:"sort_config,omitempty"`
+	VisibleFields json.RawMessage `json:"visible_fields,omitempty"`
+	IsDefault     bool            `json:"is_default"`
+	IsPublic      bool            `json:"is_public"`
+}
+
+type UpdateSavedViewReq struct {
+	Name          *string         `json:"name,omitempty"`
+	FilterConfig  json.RawMessage `json:"filter_config,omitempty"`
+	SortConfig    *string         `json:"sort_config,omitempty"`
+	VisibleFields json.RawMessage `json:"visible_fields,omitempty"`
+	IsDefault     *bool           `json:"is_default,omitempty"`
+	IsPublic      *bool           `json:"is_public,omitempty"`
 }

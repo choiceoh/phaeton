@@ -39,6 +39,8 @@ func FieldTypeToPG(ft schema.FieldType) string {
 		return "JSONB"
 	case schema.FieldAutonumber:
 		return "BIGINT"
+	case schema.FieldFormula, schema.FieldLookup, schema.FieldRollup:
+		return "" // computed types have no DB column
 	case schema.FieldLabel, schema.FieldLine, schema.FieldSpacer:
 		return "" // layout types have no DB column
 	default:
@@ -59,7 +61,7 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 	var colDefs []string
 	colDefs = append(colDefs, "id UUID PRIMARY KEY DEFAULT gen_random_uuid()")
 	for _, f := range fields {
-		if f.FieldType.IsLayout() {
+		if f.FieldType.NoColumn() {
 			continue
 		}
 		colDefs = append(colDefs, columnDefWithTable(col.Slug, f))
@@ -106,7 +108,7 @@ func GenerateDropTable(slug string) (up, down []string) {
 // GenerateAddColumn produces DDL to add a column, plus any unique/index statements.
 // Layout fields produce no DDL.
 func GenerateAddColumn(tableSlug string, f schema.Field) (up, down []string) {
-	if f.FieldType.IsLayout() {
+	if f.FieldType.NoColumn() {
 		return nil, nil
 	}
 	qTable := quoteIdent("data", tableSlug)

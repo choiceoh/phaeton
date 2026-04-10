@@ -55,5 +55,33 @@ export function formatCell(value: unknown, field: Field): string {
 
   if (field.field_type === 'autonumber') return String(value)
 
+  // Formula fields: format based on result_type in options.
+  if (field.field_type === 'formula') {
+    const resultType = field.options?.result_type as string | undefined
+    if (resultType === 'number' || resultType === 'integer') {
+      const num = Number(value)
+      if (!isNaN(num)) {
+        const precision = (field.options?.precision as number) ?? undefined
+        return precision !== undefined
+          ? num.toLocaleString('ko-KR', { minimumFractionDigits: precision, maximumFractionDigits: precision })
+          : num.toLocaleString('ko-KR')
+      }
+    }
+    if (resultType === 'boolean') return value ? '✓' : '-'
+    if (resultType === 'date' && value) {
+      return new Date(value as string).toLocaleDateString('ko')
+    }
+    return String(value)
+  }
+
+  // Rollup fields: format numbers nicely.
+  if (field.field_type === 'rollup') {
+    if (typeof value === 'number') return value.toLocaleString('ko-KR')
+    return String(value)
+  }
+
+  // Lookup fields: pass through.
+  if (field.field_type === 'lookup') return String(value)
+
   return String(value)
 }

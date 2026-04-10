@@ -1,9 +1,12 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
 import {
   ArrowDownUp,
+  BarChart3,
   Calendar,
   Download,
   Filter,
+  GanttChart,
+  LayoutGrid,
   Power,
   PowerOff,
   Search,
@@ -15,7 +18,7 @@ import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
-import { type CellEditEvent, DataTable } from '@/components/common/DataTable'
+import { type BatchCellEditEvent, type CellEditEvent, DataTable } from '@/components/common/DataTable'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
@@ -23,8 +26,11 @@ import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
-import KanbanView from '@/components/works/views/KanbanView'
 import CalendarView from '@/components/works/views/CalendarView'
+import ChartPanel from '@/components/works/views/ChartPanel'
+import GalleryView from '@/components/works/views/GalleryView'
+import GanttView from '@/components/works/views/GanttView'
+import KanbanView from '@/components/works/views/KanbanView'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,17 +49,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
+  useBatchUpdateEntry,
   useCreateEntry,
   useDeleteEntry,
   useEntries,
   useUpdateEntry,
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
-import { useViews, useCreateView, useDeleteView } from '@/hooks/useViews'
+import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
-import type { FilterCondition, View } from '@/lib/types'
+import type { FilterCondition, SavedView } from '@/lib/types'
 
 const DEFAULT_LIMIT = 20
 
@@ -86,7 +93,7 @@ export default function AppViewPage() {
   const [processVisible, setProcessVisible] = useState(true)
 
   // Saved views state
-  const [activeView, setActiveView] = useState<View | null>(null)
+  const [activeView, setActiveView] = useState<SavedView | null>(null)
   const [savingView, setSavingView] = useState(false)
   const [newViewName, setNewViewName] = useState('')
 
@@ -101,9 +108,9 @@ export default function AppViewPage() {
     return rels.length > 0 ? rels.join(',') : undefined
   }, [collection])
 
-  const { data: savedViews } = useViews(collection?.id)
-  const createView = useCreateView(collection?.id ?? '')
-  const deleteView = useDeleteView(collection?.id ?? '')
+  const { data: savedViews } = useSavedViews(collection?.id)
+  const createSavedView = useCreateSavedView(collection?.id ?? '')
+  const deleteSavedView = useDeleteSavedView(collection?.id ?? '')
 
   // Build sort param from either column header sorting or sort panel.
   const sortParam = useMemo(() => {
@@ -148,6 +155,7 @@ export default function AppViewPage() {
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
+  const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
 
   // Detect views.
@@ -157,6 +165,16 @@ export default function AppViewPage() {
   )
   const dateField = useMemo(
     () => collection?.fields?.find((f) => f.field_type === 'date' || f.field_type === 'datetime'),
+    [collection],
+  )
+  const fileField = useMemo(
+    () => collection?.fields?.find((f) => f.field_type === 'file'),
+    [collection],
+  )
+
+  // Formula fields are read-only in the grid.
+  const formulaReadonlyCols = useMemo(
+    () => collection?.fields?.filter((f) => f.field_type === 'formula').map((f) => f.slug) ?? [],
     [collection],
   )
 
@@ -304,6 +322,25 @@ export default function AppViewPage() {
     [updateEntry],
   )
 
+  // Batch edit handler (for paste operations).
+  const handleBatchCellEdit = useCallback(
+    (event: BatchCellEditEvent) => {
+      // Group updates by rowId.
+      const byRow = new Map<string, Record<string, unknown>>()
+      for (const u of event.updates) {
+        const existing = byRow.get(u.rowId) ?? {}
+        existing[u.columnId] = u.value
+        byRow.set(u.rowId, existing)
+      }
+      const updates = Array.from(byRow.entries()).map(([id, fields]) => ({ id, fields }))
+      batchUpdateEntry.mutate(updates, {
+        onSuccess: () => toast.success(`${updates.length}건 수정되었습니다`),
+        onError: (err) => toast.error(formatError(err)),
+      })
+    },
+    [batchUpdateEntry],
+  )
+
   // Search with debounce.
   function handleSearchInput(value: string) {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
@@ -337,6 +374,16 @@ export default function AppViewPage() {
   function handleEntryClick(entry: Record<string, unknown>) {
     setEditEntry(entry)
     setSheetOpen(true)
+  }
+
+  function handleGanttUpdate(entryId: string, updates: Record<string, unknown>) {
+    updateEntry.mutate(
+      { id: entryId, body: updates },
+      {
+        onSuccess: () => toast.success('일정이 변경되었습니다'),
+        onError: (err) => toast.error(formatError(err)),
+      },
+    )
   }
 
   function handleCardMove(entryId: string, newValue: string) {
@@ -403,8 +450,14 @@ export default function AppViewPage() {
     }
   }, [collection, refetch])
 
+  const dateFields = useMemo(
+    () => collection.fields?.filter((f) => f.field_type === 'date' || f.field_type === 'datetime') ?? [],
+    [collection],
+  )
   const hasKanban = !!selectField
   const hasCalendar = !!dateField
+  const hasGallery = !!fileField
+  const hasGantt = dateFields.length >= 1
 
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
@@ -564,6 +617,12 @@ export default function AppViewPage() {
         description={collection.description}
         actions={
           <>
+            <Link to={`/apps/${collection.id}/dashboard`}>
+              <Button variant="outline" className="gap-1">
+                <BarChart3 className="h-4 w-4" />
+                대시보드
+              </Button>
+            </Link>
             <RoleGate roles={['director', 'pm']}>
               <Link to={`/apps/${collection.id}/settings`}>
                 <Button variant="outline">설정</Button>
@@ -589,11 +648,35 @@ export default function AppViewPage() {
             onValueChange={(v) => {
               if (v === '__none__') {
                 setActiveView(null)
+                setFilterConditions([])
+                setSortItems([])
                 setPage(1)
               } else {
                 const view = savedViews.find((sv) => sv.id === v)
                 if (view) {
                   setActiveView(view)
+                  // Restore filters from saved view.
+                  if (view.filter_config) {
+                    const restored: FilterCondition[] = Object.entries(view.filter_config).map(
+                      ([key, value], i) => {
+                        const [field, operator] = key.split(':')
+                        return { id: `sv-${i}`, field, operator: operator || 'eq', value }
+                      },
+                    )
+                    setFilterConditions(restored)
+                  } else {
+                    setFilterConditions([])
+                  }
+                  // Restore sort from saved view.
+                  if (view.sort_config) {
+                    const items: SortItem[] = view.sort_config.split(',').filter(Boolean).map((s) => ({
+                      field: s.startsWith('-') ? s.slice(1) : s,
+                      desc: s.startsWith('-'),
+                    }))
+                    setSortItems(items)
+                  } else {
+                    setSortItems([])
+                  }
                   setPage(1)
                 }
               }
@@ -614,10 +697,12 @@ export default function AppViewPage() {
               variant="ghost"
               size="sm"
               onClick={() => {
-                deleteView.mutate(activeView.id, {
+                deleteSavedView.mutate(activeView.id, {
                   onSuccess: () => {
                     toast.success('뷰가 삭제되었습니다')
                     setActiveView(null)
+                    setFilterConditions([])
+                    setSortItems([])
                   },
                   onError: (err) => toast.error(formatError(err)),
                 })
@@ -646,12 +731,26 @@ export default function AppViewPage() {
           />
           <Button
             size="sm"
-            disabled={!newViewName.trim() || createView.isPending}
+            disabled={!newViewName.trim() || createSavedView.isPending}
             onClick={() => {
-              createView.mutate(
+              // Serialize current filter conditions to filter_config.
+              const filterConfig: Record<string, string> = {}
+              for (const c of filterConditions) {
+                if (c.field && c.operator) {
+                  filterConfig[`${c.field}:${c.operator}`] = c.value
+                }
+              }
+              // Serialize current sort to sort_config.
+              const sortConfig = sortItems.length > 0
+                ? sortItems.map((s) => `${s.desc ? '-' : ''}${s.field}`).join(',')
+                : ''
+
+              createSavedView.mutate(
                 {
                   name: newViewName.trim(),
-                  view_type: 'list',
+                  filter_config: filterConfig,
+                  sort_config: sortConfig,
+                  is_public: true,
                 },
                 {
                   onSuccess: () => {
@@ -672,12 +771,18 @@ export default function AppViewPage() {
         </div>
       )}
 
+      <ChartPanel
+        slug={collection.slug}
+        fields={collection.fields ?? []}
+        totalRecords={list?.total ?? 0}
+      />
+
       {entriesLoading && !list && <LoadingState />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
       {list && (
         <Tabs defaultValue="list">
-          {(hasKanban || hasCalendar) && (
+          {(hasKanban || hasCalendar || hasGallery || hasGantt) && (
             <TabsList className="mb-4">
               <TabsTrigger value="list">목록</TabsTrigger>
               {hasKanban && <TabsTrigger value="kanban">칸반</TabsTrigger>}
@@ -685,6 +790,18 @@ export default function AppViewPage() {
                 <TabsTrigger value="calendar" className="gap-1">
                   <Calendar className="h-3.5 w-3.5" />
                   캘린더
+                </TabsTrigger>
+              )}
+              {hasGallery && (
+                <TabsTrigger value="gallery" className="gap-1">
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  갤러리
+                </TabsTrigger>
+              )}
+              {hasGantt && (
+                <TabsTrigger value="gantt" className="gap-1">
+                  <GanttChart className="h-3.5 w-3.5" />
+                  간트
                 </TabsTrigger>
               )}
             </TabsList>
@@ -702,6 +819,8 @@ export default function AppViewPage() {
               onSortChange={setSorting}
               onRowClick={handleEntryClick}
               onCellEdit={handleCellEdit}
+              onBatchCellEdit={handleBatchCellEdit}
+              readonlyColumns={formulaReadonlyCols}
               emptyTitle={TERM.noRecords}
               emptyDescription={TERM.noRecordsDesc}
               summaryRow={summaryRow}
@@ -728,6 +847,28 @@ export default function AppViewPage() {
                 fields={collection.fields ?? []}
                 entries={list.data}
                 onEntryClick={handleEntryClick}
+              />
+            </TabsContent>
+          )}
+
+          {hasGallery && fileField && (
+            <TabsContent value="gallery" className="mt-0">
+              <GalleryView
+                imageField={fileField}
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onEntryClick={handleEntryClick}
+              />
+            </TabsContent>
+          )}
+
+          {hasGantt && (
+            <TabsContent value="gantt" className="mt-0">
+              <GanttView
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onEntryClick={handleEntryClick}
+                onEntryUpdate={handleGanttUpdate}
               />
             </TabsContent>
           )}

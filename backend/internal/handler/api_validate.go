@@ -41,6 +41,9 @@ func validatePayload(
 			if f.FieldType.IsLayout() {
 				return fmt.Errorf("%w: layout field %q cannot hold data", schema.ErrInvalidInput, k)
 			}
+			if f.FieldType.IsComputed() {
+				return fmt.Errorf("%w: computed field %q cannot hold data", schema.ErrInvalidInput, k)
+			}
 			continue
 		}
 		// System columns the client may set.
@@ -51,7 +54,7 @@ func validatePayload(
 	}
 
 	for _, f := range fields {
-		if f.FieldType.IsLayout() {
+		if f.FieldType.IsLayout() || f.FieldType.IsComputed() {
 			continue
 		}
 		v, present := body[f.Slug]

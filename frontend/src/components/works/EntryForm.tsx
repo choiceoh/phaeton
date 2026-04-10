@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 
 import RelationCombobox from '@/components/common/RelationCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
+import { useCurrentUser } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -45,6 +46,7 @@ export default function EntryForm({
   process,
 }: Props) {
   const [data, setData] = useState<Record<string, unknown>>(initialData ?? {})
+  const { data: currentUser } = useCurrentUser()
 
   function setValue(name: string, value: unknown) {
     setData((prev) => ({ ...prev, [name]: value }))
@@ -56,14 +58,20 @@ export default function EntryForm({
   }
 
   // Process status transitions (only when editing an existing entry).
+  // Filter by the current user's role when allowed_roles is specified.
   const currentStatus = initialData?._status as string | undefined
   const availableTransitions = (() => {
     if (!process?.is_enabled || !currentStatus || !initialData?.id || !process.statuses?.length) return []
     const statusByName = new Map(process.statuses.map((s) => [s.name, s]))
     const currentStatusObj = statusByName.get(currentStatus)
     if (!currentStatusObj) return []
+    const userRole = currentUser?.role
     return process.transitions
-      .filter((t) => t.from_status_id === currentStatusObj.id)
+      .filter((t) => {
+        if (t.from_status_id !== currentStatusObj.id) return false
+        if (t.allowed_roles.length > 0 && userRole && !t.allowed_roles.includes(userRole)) return false
+        return true
+      })
       .map((t) => {
         const target = process.statuses.find((s) => s.id === t.to_status_id)
         return { label: t.label, targetName: target?.name ?? '', targetColor: target?.color ?? '#6b7280' }
@@ -116,6 +124,23 @@ export default function EntryForm({
             return (
               <div key={field.id} className="col-span-full">
                 <LayoutElement field={field} />
+              </div>
+            )
+          }
+          // Formula fields: show computed value as read-only.
+          if (field.field_type === 'formula') {
+            const span = field.width || 6
+            const smSpan: Record<number, string> = {
+              1: 'sm:col-span-1', 2: 'sm:col-span-2', 3: 'sm:col-span-3',
+              4: 'sm:col-span-4', 5: 'sm:col-span-5', 6: 'sm:col-span-6',
+            }
+            const val = data[field.slug]
+            return (
+              <div key={field.id} className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'}`}>
+                <Label className="text-muted-foreground">{field.label} (수식)</Label>
+                <div className="mt-1 rounded-md bg-muted px-3 py-2 text-sm">
+                  {val != null ? String(val) : '-'}
+                </div>
               </div>
             )
           }
@@ -404,6 +429,16 @@ function FieldInput({
       return (
         <Input
           value={value != null ? String(value) : '(자동 생성)'}
+          disabled
+          className="bg-muted"
+        />
+      )
+    case 'formula':
+    case 'lookup':
+    case 'rollup':
+      return (
+        <Input
+          value={value != null ? String(value) : '(자동 계산)'}
           disabled
           className="bg-muted"
         />

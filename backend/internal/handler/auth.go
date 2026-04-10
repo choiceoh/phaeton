@@ -618,6 +618,9 @@ func generateToken(user User) (string, error) {
 		"role":   user.Role,
 		"exp":    time.Now().Add(7 * 24 * time.Hour).Unix(),
 	}
+	if user.DepartmentID != nil {
+		claims["departmentId"] = *user.DepartmentID
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }

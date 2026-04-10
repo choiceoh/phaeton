@@ -47,3 +47,10 @@ export function useAIBuildCollection() {
       api.post<AIBuildEnvelope>('/ai/build-collection', input),
   })
 }
+
+export function useAIGenerateSlug() {
+  return useMutation({
+    mutationFn: (label: string) =>
+      api.post<{ slug: string }>('/ai/generate-slug', { label }),
+  })
+}

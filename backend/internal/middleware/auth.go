@@ -17,10 +17,11 @@ const userContextKey contextKey = "user"
 
 // UserClaims holds JWT claims for the authenticated user.
 type UserClaims struct {
-	UserID string `json:"userId"`
-	Email  string `json:"email"`
-	Name   string `json:"name"`
-	Role   string `json:"role"`
+	UserID       string `json:"userId"`
+	Email        string `json:"email"`
+	Name         string `json:"name"`
+	Role         string `json:"role"`
+	DepartmentID string `json:"departmentId,omitempty"`
 }
 
 // RequireAuth returns middleware that validates JWT from Authorization header or cookie.
@@ -87,6 +88,10 @@ func claimsToUser(claims jwt.MapClaims) (UserClaims, error) {
 		user.Role = role
 	} else {
 		return user, errInvalidClaim("role")
+	}
+	// Optional: departmentId (may be absent for users without a department).
+	if deptID, ok := claims["departmentId"].(string); ok {
+		user.DepartmentID = deptID
 	}
 
 	return user, nil

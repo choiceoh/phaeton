@@ -15,6 +15,9 @@ export type FieldType =
   | 'file'
   | 'json'
   | 'autonumber'
+  | 'formula'
+  | 'lookup'
+  | 'rollup'
   | 'label'
   | 'line'
   | 'spacer'
@@ -159,6 +162,7 @@ export interface ProcessTransition {
   from_status_id: string
   to_status_id: string
   label: string
+  allowed_roles: string[]
 }
 
 export interface Process {
@@ -172,7 +176,7 @@ export interface Process {
 export interface SaveProcessReq {
   is_enabled: boolean
   statuses: { name: string; color: string; sort_order: number; is_initial: boolean }[]
-  transitions: { from_index: number; to_index: number; label: string }[]
+  transitions: { from_index: number; to_index: number; label: string; allowed_roles: string[] }[]
 }
 
 // --- Filter condition (frontend-only) ---
@@ -193,7 +197,7 @@ export interface AggregateResult {
 
 // --- Views ---
 
-export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery'
+export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery' | 'gantt'
 
 export interface View {
   id: string
@@ -296,6 +300,24 @@ export interface SavedView {
   created_by?: string
   created_at: string
   updated_at: string
+}
+
+export interface CreateSavedViewReq {
+  name: string
+  filter_config?: Record<string, string>
+  sort_config?: string
+  visible_fields?: string[]
+  is_default?: boolean
+  is_public?: boolean
+}
+
+export interface UpdateSavedViewReq {
+  name?: string
+  filter_config?: Record<string, string>
+  sort_config?: string
+  visible_fields?: string[]
+  is_default?: boolean
+  is_public?: boolean
 }
 
 // --- Envelope responses ---

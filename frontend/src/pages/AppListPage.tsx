@@ -1,4 +1,5 @@
 import { Layers, MousePointerClick, Settings } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router'
 
 import AppCard from '@/components/works/AppCard'
@@ -7,12 +8,14 @@ import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
+import TemplateGallery from '@/components/works/TemplateGallery'
 import { Button } from '@/components/ui/button'
 import { useCollections } from '@/hooks/useCollections'
 import { TERM } from '@/lib/constants'
 
 export default function AppListPage() {
   const { data: collections, isLoading, isError, error, refetch } = useCollections()
+  const [showTemplates, setShowTemplates] = useState(false)
 
   return (
     <div>
@@ -21,6 +24,12 @@ export default function AppListPage() {
         description="업무 앱을 만들고 데이터를 관리하세요"
         actions={
           <RoleGate roles={['director', 'pm']}>
+            <Button
+              variant="outline"
+              onClick={() => setShowTemplates(!showTemplates)}
+            >
+              템플릿
+            </Button>
             <Link to="/apps/new">
               <Button>{TERM.newCollection}</Button>
             </Link>
@@ -28,10 +37,20 @@ export default function AppListPage() {
         }
       />
 
+      {/* Template gallery */}
+      {showTemplates && (
+        <div className="mb-6">
+          <h3 className="mb-3 text-sm font-medium text-muted-foreground">
+            템플릿으로 빠르게 시작하세요
+          </h3>
+          <TemplateGallery />
+        </div>
+      )}
+
       {isLoading && <LoadingState />}
       {isError && <ErrorState error={error} onRetry={() => refetch()} />}
 
-      {collections && collections.length === 0 && (
+      {collections && collections.length === 0 && !showTemplates && (
         <div className="mx-auto max-w-lg mt-8">
           <EmptyState
             title={TERM.noCollections}
@@ -67,7 +86,7 @@ export default function AppListPage() {
                 icon={<Settings className="h-5 w-5" />}
                 step="3"
                 title="뷰 구성"
-                description="목록, 칸반, 캘린더 등 원하는 형태로 데이터를 확인하세요."
+                description="목록, 칸반, 캘린더, 갤러리 등 원하는 형태로 데이터를 확인하세요."
               />
             </div>
           </div>

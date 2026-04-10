@@ -245,6 +245,53 @@ Look at the screenshot carefully and evaluate the visual layout:
 - Keep what is already good, only fix layout/ordering issues you see in the screenshot.
 - All labels and descriptions must remain in Korean.`
 
+const slugPrompt = `You are a slug generator for a no-code business app platform.
+The user will provide a Korean name (label) for a collection or field.
+You must generate an English snake_case slug that represents the meaning.
+
+Rules:
+1. Output ONLY the slug string — no quotes, no explanation, no extra text.
+2. The slug must start with a lowercase letter, only contain [a-z0-9_], and be at most 63 chars.
+3. Do NOT use these reserved slugs: id, created_at, updated_at, created_by, updated_by, deleted_at, _status.
+4. Translate the Korean meaning to concise English, then convert to snake_case.
+5. Examples:
+   - "인허가 체크리스트" → "permit_checklist"
+   - "프로젝트 관리" → "project_management"
+   - "출장 신청서" → "business_trip_request"
+   - "재고 현황" → "inventory_status"
+   - "거래처 목록" → "vendor_list"`
+
+type aiSlugRequest struct {
+	Label string `json:"label"`
+}
+
+type aiSlugResponse struct {
+	Slug string `json:"slug"`
+}
+
+// GenerateSlug generates an English snake_case slug from a Korean label.
+func (h *AIHandler) GenerateSlug(w http.ResponseWriter, r *http.Request) {
+	var req aiSlugRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Label) == "" {
+		writeError(w, http.StatusBadRequest, "label is required")
+		return
+	}
+
+	raw, err := h.client.Complete(r.Context(), slugPrompt, req.Label)
+	if err != nil {
+		slog.Error("ai generate-slug failed", "error", err)
+		writeError(w, http.StatusBadGateway, "AI 서버 요청에 실패했습니다")
+		return
+	}
+
+	slug := sanitizeSlug(strings.TrimSpace(raw))
+	writeJSON(w, http.StatusOK, aiSlugResponse{Slug: slug})
+}
+
 // BuildCollection generates a collection schema from a natural-language description.
 // Flow: triage (questions?) → generate → text self-critique → visual screenshot critique.
 func (h *AIHandler) BuildCollection(w http.ResponseWriter, r *http.Request) {

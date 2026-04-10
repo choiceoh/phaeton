@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -40,7 +41,7 @@ func (h *DynHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	args = append(args, searchArgs...)
 
 	orderBy := ParseSort(params.Get("sort"), fields)
-	selectCols := buildSelectCols(fields)
+	selectCols := buildSelectCols(fields, false, &selectColOpts{cache: h.cache})
 
 	sql := fmt.Sprintf("SELECT %s FROM %s WHERE deleted_at IS NULL %s %s",
 		selectCols, qTable, where, orderBy)
@@ -232,11 +233,12 @@ func (h *DynHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields)
+	selectCols := buildSelectCols(fields, false, &selectColOpts{cache: h.cache})
 
+	user, _ := middleware.GetUser(r.Context())
 	created := make([]map[string]any, 0, len(bodies))
 	for i, body := range bodies {
-		colNames, placeholders, args := buildInsertColumns(body, fields)
+		colNames, placeholders, args := buildInsertColumns(body, fields, user.UserID)
 		var sql string
 		if len(colNames) == 0 {
 			sql = fmt.Sprintf("INSERT INTO %s DEFAULT VALUES RETURNING %s", qTable, selectCols)

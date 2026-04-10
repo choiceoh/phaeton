@@ -32,6 +32,9 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   file: '파일',
   json: 'JSON',
   autonumber: '자동 번호',
+  formula: '수식',
+  lookup: '조회',
+  rollup: '집계',
   label: '라벨',
   line: '라인',
   spacer: '공백',
@@ -53,6 +56,9 @@ export const FIELD_TYPE_ICONS: Record<FieldType, string> = {
   file: '📎',
   json: '{ }',
   autonumber: '⧣',
+  formula: 'fx',
+  lookup: '->',
+  rollup: 'E',
   label: 'Lbl',
   line: '━',
   spacer: '⬜',
@@ -60,6 +66,18 @@ export const FIELD_TYPE_ICONS: Record<FieldType, string> = {
 
 export const LAYOUT_FIELD_TYPES: FieldType[] = ['label', 'line', 'spacer']
 export const isLayoutType = (ft: FieldType) => LAYOUT_FIELD_TYPES.includes(ft)
+
+export const COMPUTED_FIELD_TYPES: FieldType[] = ['formula', 'lookup', 'rollup']
+export const isComputedType = (ft: FieldType) => COMPUTED_FIELD_TYPES.includes(ft)
+
+export const ROLLUP_FUNCTIONS = [
+  { value: 'SUM', label: '합계 (SUM)' },
+  { value: 'COUNT', label: '개수 (COUNT)' },
+  { value: 'AVG', label: '평균 (AVG)' },
+  { value: 'MIN', label: '최소 (MIN)' },
+  { value: 'MAX', label: '최대 (MAX)' },
+  { value: 'COUNTA', label: '비어있지 않은 개수 (COUNTA)' },
+]
 
 export const ROLE_LABELS: Record<string, string> = {
   director: '디렉터',
@@ -153,6 +171,8 @@ export function operatorsForFieldType(ft: FieldType): FilterOperator[] {
     case 'text':
     case 'textarea':
       return ['eq', 'neq', 'like', 'is_null']
+    case 'formula':
+      return ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'is_null']
     default:
       return ['eq', 'neq', 'like', 'is_null']
   }

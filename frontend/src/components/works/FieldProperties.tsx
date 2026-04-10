@@ -13,25 +13,33 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   FIELD_TYPE_LABELS,
   HEIGHT_OPTIONS,
+  isComputedType,
   isLayoutType,
   NUMBER_DISPLAY_TYPES,
   ON_DELETE_OPTIONS,
   RELATION_TYPE_LABELS,
+  ROLLUP_FUNCTIONS,
   TEXT_DISPLAY_TYPES,
   VALIDATION_OPTIONS,
   WIDTH_OPTIONS,
 } from '@/lib/constants'
-import type { Collection, FieldType } from '@/lib/types'
+import type { Collection, Field, FieldType } from '@/lib/types'
 
 import type { FieldDraft } from './FieldPreview'
+import FormulaEditor from './FormulaEditor'
 
 interface Props {
   field: FieldDraft | null
   collections: Collection[]
+  siblingFields?: FieldDraft[]
   onChange: (field: FieldDraft) => void
+  /** Collection slug — needed for formula preview API. */
+  collectionSlug?: string
+  /** All fields in the collection — needed for formula field reference hints. */
+  allFields?: FieldDraft[]
 }
 
-export default function FieldProperties({ field, collections, onChange }: Props) {
+export default function FieldProperties({ field, collections, siblingFields, onChange, collectionSlug, allFields }: Props) {
   if (!field) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -57,6 +65,25 @@ export default function FieldProperties({ field, collections, onChange }: Props)
   const isRelation = field.field_type === 'relation'
   const isBoolean = field.field_type === 'boolean'
   const isDate = field.field_type === 'date' || field.field_type === 'datetime' || field.field_type === 'time'
+  const isComputed = isComputedType(field.field_type)
+  const isFormula = field.field_type === 'formula'
+  const isLookup = field.field_type === 'lookup'
+  const isRollup = field.field_type === 'rollup'
+
+  // For lookup/rollup: find relation fields among sibling fields
+  const relationFields = (siblingFields ?? []).filter(
+    (f) => f.field_type === 'relation',
+  )
+
+  // For lookup/rollup: find target collection fields
+  const selectedRelationField = relationFields.find(
+    (f) => f.slug === (opts.relation_field as string),
+  )
+  const targetCollectionId = selectedRelationField?.relation?.target_collection_id
+  const targetCollection = collections.find((c) => c.id === targetCollectionId)
+  const targetFields = targetCollection?.fields?.filter(
+    (f: Field) => !isLayoutType(f.field_type) && !isComputedType(f.field_type),
+  ) ?? []
 
   // Group variant options
   type VariantOption = { value: FieldType; label: string }
@@ -138,6 +165,96 @@ export default function FieldProperties({ field, collections, onChange }: Props)
             </section>
           </>
         )}
+      </div>
+    )
+  }
+
+  // Formula fields: show dedicated editor instead of standard properties.
+  if (isFormula) {
+    const formulaFields = (allFields ?? []).filter(
+      (f) => !['label', 'line', 'spacer', 'formula'].includes(f.field_type),
+    )
+    return (
+      <div className="space-y-4 overflow-y-auto">
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
+            {FIELD_TYPE_LABELS[field.field_type]}
+          </span>
+          <h3 className="text-sm font-medium">속성</h3>
+        </div>
+
+        <section className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground">이름</Label>
+          <Input value={field.label} onChange={(e) => update({ label: e.target.value })} />
+        </section>
+
+        <Separator />
+
+        <FormulaEditor
+          expression={(opts.expression as string) || ''}
+          resultType={(opts.result_type as string) || 'number'}
+          precision={opts.precision as number | undefined}
+          slug={collectionSlug}
+          fields={formulaFields as any}
+          onChange={(expr) => updateOption('expression', expr)}
+          onResultTypeChange={(rt) => updateOption('result_type', rt)}
+          onPrecisionChange={(p) => updateOption('precision', p)}
+        />
+
+        <Separator />
+
+        <section className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground">그리드 크기</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">폭</Label>
+              <Select
+                value={String(field.width)}
+                onValueChange={(v) => update({ width: Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WIDTH_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={String(o.value)}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">높이</Label>
+              <Select
+                value={String(field.height)}
+                onValueChange={(v) => update({ height: Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HEIGHT_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={String(o.value)}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </section>
+
+        <Separator />
+
+        <section className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground">코드</Label>
+          <Input
+            value={field.slug}
+            onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+            placeholder="snake_case"
+          />
+        </section>
       </div>
     )
   }
@@ -252,39 +369,43 @@ export default function FieldProperties({ field, collections, onChange }: Props)
 
       <Separator />
 
-      {/* ── 컴포넌트 옵션 ── */}
-      <section className="space-y-2">
-        <Label className="text-xs font-semibold text-muted-foreground">컴포넌트</Label>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="required"
-            checked={field.is_required}
-            onCheckedChange={(c) => update({ is_required: !!c })}
-          />
-          <Label htmlFor="required" className="text-xs">필수 입력 컴포넌트</Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="unique"
-            checked={field.is_unique}
-            onCheckedChange={(c) => update({ is_unique: !!c })}
-          />
-          <Label htmlFor="unique" className="text-xs">중복 입력값 등록 불가</Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="indexed"
-            checked={field.is_indexed}
-            onCheckedChange={(c) => update({ is_indexed: !!c })}
-          />
-          <Label htmlFor="indexed" className="text-xs">인덱스 (검색 최적화)</Label>
-        </div>
-      </section>
+      {/* ── 컴포넌트 옵션 (computed fields don't have DB constraints) ── */}
+      {!isComputed && (
+        <>
+          <section className="space-y-2">
+            <Label className="text-xs font-semibold text-muted-foreground">컴포넌트</Label>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="required"
+                checked={field.is_required}
+                onCheckedChange={(c) => update({ is_required: !!c })}
+              />
+              <Label htmlFor="required" className="text-xs">필수 입력 컴포넌트</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="unique"
+                checked={field.is_unique}
+                onCheckedChange={(c) => update({ is_unique: !!c })}
+              />
+              <Label htmlFor="unique" className="text-xs">중복 입력값 등록 불가</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="indexed"
+                checked={field.is_indexed}
+                onCheckedChange={(c) => update({ is_indexed: !!c })}
+              />
+              <Label htmlFor="indexed" className="text-xs">인덱스 (검색 최적화)</Label>
+            </div>
+          </section>
 
-      <Separator />
+          <Separator />
+        </>
+      )}
 
       {/* ── 기본값 (Default Value) ── */}
-      {!isRelation && (
+      {!isRelation && !isComputed && (
         <>
           <section className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground">기본값</Label>
@@ -549,6 +670,128 @@ export default function FieldProperties({ field, collections, onChange }: Props)
                 placeholder="정규식 패턴"
               />
             )}
+          </section>
+          <Separator />
+        </>
+      )}
+
+      {/* ── 수식 설정 (formula only) ── */}
+      {isFormula && (
+        <>
+          <section className="space-y-3 rounded-md border bg-muted/30 p-3">
+            <Label className="text-xs font-semibold text-muted-foreground">수식 설정</Label>
+            <div className="space-y-1">
+              <Label className="text-xs">수식 표현식</Label>
+              <Textarea
+                rows={3}
+                value={(opts.expression as string) || ''}
+                onChange={(e) => updateOption('expression', e.target.value)}
+                placeholder="{unit_price} * {quantity}"
+              />
+              <p className="text-xs text-muted-foreground">
+                필드명을 {'{'}중괄호{'}'}로 감싸서 참조합니다. +, -, *, / 연산자와 괄호를 사용할 수 있습니다.
+              </p>
+            </div>
+          </section>
+          <Separator />
+        </>
+      )}
+
+      {/* ── 조회 설정 (lookup only) ── */}
+      {isLookup && (
+        <>
+          <section className="space-y-3 rounded-md border bg-muted/30 p-3">
+            <Label className="text-xs font-semibold text-muted-foreground">조회 설정</Label>
+            <div className="space-y-1">
+              <Label className="text-xs">관계 필드</Label>
+              <Select
+                value={(opts.relation_field as string) || ''}
+                onValueChange={(v) => updateOption('relation_field', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="관계 필드 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {relationFields.map((f) => (
+                    <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">참조할 필드</Label>
+              <Select
+                value={(opts.target_field as string) || ''}
+                onValueChange={(v) => updateOption('target_field', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="필드 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {targetFields.map((f: Field) => (
+                    <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </section>
+          <Separator />
+        </>
+      )}
+
+      {/* ── 집계 설정 (rollup only) ── */}
+      {isRollup && (
+        <>
+          <section className="space-y-3 rounded-md border bg-muted/30 p-3">
+            <Label className="text-xs font-semibold text-muted-foreground">집계 설정</Label>
+            <div className="space-y-1">
+              <Label className="text-xs">관계 필드</Label>
+              <Select
+                value={(opts.relation_field as string) || ''}
+                onValueChange={(v) => updateOption('relation_field', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="관계 필드 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {relationFields.map((f) => (
+                    <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">집계할 필드</Label>
+              <Select
+                value={(opts.target_field as string) || ''}
+                onValueChange={(v) => updateOption('target_field', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="필드 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {targetFields.map((f: Field) => (
+                    <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">집계 함수</Label>
+              <Select
+                value={(opts.function as string) || 'SUM'}
+                onValueChange={(v) => updateOption('function', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLLUP_FUNCTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </section>
           <Separator />
         </>
