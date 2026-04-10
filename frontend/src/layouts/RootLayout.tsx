@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 
 import AIChatPanel from '@/components/common/AIChatPanel'
+import CommandPalette from '@/components/common/CommandPalette'
 import { AIAvailabilityProvider } from '@/contexts/AIAvailabilityContext'
 import LoadingState from '@/components/common/LoadingState'
 import NotificationBell from '@/components/common/NotificationBell'
@@ -44,11 +45,11 @@ export default function RootLayout() {
               <NavLink to="/dashboard" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
                 대시보드
               </NavLink>
-              <NavLink to="/admin/org" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
-                조직도
-              </NavLink>
               <NavLink to="/automations" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
                 자동화
+              </NavLink>
+              <NavLink to="/admin/org" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                조직도
               </NavLink>
               {(user.role === 'director' || user.role === 'pm') && (
                 <>
@@ -80,6 +81,7 @@ export default function RootLayout() {
           <Outlet />
         </main>
         <AIChatPanel />
+        <CommandPalette />
       </div>
     </AIAvailabilityProvider>
   )

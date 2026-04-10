@@ -353,6 +353,51 @@
   animation: shimmer 1.8s ease-in-out infinite;
 }
 
+/* ── Print styles ── */
+@media print {
+  /* Hide everything except the sheet content */
+  body > div > div > nav,
+  body > div > div > main,
+  [data-sonner-toaster],
+  .fixed:not([data-sheet-content]) {
+    display: none !important;
+  }
+
+  /* Make the sheet content fill the page */
+  [data-radix-dialog-overlay] {
+    position: static !important;
+    background: none !important;
+  }
+
+  [role="dialog"] {
+    position: static !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Clean typography for print */
+  body {
+    font-size: 12pt !important;
+    color: black !important;
+    background: white !important;
+  }
+
+  /* Hide action buttons in print */
+  .print\:hidden,
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  /* Ensure page breaks work nicely */
+  .space-y-4 > * {
+    break-inside: avoid;
+  }
+}
+
 /* Reduced motion: disable all custom animations */
 @media (prefers-reduced-motion: reduce) {
   .animate-shake,

@@ -6,11 +6,19 @@ import RelationMultiCombobox from '@/components/common/RelationMultiCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useSimilarRecords } from '@/hooks/useEntries'
+import { X } from 'lucide-react'
+
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -76,6 +84,25 @@ export default function EntryForm({
   function setValue(name: string, value: unknown) {
     setData((prev) => ({ ...prev, [name]: value }))
     if (errors[name]) setErrors((prev) => { const next = { ...prev }; delete next[name]; return next })
+  }
+
+  function handleBlur(field: Field) {
+    if (!field.is_required || isLayoutType(field.field_type)) return
+    const val = data[field.slug]
+    if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+      setErrors((prev) => ({ ...prev, [field.slug]: '필수 항목입니다' }))
+    }
+    // Number range validation
+    if ((field.field_type === 'number' || field.field_type === 'integer') && val != null && val !== '') {
+      const num = Number(val)
+      const minVal = field.options?.min as number | undefined
+      const maxVal = field.options?.max as number | undefined
+      if (minVal != null && num < minVal) {
+        setErrors((prev) => ({ ...prev, [field.slug]: `최소 ${minVal} 이상이어야 합니다` }))
+      } else if (maxVal != null && num > maxVal) {
+        setErrors((prev) => ({ ...prev, [field.slug]: `최대 ${maxVal} 이하여야 합니다` }))
+      }
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -202,9 +229,10 @@ export default function EntryForm({
                   field={field}
                   value={extractValue(data[field.slug], field)}
                   onChange={(v) => setValue(field.slug, v)}
+                  onBlur={() => handleBlur(field)}
                 />
                 {errors[field.slug] && (
-                  <p key={shakeKey} className="mt-1 text-xs text-destructive animate-shake">{errors[field.slug]}</p>
+                  <p key={shakeKey} className="mt-1 text-xs text-destructive animate-shake animate-fade-in">{errors[field.slug]}</p>
                 )}
               </div>
             </div>
@@ -280,10 +308,12 @@ function FieldInput({
   field,
   value,
   onChange,
+  onBlur,
 }: {
   field: Field
   value: unknown
   onChange: (v: unknown) => void
+  onBlur?: () => void
 }) {
   const h = field.height || 1
 
@@ -293,6 +323,7 @@ function FieldInput({
         <Textarea
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           rows={(field.options?.rows as number) || Math.max(4, h * 2)}
           required={field.is_required}
         />
@@ -303,6 +334,7 @@ function FieldInput({
           type="time"
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           required={field.is_required}
         />
       )
@@ -313,6 +345,7 @@ function FieldInput({
           <Textarea
             value={(value as string) || ''}
             onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
             required={field.is_required}
             rows={h * 2}
           />
@@ -327,6 +360,7 @@ function FieldInput({
           type={inputType}
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           required={field.is_required}
         />
       )
@@ -362,6 +396,7 @@ function FieldInput({
               max={100}
               value={value === null || value === undefined ? '' : num}
               onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+              onBlur={onBlur}
               required={field.is_required}
             />
             <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -388,6 +423,7 @@ function FieldInput({
             type="number"
             value={value === null || value === undefined ? '' : (value as number)}
             onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+            onBlur={onBlur}
             required={field.is_required}
             className={prefix ? 'pl-8' : suffix ? 'pr-8' : ''}
           />
@@ -413,6 +449,7 @@ function FieldInput({
           type="datetime-local"
           value={(value as string)?.slice(0, 16) || ''}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           required={field.is_required}
         />
       )
@@ -445,7 +482,7 @@ function FieldInput({
       }
       return (
         <Select value={(value as string) || ''} onValueChange={onChange}>
-          <SelectTrigger>
+          <SelectTrigger onBlur={onBlur}>
             <SelectValue placeholder="항목 선택" />
           </SelectTrigger>
           <SelectContent>
@@ -462,20 +499,46 @@ function FieldInput({
       const choices = (field.options?.choices as string[]) || []
       const selected = (value as string[]) || []
       return (
-        <div className="space-y-1">
-          {choices.map((c) => (
-            <label key={c} className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={selected.includes(c)}
-                onCheckedChange={(checked) => {
-                  if (checked) onChange([...selected, c])
-                  else onChange(selected.filter((x) => x !== c))
+        <Popover>
+          <PopoverTrigger
+            className="flex min-h-9 w-full flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm shadow-xs"
+          >
+            {selected.length === 0 && (
+              <span className="text-muted-foreground">선택...</span>
+            )}
+            {selected.map((v) => (
+              <Badge
+                key={v}
+                variant="secondary"
+                className="gap-0.5"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onChange(selected.filter((x) => x !== v))
                 }}
-              />
-              {c}
-            </label>
-          ))}
-        </div>
+              >
+                {v}
+                <X className="h-3 w-3 cursor-pointer" />
+              </Badge>
+            ))}
+          </PopoverTrigger>
+          <PopoverContent align="start" className="max-h-60 overflow-y-auto p-1">
+            {choices.map((c) => (
+              <label
+                key={c}
+                className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <Checkbox
+                  checked={selected.includes(c)}
+                  onCheckedChange={(checked) => {
+                    if (checked) onChange([...selected, c])
+                    else onChange(selected.filter((x) => x !== c))
+                  }}
+                />
+                {c}
+              </label>
+            ))}
+          </PopoverContent>
+        </Popover>
       )
     }
     case 'relation':
@@ -533,12 +596,13 @@ function FieldInput({
               onChange(e.target.value)
             }
           }}
+          onBlur={onBlur}
           rows={Math.max(4, h * 2)}
         />
       )
     default:
       return (
-        <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} />
+        <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
       )
   }
 }
