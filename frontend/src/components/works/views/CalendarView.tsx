@@ -112,7 +112,7 @@ export default function CalendarView({
 
   const weeks = calendarData?.weeks ?? []
   const monthHasEvents = weeks.some(
-    (w) => w.spans.length > 0 || Object.keys(w.singles).length > 0,
+    (w) => (w.spans?.length ?? 0) > 0 || Object.keys(w.singles ?? {}).length > 0,
   )
 
   const today = new Date()
@@ -147,10 +147,10 @@ export default function CalendarView({
     if (!calendarData) return new Map<string, Record<string, unknown>>()
     const map = new Map<string, Record<string, unknown>>()
     for (const w of calendarData.weeks) {
-      for (const span of w.spans) {
+      for (const span of w.spans ?? []) {
         map.set(String(span.entry.id), span.entry)
       }
-      for (const entries of Object.values(w.singles)) {
+      for (const entries of Object.values(w.singles ?? {})) {
         for (const e of entries) {
           map.set(String(e.id), e)
         }
@@ -259,7 +259,7 @@ export default function CalendarView({
               </div>
             )}
             {!isLoading && weeks.map((week, wi) => {
-              const weekSpans = week.spans
+              const weekSpans = week.spans ?? []
               const maxTrack = weekSpans.length > 0
                 ? Math.min(Math.max(...weekSpans.map((s) => s.track)) + 1, MAX_VISIBLE_SPANS)
                 : 0
@@ -307,7 +307,7 @@ export default function CalendarView({
                     }
 
                     const dayNum = parseInt(dateStr.slice(8, 10), 10)
-                    const dayEntries = week.singles[dateStr] ?? []
+                    const dayEntries = week.singles?.[dateStr] ?? []
                     // Reserve space for spanning bars
                     const spanOffset = maxTrack * 22
 
