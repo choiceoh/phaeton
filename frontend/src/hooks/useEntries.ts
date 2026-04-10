@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tansta
 
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
-import type { AggregateResult } from '@/lib/types'
+import type { AggregateResult, TotalsResult } from '@/lib/types'
 
 // QueryParams describes the URL query string options accepted by the
 // dynamic List endpoint. Kept generic so callers can build any combination.
@@ -114,6 +114,26 @@ export function useBulkDeleteEntries(slug: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entries.all })
     },
+  })
+}
+
+// useTotals fetches server-side totals (sum/avg/min/max/count) for all numeric
+// fields in a collection. Supports same filter params as List.
+export function useTotals(slug: string | undefined, filters?: Record<string, string>) {
+  const search = new URLSearchParams()
+  if (filters) {
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) search.set(key, value)
+    }
+  }
+  const qs = search.toString()
+
+  return useQuery({
+    queryKey: [...queryKeys.entries.all, slug, 'totals', filters],
+    queryFn: () =>
+      api.get<TotalsResult>(`/data/${slug}/totals${qs ? `?${qs}` : ''}`),
+    enabled: !!slug,
+    staleTime: 30_000,
   })
 }
 

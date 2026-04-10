@@ -6,7 +6,9 @@ import {
   BarChart3,
   Calendar,
   Download,
+  FileText,
   Filter,
+  Mail,
   GanttChart,
   LayoutGrid,
   Loader2,
@@ -23,6 +25,16 @@ import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { type BatchCellEditEvent, type CellEditEvent, DataTable } from '@/components/common/DataTable'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
@@ -54,18 +66,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
-  useAggregate,
   useBatchUpdateEntry,
   useBulkDeleteEntries,
   useCreateEntry,
   useDeleteEntry,
   useEntries,
+  useTotals,
   useUpdateEntry,
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
-import { ApiError, formatError } from '@/lib/api'
+import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { FilterCondition, SavedView } from '@/lib/types'
@@ -245,83 +257,66 @@ export default function AppViewPage() {
     [aggFnStorageKey],
   )
 
-  // Fetch server-side aggregates for numeric fields.
-  const aggSumSlug = numericFields.length > 0 ? collection?.slug : undefined
-  const { data: aggSumData } = useAggregate(aggSumSlug, {
-    group: '_created_by',
-    fn: 'sum',
-    field: numericFields.map((f) => f.slug).join(','),
-  })
-  const { data: aggAvgData } = useAggregate(aggSumSlug, {
-    group: '_created_by',
-    fn: 'avg',
-    field: numericFields.map((f) => f.slug).join(','),
-  })
+  // Fetch server-side totals for all numeric fields (single query).
+  const totalsSlug = numericFields.length > 0 ? collection?.slug : undefined
+  const { data: totals } = useTotals(totalsSlug, filters)
 
-  // Build summary row from server-side aggregation + page-level fallback.
+  // Build summary row from server-side totals with page-level fallback.
   const summaryRow = useMemo(() => {
     if (numericFields.length === 0 || !list?.data?.length) return undefined
     const summary: Record<string, { label: string; value: string | number }> = {}
+    const fnLabels: Record<string, string> = { sum: '합계', avg: '평균', count: '개수', min: '최소', max: '최대' }
+
     for (const f of numericFields) {
       const fn = columnAggFn[f.slug] || 'sum'
+      const fnLabel = fnLabels[fn] || fn
 
-      // Page-level computation (fallback and for comparison).
+      // Server-side totals (preferred).
+      const serverField = totals?.[f.slug]
+      const serverAgg = typeof serverField === 'object' && serverField !== null
+        ? serverField as { sum: number; avg: number; min: number; max: number }
+        : null
+      const serverCount = totals?._count as number | undefined
+
+      // Page-level fallback.
       const pageValues = list.data
         .map((e) => Number(e[f.slug]))
         .filter((n) => !isNaN(n))
-      if (pageValues.length === 0) continue
+      if (pageValues.length === 0 && !serverAgg) continue
       const pageSum = pageValues.reduce((a, b) => a + b, 0)
-      const pageAvg = pageSum / pageValues.length
-      const pageMin = Math.min(...pageValues)
-      const pageMax = Math.max(...pageValues)
-      const pageCount = pageValues.length
-
-      // Server-side totals.
-      const serverSum = aggSumData?.reduce((acc, r) => acc + r.value, 0)
-      const serverAvg = aggAvgData?.length
-        ? aggAvgData.reduce((acc, r) => acc + r.value, 0) / aggAvgData.length
-        : undefined
-
-      const isAllOnePage = list?.total != null && list.data.length >= list.total
+      const pageAvg = pageValues.length > 0 ? pageSum / pageValues.length : 0
 
       let displayValue: number
       let label: string
-      const fnLabels: Record<string, string> = { sum: '합계', avg: '평균', count: '개수', min: '최소', max: '최대' }
-      const fnLabel = fnLabels[fn] || fn
 
       switch (fn) {
         case 'sum':
-          displayValue = isAllOnePage ? pageSum : (serverSum ?? pageSum)
-          label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: 1 })}`
-          if (!isAllOnePage && serverSum != null) label += ' (전체)'
+          displayValue = serverAgg?.sum ?? pageSum
           break
         case 'avg':
-          displayValue = isAllOnePage ? pageAvg : (serverAvg ?? pageAvg)
-          label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: 1 })}`
-          if (!isAllOnePage && serverAvg != null) label += ' (전체)'
+          displayValue = serverAgg?.avg ?? pageAvg
           break
         case 'count':
-          displayValue = isAllOnePage ? pageCount : (list?.total ?? pageCount)
-          label = `${fnLabel} ${displayValue.toLocaleString('ko')}`
+          displayValue = serverCount ?? list.total ?? pageValues.length
           break
         case 'min':
-          displayValue = pageMin
-          label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: 1 })}`
-          if (!isAllOnePage) label += ' (현재 페이지)'
+          displayValue = serverAgg?.min ?? Math.min(...pageValues)
           break
         case 'max':
-          displayValue = pageMax
-          label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: 1 })}`
-          if (!isAllOnePage) label += ' (현재 페이지)'
+          displayValue = serverAgg?.max ?? Math.max(...pageValues)
           break
         default:
-          displayValue = pageSum
-          label = `합계 ${displayValue.toLocaleString('ko')}`
+          displayValue = serverAgg?.sum ?? pageSum
+      }
+
+      label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: fn === 'count' ? 0 : 1 })}`
+      if (serverAgg && list.total != null && list.data.length < list.total) {
+        label += ' (전체)'
       }
       summary[f.slug] = { label, value: displayValue }
     }
     return Object.keys(summary).length > 0 ? summary : undefined
-  }, [numericFields, list, columnAggFn, aggSumData, aggAvgData])
+  }, [numericFields, list, columnAggFn, totals])
 
   // Build columns from collection.fields.
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
@@ -542,9 +537,8 @@ export default function AppViewPage() {
     }, 300)
   }
 
-  // CSV export.
-  function handleCsvExport() {
-    if (!collection) return
+  // Export query string builder (shared by CSV/PDF).
+  function buildExportQS() {
     const params = new URLSearchParams()
     if (searchText) params.set('q', searchText)
     if (sortParam) params.set('sort', sortParam)
@@ -555,8 +549,48 @@ export default function AppViewPage() {
         params.set(cond.field, `${cond.operator}:${cond.value}`)
       }
     }
-    const qs = params.toString()
+    return params.toString()
+  }
+
+  // CSV export.
+  function handleCsvExport() {
+    if (!collection) return
+    const qs = buildExportQS()
     window.open(`/api/data/${collection.slug}/export.csv${qs ? `?${qs}` : ''}`, '_blank')
+  }
+
+  // PDF export.
+  function handlePdfExport() {
+    if (!collection) return
+    const qs = buildExportQS()
+    window.open(`/api/data/${collection.slug}/export.pdf${qs ? `?${qs}` : ''}`, '_blank')
+  }
+
+  // Email report.
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [emailTo, setEmailTo] = useState('')
+  const [emailMessage, setEmailMessage] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+
+  async function handleEmailReport() {
+    if (!collection || !emailTo) return
+    setEmailSending(true)
+    try {
+      const qs = buildExportQS()
+      await api.post(`/data/${collection.slug}/email-report${qs ? `?${qs}` : ''}`, {
+        to: emailTo,
+        subject: `[Phaeton] ${collection.label} 리포트`,
+        message: emailMessage || `${collection.label} 데이터 리포트입니다.`,
+      })
+      toast.success(`${emailTo}로 리포트가 전송되었습니다`)
+      setEmailDialogOpen(false)
+      setEmailTo('')
+      setEmailMessage('')
+    } catch (err) {
+      toast.error(formatError(err))
+    } finally {
+      setEmailSending(false)
+    }
   }
 
   const [importingCSV, setImportingCSV] = useState(false)
@@ -894,7 +928,15 @@ export default function AppViewPage() {
           <DropdownMenuContent align="start">
             <DropdownMenuItem onClick={handleCsvExport}>
               <Download className="h-3.5 w-3.5 mr-2" />
-              내보내기
+              CSV 내보내기
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handlePdfExport}>
+              <FileText className="h-3.5 w-3.5 mr-2" />
+              PDF 내보내기
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setEmailDialogOpen(true)}>
+              <Mail className="h-3.5 w-3.5 mr-2" />
+              이메일 리포트
             </DropdownMenuItem>
             <RoleGate roles={['director', 'pm', 'engineer']}>
               <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
@@ -1231,6 +1273,49 @@ export default function AppViewPage() {
         onConfirm={handleBulkDelete}
         loading={bulkDelete.isPending}
       />
+
+      {/* Email report dialog */}
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>이메일 리포트</DialogTitle>
+            <DialogDescription>
+              현재 필터가 적용된 데이터를 PDF로 생성하여 이메일로 전송합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="email-to">받는 사람</Label>
+              <Input
+                id="email-to"
+                type="email"
+                placeholder="user@example.com"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="email-msg">메시지 (선택)</Label>
+              <Textarea
+                id="email-msg"
+                placeholder="리포트에 대한 설명을 입력하세요"
+                rows={3}
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={handleEmailReport} disabled={!emailTo || emailSending}>
+              {emailSending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
+              전송
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

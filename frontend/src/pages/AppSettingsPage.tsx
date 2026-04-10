@@ -30,7 +30,7 @@ import {
 import { useMembers, useAddMember, useRemoveMember } from '@/hooks/useMembers'
 import { formatError } from '@/lib/api'
 import { FIELD_TYPE_LABELS } from '@/lib/constants'
-import type { CreateFieldIn, FieldType } from '@/lib/types'
+import type { CreateFieldIn, FieldType, RLSFilter } from '@/lib/types'
 
 const FIELD_TYPES: FieldType[] = [
   'text', 'number', 'integer', 'boolean', 'date', 'datetime',
@@ -375,7 +375,7 @@ export default function AppSettingsPage() {
                   {
                     access_config: {
                       ...collection.access_config,
-                      rls_mode: mode as '' | 'none' | 'creator' | 'department',
+                      rls_mode: mode as '' | 'none' | 'creator' | 'department' | 'subsidiary' | 'filter',
                     },
                   },
                   {
@@ -392,8 +392,31 @@ export default function AppSettingsPage() {
                 <SelectItem value="none">제한 없음 (모든 행 열람)</SelectItem>
                 <SelectItem value="creator">본인 작성 행만 열람</SelectItem>
                 <SelectItem value="department">같은 부서 행만 열람</SelectItem>
+                <SelectItem value="subsidiary">같은 법인 행만 열람</SelectItem>
+                <SelectItem value="filter">커스텀 필터 규칙</SelectItem>
               </SelectContent>
             </Select>
+
+            {collection.access_config?.rls_mode === 'filter' && (
+              <RLSFilterEditor
+                filters={collection.access_config?.rls_filters ?? []}
+                fields={(collection.fields ?? []).map((f) => ({ slug: f.slug, label: f.label }))}
+                onSave={(filters) => {
+                  updateCollection.mutate(
+                    {
+                      access_config: {
+                        ...collection.access_config,
+                        rls_filters: filters,
+                      },
+                    },
+                    {
+                      onSuccess: () => toast.success('RLS 필터 규칙이 저장되었습니다'),
+                      onError: (err) => toast.error(formatError(err)),
+                    },
+                  )
+                }}
+              />
+            )}
           </section>
         </RoleGate>
 
@@ -437,6 +460,103 @@ export default function AppSettingsPage() {
         onConfirm={handleDeleteCollection}
         loading={deleteCollection.isPending}
       />
+    </div>
+  )
+}
+
+const RLS_OPS = [
+  { value: 'eq', label: '같음 (=)' },
+  { value: 'neq', label: '다름 (!=)' },
+  { value: 'in', label: '포함 (IN)' },
+  { value: 'contains', label: '텍스트 포함' },
+] as const
+
+const RLS_USER_VARS = [
+  { value: '$user.id', label: '현재 사용자 ID' },
+  { value: '$user.department_id', label: '현재 사용자 부서' },
+  { value: '$user.subsidiary_id', label: '현재 사용자 법인' },
+  { value: '$user.email', label: '현재 사용자 이메일' },
+]
+
+function RLSFilterEditor({
+  filters,
+  fields,
+  onSave,
+}: {
+  filters: RLSFilter[]
+  fields: { slug: string; label: string }[]
+  onSave: (filters: RLSFilter[]) => void
+}) {
+  const [draft, setDraft] = useState<RLSFilter[]>(filters.length > 0 ? filters : [{ field: '', op: 'eq', value: '' }])
+
+  const addRule = () => setDraft((prev) => [...prev, { field: '', op: 'eq', value: '' }])
+  const removeRule = (i: number) => setDraft((prev) => prev.filter((_, idx) => idx !== i))
+  const updateRule = (i: number, patch: Partial<RLSFilter>) =>
+    setDraft((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+
+  const canSave = draft.every((r) => r.field && r.op && r.value)
+
+  return (
+    <div className="mt-4 space-y-3">
+      <p className="text-sm text-muted-foreground">
+        필터 규칙을 정의하면 열람자는 모든 조건을 만족하는 행만 볼 수 있습니다.
+        값에 <code className="rounded bg-muted px-1 text-xs">$user.department_id</code> 등을 사용하면 현재 사용자 속성으로 자동 치환됩니다.
+      </p>
+      {draft.map((rule, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Select value={rule.field || undefined} onValueChange={(v) => updateRule(i, { field: v ?? '' })}>
+            <SelectTrigger className="w-40"><SelectValue placeholder="필드" /></SelectTrigger>
+            <SelectContent>
+              {fields.map((f) => (
+                <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+              ))}
+              <SelectItem value="created_by">작성자 ID</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={rule.op} onValueChange={(v) => updateRule(i, { op: (v ?? 'eq') as RLSFilter['op'] })}>
+            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {RLS_OPS.map((op) => (
+                <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex-1">
+            <Select
+              value={rule.value.startsWith('$user.') ? rule.value : '__custom__'}
+              onValueChange={(v) => {
+                if (!v || v === '__custom__') updateRule(i, { value: '' })
+                else updateRule(i, { value: v })
+              }}
+            >
+              <SelectTrigger className="w-full"><SelectValue placeholder="값 선택" /></SelectTrigger>
+              <SelectContent>
+                {RLS_USER_VARS.map((uv) => (
+                  <SelectItem key={uv.value} value={uv.value}>{uv.label}</SelectItem>
+                ))}
+                <SelectItem value="__custom__">직접 입력</SelectItem>
+              </SelectContent>
+            </Select>
+            {!rule.value.startsWith('$user.') && (
+              <Input
+                className="mt-1"
+                placeholder="직접 입력 값"
+                value={rule.value}
+                onChange={(e) => updateRule(i, { value: e.target.value })}
+              />
+            )}
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => removeRule(i)} disabled={draft.length <= 1}>
+            &times;
+          </Button>
+        </div>
+      ))}
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={addRule}>+ 규칙 추가</Button>
+        <Button size="sm" disabled={!canSave} onClick={() => onSave(draft.filter((r) => r.field && r.value))}>
+          저장
+        </Button>
+      </div>
     </div>
   )
 }
