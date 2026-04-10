@@ -50,38 +50,38 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    --background: oklch(0.993 0.002 80);
+    --foreground: oklch(0.16 0.01 260);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    --card-foreground: oklch(0.16 0.01 260);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.16 0.01 260);
+    --primary: oklch(0.22 0.01 260);
     --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.94 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.94 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.965 0.003 80);
+    --secondary-foreground: oklch(0.22 0.01 260);
+    --muted: oklch(0.945 0.004 80);
+    --muted-foreground: oklch(0.52 0.01 260);
+    --accent: oklch(0.945 0.004 80);
+    --accent-foreground: oklch(0.22 0.01 260);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --border: oklch(0.915 0.005 80);
+    --input: oklch(0.915 0.005 80);
+    --ring: oklch(0.65 0.01 260);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar: oklch(0.985 0.002 80);
+    --sidebar-foreground: oklch(0.16 0.01 260);
+    --sidebar-primary: oklch(0.22 0.01 260);
     --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar-accent: oklch(0.965 0.003 80);
+    --sidebar-accent-foreground: oklch(0.22 0.01 260);
+    --sidebar-border: oklch(0.915 0.005 80);
+    --sidebar-ring: oklch(0.65 0.01 260);
 }
 
 .dark {
@@ -126,26 +126,33 @@
     @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     }
   html {
     @apply font-sans;
     font-size: 17px;
+    letter-spacing: -0.011em;
     }
 
-  /* Refined scrollbar */
+  /* Premium scrollbar */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: oklch(0.8 0 0);
+    background: oklch(0.82 0.005 80);
     border-radius: 999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.65 0 0);
+    background: oklch(0.65 0.01 260);
+  }
+
+  /* Premium heading typography */
+  h1, h2, h3 {
+    letter-spacing: -0.025em;
   }
 }
 
@@ -203,8 +210,28 @@
 
 /* Button press feedback */
 [data-slot="button"]:not(:disabled):active {
-  transform: scale(0.97);
-  transition: transform 0.1s ease-out;
+  transform: scale(0.975);
+  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Premium layered shadows */
+.shadow-premium {
+  box-shadow:
+    0 1px 2px oklch(0.16 0.01 260 / 0.04),
+    0 3px 8px oklch(0.16 0.01 260 / 0.03),
+    0 8px 24px oklch(0.16 0.01 260 / 0.02);
+}
+.shadow-premium-lg {
+  box-shadow:
+    0 1px 2px oklch(0.16 0.01 260 / 0.04),
+    0 4px 12px oklch(0.16 0.01 260 / 0.04),
+    0 16px 40px oklch(0.16 0.01 260 / 0.04);
+}
+.shadow-premium-hover {
+  box-shadow:
+    0 2px 4px oklch(0.16 0.01 260 / 0.05),
+    0 8px 20px oklch(0.16 0.01 260 / 0.05),
+    0 20px 48px oklch(0.16 0.01 260 / 0.03);
 }
 
 /* Drag cancel spring-back */
@@ -271,29 +298,30 @@
 /* Nav link hover underline */
 .nav-link {
   position: relative;
-  transition: color 0.15s ease-out;
+  transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .nav-link::after {
   content: '';
   position: absolute;
   bottom: -2px;
-  left: 0;
-  width: 100%;
+  left: 50%;
+  width: 0;
   height: 1.5px;
-  background: currentColor;
-  transform: scaleX(0);
-  transform-origin: center;
-  transition: transform 0.2s ease-out;
+  background: oklch(0.22 0.01 260);
+  border-radius: 999px;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .nav-link:hover::after {
-  transform: scaleX(1);
+  width: 60%;
+  left: 20%;
 }
 .nav-link.active {
-  color: oklch(0.145 0 0);
+  color: oklch(0.16 0.01 260);
   font-weight: 500;
 }
 .nav-link.active::after {
-  transform: scaleX(1);
+  width: 100%;
+  left: 0;
 }
 
 /* ─── Functional animations ─── */

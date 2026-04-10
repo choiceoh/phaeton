@@ -134,11 +134,15 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 			return Collection{}, fmt.Errorf("marshal access_config: %w", err)
 		}
 	}
+	var createdByUUID pgtype.UUID
+	if req.CreatedBy != "" {
+		createdByUUID, _ = parseUUID(req.CreatedBy)
+	}
 	err := tx.QueryRow(ctx, `
-		INSERT INTO _meta.collections (slug, label, description, icon, is_system, access_config)
-		VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'))
+		INSERT INTO _meta.collections (slug, label, description, icon, is_system, access_config, created_by)
+		VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'), $7)
 		RETURNING id, created_at, updated_at`,
-		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), req.IsSystem, jsonOrNil(acJSON),
+		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), req.IsSystem, jsonOrNil(acJSON), createdByUUID,
 	).Scan(&id, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return Collection{}, fmt.Errorf("insert collection: %w", err)
@@ -149,6 +153,7 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 	c.Description = req.Description
 	c.Icon = req.Icon
 	c.IsSystem = req.IsSystem
+	c.CreatedBy = req.CreatedBy
 	return c, nil
 }
 

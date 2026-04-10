@@ -85,7 +85,7 @@ import {
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
-import { useCurrentUser } from '@/hooks/useAuth'
+import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
 import { useRetryToast } from '@/hooks/useRetryToast'
 import { useUndoToast } from '@/hooks/useUndoToast'
@@ -151,6 +151,7 @@ export default function AppViewPage() {
     useCollection(appId)
   const { data: process } = useProcess(appId)
   const { data: currentUser } = useCurrentUser()
+  const canManage = canManageCollection(currentUser, collection?.created_by)
 
   // Show toast when automation runs are detected.
   useAutomationRunToasts(collection?.id)
@@ -439,8 +440,7 @@ export default function AppViewPage() {
       enableSorting: false,
       enableHiding: false,
       size: 60,
-      cell: ({ row }) => (
-        <RoleGate roles={['director', 'pm']}>
+      cell: ({ row }) => canManage ? (
           <Button
             variant="ghost"
             size="sm"
@@ -451,8 +451,7 @@ export default function AppViewPage() {
           >
             삭제
           </Button>
-        </RoleGate>
-      ),
+      ) : null,
     })
     return cols
   }, [collection, process, processVisible])
@@ -1340,11 +1339,11 @@ export default function AppViewPage() {
                 인터페이스
               </Button>
             </Link>
-            <RoleGate roles={['director', 'pm']}>
+            {canManage && (
               <Link to={`/apps/${collection.id}/settings`}>
                 <Button variant="outline">설정</Button>
               </Link>
-            </RoleGate>
+            )}
             <Button
               onClick={() => {
                 setEditEntry(undefined)
@@ -1460,7 +1459,7 @@ export default function AppViewPage() {
                     일괄 편집
                   </Button>
                 </RoleGate>
-                <RoleGate roles={['director', 'pm']}>
+                {canManage && (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -1470,7 +1469,7 @@ export default function AppViewPage() {
                     <Trash2 className="h-3.5 w-3.5" />
                     일괄 삭제
                   </Button>
-                </RoleGate>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"

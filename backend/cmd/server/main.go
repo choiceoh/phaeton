@@ -187,6 +187,7 @@ func run() int {
 	// Router.
 	r := buildRouter(routerConfig{
 		pool:         pool,
+		cache:        cache,
 		schemaH:      schemaHandler,
 		dynH:         dynHandler,
 		viewH:        viewHandler,
@@ -261,6 +262,7 @@ func run() int {
 
 type routerConfig struct {
 	pool         *pgxpool.Pool
+	cache        *schema.Cache
 	schemaH      *handler.SchemaHandler
 	dynH         *handler.DynHandler
 	viewH        *handler.ViewHandler
@@ -365,10 +367,12 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Get("/collections/{id}", cfg.schemaH.GetCollection)
 			r.Get("/migrations/history", cfg.schemaH.MigrationHistory)
 
-			// Write: director and pm only.
+			// Create collection: all authenticated users.
+			r.Post("/collections", cfg.schemaH.CreateCollection)
+
+			// Modify collection: director/pm OR the collection creator.
 			r.Group(func(r chi.Router) {
-				r.Use(middleware.RequireRole("director", "pm"))
-				r.Post("/collections", cfg.schemaH.CreateCollection)
+				r.Use(middleware.RequireCollectionOwnerOrRole(cfg.cache, "director", "pm"))
 				r.Patch("/collections/{id}", cfg.schemaH.UpdateCollection)
 				r.Delete("/collections/{id}", cfg.schemaH.DeleteCollection)
 
@@ -376,13 +380,22 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 				r.Put("/collections/{id}/process", cfg.schemaH.SaveProcess)
 
 				r.Post("/collections/{id}/fields", cfg.schemaH.AddField)
+
+				// Template export.
+				r.Get("/collections/{id}/export", cfg.templateH.ExportCollection)
+			})
+
+			// Field update/delete: director/pm OR the field's collection creator.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireFieldOwnerOrRole(cfg.cache, "director", "pm"))
 				r.Patch("/fields/{fieldId}", cfg.schemaH.UpdateField)
 				r.Delete("/fields/{fieldId}", cfg.schemaH.DeleteField)
+			})
 
+			// Migration rollback & template import: director/pm only.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("director", "pm"))
 				r.Post("/migrations/rollback/{migrationId}", cfg.schemaH.RollbackMigration)
-
-				// Template export/import.
-				r.Get("/collections/{id}/export", cfg.templateH.ExportCollection)
 				r.Post("/templates/import", cfg.templateH.ImportTemplate)
 			})
 

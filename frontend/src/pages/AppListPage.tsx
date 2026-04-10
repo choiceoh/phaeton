@@ -7,7 +7,6 @@ import EmptyState from '@/components/common/EmptyState'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
-import RoleGate from '@/components/common/RoleGate'
 import TemplateGallery from '@/components/works/TemplateGallery'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,21 +45,19 @@ export default function AppListPage() {
                 관계도
               </Button>
             </Link>
-            <RoleGate roles={['director', 'pm']}>
-              <Button
-                variant={showTemplates ? 'secondary' : 'outline'}
-                onClick={() => setShowTemplates(!showTemplates)}
-                className="gap-1"
-              >
-                템플릿
-                {showTemplates
-                  ? <ChevronUp className="h-3.5 w-3.5" />
-                  : <ChevronDown className="h-3.5 w-3.5" />}
-              </Button>
-              <Link to="/apps/new">
-                <Button>{TERM.newCollection}</Button>
-              </Link>
-            </RoleGate>
+            <Button
+              variant={showTemplates ? 'secondary' : 'outline'}
+              onClick={() => setShowTemplates(!showTemplates)}
+              className="gap-1"
+            >
+              템플릿
+              {showTemplates
+                ? <ChevronUp className="h-3.5 w-3.5" />
+                : <ChevronDown className="h-3.5 w-3.5" />}
+            </Button>
+            <Link to="/apps/new">
+              <Button>{TERM.newCollection}</Button>
+            </Link>
           </>
         }
       />
@@ -85,11 +82,9 @@ export default function AppListPage() {
             description={TERM.noCollectionsDesc}
             icon={<Layers className="h-10 w-10" />}
             action={
-              <RoleGate roles={['director', 'pm']}>
-                <Link to="/apps/new">
-                  <Button>{TERM.newCollection}</Button>
-                </Link>
-              </RoleGate>
+              <Link to="/apps/new">
+                <Button>{TERM.newCollection}</Button>
+              </Link>
             }
           />
           {/* Onboarding guide */}
@@ -165,13 +160,13 @@ function OnboardingStep({
   description: string
 }) {
   return (
-    <div className="flex flex-col items-center gap-2.5 rounded-xl border border-stone-200/80 bg-white p-5 text-center shadow-sm">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-stone-500">
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-border/60 bg-white p-6 text-center shadow-premium transition-all duration-300 hover:-translate-y-0.5 hover:shadow-premium-hover">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-muted-foreground">
         {icon}
       </div>
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-stone-400">STEP {step}</div>
-      <h4 className="text-sm font-medium text-stone-800">{title}</h4>
-      <p className="text-xs leading-relaxed text-stone-500">{description}</p>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/60">STEP {step}</div>
+      <h4 className="text-sm font-medium text-foreground">{title}</h4>
+      <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
     </div>
   )
 }

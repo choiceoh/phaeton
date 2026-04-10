@@ -30,18 +30,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-stone-50/80 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.94_0.01_260/0.3),transparent_70%)]" />
       <FormProvider {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}
-          className="w-full max-w-sm space-y-5 rounded-xl border border-stone-200/80 bg-white p-8 shadow-lg animate-scale-in"
+          className="relative w-full max-w-sm space-y-6 rounded-2xl border border-border/60 bg-white p-10 shadow-premium-lg animate-scale-in"
         >
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-900 text-sm font-bold text-white">T</span>
-              <h1 className="text-xl font-bold tracking-tight text-stone-900">Topworks</h1>
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-sm font-bold text-white shadow-sm">T</span>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">Topworks</h1>
             </div>
-            <p className="text-sm text-stone-500">업무 플랫폼에 로그인하세요</p>
+            <p className="text-sm text-muted-foreground">업무 플랫폼에 로그인하세요</p>
           </div>
 
           <FormField<LoginForm> name="email" label="이메일" required>
@@ -52,7 +53,7 @@ export default function LoginPage() {
             <Input type="password" autoComplete="current-password" {...form.register('password')} />
           </FormField>
 
-          <Button type="submit" disabled={login.isPending} className="w-full">
+          <Button type="submit" disabled={login.isPending} className="w-full h-9">
             {login.isPending ? '로그인 중...' : '로그인'}
           </Button>
         </form>

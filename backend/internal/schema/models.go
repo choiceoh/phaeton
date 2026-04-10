@@ -230,6 +230,7 @@ type CreateCollectionReq struct {
 	IsSystem     bool            `json:"is_system,omitempty"`
 	AccessConfig *AccessConfig   `json:"access_config,omitempty"`
 	Fields       []CreateFieldIn `json:"fields,omitempty"`
+	CreatedBy    string          `json:"-"` // set by handler, not from JSON
 }
 
 type CreateFieldIn struct {
