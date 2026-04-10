@@ -11,7 +11,7 @@ import (
 // FieldTypeToPG maps a schema field type to its PostgreSQL column type.
 func FieldTypeToPG(ft schema.FieldType) string {
 	switch ft {
-	case schema.FieldText:
+	case schema.FieldText, schema.FieldTextarea:
 		return "TEXT"
 	case schema.FieldNumber:
 		return "NUMERIC"
@@ -23,11 +23,15 @@ func FieldTypeToPG(ft schema.FieldType) string {
 		return "DATE"
 	case schema.FieldDatetime:
 		return "TIMESTAMPTZ"
+	case schema.FieldTime:
+		return "TIME"
 	case schema.FieldSelect:
 		return "VARCHAR(255)"
 	case schema.FieldMultiselect:
 		return "TEXT[]"
 	case schema.FieldRelation:
+		return "UUID"
+	case schema.FieldUser:
 		return "UUID"
 	case schema.FieldFile:
 		return "UUID"

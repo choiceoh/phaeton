@@ -7,14 +7,17 @@ interface Props {
 
 const ORDER: FieldType[] = [
   'text',
+  'textarea',
   'number',
   'integer',
   'boolean',
   'date',
   'datetime',
+  'time',
   'select',
   'multiselect',
   'relation',
+  'user',
   'file',
   'json',
 ]

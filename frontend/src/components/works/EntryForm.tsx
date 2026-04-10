@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import RelationCombobox from '@/components/common/RelationCombobox'
+import UserCombobox from '@/components/common/UserCombobox'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -87,6 +88,9 @@ function extractValue(value: unknown, field: Field): unknown {
   if (field.field_type === 'relation' && typeof value === 'object') {
     return (value as Record<string, unknown>).id
   }
+  if (field.field_type === 'user' && typeof value === 'object') {
+    return (value as Record<string, unknown>).id
+  }
   return value
 }
 
@@ -106,6 +110,15 @@ function FieldInput({
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
           required={field.is_required}
+        />
+      )
+    case 'textarea':
+      return (
+        <Textarea
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
+          rows={4}
         />
       )
     case 'number':
@@ -132,6 +145,15 @@ function FieldInput({
         <Input
           type="datetime-local"
           value={(value as string)?.slice(0, 16) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.is_required}
+        />
+      )
+    case 'time':
+      return (
+        <Input
+          type="time"
+          value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
           required={field.is_required}
         />
@@ -186,6 +208,13 @@ function FieldInput({
       return (
         <RelationCombobox
           targetCollectionId={field.relation.target_collection_id}
+          value={value as string | undefined}
+          onChange={onChange}
+        />
+      )
+    case 'user':
+      return (
+        <UserCombobox
           value={value as string | undefined}
           onChange={onChange}
         />

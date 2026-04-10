@@ -11,7 +11,32 @@ import (
 
 // reserved query params — not treated as field filters.
 var reservedParams = map[string]bool{
-	"sort": true, "page": true, "limit": true, "confirm": true, "expand": true,
+	"sort": true, "page": true, "limit": true, "confirm": true, "expand": true, "q": true,
+}
+
+// BuildSearchClause generates an ILIKE-based full-text search condition across
+// all text/textarea fields. Returns empty string and nil args if q is empty.
+func BuildSearchClause(q string, fields []schema.Field, prefix string, argStart int) (clause string, args []any) {
+	if q == "" {
+		return "", nil
+	}
+	var conditions []string
+	for _, f := range fields {
+		if f.FieldType != schema.FieldText && f.FieldType != schema.FieldTextarea {
+			continue
+		}
+		var qCol string
+		if prefix != "" {
+			qCol = fmt.Sprintf(`%s."%s"`, prefix, f.Slug)
+		} else {
+			qCol = fmt.Sprintf("%q", f.Slug)
+		}
+		conditions = append(conditions, fmt.Sprintf("%s ILIKE $%d", qCol, argStart))
+	}
+	if len(conditions) == 0 {
+		return "", nil
+	}
+	return "AND (" + strings.Join(conditions, " OR ") + ")", []any{"%" + q + "%"}
 }
 
 // ParseFilters converts query params into a WHERE clause with parameterised args.

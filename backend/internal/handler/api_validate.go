@@ -73,13 +73,24 @@ func validatePayload(
 				return fmt.Errorf("field %q: %w", f.Slug, err)
 			}
 		}
+
+		// User: confirm the user exists in auth.users.
+		if f.FieldType == schema.FieldUser {
+			id, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("%w: field %q must be a UUID string", schema.ErrInvalidInput, f.Slug)
+			}
+			if err := checkUserExists(ctx, pool, id); err != nil {
+				return fmt.Errorf("field %q: %w", f.Slug, err)
+			}
+		}
 	}
 	return nil
 }
 
 func validateFieldValue(f schema.Field, v any) error {
 	switch f.FieldType {
-	case schema.FieldText:
+	case schema.FieldText, schema.FieldTextarea:
 		if _, ok := v.(string); !ok {
 			return fmt.Errorf("%w: expected string", schema.ErrInvalidInput)
 		}
@@ -115,6 +126,16 @@ func validateFieldValue(f schema.Field, v any) error {
 		if _, err := time.Parse(time.RFC3339, s); err != nil {
 			return fmt.Errorf("%w: invalid datetime %q", schema.ErrInvalidInput, s)
 		}
+	case schema.FieldTime:
+		s, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("%w: expected time string HH:MM or HH:MM:SS", schema.ErrInvalidInput)
+		}
+		if _, err := time.Parse("15:04", s); err != nil {
+			if _, err2 := time.Parse("15:04:05", s); err2 != nil {
+				return fmt.Errorf("%w: invalid time %q (expected HH:MM or HH:MM:SS)", schema.ErrInvalidInput, s)
+			}
+		}
 	case schema.FieldSelect:
 		s, ok := v.(string)
 		if !ok {
@@ -145,7 +166,7 @@ func validateFieldValue(f schema.Field, v any) error {
 				return fmt.Errorf("%w: %q is not in allowed choices %v", schema.ErrInvalidInput, s, choices)
 			}
 		}
-	case schema.FieldRelation, schema.FieldFile:
+	case schema.FieldRelation, schema.FieldUser, schema.FieldFile:
 		s, ok := v.(string)
 		if !ok {
 			return fmt.Errorf("%w: expected UUID string", schema.ErrInvalidInput)
@@ -169,6 +190,22 @@ func contains(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// checkUserExists confirms the referenced user exists in auth.users.
+func checkUserExists(ctx context.Context, pool *pgxpool.Pool, id string) error {
+	var exists bool
+	err := pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = $1 AND is_active = true)`,
+		id,
+	).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("verify user: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("%w: user %s does not exist", schema.ErrInvalidInput, id)
+	}
+	return nil
 }
 
 // checkRelationTarget confirms the referenced row exists and is not soft-deleted.

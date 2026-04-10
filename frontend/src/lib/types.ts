@@ -1,14 +1,17 @@
 // Field types supported by the schema engine.
 export type FieldType =
   | 'text'
+  | 'textarea'
   | 'number'
   | 'integer'
   | 'boolean'
   | 'date'
   | 'datetime'
+  | 'time'
   | 'select'
   | 'multiselect'
   | 'relation'
+  | 'user'
   | 'file'
   | 'json'
 

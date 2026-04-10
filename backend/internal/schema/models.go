@@ -14,23 +14,26 @@ type FieldType string
 
 const (
 	FieldText        FieldType = "text"
+	FieldTextarea    FieldType = "textarea"
 	FieldNumber      FieldType = "number"
 	FieldInteger     FieldType = "integer"
 	FieldBoolean     FieldType = "boolean"
 	FieldDate        FieldType = "date"
 	FieldDatetime    FieldType = "datetime"
+	FieldTime        FieldType = "time"
 	FieldSelect      FieldType = "select"
 	FieldMultiselect FieldType = "multiselect"
 	FieldRelation    FieldType = "relation"
+	FieldUser        FieldType = "user"
 	FieldFile        FieldType = "file"
 	FieldJSON        FieldType = "json"
 )
 
 var validFieldTypes = map[FieldType]bool{
-	FieldText: true, FieldNumber: true, FieldInteger: true,
-	FieldBoolean: true, FieldDate: true, FieldDatetime: true,
+	FieldText: true, FieldTextarea: true, FieldNumber: true, FieldInteger: true,
+	FieldBoolean: true, FieldDate: true, FieldDatetime: true, FieldTime: true,
 	FieldSelect: true, FieldMultiselect: true, FieldRelation: true,
-	FieldFile: true, FieldJSON: true,
+	FieldUser: true, FieldFile: true, FieldJSON: true,
 }
 
 func (ft FieldType) Valid() bool { return validFieldTypes[ft] }

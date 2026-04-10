@@ -54,6 +54,15 @@ function formatCell(value: unknown, fieldType: string): string {
   if (fieldType === 'date' || fieldType === 'datetime') {
     return new Date(value as string).toLocaleDateString('ko')
   }
+  if (fieldType === 'time') return String(value)
+  if (fieldType === 'user' && typeof value === 'object') {
+    const obj = value as Record<string, unknown>
+    return String(obj.name ?? obj.email ?? obj.id ?? '?')
+  }
+  if (fieldType === 'relation' && typeof value === 'object') {
+    const obj = value as Record<string, unknown>
+    return String(obj.name ?? obj.title ?? obj.label ?? obj.id ?? '?')
+  }
   if (fieldType === 'multiselect' && Array.isArray(value)) {
     return value.join(', ')
   }

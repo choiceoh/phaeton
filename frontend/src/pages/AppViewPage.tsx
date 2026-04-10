@@ -1,5 +1,5 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -11,6 +11,7 @@ import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { useCollection } from '@/hooks/useCollections'
 import {
   useCreateEntry,
@@ -27,9 +28,11 @@ export default function AppViewPage() {
   const { appId } = useParams()
   const [page, setPage] = useState(1)
   const [sorting, setSorting] = useState<SortingState>([])
+  const [search, setSearch] = useState('')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editEntry, setEditEntry] = useState<Record<string, unknown> | undefined>()
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: collection, isLoading: colLoading, isError: colError, error: colErr } =
     useCollection(appId)
@@ -46,6 +49,11 @@ export default function AppViewPage() {
     return sorting.map((s) => `${s.desc ? '-' : ''}${s.id}`).join(',')
   }, [sorting])
 
+  const filters = useMemo(() => {
+    if (!search) return undefined
+    return { q: search }
+  }, [search])
+
   const {
     data: list,
     isLoading: entriesLoading,
@@ -57,6 +65,7 @@ export default function AppViewPage() {
     limit: PAGE_SIZE,
     sort: sortParam,
     expand,
+    filters,
   })
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
@@ -138,6 +147,41 @@ export default function AppViewPage() {
     })
   }
 
+  const handleExportCSV = useCallback(() => {
+    if (!collection) return
+    const params = new URLSearchParams()
+    if (search) params.set('q', search)
+    if (sortParam) params.set('sort', sortParam)
+    const qs = params.toString()
+    const url = `/api/data/${collection.slug}/export.csv${qs ? `?${qs}` : ''}`
+    window.open(url, '_blank')
+  }, [collection, search, sortParam])
+
+  const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !collection) return
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const res = await fetch(`/api/data/${collection.slug}/import`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(body.error || body.message || res.statusText)
+      }
+      const result = await res.json()
+      toast.success(`${result.data?.imported ?? 0}건 가져왔습니다`)
+      refetch()
+    } catch (err) {
+      toast.error(formatError(err))
+    } finally {
+      e.target.value = ''
+    }
+  }, [collection, refetch])
+
   return (
     <div>
       <PageHeader
@@ -161,6 +205,35 @@ export default function AppViewPage() {
           </>
         }
       />
+
+      <div className="mb-4 flex items-center gap-2">
+        <Input
+          placeholder="검색..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(1)
+          }}
+          className="max-w-xs"
+        />
+        <div className="ml-auto flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportCSV}>
+            CSV 내보내기
+          </Button>
+          <RoleGate roles={['director', 'pm']}>
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+              CSV 가져오기
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleImportCSV}
+            />
+          </RoleGate>
+        </div>
+      </div>
 
       {entriesLoading && !list && <LoadingState />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
@@ -214,10 +287,16 @@ function formatCell(value: unknown, field: Field): string {
     const obj = value as Record<string, unknown>
     return String(obj.name ?? obj.title ?? obj.label ?? obj.id ?? '?')
   }
+  // Expanded user: backend auto-expands to {id, name, email}
+  if (field.field_type === 'user' && typeof value === 'object') {
+    const obj = value as Record<string, unknown>
+    return String(obj.name ?? obj.email ?? obj.id ?? '?')
+  }
   if (field.field_type === 'boolean') return value ? '✓' : '-'
   if (field.field_type === 'date' || field.field_type === 'datetime') {
     return new Date(value as string).toLocaleDateString('ko')
   }
+  if (field.field_type === 'time') return String(value)
   if (field.field_type === 'multiselect' && Array.isArray(value)) {
     return value.join(', ')
   }
