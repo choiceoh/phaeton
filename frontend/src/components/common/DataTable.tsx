@@ -43,6 +43,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -488,41 +489,43 @@ export function DataTable<T>({
             컬럼
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>표시할 컬럼</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {table
-              .getAllColumns()
-              .filter((col) => col.getCanHide())
-              .map((col) => (
-                <DropdownMenuCheckboxItem
-                  key={col.id}
-                  checked={col.getIsVisible()}
-                  onCheckedChange={(value) => col.toggleVisibility(!!value)}
-                >
-                  <span className="flex items-center justify-between w-full">
-                    {String(col.columnDef.header ?? col.id)}
-                    <button
-                      type="button"
-                      className="ml-2 text-muted-foreground hover:text-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const isPinned = col.getIsPinned()
-                        if (isPinned) {
-                          col.pin(false)
-                        } else {
-                          col.pin('left')
-                        }
-                      }}
-                    >
-                      {col.getIsPinned() ? (
-                        <PinOffIcon className="h-3 w-3" />
-                      ) : (
-                        <PinIcon className="h-3 w-3" />
-                      )}
-                    </button>
-                  </span>
-                </DropdownMenuCheckboxItem>
-              ))}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>표시할 컬럼</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {table
+                .getAllColumns()
+                .filter((col) => col.getCanHide())
+                .map((col) => (
+                  <DropdownMenuCheckboxItem
+                    key={col.id}
+                    checked={col.getIsVisible()}
+                    onCheckedChange={(value) => col.toggleVisibility(!!value)}
+                  >
+                    <span className="flex items-center justify-between w-full">
+                      {String(col.columnDef.header ?? col.id)}
+                      <button
+                        type="button"
+                        className="ml-2 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const isPinned = col.getIsPinned()
+                          if (isPinned) {
+                            col.pin(false)
+                          } else {
+                            col.pin('left')
+                          }
+                        }}
+                      >
+                        {col.getIsPinned() ? (
+                          <PinOffIcon className="h-3 w-3" />
+                        ) : (
+                          <PinIcon className="h-3 w-3" />
+                        )}
+                      </button>
+                    </span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
