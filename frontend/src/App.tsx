@@ -20,6 +20,7 @@ import NotFoundPage from '@/pages/NotFoundPage'
 import UsersPage from '@/pages/UsersPage'
 import ProfilePage from '@/pages/ProfilePage'
 import OrgChartPage from '@/pages/OrgChartPage'
+import AIChatPage from '@/pages/AIChatPage'
 
 export default function App() {
   return (
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/history" element={<MigrationHistoryPage />} />
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/org" element={<OrgChartPage />} />
+        <Route path="/ai" element={<AIChatPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
