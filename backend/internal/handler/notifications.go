@@ -78,9 +78,12 @@ func (h *NotificationHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *NotificationHandler) UnreadCount(w http.ResponseWriter, r *http.Request) {
 	user, _ := middleware.GetUser(r.Context())
 	var count int64
-	_ = h.pool.QueryRow(r.Context(),
+	if err := h.pool.QueryRow(r.Context(),
 		`SELECT COUNT(*) FROM _meta.notifications WHERE user_id = $1 AND is_read = FALSE`, user.UserID,
-	).Scan(&count)
+	).Scan(&count); err != nil {
+		handleErr(w, r, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]int64{"count": count})
 }
 
@@ -157,30 +160,40 @@ func SubscribeNotifications(pool *pgxpool.Pool, bus *events.Bus) {
 // notifyCommentRecipients sends notifications to the record creator and other
 // commenters (excluding the actor).
 func notifyCommentRecipients(ctx context.Context, pool *pgxpool.Pool, ev events.Event) {
-	// Find unique user IDs: record creator + all commenters.
-	rows, err := pool.Query(ctx, `
-		SELECT DISTINCT user_id::text FROM (
-			SELECT created_by AS user_id FROM data_record_creator($1, $2)
-			UNION
-			SELECT user_id FROM _meta.comments WHERE collection_id = $3 AND record_id = $4
-		) sub
-		WHERE user_id IS NOT NULL AND user_id::text != $5
-		LIMIT 50`,
-		ev.CollectionID, ev.RecordID, ev.CollectionID, ev.RecordID, ev.ActorUserID,
-	)
-	// This query uses a helper function that doesn't exist — fall back to just commenters.
-	if err != nil {
-		// Fallback: notify other commenters only.
+	// Look up the collection slug so we can query the data table for the record creator.
+	var slug string
+	if err := pool.QueryRow(ctx,
+		`SELECT slug FROM _meta.collections WHERE id = $1`, ev.CollectionID,
+	).Scan(&slug); err != nil {
+		slog.Warn("notify comment recipients: collection lookup failed", "error", err)
+		slug = "" // proceed without record creator
+	}
+
+	var rows pgx.Rows
+	var err error
+	if slug != "" {
+		qTable := fmt.Sprintf("%q.%q", "data", slug)
+		rows, err = pool.Query(ctx, fmt.Sprintf(`
+			SELECT DISTINCT user_id::text FROM (
+				SELECT _created_by AS user_id FROM %s WHERE id = $1 AND deleted_at IS NULL
+				UNION
+				SELECT user_id FROM _meta.comments WHERE collection_id = $2 AND record_id = $3
+			) sub
+			WHERE user_id IS NOT NULL AND user_id::text != $4
+			LIMIT 50`, qTable),
+			ev.RecordID, ev.CollectionID, ev.RecordID, ev.ActorUserID,
+		)
+	} else {
 		rows, err = pool.Query(ctx, `
 			SELECT DISTINCT user_id::text FROM _meta.comments
 			WHERE collection_id = $1 AND record_id = $2 AND user_id::text != $3
 			LIMIT 50`,
 			ev.CollectionID, ev.RecordID, ev.ActorUserID,
 		)
-		if err != nil {
-			slog.Error("notify comment recipients query", "error", err)
-			return
-		}
+	}
+	if err != nil {
+		slog.Error("notify comment recipients query", "error", err)
+		return
 	}
 	defer rows.Close()
 

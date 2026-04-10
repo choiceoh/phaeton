@@ -85,12 +85,8 @@ func (h *WebhookHandler) Receive(w http.ResponseWriter, r *http.Request) {
 
 	fn, ok := h.handlers[topic]
 	if !ok {
-		// Accept but log — no handler registered yet for this topic.
 		slog.Warn("webhook: no handler for topic", "topic", topic)
-		writeJSON(w, http.StatusAccepted, map[string]string{
-			"status": "accepted",
-			"note":   "no handler registered for topic",
-		})
+		apierr.NotFound("no handler registered for topic: " + topic).Write(w)
 		return
 	}
 
