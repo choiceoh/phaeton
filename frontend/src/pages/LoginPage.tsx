@@ -30,7 +30,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-stone-50">
+    <div className="flex min-h-screen items-center justify-center bg-stone-50 px-4">
       <FormProvider {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}

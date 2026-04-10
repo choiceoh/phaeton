@@ -41,7 +41,7 @@ export default function OrgChartPage() {
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <Info label="이메일" value={selected.email} />
                 <Info label="전화번호" value={selected.phone} />
                 <Info label="직책" value={selected.title} />

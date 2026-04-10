@@ -66,7 +66,7 @@ function SortableCard({
         }
       }}
     >
-      <p className="text-sm font-medium">
+      <p className="truncate text-sm font-medium">
         {titleField
           ? String(entry[titleField.slug] || '제목 없음')
           : `#${String(entry.id).slice(0, 8)}`}
@@ -92,7 +92,7 @@ function DroppableColumn({
   const ids = column.entries.map((e) => String(e.id))
 
   return (
-    <div className="min-w-[240px] flex-shrink-0">
+    <div className="min-w-[240px] flex-shrink-0 snap-center">
       <div className="mb-2 flex items-center gap-2">
         <Badge variant="secondary">{column.label}</Badge>
         <span className="text-xs text-muted-foreground">{column.entries.length}</span>
@@ -187,7 +187,7 @@ export default function KanbanView({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4 sm:snap-none">
         {columns.map((col) => (
           <DroppableColumn
             key={col.value}

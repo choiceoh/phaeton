@@ -110,19 +110,24 @@ export default function EntryForm({
         </div>
       )}
 
-      <div className="grid grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
         {fields.map((field) => {
           if (isLayoutType(field.field_type)) {
             return (
-              <div key={field.id} style={{ gridColumn: 'span 6' }}>
+              <div key={field.id} className="col-span-full">
                 <LayoutElement field={field} />
               </div>
             )
           }
+          const span = field.width || 6
+          const smSpan: Record<number, string> = {
+            1: 'sm:col-span-1', 2: 'sm:col-span-2', 3: 'sm:col-span-3',
+            4: 'sm:col-span-4', 5: 'sm:col-span-5', 6: 'sm:col-span-6',
+          }
           return (
             <div
               key={field.id}
-              style={{ gridColumn: `span ${field.width || 6}` }}
+              className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'}`}
             >
               <Label>
                 {field.label}

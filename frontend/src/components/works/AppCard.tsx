@@ -35,7 +35,7 @@ export default function AppCard({ collection }: { collection: Collection }) {
           </div>
         </div>
         {collection.description && (
-          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{collection.description}</p>
+          <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground">{collection.description}</p>
         )}
         <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
           <span>{collection.fields?.length || 0}개 {TERM.field}</span>

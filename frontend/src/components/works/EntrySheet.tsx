@@ -63,7 +63,7 @@ export default function EntrySheet({
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) { onClose(); setTab('form') } }}>
-      <SheetContent className="w-[480px] overflow-y-auto sm:max-w-lg">
+      <SheetContent className="w-full overflow-y-auto sm:w-[480px] sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>{title || '새 항목'}</SheetTitle>
         </SheetHeader>
