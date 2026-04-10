@@ -12,6 +12,7 @@ import {
   GanttChart,
   LayoutGrid,
   Loader2,
+  Pencil,
   Power,
   PowerOff,
   Search,
@@ -41,6 +42,8 @@ import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
+import BulkEditPanel from '@/components/works/BulkEditPanel'
+import CSVImportPreview from '@/components/works/CSVImportPreview'
 import EntrySheet from '@/components/works/EntrySheet'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
@@ -51,6 +54,7 @@ import GalleryView from '@/components/works/views/GalleryView'
 import FormView from '@/components/works/views/FormView'
 import GanttView from '@/components/works/views/GanttView'
 import KanbanView from '@/components/works/views/KanbanView'
+import SetupChecklist from '@/components/works/SetupChecklist'
 import ViewGuide from '@/components/works/views/ViewGuide'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -83,7 +87,6 @@ import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
-import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { useUndoToast } from '@/hooks/useUndoToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
@@ -218,7 +221,6 @@ export default function AppViewPage() {
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
   const { data: entryDefaults } = useEntryDefaults(collection?.slug)
-  const aiAvailable = useAIAvailable()
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
@@ -227,6 +229,7 @@ export default function AppViewPage() {
   // Multi-select state for bulk operations.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
 
   // Detect views.
   const selectField = useMemo(
@@ -655,16 +658,27 @@ export default function AppViewPage() {
   }
 
   const [importingCSV, setImportingCSV] = useState(false)
-  const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [csvPreviewFile, setCsvPreviewFile] = useState<File | null>(null)
+  const [csvPreviewOpen, setCsvPreviewOpen] = useState(false)
+
+  const handleImportCSV = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !collection) return
+    if (!file) return
+    setCsvPreviewFile(file)
+    setCsvPreviewOpen(true)
+    e.target.value = ''
+  }, [])
+
+  const handleCSVConfirm = useCallback(async (file: File, columnMap: Record<string, string>) => {
+    if (!collection) return
+    setCsvPreviewOpen(false)
     setImportingCSV(true)
     const toastId = toast.loading('CSV 가져오는 중...')
 
-    const doImport = async (columnMap?: Record<string, string>) => {
+    try {
       const formData = new FormData()
       formData.append('file', file)
-      if (columnMap) {
+      if (Object.keys(columnMap).length > 0) {
         formData.append('column_map', JSON.stringify(columnMap))
       }
       const res = await fetch(`/api/data/${collection.slug}/import`, {
@@ -676,39 +690,7 @@ export default function AppViewPage() {
         const body = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(body.error || body.message || res.statusText)
       }
-      return res.json()
-    }
-
-    try {
-      let result: any
-      try {
-        result = await doImport()
-      } catch (err) {
-        // If column matching failed and AI is available, try AI mapping.
-        const msg = err instanceof Error ? err.message : ''
-        if (msg.includes('no CSV columns matched') && aiAvailable) {
-          toast.loading('컬럼 자동 매핑 중...', { id: toastId })
-          // Read CSV headers from the file.
-          const text = await file.text()
-          const firstLine = text.split('\n')[0]?.replace(/^\xef\xbb\xbf/, '') ?? ''
-          const headers = firstLine.split(',').map((h) => h.trim().replace(/^"|"$/g, ''))
-          if (headers.length > 0) {
-            const columnMap = await api.post<Record<string, string>>(
-              `/ai/map-csv-columns/${collection.slug}`,
-              { headers },
-            )
-            if (Object.keys(columnMap).length > 0) {
-              result = await doImport(columnMap)
-            } else {
-              throw err
-            }
-          } else {
-            throw err
-          }
-        } else {
-          throw err
-        }
-      }
+      const result = await res.json()
       const count = result.data?.imported ?? 0
       toast.success(`${count}건 가져왔습니다`, { id: toastId })
       setImportedCount(count)
@@ -718,9 +700,9 @@ export default function AppViewPage() {
       toast.error(formatError(err), { id: toastId })
     } finally {
       setImportingCSV(false)
-      e.target.value = ''
+      setCsvPreviewFile(null)
     }
-  }, [collection, refetch, aiAvailable])
+  }, [collection, refetch])
 
   const dateFields = useMemo(
     () => collection?.fields?.filter((f) => f.field_type === 'date' || f.field_type === 'datetime') ?? [],
@@ -973,6 +955,30 @@ export default function AppViewPage() {
         setBulkDeleteOpen(false)
       },
       onError: (err) => toast.error(formatError(err)),
+    })
+  }
+
+  function handleBulkEdit(fieldSlug: string, value: unknown) {
+    const ids = Array.from(selectedRowIds)
+    if (ids.length === 0) return
+    const updates = ids.map((id) => {
+      const version = getRowVersion(id)
+      return { id, fields: { [fieldSlug]: value }, _version: version }
+    })
+    batchUpdateEntry.mutate(updates, {
+      onSuccess: () => {
+        toast.success(`${ids.length}건 수정되었습니다`)
+        setSelectedRowIds(new Set())
+        setBulkEditOpen(false)
+      },
+      onError: (err) => {
+        if (err instanceof ApiError && err.isConflict()) {
+          toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
+          refetch()
+        } else {
+          toast.error(formatError(err))
+        }
+      },
     })
   }
 
@@ -1352,12 +1358,38 @@ export default function AppViewPage() {
         totalRecords={list?.total ?? 0}
       />
 
+      {list && (list.total ?? 0) < 5 && (
+        <SetupChecklist
+          collectionId={collection.id}
+          items={[
+            {
+              label: '항목(필드) 추가하기',
+              done: (collection.fields?.filter((f) => !isLayoutType(f.field_type)).length ?? 0) >= 2,
+              href: `/apps/${collection.id}/settings`,
+            },
+            {
+              label: '첫 데이터 입력하기',
+              done: (list.total ?? 0) > 0,
+            },
+            {
+              label: '보기(뷰) 저장하기',
+              done: (savedViews?.length ?? 0) > 0,
+            },
+            {
+              label: '프로세스 설정하기',
+              done: !!process?.is_enabled,
+              href: `/apps/${collection.id}/process`,
+            },
+          ]}
+        />
+      )}
+
       {entriesLoading && !list && <LoadingState variant="table" />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
       {list && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-4 max-w-full overflow-x-auto">
+          <TabsList className="mb-4 max-w-full overflow-x-auto scrollbar-none">
             <TabsTrigger value="list">목록</TabsTrigger>
             {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}
             {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
@@ -1412,6 +1444,17 @@ export default function AppViewPage() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+                <RoleGate roles={['director', 'pm', 'engineer']}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1"
+                    onClick={() => setBulkEditOpen(true)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    일괄 편집
+                  </Button>
+                </RoleGate>
                 <RoleGate roles={['director', 'pm']}>
                   <Button
                     variant="destructive"
@@ -1560,6 +1603,23 @@ export default function AppViewPage() {
         title={editEntry ? `${TERM.record} 편집` : duplicateData ? '항목 복제' : TERM.newRecord}
         process={process}
         onDuplicate={handleDuplicate}
+      />
+
+      <CSVImportPreview
+        open={csvPreviewOpen}
+        onOpenChange={setCsvPreviewOpen}
+        file={csvPreviewFile}
+        fields={collection.fields ?? []}
+        onConfirm={handleCSVConfirm}
+      />
+
+      <BulkEditPanel
+        open={bulkEditOpen}
+        onOpenChange={setBulkEditOpen}
+        fields={collection.fields ?? []}
+        selectedCount={selectedRowIds.size}
+        onApply={handleBulkEdit}
+        loading={batchUpdateEntry.isPending}
       />
 
       <ConfirmDialog
