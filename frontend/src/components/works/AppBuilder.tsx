@@ -78,6 +78,7 @@ export default function AppBuilder() {
         is_required: f.is_required,
         is_unique: f.is_unique,
         is_indexed: f.is_indexed,
+        default_value: f.default_value,
         options: f.options,
         relation: f.relation,
       })),
