@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -234,9 +235,10 @@ func (h *DynHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	selectCols := buildSelectCols(fields)
 
+	user, _ := middleware.GetUser(r.Context())
 	created := make([]map[string]any, 0, len(bodies))
 	for i, body := range bodies {
-		colNames, placeholders, args := buildInsertColumns(body, fields)
+		colNames, placeholders, args := buildInsertColumns(body, fields, user.UserID)
 		var sql string
 		if len(colNames) == 0 {
 			sql = fmt.Sprintf("INSERT INTO %s DEFAULT VALUES RETURNING %s", qTable, selectCols)

@@ -84,17 +84,13 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	where += " " + searchClause
 	args = append(args, searchArgs...)
 
-	// Row-level security: viewers only see their own rows.
+	// Row-level security: restrict row visibility based on collection's rls_mode.
 	rlsClause := ""
 	colRole := middleware.GetCollectionRole(r.Context())
 	if colRole == "viewer" {
-		user, _ := middleware.GetUser(r.Context())
-		args = append(args, user.UserID)
-		if len(sortJoins) > 0 {
-			rlsClause = fmt.Sprintf(" AND %s.created_by = $%d", qTable, len(args))
-		} else {
-			rlsClause = fmt.Sprintf(" AND created_by = $%d", len(args))
-		}
+		rlsClause = buildRLSClause(r, col, &args, func() string {
+			if len(sortJoins) > 0 { return qTable }; return ""
+		}())
 	}
 
 	// Count total. Sort joins are not needed for COUNT, but we use the same
@@ -172,13 +168,11 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 	procEnabled := h.hasProcessEnabled(col.ID)
 	selectCols := buildSelectCols(fields, procEnabled)
 
-	// RLS: viewer can only see own rows.
+	// RLS: restrict row visibility based on collection's rls_mode.
 	getArgs := []any{id}
 	rlsGet := ""
 	if colRole := middleware.GetCollectionRole(r.Context()); colRole == "viewer" {
-		user, _ := middleware.GetUser(r.Context())
-		getArgs = append(getArgs, user.UserID)
-		rlsGet = fmt.Sprintf(" AND created_by = $%d", len(getArgs))
+		rlsGet = buildRLSClause(r, col, &getArgs, "")
 	}
 
 	getSQL := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1 AND deleted_at IS NULL%s", selectCols, qTable, rlsGet)
@@ -255,12 +249,12 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		idx++
 	}
 
-	// Optional: created_by from body (will be replaced by auth later).
-	if cb, ok := body["created_by"]; ok {
-		colNames = append(colNames, `"created_by"`)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
-		args = append(args, cb)
-	}
+	// Auto-set created_by from authenticated user.
+	user, _ := middleware.GetUser(r.Context())
+	colNames = append(colNames, `"created_by"`)
+	placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+	args = append(args, user.UserID)
+	idx++
 
 	// Process: inject initial status for new entries.
 	procEnabled := h.hasProcessEnabled(col.ID)
@@ -308,7 +302,6 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Record change history.
-	user, _ := middleware.GetUser(r.Context())
 	if recID, ok := records[0]["id"].(string); ok {
 		diff := createDiff(records[0], fields)
 		recordChange(r.Context(), h.pool, col.ID, recID, user.UserID, user.Name, "create", diff)
@@ -361,6 +354,12 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	sets := []string{`"updated_at" = now()`}
 	args := []any{}
 	idx := 1
+
+	// Auto-set updated_by from authenticated user.
+	sets = append(sets, fmt.Sprintf(`"updated_by" = $%d`, idx))
+	args = append(args, user.UserID)
+	idx++
+
 	for _, f := range fields {
 		if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
 			continue
@@ -413,8 +412,17 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	selectCols := buildSelectCols(fields, procEnabled)
 
-	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL RETURNING %s",
-		qTable, strings.Join(sets, ", "), idx, selectCols)
+	// RLS: viewers can only update their own rows.
+	rlsClause := ""
+	colRole := middleware.GetCollectionRole(r.Context())
+	if colRole == "viewer" {
+		idx++
+		args = append(args, user.UserID)
+		rlsClause = fmt.Sprintf(" AND created_by = $%d", len(args))
+	}
+
+	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL%s RETURNING %s",
+		qTable, strings.Join(sets, ", "), idx, rlsClause, selectCols)
 
 	rows, err := h.pool.Query(r.Context(), sql, args...)
 	if err != nil {
@@ -704,9 +712,10 @@ func (h *DynHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	user, _ := middleware.GetUser(r.Context())
 	created := make([]map[string]any, 0, len(bodies))
 	for i, body := range bodies {
-		colNames, placeholders, args := buildInsertColumns(body, fields)
+		colNames, placeholders, args := buildInsertColumns(body, fields, user.UserID)
 		var sql string
 		if len(colNames) == 0 {
 			sql = fmt.Sprintf("INSERT INTO %s DEFAULT VALUES RETURNING %s", qTable, selectCols)
@@ -776,9 +785,19 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 		args[i] = id
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
+
+	// RLS: viewers can only delete their own rows.
+	rlsClause := ""
+	colRole := middleware.GetCollectionRole(r.Context())
+	if colRole == "viewer" {
+		user, _ := middleware.GetUser(r.Context())
+		args = append(args, user.UserID)
+		rlsClause = fmt.Sprintf(" AND created_by = $%d", len(args))
+	}
+
 	sql := fmt.Sprintf(
-		"UPDATE %s SET deleted_at = now() WHERE id IN (%s) AND deleted_at IS NULL",
-		qTable, strings.Join(placeholders, ","),
+		"UPDATE %s SET deleted_at = now() WHERE id IN (%s) AND deleted_at IS NULL%s",
+		qTable, strings.Join(placeholders, ","), rlsClause,
 	)
 	tag, err := h.pool.Exec(r.Context(), sql, args...)
 	if err != nil {
@@ -792,7 +811,8 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 
 // buildInsertColumns extracts the column list for an INSERT from a body map,
 // returning quoted column names, $-placeholders, and the matching arg values.
-func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []string, placeholders []string, args []any) {
+// userID is injected as created_by for all inserts.
+func buildInsertColumns(body map[string]any, fields []schema.Field, userID string) (cols []string, placeholders []string, args []any) {
 	idx := 1
 	for _, f := range fields {
 		if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
@@ -807,12 +827,11 @@ func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []stri
 		args = append(args, coerceValue(v, f.FieldType))
 		idx++
 	}
-	if cb, ok := body["created_by"]; ok {
-		cols = append(cols, `"created_by"`)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
-		args = append(args, cb)
-		idx++
-	}
+	// Auto-set created_by from authenticated user.
+	cols = append(cols, `"created_by"`)
+	placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+	args = append(args, userID)
+	idx++
 	if st, ok := body["_status"]; ok {
 		cols = append(cols, `"_status"`)
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
@@ -835,9 +854,21 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	sql := fmt.Sprintf("UPDATE %s SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL", qTable)
+	user, _ := middleware.GetUser(r.Context())
 
-	tag, err := h.pool.Exec(r.Context(), sql, id)
+	// RLS: viewers can only delete their own rows.
+	var sqlDel string
+	var delArgs []any
+	colRole := middleware.GetCollectionRole(r.Context())
+	if colRole == "viewer" {
+		sqlDel = fmt.Sprintf("UPDATE %s SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL AND created_by = $2", qTable)
+		delArgs = []any{id, user.UserID}
+	} else {
+		sqlDel = fmt.Sprintf("UPDATE %s SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL", qTable)
+		delArgs = []any{id}
+	}
+
+	tag, err := h.pool.Exec(r.Context(), sqlDel, delArgs...)
 	if err != nil {
 		handleErr(w, r, err)
 		return
@@ -848,7 +879,6 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Record change history.
-	user, _ := middleware.GetUser(r.Context())
 	recordChange(r.Context(), h.pool, col.ID, id, user.UserID, user.Name, "delete", map[string]any{"_deleted": true})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -873,6 +903,28 @@ func (h *DynHandler) checkAccess(w http.ResponseWriter, r *http.Request, col sch
 		return false
 	}
 	return true
+}
+
+// buildRLSClause appends an AND clause that restricts rows based on the
+// collection's rls_mode. prefix is the optional table qualifier (e.g. "data"."my_table").
+// Default / "creator" mode: created_by = $userID.
+// "department" mode: created_by IN (SELECT id FROM auth.users WHERE department_id = $deptID).
+func buildRLSClause(r *http.Request, col schema.Collection, args *[]any, prefix string) string {
+	user, _ := middleware.GetUser(r.Context())
+	colRef := "created_by"
+	if prefix != "" {
+		colRef = prefix + ".created_by"
+	}
+
+	mode := col.AccessConfig.RLSMode
+	if mode == "department" && user.DepartmentID != "" {
+		*args = append(*args, user.DepartmentID)
+		return fmt.Sprintf(" AND %s IN (SELECT id FROM auth.users WHERE department_id = $%d)", colRef, len(*args))
+	}
+
+	// Default: creator-only.
+	*args = append(*args, user.UserID)
+	return fmt.Sprintf(" AND %s = $%d", colRef, len(*args))
 }
 
 func (h *DynHandler) resolveCollection(w http.ResponseWriter, slug string) (schema.Collection, []schema.Field, bool) {

@@ -49,11 +49,11 @@ import {
   useUpdateEntry,
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
-import { useViews, useCreateView, useDeleteView } from '@/hooks/useViews'
+import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
-import type { FilterCondition, View } from '@/lib/types'
+import type { FilterCondition, SavedView } from '@/lib/types'
 
 const DEFAULT_LIMIT = 20
 
@@ -86,7 +86,7 @@ export default function AppViewPage() {
   const [processVisible, setProcessVisible] = useState(true)
 
   // Saved views state
-  const [activeView, setActiveView] = useState<View | null>(null)
+  const [activeView, setActiveView] = useState<SavedView | null>(null)
   const [savingView, setSavingView] = useState(false)
   const [newViewName, setNewViewName] = useState('')
 
@@ -101,9 +101,9 @@ export default function AppViewPage() {
     return rels.length > 0 ? rels.join(',') : undefined
   }, [collection])
 
-  const { data: savedViews } = useViews(collection?.id)
-  const createView = useCreateView(collection?.id ?? '')
-  const deleteView = useDeleteView(collection?.id ?? '')
+  const { data: savedViews } = useSavedViews(collection?.id)
+  const createSavedView = useCreateSavedView(collection?.id ?? '')
+  const deleteSavedView = useDeleteSavedView(collection?.id ?? '')
 
   // Build sort param from either column header sorting or sort panel.
   const sortParam = useMemo(() => {
@@ -589,11 +589,35 @@ export default function AppViewPage() {
             onValueChange={(v) => {
               if (v === '__none__') {
                 setActiveView(null)
+                setFilterConditions([])
+                setSortItems([])
                 setPage(1)
               } else {
                 const view = savedViews.find((sv) => sv.id === v)
                 if (view) {
                   setActiveView(view)
+                  // Restore filters from saved view.
+                  if (view.filter_config) {
+                    const restored: FilterCondition[] = Object.entries(view.filter_config).map(
+                      ([key, value], i) => {
+                        const [field, operator] = key.split(':')
+                        return { id: `sv-${i}`, field, operator: operator || 'eq', value }
+                      },
+                    )
+                    setFilterConditions(restored)
+                  } else {
+                    setFilterConditions([])
+                  }
+                  // Restore sort from saved view.
+                  if (view.sort_config) {
+                    const items: SortItem[] = view.sort_config.split(',').filter(Boolean).map((s) => ({
+                      field: s.startsWith('-') ? s.slice(1) : s,
+                      desc: s.startsWith('-'),
+                    }))
+                    setSortItems(items)
+                  } else {
+                    setSortItems([])
+                  }
                   setPage(1)
                 }
               }
@@ -614,10 +638,12 @@ export default function AppViewPage() {
               variant="ghost"
               size="sm"
               onClick={() => {
-                deleteView.mutate(activeView.id, {
+                deleteSavedView.mutate(activeView.id, {
                   onSuccess: () => {
                     toast.success('뷰가 삭제되었습니다')
                     setActiveView(null)
+                    setFilterConditions([])
+                    setSortItems([])
                   },
                   onError: (err) => toast.error(formatError(err)),
                 })
@@ -646,12 +672,26 @@ export default function AppViewPage() {
           />
           <Button
             size="sm"
-            disabled={!newViewName.trim() || createView.isPending}
+            disabled={!newViewName.trim() || createSavedView.isPending}
             onClick={() => {
-              createView.mutate(
+              // Serialize current filter conditions to filter_config.
+              const filterConfig: Record<string, string> = {}
+              for (const c of filterConditions) {
+                if (c.field && c.operator) {
+                  filterConfig[`${c.field}:${c.operator}`] = c.value
+                }
+              }
+              // Serialize current sort to sort_config.
+              const sortConfig = sortItems.length > 0
+                ? sortItems.map((s) => `${s.desc ? '-' : ''}${s.field}`).join(',')
+                : ''
+
+              createSavedView.mutate(
                 {
                   name: newViewName.trim(),
-                  view_type: 'list',
+                  filter_config: filterConfig,
+                  sort_config: sortConfig,
+                  is_public: true,
                 },
                 {
                   onSuccess: () => {

@@ -298,6 +298,24 @@ export interface SavedView {
   updated_at: string
 }
 
+export interface CreateSavedViewReq {
+  name: string
+  filter_config?: Record<string, string>
+  sort_config?: string
+  visible_fields?: string[]
+  is_default?: boolean
+  is_public?: boolean
+}
+
+export interface UpdateSavedViewReq {
+  name?: string
+  filter_config?: Record<string, string>
+  sort_config?: string
+  visible_fields?: string[]
+  is_default?: boolean
+  is_public?: boolean
+}
+
 // --- Envelope responses ---
 
 export interface DataEnvelope<T> {
