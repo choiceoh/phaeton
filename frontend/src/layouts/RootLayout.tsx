@@ -68,6 +68,9 @@ export default function RootLayout() {
               <NavLink to="/admin/org" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 조직도
               </NavLink>
+              <NavLink to="/ai" className={({ isActive }) => `nav-link rounded-md px-2.5 py-1.5 text-sm ${isActive ? 'active text-stone-900' : 'text-stone-500 hover:text-stone-900'}`} viewTransition>
+                AI
+              </NavLink>
               {(user.role === 'director' || user.role === 'pm') && (
                 <>
                   <NavLink to="/history" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>

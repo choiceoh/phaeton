@@ -120,7 +120,8 @@ export default function AIChatPanel() {
     }
   }
 
-  if (!aiAvailable) return null
+  // Hide floating panel on the dedicated AI chat page.
+  if (!aiAvailable || location.pathname === '/ai') return null
 
   return (
     <>
