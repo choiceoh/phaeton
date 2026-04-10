@@ -33,7 +33,8 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-import type { FieldType } from '@/lib/types'
+import type { FieldType, SubColumn } from '@/lib/types'
+import { getChoices, getDisplayType, getFieldOptions } from '@/lib/fieldGuards'
 
 import type { FieldDraft } from './FieldPreview'
 
@@ -360,13 +361,13 @@ function LayoutPreview({ field }: { field: FieldDraft }) {
     case 'label':
       return (
         <p className="text-sm text-muted-foreground">
-          {(field.options?.content as string) || field.label}
+          {getFieldOptions(field, 'label')?.content || field.label}
         </p>
       )
     case 'line':
       return <hr className="my-2" />
     case 'spacer':
-      return <div style={{ height: (field.options?.height as number) || 24 }} />
+      return <div style={{ height: getFieldOptions(field, 'spacer')?.height || 24 }} />
     default:
       return null
   }
@@ -382,14 +383,14 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
         <Textarea
           readOnly
           tabIndex={-1}
-          rows={(field.options?.rows as number) || Math.max(4, h * 2)}
+          rows={getFieldOptions(field, 'textarea')?.rows || Math.max(4, h * 2)}
           placeholder={field.label || '텍스트 입력'}
         />
       )
     case 'time':
       return <Input type="time" readOnly tabIndex={-1} />
     case 'text': {
-      const textDisplay = field.options?.display_type as string | undefined
+      const textDisplay = getDisplayType(field)
       if (h > 1) {
         return (
           <Textarea readOnly tabIndex={-1} rows={h * 2} placeholder={field.label || '텍스트 입력'} />
@@ -403,9 +404,10 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
     }
     case 'number':
     case 'integer': {
-      const displayType = field.options?.display_type as string | undefined
+      const displayType = getDisplayType(field)
+      const numOpts = getFieldOptions(field, 'number')
       if (displayType === 'rating') {
-        const max = (field.options?.max_rating as number) || 5
+        const max = numOpts?.max_rating || 5
         return (
           <div className="flex items-center gap-1 pt-1">
             {Array.from({ length: max }, (_, i) => (
@@ -425,7 +427,7 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
         )
       }
       const prefix = displayType === 'currency'
-        ? (field.options?.currency_code as string) === 'USD' ? '$' : '₩'
+        ? numOpts?.currency_code === 'USD' ? '$' : '₩'
         : undefined
       const suffix = displayType === 'percent' ? '%' : undefined
       return (
@@ -471,8 +473,8 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
         </div>
       )
     case 'select': {
-      const choices = (field.options?.choices as string[]) || []
-      const display = field.options?.display as string | undefined
+      const choices = getChoices(field)
+      const display = getFieldOptions(field, 'select')?.display
       if (display === 'radio') {
         return (
           <div className="space-y-1">
@@ -496,7 +498,7 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
       )
     }
     case 'multiselect': {
-      const choices = (field.options?.choices as string[]) || []
+      const choices = getChoices(field)
       return (
         <div className="flex min-h-9 w-full flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm shadow-xs opacity-70">
           {choices.length > 0 ? (
@@ -559,12 +561,13 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
         </div>
       )
     case 'spreadsheet': {
-      const cols = (field.options?.sub_columns as { key: string; label: string }[]) || [
+      const spreadOpts = getFieldOptions(field, 'spreadsheet')
+      const cols = spreadOpts?.sub_columns || [
         { key: 'col1', label: 'A' },
         { key: 'col2', label: 'B' },
         { key: 'col3', label: 'C' },
       ]
-      const rowCount = Math.min((field.options?.initial_rows as number) || 5, 4)
+      const rowCount = Math.min(spreadOpts?.initial_rows || 5, 4)
       return (
         <div className="rounded-md border overflow-hidden text-xs">
           <table className="w-full border-collapse">
@@ -603,7 +606,7 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
         </div>
       )
     case 'table': {
-      const subColumns = (field.options?.sub_columns as { key: string, label: string }[]) || [
+      const subColumns: SubColumn[] = getFieldOptions(field, 'table')?.sub_columns || [
         { key: 'col1', label: '항목' },
         { key: 'col2', label: '값' },
       ]

@@ -90,7 +90,8 @@ import { useUndoToast } from '@/hooks/useUndoToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
-import type { FilterCondition, SavedView } from '@/lib/types'
+import type { EntryRow, FilterCondition, SavedView } from '@/lib/types'
+import { getDisplayType } from '@/lib/fieldGuards'
 
 const DEFAULT_LIMIT = 20
 
@@ -376,7 +377,7 @@ export default function AppViewPage() {
           size: f.field_type === 'textarea' ? 250 : 150,
           cell: ({ row }: { row: { original: Record<string, unknown> } }) => {
             const v = row.original[f.slug]
-            const dt = f.options?.display_type as string | undefined
+            const dt = getDisplayType(f)
 
             // Render text display subtypes as clickable links
             if (f.field_type === 'text' && dt && v) {
@@ -828,7 +829,7 @@ export default function AppViewPage() {
       onSuccess: () => {
         setDeleteId(null)
         if (deletedRow) {
-          const row = deletedRow as Record<string, unknown>
+          const row = deletedRow as EntryRow
           const rest = Object.fromEntries(
             Object.entries(row).filter(([k]) => !['id', '_version', 'created_at', 'updated_at', '_optimistic'].includes(k)),
           )
