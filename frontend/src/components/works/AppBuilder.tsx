@@ -110,7 +110,7 @@ export default function AppBuilder() {
       is_required: false,
       is_unique: false,
       is_indexed: false,
-      width: 6,
+      width: 3,
       height: 1,
       options: presetOptions,
     }
