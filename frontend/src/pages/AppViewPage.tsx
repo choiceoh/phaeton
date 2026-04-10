@@ -88,6 +88,7 @@ export default function AppViewPage() {
 
   // Search state
   const [searchText, setSearchText] = useState('')
+  const [searchInputValue, setSearchInputValue] = useState('')
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
   useEffect(() => {
     return () => {
@@ -335,8 +336,15 @@ export default function AppViewPage() {
     return cols
   }, [collection, process, processVisible])
 
-  // Default: hide columns beyond the first 8 data fields.
+  // Default: hide columns beyond the first 8 data fields, restored from localStorage if available.
+  const colVisStorageKey = appId ? `phaeton:colvis:${appId}` : null
   const initialColumnVisibility = useMemo<Record<string, boolean>>(() => {
+    if (colVisStorageKey) {
+      try {
+        const saved = localStorage.getItem(colVisStorageKey)
+        if (saved) return JSON.parse(saved)
+      } catch { /* ignore */ }
+    }
     if (!collection?.fields) return {}
     const dataFields = collection.fields.filter((f) => !isLayoutType(f.field_type))
     const vis: Record<string, boolean> = {}
@@ -344,7 +352,16 @@ export default function AppViewPage() {
       if (i >= 8) vis[f.slug] = false
     })
     return vis
-  }, [collection])
+  }, [collection, colVisStorageKey])
+
+  const handleColumnVisibilityChange = useCallback(
+    (visibility: Record<string, boolean>) => {
+      if (colVisStorageKey) {
+        try { localStorage.setItem(colVisStorageKey, JSON.stringify(visibility)) } catch { /* ignore */ }
+      }
+    },
+    [colVisStorageKey],
+  )
 
   // Inline edit handler.
   const handleCellEdit = useCallback(
@@ -381,6 +398,7 @@ export default function AppViewPage() {
 
   // Search with debounce.
   function handleSearchInput(value: string) {
+    setSearchInputValue(value)
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
     searchDebounceRef.current = setTimeout(() => {
       setSearchText(value)
@@ -588,14 +606,15 @@ export default function AppViewPage() {
         <Input
           className="h-8 w-[200px] pl-8 text-sm"
           placeholder="검색..."
-          defaultValue=""
+          value={searchInputValue}
           onChange={(e) => handleSearchInput(e.target.value)}
         />
-        {searchText && (
+        {searchInputValue && (
           <button
             type="button"
             className="absolute right-2 top-1/2 -translate-y-1/2"
             onClick={() => {
+              setSearchInputValue('')
               setSearchText('')
               setPage(1)
             }}
@@ -925,6 +944,7 @@ export default function AppViewPage() {
               summaryRow={summaryRow}
               toolbar={tableToolbar}
               initialColumnVisibility={initialColumnVisibility}
+              onColumnVisibilityChange={handleColumnVisibilityChange}
               highlightRows={importedCount}
               selectable
               selectedRowIds={selectedRowIds}

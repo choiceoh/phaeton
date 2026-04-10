@@ -39,6 +39,34 @@ interface Props {
   onChange: (cron: string) => void
 }
 
+/** Validate a 5-field cron expression (minute hour dom month dow). */
+export function isValidCron(cron: string): boolean {
+  const parts = cron.trim().split(/\s+/)
+  if (parts.length !== 5) return false
+  const patterns = [
+    /^(\*|(\d{1,2})(,\d{1,2})*|(\d{1,2}-\d{1,2})(\/\d{1,2})?)$/, // minute 0-59
+    /^(\*|(\d{1,2})(,\d{1,2})*|(\d{1,2}-\d{1,2})(\/\d{1,2})?)$/, // hour 0-23
+    /^(\*|(\d{1,2})(,\d{1,2})*|(\d{1,2}-\d{1,2})(\/\d{1,2})?)$/, // dom 1-31
+    /^(\*|(\d{1,2})(,\d{1,2})*|(\d{1,2}-\d{1,2})(\/\d{1,2})?)$/, // month 1-12
+    /^(\*|(\d)(,\d)*|(\d-\d)(\/\d)?)$/,                           // dow 0-7
+  ]
+  const ranges = [
+    [0, 59], [0, 23], [1, 31], [1, 12], [0, 7],
+  ]
+  for (let i = 0; i < 5; i++) {
+    if (!patterns[i].test(parts[i])) return false
+    // Check numeric values are within range
+    const nums = parts[i].match(/\d+/g)
+    if (nums) {
+      for (const n of nums) {
+        const v = parseInt(n, 10)
+        if (v < ranges[i][0] || v > ranges[i][1]) return false
+      }
+    }
+  }
+  return true
+}
+
 /** Parse a cron expression into our friendly UI state */
 function parseCron(cron: string): {
   frequency: FrequencyType
@@ -89,6 +117,9 @@ export default function SchedulePicker({ value, onChange }: Props) {
   const [weekdays, setWeekdays] = useState<string[]>(parsed.weekdays)
   const [monthDay, setMonthDay] = useState(parsed.monthDay)
   const [customCron, setCustomCron] = useState(parsed.frequency === 'custom' ? value : '')
+  const cronError = frequency === 'custom' && customCron.trim() !== '' && !isValidCron(customCron)
+    ? '유효하지 않은 크론 표현식입니다 (예: 0 9 * * 1-5)'
+    : ''
 
   // Sync from external value changes (e.g. edit mode)
   useEffect(() => {
@@ -205,14 +236,19 @@ export default function SchedulePicker({ value, onChange }: Props) {
         <div>
           <Label>크론 표현식</Label>
           <input
-            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+            className={`flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm ${cronError ? 'border-destructive' : 'border-input'}`}
             value={customCron}
             onChange={(e) => {
               setCustomCron(e.target.value)
-              emitChange('custom', hour, minute, weekdays, monthDay, e.target.value)
+              if (isValidCron(e.target.value) || e.target.value.trim() === '') {
+                emitChange('custom', hour, minute, weekdays, monthDay, e.target.value)
+              }
             }}
             placeholder="분 시 일 월 요일 (예: 0 9 * * 1-5)"
           />
+          {cronError && (
+            <p className="text-sm text-destructive mt-1">{cronError}</p>
+          )}
         </div>
       )}
 
