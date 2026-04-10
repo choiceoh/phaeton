@@ -23,6 +23,10 @@ export function formatCell(value: unknown, field: Field): string {
     return s.length > 100 ? s.slice(0, 100) + '...' : s
   }
   if (field.field_type === 'json') return JSON.stringify(value)
+  if (field.field_type === 'table') {
+    if (Array.isArray(value)) return `${value.length}행`
+    return '-'
+  }
 
   const displayType = field.options?.display_type as string | undefined
 

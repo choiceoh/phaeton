@@ -35,6 +35,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   formula: '수식',
   lookup: '조회',
   rollup: '집계',
+  table: '테이블',
   label: '라벨',
   line: '라인',
   spacer: '공백',

@@ -1,4 +1,5 @@
 import {
+  type Column,
   type ColumnDef,
   type ColumnPinningState,
   type SortingState,
@@ -74,6 +75,10 @@ interface Props<T> {
   emptyTitle?: string
   emptyDescription?: string
   summaryRow?: Record<string, { label: string; value: string | number }>
+  /** Current aggregate function per column slug (for footer dropdown). */
+  summaryFn?: Record<string, string>
+  /** Called when user changes the aggregate function for a column. */
+  onSummaryFnChange?: (columnId: string, fn: string) => void
   toolbar?: React.ReactNode
   initialColumnVisibility?: VisibilityState
   /** Called when column visibility changes */
@@ -108,6 +113,8 @@ export function DataTable<T>({
   emptyTitle = '데이터가 없습니다',
   emptyDescription,
   summaryRow,
+  summaryFn,
+  onSummaryFnChange,
   toolbar,
   initialColumnVisibility,
   onColumnVisibilityChange: onColumnVisibilityChangeProp,
@@ -315,6 +322,33 @@ export function DataTable<T>({
     [grid.activeCell, grid.selection, data, colIds, editableSet, onCellEdit, onBatchCellEdit],
   )
 
+  // Header right-click context menu state.
+  const [headerMenu, setHeaderMenu] = useState<{
+    x: number
+    y: number
+    column: Column<T, unknown>
+  } | null>(null)
+
+  const handleHeaderContextMenu = useCallback(
+    (e: React.MouseEvent, column: Column<T, unknown>) => {
+      e.preventDefault()
+      setHeaderMenu({ x: e.clientX, y: e.clientY, column })
+    },
+    [],
+  )
+
+  // Close context menu on click outside.
+  useEffect(() => {
+    if (!headerMenu) return
+    const close = () => setHeaderMenu(null)
+    document.addEventListener('click', close)
+    document.addEventListener('contextmenu', close)
+    return () => {
+      document.removeEventListener('click', close)
+      document.removeEventListener('contextmenu', close)
+    }
+  }, [headerMenu])
+
   // Combined keydown handler.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -397,23 +431,26 @@ export function DataTable<T>({
           <TableHeader>
             {table.getHeaderGroups().map((group) => (
               <TableRow key={group.id}>
-                {group.headers.map((header) => {
+                {group.headers.map((header, headerIdx) => {
                   const canSort = header.column.getCanSort()
                   const sortDir = header.column.getIsSorted()
                   const isPinned = header.column.getIsPinned()
+                  // Check if this is the last pinned-left column to draw a separator.
+                  const pinnedLeftCols = columnPinning.left ?? []
+                  const isLastPinnedLeft = isPinned === 'left' && headerIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
 
                   return (
                     <TableHead
                       key={header.id}
-                      className="relative group"
+                      className={`relative group ${isPinned ? 'bg-background' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-border' : ''}`}
                       style={{
                         width: header.getSize(),
                         position: isPinned ? 'sticky' : undefined,
                         left: isPinned === 'left' ? header.column.getStart('left') : undefined,
                         right: isPinned === 'right' ? header.column.getAfter('right') : undefined,
-                        zIndex: isPinned ? 1 : undefined,
-                        backgroundColor: isPinned ? 'var(--background, #fff)' : undefined,
+                        zIndex: isPinned ? 2 : undefined,
                       }}
+                      onContextMenu={(e) => handleHeaderContextMenu(e, header.column)}
                     >
                       {header.isPlaceholder ? null : (
                         <button
@@ -422,6 +459,7 @@ export function DataTable<T>({
                           onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                           disabled={!canSort}
                         >
+                          {isPinned && <PinIcon className="h-3 w-3 text-muted-foreground shrink-0" />}
                           {flexRender(header.column.columnDef.header, header.getContext())}
                           {sortDir === 'asc' && <ChevronUp className="h-3 w-3" />}
                           {sortDir === 'desc' && <ChevronDown className="h-3 w-3" />}
@@ -434,7 +472,7 @@ export function DataTable<T>({
                       <div
                         onMouseDown={header.getResizeHandler()}
                         onTouchStart={header.getResizeHandler()}
-                        className="absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none hover:bg-primary/50 group-hover:bg-border"
+                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none touch-none hover:bg-primary/50 group-hover:bg-border"
                         style={{
                           transform: header.column.getIsResizing()
                             ? `translateX(${table.getState().columnSizingInfo.deltaOffset}px)`
@@ -473,17 +511,19 @@ export function DataTable<T>({
                     const isCellEditing = editingCell?.row === rowIdx && editingCell?.col === colIdx
                     const colId = cell.column.id
                     const editable = !!onCellEdit && editableSet.has(colId)
+                    const pinnedLeftCols = columnPinning.left ?? []
+                    const isLastPinnedLeftCell = isPinned === 'left' && colIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
 
                     return (
                       <TableCell
                         key={cell.id}
+                        className={`${isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-border' : ''}`}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
                           left: isPinned === 'left' ? cell.column.getStart('left') : undefined,
                           right: isPinned === 'right' ? cell.column.getAfter('right') : undefined,
                           zIndex: isPinned ? 1 : undefined,
-                          backgroundColor: isPinned ? 'var(--background, #fff)' : undefined,
                         }}
                       >
                         {onCellEdit ? (() => {
@@ -531,13 +571,32 @@ export function DataTable<T>({
               <TableRow className="bg-muted/50 font-medium">
                 {table.getVisibleFlatColumns().map((col, i) => {
                   const summary = summaryRow[col.id]
+                  const currentFn = summaryFn?.[col.id] || 'sum'
                   return (
                     <TableCell key={col.id} className="text-xs">
-                      {i === 0 && !summary ? '합계' : ''}
+                      {i === 0 && !summary ? (
+                        <span className="text-muted-foreground">집계</span>
+                      ) : null}
                       {summary ? (
-                        <span title={String(summary.value)}>
-                          {summary.label}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          {onSummaryFnChange && (
+                            <select
+                              value={currentFn}
+                              onChange={(e) => onSummaryFnChange(col.id, e.target.value)}
+                              className="h-5 rounded border border-input bg-transparent px-1 text-[10px] cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <option value="sum">합계</option>
+                              <option value="avg">평균</option>
+                              <option value="count">개수</option>
+                              <option value="min">최소</option>
+                              <option value="max">최대</option>
+                            </select>
+                          )}
+                          <span title={String(summary.value)}>
+                            {summary.label}
+                          </span>
+                        </div>
                       ) : null}
                     </TableCell>
                   )
@@ -560,6 +619,68 @@ export function DataTable<T>({
             const cols = c2 - c1 + 1
             return `${rows}행 x ${cols}열 선택`
           })()}
+        </div>
+      )}
+
+      {/* Header context menu (right-click) */}
+      {headerMenu && (
+        <div
+          className="fixed z-50 min-w-[160px] rounded-lg border bg-popover p-1 text-sm shadow-md"
+          style={{ left: headerMenu.x, top: headerMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {headerMenu.column.getIsPinned() ? (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+              onClick={() => {
+                headerMenu.column.pin(false)
+                setHeaderMenu(null)
+              }}
+            >
+              <PinOffIcon className="h-3.5 w-3.5" />
+              고정 해제
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                onClick={() => {
+                  headerMenu.column.pin('left')
+                  setHeaderMenu(null)
+                }}
+              >
+                <PinIcon className="h-3.5 w-3.5" />
+                왼쪽 고정
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                onClick={() => {
+                  headerMenu.column.pin('right')
+                  setHeaderMenu(null)
+                }}
+              >
+                <PinIcon className="h-3.5 w-3.5 rotate-90" />
+                오른쪽 고정
+              </button>
+            </>
+          )}
+          <div className="my-1 h-px bg-border" />
+          {headerMenu.column.getCanHide() && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+              onClick={() => {
+                headerMenu.column.toggleVisibility(false)
+                setHeaderMenu(null)
+              }}
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              컬럼 숨기기
+            </button>
+          )}
         </div>
       )}
 

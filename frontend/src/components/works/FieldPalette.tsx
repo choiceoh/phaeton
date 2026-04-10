@@ -17,6 +17,7 @@ import {
   Sigma,
   Square,
   SquareCheck,
+  Table2,
   Tag,
   Type,
   User,
@@ -60,6 +61,7 @@ const FIELD_ICONS: Record<FieldType, LucideIcon> = {
   rollup: Sigma,
   label: Tag,
   line: Minus,
+  table: Table2,
   spacer: Square,
 }
 
@@ -87,6 +89,7 @@ const FORMULA_ENTRIES: PaletteEntry[] = [
 
 const ADVANCED_ENTRIES: PaletteEntry[] = [
   { icon: FIELD_ICONS.boolean, label: FIELD_TYPE_LABELS.boolean, type: 'boolean' },
+  { icon: FIELD_ICONS.table, label: FIELD_TYPE_LABELS.table, type: 'table' },
   { icon: FIELD_ICONS.json, label: FIELD_TYPE_LABELS.json, type: 'json' },
   { icon: FIELD_ICONS.autonumber, label: FIELD_TYPE_LABELS.autonumber, type: 'autonumber' },
 ]
