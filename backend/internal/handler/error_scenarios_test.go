@@ -48,7 +48,7 @@ func TestWriteError_Status(t *testing.T) {
 			}
 			json.NewDecoder(w.Body).Decode(&body)
 			if body.Message != tc.msg {
-				t.Errorf("error = %q, want %q", body.Message, tc.msg)
+				t.Errorf("message = %q, want %q", body.Message, tc.msg)
 			}
 		})
 	}
