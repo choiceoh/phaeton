@@ -31,6 +31,8 @@ export default function ViewTabs({ fields, entries, onEntryClick, onCardMove, pr
         width: 6,
         height: 1,
         sort_order: 0,
+        width: 6,
+        height: 1,
         created_at: '',
         updated_at: '',
         options: {

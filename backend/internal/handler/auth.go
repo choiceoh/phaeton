@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -23,14 +25,20 @@ import (
 
 // User represents an auth.users row.
 type User struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	Password  string    `json:"-"`
-	Role      string    `json:"role"`
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	Name         string    `json:"name"`
+	Password     string    `json:"-"`
+	Role         string    `json:"role"`
+	IsActive     bool      `json:"is_active"`
+	DepartmentID *string   `json:"department_id"`
+	Position     string    `json:"position"`
+	Title        string    `json:"title"`
+	Phone        string    `json:"phone"`
+	Avatar       string    `json:"avatar"`
+	JoinedAt     *string   `json:"joined_at"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // Role constants.
@@ -84,10 +92,14 @@ func Login(pool *pgxpool.Pool, limiter *middleware.RateLimiter) http.HandlerFunc
 
 		var user User
 		err := pool.QueryRow(r.Context(),
-			`SELECT id, email, name, password, role, is_active
+			`SELECT id, email, name, password, role, is_active,
+			        department_id, position, title, phone, avatar,
+			        joined_at::text
 			 FROM auth.users WHERE LOWER(email) = $1`,
 			email,
-		).Scan(&user.ID, &user.Email, &user.Name, &user.Password, &user.Role, &user.IsActive)
+		).Scan(&user.ID, &user.Email, &user.Name, &user.Password, &user.Role, &user.IsActive,
+			&user.DepartmentID, &user.Position, &user.Title, &user.Phone, &user.Avatar,
+			&user.JoinedAt)
 
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -157,11 +169,25 @@ func Logout() http.HandlerFunc {
 }
 
 // Me handles GET /api/auth/me.
-func Me() http.HandlerFunc {
+func Me(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := middleware.GetUser(r.Context())
+		claims, ok := middleware.GetUser(r.Context())
 		if !ok {
 			apierr.Unauthorized("not authenticated").Write(w)
+			return
+		}
+		var user User
+		err := pool.QueryRow(r.Context(),
+			`SELECT id, email, name, role, is_active,
+			        department_id, position, title, phone, avatar,
+			        joined_at::text, created_at, updated_at
+			 FROM auth.users WHERE id = $1`, claims.UserID,
+		).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &user.IsActive,
+			&user.DepartmentID, &user.Position, &user.Title, &user.Phone, &user.Avatar,
+			&user.JoinedAt, &user.CreatedAt, &user.UpdatedAt)
+		if err != nil {
+			slog.Error("me: query failed", "error", err)
+			apierr.WrapInternal("query current user", err).Write(w)
 			return
 		}
 		writeJSON(w, http.StatusOK, user)
@@ -182,10 +208,15 @@ func CreateUser(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		var input struct {
-			Email    string `json:"email"`
-			Name     string `json:"name"`
-			Password string `json:"password"`
-			Role     string `json:"role"`
+			Email        string  `json:"email"`
+			Name         string  `json:"name"`
+			Password     string  `json:"password"`
+			Role         string  `json:"role"`
+			DepartmentID *string `json:"department_id"`
+			Position     string  `json:"position"`
+			Title        string  `json:"title"`
+			Phone        string  `json:"phone"`
+			JoinedAt     *string `json:"joined_at"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			apierr.BadRequest("invalid request body").Write(w)
@@ -213,11 +244,17 @@ func CreateUser(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// Normalize empty department_id to nil.
+		if input.DepartmentID != nil && *input.DepartmentID == "" {
+			input.DepartmentID = nil
+		}
+
 		var id string
 		err = pool.QueryRow(r.Context(),
-			`INSERT INTO auth.users (email, name, password, role)
-			 VALUES ($1, $2, $3, $4) RETURNING id`,
+			`INSERT INTO auth.users (email, name, password, role, department_id, position, title, phone, joined_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
 			email, input.Name, string(hash), input.Role,
+			input.DepartmentID, input.Position, input.Title, input.Phone, input.JoinedAt,
 		).Scan(&id)
 		if err != nil {
 			var pgErr *pgconn.PgError
@@ -238,7 +275,9 @@ func CreateUser(pool *pgxpool.Pool) http.HandlerFunc {
 func ListUsers(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rows, err := pool.Query(r.Context(),
-			`SELECT id, email, name, role, is_active, created_at, updated_at
+			`SELECT id, email, name, role, is_active,
+			        department_id, position, title, phone, avatar,
+			        joined_at::text, created_at, updated_at
 			 FROM auth.users ORDER BY name`)
 		if err != nil {
 			slog.Error("list users: query failed", "error", err)
@@ -250,7 +289,9 @@ func ListUsers(pool *pgxpool.Pool) http.HandlerFunc {
 		users := make([]User, 0)
 		for rows.Next() {
 			var u User
-			if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.IsActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.IsActive,
+				&u.DepartmentID, &u.Position, &u.Title, &u.Phone, &u.Avatar,
+				&u.JoinedAt, &u.CreatedAt, &u.UpdatedAt); err != nil {
 				slog.Warn("list users: scan row failed", "error", err)
 				continue
 			}
@@ -260,6 +301,258 @@ func ListUsers(pool *pgxpool.Pool) http.HandlerFunc {
 			slog.Error("list users: rows iteration failed", "error", err)
 		}
 		writeJSON(w, http.StatusOK, users)
+	}
+}
+
+// UpdateUser handles PATCH /api/users/{id} (director only).
+// Allows updating name, email, role, is_active, department_id, position, title, phone, avatar, joined_at.
+func UpdateUser(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		caller, ok := middleware.GetUser(r.Context())
+		if !ok {
+			apierr.Unauthorized("not authenticated").Write(w)
+			return
+		}
+		if caller.Role != RoleDirector {
+			apierr.Forbidden("directors only").Write(w)
+			return
+		}
+
+		userID := chi.URLParam(r, "id")
+
+		var input struct {
+			Name         *string `json:"name"`
+			Email        *string `json:"email"`
+			Role         *string `json:"role"`
+			IsActive     *bool   `json:"is_active"`
+			DepartmentID *string `json:"department_id"`
+			Position     *string `json:"position"`
+			Title        *string `json:"title"`
+			Phone        *string `json:"phone"`
+			Avatar       *string `json:"avatar"`
+			JoinedAt     *string `json:"joined_at"`
+			Password     *string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			apierr.BadRequest("invalid request body").Write(w)
+			return
+		}
+		defer r.Body.Close()
+
+		sets := []string{}
+		args := []any{}
+		n := 1
+
+		addSet := func(col string, val any) {
+			sets = append(sets, fmt.Sprintf("%s = $%d", col, n))
+			args = append(args, val)
+			n++
+		}
+
+		if input.Name != nil {
+			addSet("name", *input.Name)
+		}
+		if input.Email != nil {
+			addSet("email", normalizeEmail(*input.Email))
+		}
+		if input.Role != nil {
+			switch *input.Role {
+			case RoleDirector, RolePM, RoleEngineer, RoleViewer:
+			default:
+				apierr.BadRequest("invalid role").Write(w)
+				return
+			}
+			addSet("role", *input.Role)
+		}
+		if input.IsActive != nil {
+			addSet("is_active", *input.IsActive)
+		}
+		if input.DepartmentID != nil {
+			if *input.DepartmentID == "" {
+				addSet("department_id", nil)
+			} else {
+				addSet("department_id", *input.DepartmentID)
+			}
+		}
+		if input.Position != nil {
+			addSet("position", *input.Position)
+		}
+		if input.Title != nil {
+			addSet("title", *input.Title)
+		}
+		if input.Phone != nil {
+			addSet("phone", *input.Phone)
+		}
+		if input.Avatar != nil {
+			addSet("avatar", *input.Avatar)
+		}
+		if input.JoinedAt != nil {
+			if *input.JoinedAt == "" {
+				addSet("joined_at", nil)
+			} else {
+				addSet("joined_at", *input.JoinedAt)
+			}
+		}
+		if input.Password != nil && *input.Password != "" {
+			hash, err := bcrypt.GenerateFromPassword([]byte(*input.Password), bcrypt.DefaultCost)
+			if err != nil {
+				slog.Error("update user: bcrypt failed", "error", err)
+				apierr.Internal("failed to hash password").Write(w)
+				return
+			}
+			addSet("password", string(hash))
+		}
+
+		if len(sets) == 0 {
+			apierr.BadRequest("no fields to update").Write(w)
+			return
+		}
+
+		sets = append(sets, "updated_at = now()")
+		query := fmt.Sprintf("UPDATE auth.users SET %s WHERE id = $%d",
+			strings.Join(sets, ", "), n)
+		args = append(args, userID)
+
+		tag, err := pool.Exec(r.Context(), query, args...)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+				apierr.Conflict("email already exists").Write(w)
+				return
+			}
+			slog.Error("update user: exec failed", "error", err)
+			apierr.WrapInternal("update user", err).Write(w)
+			return
+		}
+		if tag.RowsAffected() == 0 {
+			apierr.NotFound("user not found").Write(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	}
+}
+
+// UpdateMe handles PATCH /api/auth/me (profile edit by current user).
+func UpdateMe(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := middleware.GetUser(r.Context())
+		if !ok {
+			apierr.Unauthorized("not authenticated").Write(w)
+			return
+		}
+
+		var input struct {
+			Name   *string `json:"name"`
+			Phone  *string `json:"phone"`
+			Avatar *string `json:"avatar"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			apierr.BadRequest("invalid request body").Write(w)
+			return
+		}
+		defer r.Body.Close()
+
+		sets := []string{}
+		args := []any{}
+		n := 1
+
+		if input.Name != nil {
+			if *input.Name == "" {
+				apierr.BadRequest("name cannot be empty").Write(w)
+				return
+			}
+			sets = append(sets, fmt.Sprintf("name = $%d", n))
+			args = append(args, *input.Name)
+			n++
+		}
+		if input.Phone != nil {
+			sets = append(sets, fmt.Sprintf("phone = $%d", n))
+			args = append(args, *input.Phone)
+			n++
+		}
+		if input.Avatar != nil {
+			sets = append(sets, fmt.Sprintf("avatar = $%d", n))
+			args = append(args, *input.Avatar)
+			n++
+		}
+
+		if len(sets) == 0 {
+			apierr.BadRequest("no fields to update").Write(w)
+			return
+		}
+
+		sets = append(sets, "updated_at = now()")
+		query := fmt.Sprintf("UPDATE auth.users SET %s WHERE id = $%d",
+			strings.Join(sets, ", "), n)
+		args = append(args, claims.UserID)
+
+		if _, err := pool.Exec(r.Context(), query, args...); err != nil {
+			slog.Error("update me: exec failed", "error", err)
+			apierr.WrapInternal("update profile", err).Write(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	}
+}
+
+// ChangePassword handles POST /api/auth/password (current user).
+func ChangePassword(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := middleware.GetUser(r.Context())
+		if !ok {
+			apierr.Unauthorized("not authenticated").Write(w)
+			return
+		}
+
+		var input struct {
+			CurrentPassword string `json:"current_password"`
+			NewPassword     string `json:"new_password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			apierr.BadRequest("invalid request body").Write(w)
+			return
+		}
+		defer r.Body.Close()
+
+		if input.CurrentPassword == "" || input.NewPassword == "" {
+			apierr.BadRequest("current_password and new_password are required").Write(w)
+			return
+		}
+		if len(input.NewPassword) < 6 {
+			apierr.BadRequest("new password must be at least 6 characters").Write(w)
+			return
+		}
+
+		var currentHash string
+		err := pool.QueryRow(r.Context(),
+			`SELECT password FROM auth.users WHERE id = $1`, claims.UserID,
+		).Scan(&currentHash)
+		if err != nil {
+			slog.Error("change password: query failed", "error", err)
+			apierr.WrapInternal("query password", err).Write(w)
+			return
+		}
+
+		if err := bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(input.CurrentPassword)); err != nil {
+			apierr.BadRequest("current password is incorrect").Write(w)
+			return
+		}
+
+		newHash, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			slog.Error("change password: bcrypt failed", "error", err)
+			apierr.Internal("failed to hash password").Write(w)
+			return
+		}
+
+		if _, err := pool.Exec(r.Context(),
+			`UPDATE auth.users SET password = $1, updated_at = now() WHERE id = $2`,
+			string(newHash), claims.UserID); err != nil {
+			slog.Error("change password: update failed", "error", err)
+			apierr.WrapInternal("change password", err).Write(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "changed"})
 	}
 }
 

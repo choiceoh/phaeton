@@ -29,16 +29,24 @@ export default function RootLayout() {
           <Link to="/apps" className="text-sm text-stone-600 hover:text-stone-900">
             컬렉션
           </Link>
+          <Link to="/admin/org" className="text-sm text-stone-600 hover:text-stone-900">
+            조직도
+          </Link>
           {(user.role === 'director' || user.role === 'pm') && (
-            <Link to="/history" className="text-sm text-stone-600 hover:text-stone-900">
-              이력
-            </Link>
+            <>
+              <Link to="/history" className="text-sm text-stone-600 hover:text-stone-900">
+                이력
+              </Link>
+              <Link to="/admin/users" className="text-sm text-stone-600 hover:text-stone-900">
+                사용자 관리
+              </Link>
+            </>
           )}
         </div>
         <div className="flex items-center gap-3 text-sm text-stone-500">
-          <span>
+          <Link to="/profile" className="hover:text-stone-900">
             {user.name} ({ROLE_LABELS[user.role] || user.role})
-          </span>
+          </Link>
           <Button variant="ghost" size="sm" onClick={() => logout.mutate()}>
             로그아웃
           </Button>
