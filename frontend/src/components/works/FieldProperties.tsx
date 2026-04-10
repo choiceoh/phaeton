@@ -21,7 +21,7 @@ import {
   VALIDATION_OPTIONS,
   WIDTH_OPTIONS,
 } from '@/lib/constants'
-import type { Collection } from '@/lib/types'
+import type { Collection, FieldType } from '@/lib/types'
 
 import type { FieldDraft } from './FieldPreview'
 
@@ -56,7 +56,37 @@ export default function FieldProperties({ field, collections, onChange }: Props)
   const isSelect = field.field_type === 'select' || field.field_type === 'multiselect'
   const isRelation = field.field_type === 'relation'
   const isBoolean = field.field_type === 'boolean'
-  const isDate = field.field_type === 'date' || field.field_type === 'datetime'
+  const isDate = field.field_type === 'date' || field.field_type === 'datetime' || field.field_type === 'time'
+
+  // Group variant options
+  type VariantOption = { value: FieldType; label: string }
+  const TEXT_VARIANTS: VariantOption[] = [
+    { value: 'text', label: '텍스트' },
+    { value: 'textarea', label: '멀티 텍스트' },
+  ]
+  const NUMBER_VARIANTS: VariantOption[] = [
+    { value: 'number', label: '숫자' },
+    { value: 'integer', label: '정수' },
+  ]
+  const DATE_VARIANTS: VariantOption[] = [
+    { value: 'date', label: '날짜' },
+    { value: 'time', label: '시간' },
+    { value: 'datetime', label: '일시' },
+  ]
+  const SELECT_VARIANTS: VariantOption[] = [
+    { value: 'select', label: '단일 선택' },
+    { value: 'multiselect', label: '다중 선택' },
+  ]
+
+  const variantGroup: VariantOption[] | null = isText
+    ? TEXT_VARIANTS
+    : isNumeric
+      ? NUMBER_VARIANTS
+      : isDate
+        ? DATE_VARIANTS
+        : isSelect
+          ? SELECT_VARIANTS
+          : null
 
   // Layout fields: show minimal properties only
   if (isLayout) {
@@ -120,6 +150,29 @@ export default function FieldProperties({ field, collections, onChange }: Props)
         </span>
         <h3 className="text-sm font-medium">속성</h3>
       </div>
+
+      {/* ── 유형 전환 (그룹 내) ── */}
+      {variantGroup && (
+        <>
+          <section className="space-y-2">
+            <Label className="text-xs font-semibold text-muted-foreground">유형</Label>
+            <Select
+              value={field.field_type}
+              onValueChange={(v) => update({ field_type: v as FieldType })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {variantGroup.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </section>
+          <Separator />
+        </>
+      )}
 
       {/* ── 이름 (Label) ── */}
       <section className="space-y-2">
@@ -291,18 +344,6 @@ export default function FieldProperties({ field, collections, onChange }: Props)
                 placeholder="KRW"
                 maxLength={3}
               />
-            )}
-            {opts.display_type === 'rating' && (
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">최대 별점</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={(opts.max_rating as number) || 5}
-                  onChange={(e) => updateOption('max_rating', Number(e.target.value) || 5)}
-                />
-              </div>
             )}
           </section>
           <Separator />

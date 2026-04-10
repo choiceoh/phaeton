@@ -1,4 +1,4 @@
-import { FIELD_TYPE_LABELS, WIDTH_OPTIONS, HEIGHT_OPTIONS, isLayoutType } from '@/lib/constants'
+import { FIELD_TYPE_LABELS, isLayoutType } from '@/lib/constants'
 import type { FieldType } from '@/lib/types'
 
 export interface FieldDraft {
@@ -52,14 +52,27 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
     )
   }
 
+  const colSpanClass: Record<number, string> = {
+    1: 'col-span-1',
+    2: 'col-span-2',
+    3: 'col-span-3',
+    6: 'col-span-6',
+  }
+
+  const rowSpanClass: Record<number, string> = {
+    1: '',
+    2: 'row-span-2 min-h-24',
+    3: 'row-span-3 min-h-36',
+  }
+
   return (
-    <div className="space-y-2">
+    <div>
       <h3 className="mb-2 text-sm font-medium text-muted-foreground">필드 목록</h3>
-      <div className="space-y-2">
+      <div className="grid grid-cols-6 gap-2">
         {fields.map((field, i) => (
           <div
             key={field.id}
-            className={`cursor-pointer rounded-md border p-3 transition-colors ${
+            className={`${colSpanClass[field.width] ?? 'col-span-6'} ${rowSpanClass[field.height] ?? ''} cursor-pointer rounded-md border p-3 transition-colors ${
               selectedId === field.id ? 'border-primary bg-accent' : 'hover:bg-accent/50'
             } ${isLayoutType(field.field_type) ? 'border-dashed opacity-75' : ''
             }`}
@@ -69,22 +82,16 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => handleDrop(e, i)}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{field.label || '(제목 없음)'}</span>
-                {field.is_required && <span className="text-xs text-destructive">*</span>}
-                {field.is_unique && <span className="text-xs text-muted-foreground">UNIQUE</span>}
+            <div className="flex items-center justify-between gap-1">
+              <div className="flex min-w-0 items-center gap-1">
+                <span className="truncate text-sm font-medium">{field.label || '(제목 없음)'}</span>
+                {field.is_required && <span className="shrink-0 text-xs text-destructive">*</span>}
+                {field.is_unique && <span className="shrink-0 text-xs text-muted-foreground">UNIQUE</span>}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1">
                 <span className="text-xs text-muted-foreground">
                   {FIELD_TYPE_LABELS[field.field_type]}
                 </span>
-                {(field.width !== 6 || field.height !== 1) && (
-                  <span className="text-xs text-muted-foreground">
-                    {WIDTH_OPTIONS.find((o) => o.value === field.width)?.label ?? field.width}
-                    {field.height !== 1 && ` / ${HEIGHT_OPTIONS.find((o) => o.value === field.height)?.label ?? field.height}`}
-                  </span>
-                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); onRemove(field.id) }}
                   className="text-xs text-muted-foreground hover:text-destructive"
@@ -95,7 +102,7 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
               </div>
             </div>
             {field.slug && (
-              <p className="mt-1 text-xs text-muted-foreground">slug: {field.slug}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">slug: {field.slug}</p>
             )}
           </div>
         ))}
