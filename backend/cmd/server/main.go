@@ -26,6 +26,8 @@ import (
 	"github.com/choiceoh/phaeton/backend/internal/migration"
 	"github.com/choiceoh/phaeton/backend/internal/samlsp"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
+	"github.com/choiceoh/phaeton/backend/internal/sync"
+	"github.com/choiceoh/phaeton/backend/internal/sync/amaranth"
 )
 
 //go:embed static/*
@@ -78,6 +80,7 @@ func run() int {
 	schemaHandler := handler.NewSchemaHandler(store, cache, migEngine)
 	dynHandler := handler.NewDynHandler(pool, cache)
 	viewHandler := handler.NewViewHandler(store)
+	savedViewHandler := handler.NewSavedViewHandler(store)
 	historyHandler := handler.NewHistoryHandler(pool, cache)
 	memberHandler := handler.NewMemberHandler(pool)
 
@@ -106,8 +109,16 @@ func run() int {
 		samlMiddleware = sp
 	}
 
+	// Sync runner (Amaranth HR integration).
+	syncRunner := sync.NewRunner(6*time.Hour, logger)
+	if cfg := amaranth.ConfigFromEnv(); cfg != nil {
+		src := amaranth.NewSource(pool, cfg, logger)
+		syncRunner.Register(src)
+		logger.Info("amaranth sync registered")
+	}
+
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, logger, loginLimiter, samlMiddleware)
+	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, savedViewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, logger, loginLimiter, samlMiddleware)
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -125,6 +136,9 @@ func run() int {
 		if err != nil {
 			return fmt.Errorf("listen: %w", err)
 		}
+
+		// Start sync runner in background.
+		go syncRunner.Start(ctx)
 
 		logging.PrintBanner(os.Stderr, logging.BannerInfo{
 			Version: version,
@@ -154,6 +168,7 @@ func buildRouter(
 	schemaH *handler.SchemaHandler,
 	dynH *handler.DynHandler,
 	viewH *handler.ViewHandler,
+	savedViewH *handler.SavedViewHandler,
 	histH *handler.HistoryHandler,
 	memberH *handler.MemberHandler,
 	commentH *handler.CommentHandler,
@@ -251,6 +266,12 @@ func buildRouter(
 			r.Post("/collections/{id}/views", viewH.CreateView)
 			r.Patch("/views/{viewId}", viewH.UpdateView)
 			r.Delete("/views/{viewId}", viewH.DeleteView)
+
+			// Saved views (filter/sort persistence).
+			r.Get("/collections/{id}/saved-views", savedViewH.ListSavedViews)
+			r.Post("/collections/{id}/saved-views", savedViewH.CreateSavedView)
+			r.Patch("/saved-views/{savedViewId}", savedViewH.UpdateSavedView)
+			r.Delete("/saved-views/{savedViewId}", savedViewH.DeleteSavedView)
 		})
 
 		// Dynamic API — auto-generated CRUD for data tables.
