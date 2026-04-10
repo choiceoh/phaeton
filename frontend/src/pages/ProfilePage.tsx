@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Camera, KeyRound, Mail, Shield, User } from 'lucide-react'
+import { KeyRound, Mail, Shield, User } from 'lucide-react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -131,13 +131,6 @@ export default function ProfilePage() {
               {user.name.slice(0, 1)}
             </AvatarFallback>
           </Avatar>
-          <button
-            type="button"
-            className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-stone-100 text-stone-500 transition-colors hover:bg-stone-200"
-            onClick={() => toast.info('프로필 사진 기능은 준비 중입니다')}
-          >
-            <Camera className="h-3.5 w-3.5" />
-          </button>
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-semibold text-stone-900">{user.name}</h2>

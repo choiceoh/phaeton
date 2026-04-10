@@ -112,16 +112,20 @@ func (h *WebhookHandler) Receive(w http.ResponseWriter, r *http.Request) {
 	if err := fn(json.RawMessage(body)); err != nil {
 		slog.Error("webhook: handler failed", "topic", topic, "error", err)
 		// Mark as processed with error message.
-		h.pool.Exec(r.Context(),
+		if _, execErr := h.pool.Exec(r.Context(),
 			`UPDATE _meta.webhook_events SET processed = TRUE, error_message = $2 WHERE id = $1`,
-			evt.ID, err.Error())
+			evt.ID, err.Error()); execErr != nil {
+			slog.Error("webhook: failed to mark event as processed", "id", evt.ID, "error", execErr)
+		}
 		apierr.Internal("webhook processing failed").Write(w)
 		return
 	}
 
 	// Mark as successfully processed.
-	h.pool.Exec(r.Context(),
-		`UPDATE _meta.webhook_events SET processed = TRUE WHERE id = $1`, evt.ID)
+	if _, err := h.pool.Exec(r.Context(),
+		`UPDATE _meta.webhook_events SET processed = TRUE WHERE id = $1`, evt.ID); err != nil {
+		slog.Error("webhook: failed to mark event as processed", "id", evt.ID, "error", err)
+	}
 	evt.Processed = true
 
 	writeJSON(w, http.StatusOK, evt)
@@ -178,6 +182,11 @@ func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		slog.Error("webhook: rows iteration failed", "error", err)
+		apierr.Internal("failed to list webhooks").Write(w)
+		return
 	}
 
 	writeList(w, events, total, page, limit)

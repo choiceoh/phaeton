@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -95,6 +96,9 @@ func (h *DynHandler) SimilarRecords(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		results = append(results, s)
+	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("similar records: rows iteration failed", "error", err)
 	}
 	if results == nil {
 		results = []similar{}

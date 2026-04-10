@@ -1,6 +1,7 @@
 package automation
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -164,14 +165,14 @@ func TestNewScheduler(t *testing.T) {
 	if s.interval != 5*time.Minute {
 		t.Errorf("interval = %v, want 5m", s.interval)
 	}
-	if s.stop == nil {
-		t.Error("stop channel should not be nil")
+	if s.cancel == nil {
+		t.Error("cancel func should not be nil")
 	}
 }
 
 func TestScheduler_StartStop(t *testing.T) {
 	s := NewScheduler(nil, time.Hour)
-	s.Start()
+	s.Start(context.Background())
 	// Should not block or panic.
 	s.Stop()
 }

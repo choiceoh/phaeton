@@ -160,6 +160,7 @@ function DroppableColumn({
           <button
             type="button"
             className="rounded p-0.5 hover:bg-accent"
+            aria-label="컬럼 펼치기"
             onClick={onToggleCollapse}
           >
             <ChevronRight className="h-4 w-4" />
@@ -179,6 +180,7 @@ function DroppableColumn({
         <button
           type="button"
           className="rounded p-0.5 hover:bg-accent"
+          aria-label="컬럼 접기"
           onClick={onToggleCollapse}
         >
           <ChevronDown className="h-4 w-4" />
@@ -467,7 +469,6 @@ export default function KanbanView({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
         ref={containerRef}
         className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4 sm:snap-none animate-fade-in focus:outline-none"

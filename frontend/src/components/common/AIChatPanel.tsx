@@ -130,6 +130,7 @@ export default function AIChatPanel() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
+          aria-label="AI 채팅 열기"
           className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full border border-stone-200 bg-white shadow-lg transition-transform hover:scale-105 active:scale-95"
         >
           <MessageCircle className="h-5 w-5 text-stone-700" />
