@@ -143,8 +143,8 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
 
   return (
     <div>
-      <h3 className="mb-2 text-sm font-medium text-muted-foreground">입력화면 미리보기</h3>
-      <div className="rounded-lg border bg-background p-4">
+      <h3 className="mb-2 text-sm font-medium text-foreground/70">입력화면 미리보기</h3>
+      <div className="rounded-lg border bg-muted/50 p-4">
         <div ref={gridRef} className="grid grid-cols-1 gap-4 sm:grid-cols-6">
           {fields.map((field, i) => {
             if (isLayoutType(field.field_type)) {
