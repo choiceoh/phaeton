@@ -12,9 +12,11 @@ import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import {
   FIELD_TYPE_LABELS,
+  HEIGHT_OPTIONS,
   ON_DELETE_OPTIONS,
   RELATION_TYPE_LABELS,
   VALIDATION_OPTIONS,
+  WIDTH_OPTIONS,
 } from '@/lib/constants'
 import type { Collection } from '@/lib/types'
 
@@ -254,45 +256,47 @@ export default function FieldProperties({ field, collections, onChange }: Props)
         </>
       )}
 
-      {/* ── 입력 너비 조절 ── */}
+      {/* ── 폭 / 높이 ── */}
       <section className="space-y-2">
         <Label className="text-xs font-semibold text-muted-foreground">입력 너비 조절</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            min={0}
-            className="w-20"
-            value={(opts.width as number) ?? 100}
-            onChange={(e) => updateOption('width', Number(e.target.value))}
-          />
-          <div className="flex items-center gap-1 rounded-md border p-0.5">
-            <button
-              type="button"
-              className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                (opts.width_unit || '%') === 'px'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-              onClick={() => updateOption('width_unit', 'px')}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">폭</Label>
+            <Select
+              value={String(field.width)}
+              onValueChange={(v) => update({ width: Number(v) })}
             >
-              PX
-            </button>
-            <button
-              type="button"
-              className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                (opts.width_unit || '%') === '%'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-              onClick={() => updateOption('width_unit', '%')}
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WIDTH_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={String(o.value)}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">높이</Label>
+            <Select
+              value={String(field.height)}
+              onValueChange={(v) => update({ height: Number(v) })}
             >
-              %
-            </button>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HEIGHT_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={String(o.value)}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
-        {(opts.width_unit || '%') === '%' && (
-          <p className="text-xs text-muted-foreground">* 퍼센트(%) 입력시 비율로 지정</p>
-        )}
       </section>
 
       <Separator />

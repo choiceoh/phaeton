@@ -46,11 +46,7 @@ export function useLogout() {
   const navigate = useNavigate()
 
   return useMutation({
-    mutationFn: async () => {
-      // No backend logout endpoint yet — just clear the cookie client-side
-      // by overwriting it with an empty value.
-      document.cookie = 'token=; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-    },
+    mutationFn: () => api.post<void>('/auth/logout'),
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: queryKeys.auth.all })
       navigate('/login', { replace: true })

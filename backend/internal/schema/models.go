@@ -71,6 +71,8 @@ type Field struct {
 	IsIndexed    bool            `json:"is_indexed"`
 	DefaultValue json.RawMessage `json:"default_value,omitempty"`
 	Options      json.RawMessage `json:"options,omitempty"`
+	Width        int16           `json:"width"`
+	Height       int16           `json:"height"`
 	SortOrder    int             `json:"sort_order"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
@@ -125,6 +127,8 @@ type CreateFieldIn struct {
 	IsIndexed    bool            `json:"is_indexed"`
 	DefaultValue json.RawMessage `json:"default_value,omitempty"`
 	Options      json.RawMessage `json:"options,omitempty"`
+	Width        int16           `json:"width"`
+	Height       int16           `json:"height"`
 	Relation     *CreateRelIn    `json:"relation,omitempty"`
 }
 
@@ -143,11 +147,13 @@ type UpdateCollectionReq struct {
 }
 
 type UpdateFieldReq struct {
-	Label        *string          `json:"label,omitempty"`
-	FieldType    *FieldType       `json:"field_type,omitempty"`
-	IsRequired   *bool            `json:"is_required,omitempty"`
-	IsUnique     *bool            `json:"is_unique,omitempty"`
-	IsIndexed    *bool            `json:"is_indexed,omitempty"`
-	DefaultValue json.RawMessage  `json:"default_value,omitempty"`
-	Options      json.RawMessage  `json:"options,omitempty"`
+	Label        *string         `json:"label,omitempty"`
+	FieldType    *FieldType      `json:"field_type,omitempty"`
+	IsRequired   *bool           `json:"is_required,omitempty"`
+	IsUnique     *bool           `json:"is_unique,omitempty"`
+	IsIndexed    *bool           `json:"is_indexed,omitempty"`
+	DefaultValue json.RawMessage `json:"default_value,omitempty"`
+	Options      json.RawMessage `json:"options,omitempty"`
+	Width        *int16          `json:"width,omitempty"`
+	Height       *int16          `json:"height,omitempty"`
 }
