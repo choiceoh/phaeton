@@ -145,6 +145,10 @@ func (h *AutomationHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 		a.Conditions = append(a.Conditions, c)
 	}
+	if err := cRows.Err(); err != nil {
+		handleErr(w, r, err)
+		return
+	}
 	if a.Conditions == nil {
 		a.Conditions = []any{}
 	}
@@ -170,6 +174,10 @@ func (h *AutomationHandler) Get(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.Actions = append(a.Actions, act)
+	}
+	if err := aRows.Err(); err != nil {
+		handleErr(w, r, err)
+		return
 	}
 	if a.Actions == nil {
 		a.Actions = []any{}

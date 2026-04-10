@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -1273,7 +1274,12 @@ func (h *DynHandler) FormulaPreview(w http.ResponseWriter, r *http.Request) {
 				samples = append(samples, normalizeValue(vals[0]))
 			}
 		}
+		if e := rows.Err(); e != nil {
+			slog.Warn("validateFormula: row iteration error", "error", e)
+		}
 		rows.Close()
+	} else {
+		slog.Warn("validateFormula: sample query failed", "error", err)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -2262,6 +2268,7 @@ func (h *DynHandler) loadM2MFields(ctx context.Context, records []map[string]any
 		for rows.Next() {
 			vals, err := rows.Values()
 			if err != nil {
+				slog.Warn("loadM2MFields: skipping row", "field", f.Slug, "error", err)
 				continue
 			}
 			if len(vals) < 2 {
@@ -2271,11 +2278,17 @@ func (h *DynHandler) loadM2MFields(ctx context.Context, records []map[string]any
 			tID := fmt.Sprint(normalizeValue(vals[1]))
 			linkMap[oID] = append(linkMap[oID], tID)
 		}
+		if err := rows.Err(); err != nil {
+			slog.Warn("loadM2MFields: row iteration error", "field", f.Slug, "error", err)
+		}
 		rows.Close()
 
 		// Set values on records.
 		for _, row := range records {
-			id, _ := row["id"].(string)
+			id, ok := row["id"].(string)
+			if !ok {
+				id = fmt.Sprint(row["id"])
+			}
 			if links, ok := linkMap[id]; ok {
 				row[f.Slug] = links
 			} else {

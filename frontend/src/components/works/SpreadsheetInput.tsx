@@ -283,10 +283,14 @@ export default function SpreadsheetInput({
   const [filterCol, setFilterCol] = useState<number | null>(null)
   const [filterText, setFilterText] = useState('')
   const [condRules, setCondRules] = useState<ConditionalRule[]>(
-    (spreadOpts?.conditional_rules as unknown as ConditionalRule[]) || [],
+    Array.isArray(spreadOpts?.conditional_rules)
+      ? (spreadOpts.conditional_rules as unknown as ConditionalRule[])
+      : [],
   )
   const [mergedCells, setMergedCells] = useState<MergedCell[]>(
-    (spreadOpts?.merged_cells as unknown as MergedCell[]) || [],
+    Array.isArray(spreadOpts?.merged_cells)
+      ? (spreadOpts.merged_cells as unknown as MergedCell[])
+      : [],
   )
   const [showCondEditor, setShowCondEditor] = useState(false)
 

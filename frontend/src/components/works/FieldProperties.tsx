@@ -236,7 +236,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
           resultType={(opts.result_type as string) || 'number'}
           precision={opts.precision as number | undefined}
           slug={collectionSlug}
-          fields={formulaFields as unknown as Field[]}
+          fields={Array.isArray(formulaFields) ? (formulaFields as unknown as Field[]) : []}
           onChange={(expr) => updateOption('expression', expr)}
           onResultTypeChange={(rt) => updateOption('result_type', rt)}
           onPrecisionChange={(p) => updateOption('precision', p)}

@@ -84,7 +84,8 @@ export default function CalendarWeekView({
       for (const span of w.spans) {
         const entryDate = toDateStr(span.entry[dateField.slug])
         if (entryDate && weekDays.includes(entryDate)) {
-          allDay.get(entryDate)!.push(span.entry)
+          const bucket = allDay.get(entryDate)
+          if (bucket) bucket.push(span.entry)
         }
       }
       // Singles
@@ -97,14 +98,16 @@ export default function CalendarWeekView({
             const duration = endTime
               ? (endTime.hours - time.hours) + (endTime.minutes - time.minutes) / 60
               : 1
-            timed.get(dateStr)!.push({
+            const timedBucket = timed.get(dateStr)
+            if (timedBucket) timedBucket.push({
               entry,
               startHour: time.hours,
               startMin: time.minutes,
               duration: Math.max(duration, 0.5),
             })
           } else {
-            allDay.get(dateStr)!.push(entry)
+            const allDayBucket = allDay.get(dateStr)
+            if (allDayBucket) allDayBucket.push(entry)
           }
         }
       }
