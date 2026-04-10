@@ -21,6 +21,9 @@ func (h *DynHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_view") {
+		return
+	}
 
 	params := r.URL.Query()
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
@@ -110,6 +113,9 @@ func (h *DynHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_create") {
 		return
 	}
 

@@ -10,7 +10,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -76,6 +76,11 @@ export default function AppViewPage() {
   // Search state
   const [searchText, setSearchText] = useState('')
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    }
+  }, [])
 
   // Process toggle (frontend-only)
   const [processVisible, setProcessVisible] = useState(true)

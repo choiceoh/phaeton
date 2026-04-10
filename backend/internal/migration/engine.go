@@ -93,7 +93,10 @@ func (e *Engine) CreateCollection(ctx context.Context, req *schema.CreateCollect
 	}
 
 	// 5. Record migration.
-	payload, _ := json.Marshal(map[string]any{"collection": col})
+	payload, err := json.Marshal(map[string]any{"collection": col})
+	if err != nil {
+		return schema.Collection{}, fmt.Errorf("marshal migration payload: %w", err)
+	}
 	if err := recordMigration(ctx, tx, col.ID, OpCreateCollection, payload, ddlUp, ddlDown, Safe); err != nil {
 		return schema.Collection{}, err
 	}
@@ -162,10 +165,13 @@ func (e *Engine) UpdateCollection(ctx context.Context, id string, req *schema.Up
 		return schema.Collection{}, err
 	}
 
-	payload, _ := json.Marshal(map[string]any{
+	payload, err := json.Marshal(map[string]any{
 		"before":  before,
 		"changes": req,
 	})
+	if err != nil {
+		return schema.Collection{}, fmt.Errorf("marshal migration payload: %w", err)
+	}
 	// Empty DDL — this is a metadata-only change.
 	if err := recordMigration(ctx, tx, id, OpUpdateCollectionMeta, payload, nil, nil, Safe); err != nil {
 		return schema.Collection{}, err
@@ -274,7 +280,10 @@ func (e *Engine) DropCollection(ctx context.Context, collectionID string) error 
 	ddlUp, _ := GenerateDropTable(col.Slug)
 	// Down: re-create the table so rollback can restore the structure.
 	ddlDown, _ := GenerateCreateTable(col, col.Fields)
-	payload, _ := json.Marshal(map[string]any{"collection": col})
+	payload, err := json.Marshal(map[string]any{"collection": col})
+	if err != nil {
+		return fmt.Errorf("marshal migration payload: %w", err)
+	}
 
 	if err := execStmts(ctx, tx, ddlUp); err != nil {
 		return fmt.Errorf("exec drop table: %w", err)
@@ -356,7 +365,10 @@ func (e *Engine) AddField(ctx context.Context, collectionID string, req *schema.
 		}
 	}
 
-	payload, _ := json.Marshal(map[string]any{"field": f, "collection_slug": col.Slug})
+	payload, err := json.Marshal(map[string]any{"field": f, "collection_slug": col.Slug})
+	if err != nil {
+		return schema.Field{}, nil, fmt.Errorf("marshal migration payload: %w", err)
+	}
 	if err := recordMigration(ctx, tx, collectionID, OpAddField, payload, ddlUp, ddlDown, safety); err != nil {
 		return schema.Field{}, nil, err
 	}
@@ -465,12 +477,15 @@ func (e *Engine) AlterField(ctx context.Context, fieldID string, req *schema.Upd
 		}
 	}
 
-	payload, _ := json.Marshal(map[string]any{
+	payload, err := json.Marshal(map[string]any{
 		"field_id":        fieldID,
 		"collection_slug": col.Slug,
 		"before":          old,
 		"changes":         req,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal migration payload: %w", err)
+	}
 	if err := recordMigration(ctx, tx, old.CollectionID, OpAlterField, payload, ddlUp, ddlDown, safety); err != nil {
 		return nil, err
 	}
@@ -570,7 +585,10 @@ func (e *Engine) DropField(ctx context.Context, fieldID string) error {
 		return err
 	}
 
-	payload, _ := json.Marshal(map[string]any{"field": f, "collection_slug": col.Slug})
+	payload, err := json.Marshal(map[string]any{"field": f, "collection_slug": col.Slug})
+	if err != nil {
+		return fmt.Errorf("marshal migration payload: %w", err)
+	}
 	if err := recordMigration(ctx, tx, f.CollectionID, OpDropField, payload, ddlUp, ddlDown, Dangerous); err != nil {
 		return err
 	}
@@ -643,25 +661,35 @@ func (e *Engine) restoreMeta(ctx context.Context, tx pgx.Tx, mig Migration) erro
 	case OpCreateCollection:
 		var col schema.Collection
 		if raw, ok := payload["collection"]; ok {
-			json.Unmarshal(raw, &col)
+			if err := json.Unmarshal(raw, &col); err != nil {
+				return fmt.Errorf("unmarshal collection: %w", err)
+			}
 		}
 		if col.ID != "" {
-			e.store.DeleteCollectionTx(ctx, tx, col.ID)
+			if err := e.store.DeleteCollectionTx(ctx, tx, col.ID); err != nil {
+				return fmt.Errorf("delete collection during rollback: %w", err)
+			}
 		}
 
 	case OpAddField:
 		var f schema.Field
 		if raw, ok := payload["field"]; ok {
-			json.Unmarshal(raw, &f)
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return fmt.Errorf("unmarshal field: %w", err)
+			}
 		}
 		if f.ID != "" {
-			e.store.DeleteFieldTx(ctx, tx, f.ID)
+			if err := e.store.DeleteFieldTx(ctx, tx, f.ID); err != nil {
+				return fmt.Errorf("delete field during rollback: %w", err)
+			}
 		}
 
 	case OpAlterField:
 		var before schema.Field
 		if raw, ok := payload["before"]; ok {
-			json.Unmarshal(raw, &before)
+			if err := json.Unmarshal(raw, &before); err != nil {
+				return fmt.Errorf("unmarshal field before: %w", err)
+			}
 		}
 		if before.ID != "" {
 			req := &schema.UpdateFieldReq{
@@ -671,13 +699,17 @@ func (e *Engine) restoreMeta(ctx context.Context, tx pgx.Tx, mig Migration) erro
 				IsUnique:   &before.IsUnique,
 				IsIndexed:  &before.IsIndexed,
 			}
-			e.store.UpdateFieldTx(ctx, tx, before.ID, req)
+			if err := e.store.UpdateFieldTx(ctx, tx, before.ID, req); err != nil {
+				return fmt.Errorf("update field during rollback: %w", err)
+			}
 		}
 
 	case OpDropField:
 		var f schema.Field
 		if raw, ok := payload["field"]; ok {
-			json.Unmarshal(raw, &f)
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return fmt.Errorf("unmarshal field: %w", err)
+			}
 		}
 		if f.ID != "" {
 			_, err := tx.Exec(ctx, `
@@ -697,7 +729,9 @@ func (e *Engine) restoreMeta(ctx context.Context, tx pgx.Tx, mig Migration) erro
 	case OpDropCollection:
 		var col schema.Collection
 		if raw, ok := payload["collection"]; ok {
-			json.Unmarshal(raw, &col)
+			if err := json.Unmarshal(raw, &col); err != nil {
+				return fmt.Errorf("unmarshal collection: %w", err)
+			}
 		}
 		if col.ID != "" {
 			_, err := tx.Exec(ctx, `
