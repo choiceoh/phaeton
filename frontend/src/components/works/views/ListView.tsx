@@ -77,11 +77,13 @@ export default function ListView({ fields, entries, onRowClick }: Props) {
   }
 
   return (
-    <DataTable
-      columns={columns}
-      data={entries}
-      onRowClick={onRowClick}
-      summaryRow={summaryRow}
-    />
+    <div className="animate-fade-in">
+      <DataTable
+        columns={columns}
+        data={entries}
+        onRowClick={onRowClick}
+        summaryRow={summaryRow}
+      />
+    </div>
   )
 }

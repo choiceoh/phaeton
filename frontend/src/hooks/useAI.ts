@@ -54,3 +54,44 @@ export function useAIGenerateSlug() {
       api.post<{ slug: string }>('/ai/generate-slug', { label }),
   })
 }
+
+export function useAIBuildFormula(slug: string | undefined) {
+  return useMutation({
+    mutationFn: (description: string) =>
+      api.post<{ expression: string }>(`/ai/build-formula/${slug}`, { description }),
+  })
+}
+
+export function useAIBuildFilter(slug: string | undefined) {
+  return useMutation({
+    mutationFn: (query: string) =>
+      api.post<{ field: string, operator: string, value: string }[]>(`/ai/build-filter/${slug}`, { query }),
+  })
+}
+
+export function useAIPrefill(slug: string | undefined) {
+  return useMutation({
+    mutationFn: (description: string) =>
+      api.post<Record<string, unknown>>(`/ai/prefill/${slug}`, { description }),
+  })
+}
+
+export function useAIMapCSVColumns(slug: string | undefined) {
+  return useMutation({
+    mutationFn: (headers: string[]) =>
+      api.post<Record<string, string>>(`/ai/map-csv-columns/${slug}`, { headers }),
+  })
+}
+
+export interface AIChartResult {
+  name: string
+  chart_type: string
+  config: Record<string, unknown>
+}
+
+export function useAIBuildChart(collectionId: string | undefined) {
+  return useMutation({
+    mutationFn: (description: string) =>
+      api.post<AIChartResult>(`/ai/build-chart/${collectionId}`, { description }),
+  })
+}

@@ -33,6 +33,14 @@ var workspaceTools = []ai.Tool{
 			}`),
 		},
 	},
+	{
+		Type: "function",
+		Function: ai.ToolFunction{
+			Name:        "list_users",
+			Description: "워크스페이스의 사용자 목록을 이름, ID로 조회합니다. 담당자/요청자 등 사용자 필드 값을 결정할 때 사용합니다.",
+			Parameters:  json.RawMessage(`{"type":"object","properties":{},"required":[]}`),
+		},
+	},
 }
 
 // newToolResolver creates a ToolResolver that can look up workspace data.
@@ -49,6 +57,8 @@ func (h *AIHandler) newToolResolver(ctx context.Context) ai.ToolResolver {
 				return "", fmt.Errorf("parse arguments: %w", err)
 			}
 			return h.resolveGetCollectionFields(ctx, args.Slug)
+		case "list_users":
+			return h.resolveListUsers(ctx)
 		default:
 			return "", fmt.Errorf("unknown tool: %s", name)
 		}
@@ -71,6 +81,28 @@ func (h *AIHandler) resolveListCollections(ctx context.Context) (string, error) 
 			desc = " — " + c.Description
 		}
 		sb.WriteString(fmt.Sprintf("- %s (slug: %s)%s\n", c.Label, c.Slug, desc))
+	}
+	return sb.String(), nil
+}
+
+func (h *AIHandler) resolveListUsers(ctx context.Context) (string, error) {
+	rows, err := h.pool.Query(ctx,
+		`SELECT id, name, email FROM users WHERE is_active = true ORDER BY name`)
+	if err != nil {
+		return "", fmt.Errorf("list users: %w", err)
+	}
+	defer rows.Close()
+
+	var sb strings.Builder
+	for rows.Next() {
+		var id, name, email string
+		if err := rows.Scan(&id, &name, &email); err != nil {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("- %s (id: %s, email: %s)\n", name, id, email))
+	}
+	if sb.Len() == 0 {
+		return "사용자가 없습니다.", nil
 	}
 	return sb.String(), nil
 }

@@ -425,6 +425,8 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Use(middleware.CollectionAccess(cfg.pool))
 			r.Get("/{slug}", cfg.dynH.List)
 			r.Get("/{slug}/totals", cfg.dynH.Totals)
+			r.Get("/{slug}/defaults", cfg.dynH.GetDefaults)
+			r.Get("/{slug}/similar", cfg.dynH.SimilarRecords)
 			r.Get("/{slug}/aggregate", cfg.dynH.Aggregate)
 			r.Post("/{slug}/aggregate/batch", cfg.dynH.BatchAggregate)
 			r.Get("/{slug}/export.csv", cfg.dynH.ExportCSV)
@@ -466,6 +468,11 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 		r.Post("/api/ai/chat", cfg.aiH.Chat)
 		r.Post("/api/ai/generate-slug", cfg.aiH.GenerateSlug)
 		r.Post("/api/ai/build-automation/{id}", cfg.aiH.BuildAutomation)
+		r.Post("/api/ai/build-formula/{slug}", cfg.aiH.BuildFormula)
+		r.Post("/api/ai/build-filter/{slug}", cfg.aiH.BuildFilter)
+		r.Post("/api/ai/prefill/{slug}", cfg.aiH.Prefill)
+		r.Post("/api/ai/map-csv-columns/{slug}", cfg.aiH.MapCSVColumns)
+		r.Post("/api/ai/build-chart/{id}", cfg.aiH.BuildChart)
 
 		// Notifications
 		r.Get("/api/notifications", cfg.notifH.List)

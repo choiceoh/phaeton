@@ -99,19 +99,27 @@ const TABS: { key: TabKey; label: string; entries: PaletteEntry[] }[] = [
 ]
 
 function PaletteButton({ icon: Icon, label, entry }: { icon: LucideIcon, label: string, entry: PaletteEntry }) {
+  const [dragging, setDragging] = useState(false)
+
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData(
       'application/palette-field',
       JSON.stringify({ type: entry.type, presetOptions: entry.presetOptions }),
     )
     e.dataTransfer.effectAllowed = 'copy'
+    setDragging(true)
+  }
+
+  function handleDragEnd() {
+    setDragging(false)
   }
 
   return (
     <div
       draggable
       onDragStart={handleDragStart}
-      className="flex w-full cursor-grab items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      onDragEnd={handleDragEnd}
+      className={`flex w-full cursor-grab items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${dragging ? 'dragging-source' : ''}`}
       tabIndex={0}
     >
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
