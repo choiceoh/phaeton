@@ -69,6 +69,8 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			is_indexed      BOOLEAN NOT NULL DEFAULT FALSE,
 			default_value   JSONB,
 			options         JSONB,
+			width           SMALLINT NOT NULL DEFAULT 6,
+			height          SMALLINT NOT NULL DEFAULT 1,
 			sort_order      INTEGER NOT NULL DEFAULT 0,
 			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),

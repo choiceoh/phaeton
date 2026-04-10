@@ -39,6 +39,8 @@ export default function AppBuilder() {
       is_required: false,
       is_unique: false,
       is_indexed: false,
+      width: 6,
+      height: 1,
     }
     setFields([...fields, draft])
     setSelectedId(id)
@@ -77,6 +79,8 @@ export default function AppBuilder() {
         is_required: f.is_required,
         is_unique: f.is_unique,
         is_indexed: f.is_indexed,
+        width: f.width,
+        height: f.height,
         options: f.options,
         relation: f.relation,
       })),
