@@ -9,6 +9,7 @@
 ## 필독 문서
 
 - `docs/08-PHAETON-V2-DESIGN.md` — 전체 설계, 아키텍처, 데이터 모델
+- `docs/10-COMPETITIVE-ANALYSIS.md` — 경쟁 분석 및 구현 로드맵 (다우오피스 Works + Airtable/NocoDB/AppSheet/Monday/ClickUp)
 
 ## 스택
 
