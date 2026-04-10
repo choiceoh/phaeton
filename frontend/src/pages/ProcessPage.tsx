@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
@@ -62,8 +62,9 @@ export default function ProcessPage() {
   const [newStatusName, setNewStatusName] = useState('')
 
   // Sync server state to local state.
-  useEffect(() => {
-    if (!process) return
+  const [syncedProcessId, setSyncedProcessId] = useState<string | null>(null)
+  if (process && process.id !== syncedProcessId) {
+    setSyncedProcessId(process.id)
     setIsEnabled(process.is_enabled)
     if (process.statuses?.length) {
       setStatuses(
@@ -74,7 +75,6 @@ export default function ProcessPage() {
           is_initial: s.is_initial,
         })),
       )
-      // Rebuild transitions from server data using status ID → index mapping.
       if (process.transitions?.length) {
         const idToIndex = new Map(process.statuses.map((s, i) => [s.id, i]))
         setTransitions(
@@ -94,7 +94,7 @@ export default function ProcessPage() {
       setStatuses([])
       setTransitions([])
     }
-  }, [process])
+  }
 
   const isDirty = useMemo(() => {
     if (!process) return false
