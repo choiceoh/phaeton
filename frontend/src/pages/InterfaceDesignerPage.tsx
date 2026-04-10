@@ -165,9 +165,9 @@ export default function InterfaceDesignerPage() {
       const widgets = [...prev.widgets]
       const [moved] = widgets.splice(dragIdx, 1)
       widgets.splice(idx, 0, moved)
-      setDragIdx(idx)
       return { widgets }
     })
+    setDragIdx(idx)
   }, [dragIdx])
 
   const handleDragEnd = useCallback(() => {
