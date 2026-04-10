@@ -94,11 +94,22 @@ jobs:
       - name: Install dependencies
         run: cd frontend && npm ci
 
+      - name: TypeScript type check
+        run: cd frontend && npx tsc --noEmit
+
       - name: ESLint
         run: cd frontend && npm run lint
 
       - name: Vitest
-        run: cd frontend && npx vitest run
+        run: cd frontend && npx vitest run --coverage.enabled --coverage.reporter=text --coverage.thresholds.lines=50 --coverage.thresholds.branches=50
 
       - name: Build frontend
         run: cd frontend && npm run build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker build
+        run: docker build --target backend -t phaeton:ci-test .
