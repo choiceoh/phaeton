@@ -13,10 +13,11 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { useEffect, useMemo, useState } from 'react'
 
-import { Ban, LayoutGrid } from 'lucide-react'
+import { Ban, LayoutGrid, Plus } from 'lucide-react'
 
 import EmptyState from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import type { Field } from '@/lib/types'
 
@@ -28,6 +29,7 @@ interface Props {
   onCardMove?: (entryId: string, newValue: string) => void
   /** Map of "fromValue" → Set of allowed "toValue" for permission control */
   allowedMoves?: Map<string, Set<string>>
+  onAddEntry?: () => void
 }
 
 interface KanbanColumn {
@@ -151,6 +153,7 @@ export default function KanbanView({
   onCardClick,
   onCardMove,
   allowedMoves,
+  onAddEntry,
 }: Props) {
   const choices = (groupField.options?.choices as string[]) || []
   const titleField = fields.find((f) => f.field_type === 'text')
@@ -271,6 +274,12 @@ export default function KanbanView({
         icon={<LayoutGrid className="h-10 w-10" />}
         title="칸반 보드에 표시할 데이터가 없습니다"
         description="데이터를 추가하면 칸반 보드에 카드가 표시됩니다."
+        action={onAddEntry && (
+          <Button size="sm" onClick={onAddEntry}>
+            <Plus className="mr-1 h-4 w-4" />
+            첫 데이터 추가
+          </Button>
+        )}
       />
     )
   }

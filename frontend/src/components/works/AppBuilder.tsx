@@ -37,7 +37,7 @@ const BUILDER_COACH_STEPS = [
   {
     title: '항목 속성',
     description: '항목을 선택하면 여기서 이름, 필수 여부, 옵션 등을 설정할 수 있습니다.',
-    target: '[data-coach="palette"]',
+    target: '[data-coach="properties"]',
   },
 ]
 
@@ -211,10 +211,10 @@ export default function AppBuilder() {
         <div data-coach="palette" className="max-h-[calc(100vh-160px)] overflow-y-auto rounded-lg border p-3">
           <FieldPalette onAdd={handleAddField} />
           {selectedField && (
-            <>
+            <div data-coach="properties">
               <div className="my-3 border-t" />
               <FieldProperties field={selectedField} collections={collections} siblingFields={fields} onChange={handleFieldChange} />
-            </>
+            </div>
           )}
         </div>
         <div data-coach="preview" className="rounded-lg border p-3 space-y-4">

@@ -1351,6 +1351,11 @@ export default function AppViewPage() {
               cellSaveState={cellSaveState}
               emptyTitle={TERM.noRecords}
               emptyDescription={TERM.noRecordsDesc}
+              emptyAction={
+                <Button size="sm" onClick={() => { setEditEntry(undefined); setSheetOpen(true) }}>
+                  {TERM.newRecord}
+                </Button>
+              }
               summaryRow={summaryRow}
               summaryFn={columnAggFn}
               onSummaryFnChange={handleAggFnChange}
@@ -1377,6 +1382,7 @@ export default function AppViewPage() {
                 onCardClick={handleEntryClick}
                 onCardMove={handleProcessCardMove}
                 allowedMoves={processAllowedMoves}
+                onAddEntry={() => { setEditEntry(undefined); setSheetOpen(true) }}
               />
             </TabsContent>
           )}
@@ -1389,6 +1395,7 @@ export default function AppViewPage() {
                 entries={list.data}
                 onCardClick={handleEntryClick}
                 onCardMove={handleCardMove}
+                onAddEntry={() => { setEditEntry(undefined); setSheetOpen(true) }}
               />
             </TabsContent>
           )}
