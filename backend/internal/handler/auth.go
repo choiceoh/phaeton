@@ -307,7 +307,6 @@ func ListUsers(pool *pgxpool.Pool) http.HandlerFunc {
 		if subID := r.URL.Query().Get("subsidiary_id"); subID != "" {
 			wheres = append(wheres, fmt.Sprintf("u.subsidiary_id = $%d", argN))
 			args = append(args, subID)
-			argN++
 		}
 		if len(wheres) > 0 {
 			q += " WHERE " + strings.Join(wheres, " AND ")

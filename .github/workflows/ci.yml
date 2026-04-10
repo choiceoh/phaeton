@@ -19,13 +19,13 @@ jobs:
           go-version-file: backend/go.mod
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: latest
           working-directory: backend
 
       - name: Go tests
-        run: cd backend && go test ./...
+        run: cd backend && go test -short ./...
 
   lint-and-test-ui:
     runs-on: ubuntu-latest

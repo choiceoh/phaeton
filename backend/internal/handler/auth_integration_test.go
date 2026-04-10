@@ -40,13 +40,6 @@ func injectUser(r *http.Request, claims middleware.UserClaims) *http.Request {
 	return r.WithContext(ctx)
 }
 
-var directorClaims = middleware.UserClaims{
-	UserID: "director-1",
-	Email:  "director@test.com",
-	Name:   "Director",
-	Role:   "director",
-}
-
 // seedDirector creates a director user directly via the handler and returns the user ID.
 func seedDirector(t *testing.T, router *chi.Mux) string {
 	t.Helper()
@@ -431,7 +424,9 @@ func TestAuthIntegration_UpdateUser(t *testing.T) {
 	router.ServeHTTP(cw, createReq)
 
 	var created struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
 	json.Unmarshal(cw.Body.Bytes(), &created)
 	userID := created.Data.ID

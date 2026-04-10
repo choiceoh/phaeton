@@ -67,9 +67,9 @@ func orgSubsidiariesPreset() Preset {
 				FieldType: schema.FieldInteger,
 			},
 			{
-				Slug:      "is_active",
-				Label:     "활성",
-				FieldType: schema.FieldBoolean,
+				Slug:         "is_active",
+				Label:        "활성",
+				FieldType:    schema.FieldBoolean,
 				DefaultValue: jsonRaw(true),
 			},
 		},
@@ -103,9 +103,9 @@ func orgDepartmentsPreset() Preset {
 				FieldType: schema.FieldInteger,
 			},
 			{
-				Slug:      "is_active",
-				Label:     "활성",
-				FieldType: schema.FieldBoolean,
+				Slug:         "is_active",
+				Label:        "활성",
+				FieldType:    schema.FieldBoolean,
 				DefaultValue: jsonRaw(true),
 			},
 			// Relations (parent, subsidiary) added by applyOrgRefs() after creation.

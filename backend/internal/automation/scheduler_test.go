@@ -22,10 +22,10 @@ func TestCronMatches(t *testing.T) {
 		{"day mismatch", "30 9 14 3 5", "", false},
 		{"month mismatch", "30 9 15 4 5", "", false},
 		{"weekday mismatch", "30 9 15 3 1", "", false},
-		{"step minute */15", "*/15 * * * *", "", true},  // 30 % 15 == 0
-		{"step minute */7", "*/7 * * * *", "", false},   // 30 % 7 != 0
-		{"step hour */3", "* */3 * * *", "", true},      // 9 % 3 == 0
-		{"comma minute", "15,30,45 * * * *", "", true},  // 30 is in list
+		{"step minute */15", "*/15 * * * *", "", true}, // 30 % 15 == 0
+		{"step minute */7", "*/7 * * * *", "", false},  // 30 % 7 != 0
+		{"step hour */3", "* */3 * * *", "", true},     // 9 % 3 == 0
+		{"comma minute", "15,30,45 * * * *", "", true}, // 30 is in list
 		{"comma minute miss", "15,45 * * * *", "", false},
 		{"empty cron", "", "", false},
 		{"invalid field count", "* * *", "", false},

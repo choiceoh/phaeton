@@ -1,5 +1,5 @@
 import { Loader2, Plus, Trash2 } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,7 @@ interface Props {
 
 export default function FilterBuilder({ fields, conditions, onChange, slug }: Props) {
   const idBase = useId()
+  const idCounter = useRef(0)
   const dataFields = fields.filter((f) => !isLayoutType(f.field_type))
   const aiAvailable = useAIAvailable()
   const buildFilter = useAIBuildFilter(slug)
@@ -37,10 +38,11 @@ export default function FilterBuilder({ fields, conditions, onChange, slug }: Pr
     const first = dataFields[0]
     if (!first) return
     const ops = operatorsForFieldType(first.field_type)
+    idCounter.current++
     onChange([
       ...conditions,
       {
-        id: `${idBase}-${Date.now()}`,
+        id: `${idBase}-${idCounter.current}`,
         field: first.slug,
         operator: ops[0] ?? 'eq',
         value: '',

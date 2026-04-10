@@ -34,11 +34,9 @@ export default function FormView({
   const [mode, setMode] = useState<'view' | 'edit' | 'create'>('view')
 
   // Clamp index when entries change
-  useEffect(() => {
-    if (entries.length > 0 && currentIndex >= entries.length) {
-      setCurrentIndex(entries.length - 1)
-    }
-  }, [entries.length, currentIndex])
+  if (entries.length > 0 && currentIndex >= entries.length) {
+    setCurrentIndex(entries.length - 1)
+  }
 
   // Keyboard navigation
   const handleKeyDown = useCallback(

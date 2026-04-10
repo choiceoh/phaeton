@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -17,9 +15,9 @@ import (
 // computedOpts extracts common options from a computed field.
 type computedOpts struct {
 	Expression    string `json:"expression"`     // formula only
-	RelationField string `json:"relation_field"`  // lookup & rollup
-	TargetField   string `json:"target_field"`    // lookup & rollup
-	Function      string `json:"function"`        // rollup only
+	RelationField string `json:"relation_field"` // lookup & rollup
+	TargetField   string `json:"target_field"`   // lookup & rollup
+	Function      string `json:"function"`       // rollup only
 }
 
 func parseComputedOpts(raw json.RawMessage) computedOpts {
@@ -61,179 +59,6 @@ func (h *DynHandler) resolveComputedFields(
 		case schema.FieldRollup:
 			h.resolveRollup(ctx, records, fields, bySlug, f, opts)
 		}
-	}
-}
-
-// --- Formula ---
-
-// tokenRe matches field references like {field_slug} in formula expressions.
-var tokenRe = regexp.MustCompile(`\{(\w+)\}`)
-
-// resolveFormula evaluates simple arithmetic expressions: +, -, *, /
-// with field references like {unit_price} * {quantity}.
-func resolveFormula(records []map[string]any, fields []schema.Field, f schema.Field, opts computedOpts) {
-	expr := opts.Expression
-	if expr == "" {
-		return
-	}
-
-	// Find all referenced field slugs.
-	matches := tokenRe.FindAllStringSubmatch(expr, -1)
-
-	for _, row := range records {
-		// Replace field references with numeric values.
-		evaluated := expr
-		valid := true
-		for _, m := range matches {
-			slug := m[1]
-			val := row[slug]
-			num, ok := toFloat64(val)
-			if !ok {
-				valid = false
-				break
-			}
-			evaluated = strings.Replace(evaluated, m[0], strconv.FormatFloat(num, 'f', -1, 64), 1)
-		}
-
-		if !valid {
-			row[f.Slug] = nil
-			continue
-		}
-
-		result, err := evalArithmetic(evaluated)
-		if err != nil {
-			row[f.Slug] = nil
-			continue
-		}
-		// Round to avoid floating point artifacts.
-		row[f.Slug] = math.Round(result*1e10) / 1e10
-	}
-}
-
-// evalArithmetic evaluates a simple arithmetic expression with +, -, *, /.
-// Supports parentheses and operator precedence.
-func evalArithmetic(expr string) (float64, error) {
-	p := &parser{input: strings.TrimSpace(expr), pos: 0}
-	result := p.parseExpr()
-	if p.err != nil {
-		return 0, p.err
-	}
-	if p.pos < len(p.input) {
-		return 0, fmt.Errorf("unexpected character at position %d", p.pos)
-	}
-	return result, nil
-}
-
-type parser struct {
-	input string
-	pos   int
-	err   error
-}
-
-func (p *parser) parseExpr() float64 {
-	left := p.parseTerm()
-	for p.pos < len(p.input) && p.err == nil {
-		p.skipSpaces()
-		if p.pos >= len(p.input) {
-			break
-		}
-		op := p.input[p.pos]
-		if op != '+' && op != '-' {
-			break
-		}
-		p.pos++
-		right := p.parseTerm()
-		if op == '+' {
-			left += right
-		} else {
-			left -= right
-		}
-	}
-	return left
-}
-
-func (p *parser) parseTerm() float64 {
-	left := p.parseFactor()
-	for p.pos < len(p.input) && p.err == nil {
-		p.skipSpaces()
-		if p.pos >= len(p.input) {
-			break
-		}
-		op := p.input[p.pos]
-		if op != '*' && op != '/' {
-			break
-		}
-		p.pos++
-		right := p.parseFactor()
-		if op == '*' {
-			left *= right
-		} else {
-			if right == 0 {
-				p.err = fmt.Errorf("division by zero")
-				return 0
-			}
-			left /= right
-		}
-	}
-	return left
-}
-
-func (p *parser) parseFactor() float64 {
-	p.skipSpaces()
-	if p.pos >= len(p.input) {
-		p.err = fmt.Errorf("unexpected end of expression")
-		return 0
-	}
-
-	// Handle negative numbers.
-	neg := false
-	if p.input[p.pos] == '-' {
-		neg = true
-		p.pos++
-		p.skipSpaces()
-	}
-
-	var val float64
-	if p.pos < len(p.input) && p.input[p.pos] == '(' {
-		p.pos++ // skip '('
-		val = p.parseExpr()
-		p.skipSpaces()
-		if p.pos < len(p.input) && p.input[p.pos] == ')' {
-			p.pos++
-		} else {
-			p.err = fmt.Errorf("missing closing parenthesis")
-		}
-	} else {
-		val = p.parseNumber()
-	}
-
-	if neg {
-		val = -val
-	}
-	return val
-}
-
-func (p *parser) parseNumber() float64 {
-	p.skipSpaces()
-	start := p.pos
-	for p.pos < len(p.input) && (p.input[p.pos] >= '0' && p.input[p.pos] <= '9' || p.input[p.pos] == '.') {
-		p.pos++
-	}
-	if start == p.pos {
-		p.err = fmt.Errorf("expected number at position %d", p.pos)
-		return 0
-	}
-	f, err := strconv.ParseFloat(p.input[start:p.pos], 64)
-	if err != nil {
-		p.err = err
-		return 0
-	}
-	return f
-}
-
-func (p *parser) skipSpaces() {
-	for p.pos < len(p.input) && p.input[p.pos] == ' ' {
-		p.pos++
 	}
 }
 

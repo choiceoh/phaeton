@@ -56,8 +56,8 @@ export default function GridCell({
 
   useEffect(() => {
     if (isEditing) {
-      setEditValue(rawValue == null ? '' : String(rawValue))
       requestAnimationFrame(() => {
+        setEditValue(rawValue == null ? '' : String(rawValue))
         if (fieldType === 'textarea') {
           textareaRef.current?.focus()
           textareaRef.current?.select()

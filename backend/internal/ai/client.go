@@ -154,7 +154,7 @@ type chatRequest struct {
 
 // contentPart is a single part of a multimodal message (OpenAI vision format).
 type contentPart struct {
-	Type     string    `json:"type"`               // "text" or "image_url"
+	Type     string    `json:"type"`                // "text" or "image_url"
 	Text     string    `json:"text,omitempty"`      // for type=text
 	ImageURL *imageURL `json:"image_url,omitempty"` // for type=image_url
 }
@@ -213,8 +213,8 @@ func (m chatMessage) MarshalJSON() ([]byte, error) {
 
 type chatResponse struct {
 	Choices []struct {
-		Message    chatResponseMessage `json:"message"`
-		FinishReason string            `json:"finish_reason"`
+		Message      chatResponseMessage `json:"message"`
+		FinishReason string              `json:"finish_reason"`
 	} `json:"choices"`
 }
 

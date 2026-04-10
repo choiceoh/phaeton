@@ -138,15 +138,15 @@ func SeedData(ctx context.Context, pool *pgxpool.Pool, store *schema.Store, cach
 			{
 				"title": "영암 1단지 주간 공정 회의", "meeting_date": "2026-04-07T10:00:00+09:00",
 				"location": "영암 현장 사무소", "attendees": "김태양, 박전기, 최구조",
-				"agenda":    "1. 주간 공정률 확인\n2. 자재 입고 일정\n3. 안전 점검 결과",
-				"decisions": "자재 입고 일정 1주 앞당김, 안전 교육 추가 실시",
+				"agenda":       "1. 주간 공정률 확인\n2. 자재 입고 일정\n3. 안전 점검 결과",
+				"decisions":    "자재 입고 일정 1주 앞당김, 안전 교육 추가 실시",
 				"action_items": "- 자재 발주 확인 (박전기, 4/9)\n- 안전교육 일정 수립 (정안전, 4/10)",
 			},
 			{
 				"title": "2분기 사업 계획 검토", "meeting_date": "2026-04-01T14:00:00+09:00",
 				"location": "본사 대회의실", "attendees": "관리자, 김태양, 이풍력, 정안전",
-				"agenda":    "1. 1분기 실적 리뷰\n2. 2분기 목표 설정\n3. 신규 프로젝트 검토",
-				"decisions": "포항 풍력 프로젝트 타당성 조사 착수",
+				"agenda":       "1. 1분기 실적 리뷰\n2. 2분기 목표 설정\n3. 신규 프로젝트 검토",
+				"decisions":    "포항 풍력 프로젝트 타당성 조사 착수",
 				"action_items": "- 포항 풍력 사전조사 보고서 (이풍력, 4/30)",
 			},
 		})
@@ -231,8 +231,8 @@ func seedRecords(ctx context.Context, pool *pgxpool.Pool, slug, userID string, r
 // seedViews creates view configurations for key collections.
 func seedViews(ctx context.Context, store *schema.Store, cache *schema.Cache, projectsID string) error {
 	type viewSeed struct {
-		slug     string
-		views    []schema.CreateViewReq
+		slug  string
+		views []schema.CreateViewReq
 	}
 
 	seeds := []viewSeed{

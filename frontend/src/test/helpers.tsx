@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { createMemoryRouter, RouterProvider } from 'react-router'
 import { render, type RenderOptions } from '@testing-library/react'
 
 export function createTestQueryClient() {
@@ -23,19 +23,20 @@ export function renderWithProviders(
 ) {
   const queryClient = createTestQueryClient()
 
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[route]}>
-          <Routes>
-            <Route path={path} element={children} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
-    )
-  }
+  const router = createMemoryRouter(
+    [{ path, element: ui }],
+    { initialEntries: [route] },
+  )
 
-  return { ...render(ui, { wrapper: Wrapper, ...renderOptions }), queryClient }
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+      renderOptions,
+    ),
+    queryClient,
+  }
 }
 
 // Mock fetch helper reused across tests.

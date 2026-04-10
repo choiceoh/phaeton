@@ -61,7 +61,7 @@ export default function EntrySheet({
   const [prefillData, setPrefillData] = useState<Record<string, unknown> | null>(null)
   const aiAvailable = useAIAvailable()
   const prefill = useAIPrefill(slug)
-  const formKeyRef = useRef(0)
+  const [formKey, setFormKey] = useState(0)
   const contentRef = useRef<HTMLDivElement>(null)
 
   const { data: currentUser } = useCurrentUser()
@@ -102,7 +102,10 @@ export default function EntrySheet({
                     size="sm"
                     className="h-7 gap-1 text-xs"
                     onClick={() => {
-                      const { id, _version, created_at, updated_at, _created_by, _optimistic, _updated_at, _created_at, ...rest } = initialData as Record<string, unknown>
+                      const row = initialData as Record<string, unknown>
+                      const rest = Object.fromEntries(
+                        Object.entries(row).filter(([k]) => !['id', '_version', 'created_at', 'updated_at', '_created_by', '_optimistic', '_updated_at', '_created_at'].includes(k)),
+                      )
                       onDuplicate(rest)
                     }}
                   >
@@ -290,7 +293,7 @@ export default function EntrySheet({
                         prefill.mutate(aiPrompt.trim(), {
                           onSuccess: (res) => {
                             setPrefillData({ ...initialData, ...res })
-                            formKeyRef.current++
+                            setFormKey((k) => k + 1)
                             setAiPrompt('')
                           },
                         })
@@ -309,7 +312,7 @@ export default function EntrySheet({
                       prefill.mutate(aiPrompt.trim(), {
                         onSuccess: (res) => {
                           setPrefillData({ ...initialData, ...res })
-                          formKeyRef.current++
+                          setFormKey((k) => k + 1)
                           setAiPrompt('')
                         },
                       })
@@ -320,7 +323,7 @@ export default function EntrySheet({
                 </div>
               )}
               <EntryForm
-                key={formKeyRef.current}
+                key={formKey}
                 fields={fields}
                 initialData={prefillData ?? initialData}
                 slug={slug}

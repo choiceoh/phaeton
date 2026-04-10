@@ -11,11 +11,11 @@ import (
 
 // APILimiter is a per-user token-bucket rate limiter for API requests.
 type APILimiter struct {
-	mu       sync.Mutex
-	buckets  map[string]*bucket
-	rate     float64 // tokens per second
-	burst    int     // max tokens
-	stopCh   chan struct{}
+	mu      sync.Mutex
+	buckets map[string]*bucket
+	rate    float64 // tokens per second
+	burst   int     // max tokens
+	stopCh  chan struct{}
 }
 
 type bucket struct {

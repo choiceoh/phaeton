@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownAZ, ArrowUpAZ, Filter, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -308,7 +308,7 @@ export default function SpreadsheetInput({
     onChange(nextRows.slice(0, Math.max(end, 0)))
   }
 
-  function getDisplayRows(): { row: Row; originalIdx: number }[] {
+  const visibleRows = useMemo(() => {
     let indexed = displayRows.map((row, i) => ({ row, originalIdx: i }))
 
     // filter
@@ -343,9 +343,7 @@ export default function SpreadsheetInput({
     }
 
     return indexed
-  }
-
-  const visibleRows = useMemo(getDisplayRows, [displayRows, filterCol, filterText, sortCol, subColumns])
+  }, [displayRows, filterCol, filterText, sortCol, subColumns])
 
   function updateCell(originalIdx: number, colKey: string, val: unknown) {
     const next = displayRows.map((r, i) => (i === originalIdx ? { ...r, [colKey]: val } : { ...r }))
@@ -450,7 +448,7 @@ export default function SpreadsheetInput({
     })
   }
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent, rowIdx: number, colIdx: number) => {
+  function handleKeyDown(e: React.KeyboardEvent, rowIdx: number, colIdx: number) {
     const maxRow = visibleRows.length - 1
     const maxCol = subColumns.length - 1
     let nextRow = rowIdx
@@ -524,7 +522,7 @@ export default function SpreadsheetInput({
     setSelAnchor({ row: nextRow, col: nextCol })
     setSelCursor({ row: nextRow, col: nextCol })
     focusCell(nextRow, nextCol)
-  }, [visibleRows.length, subColumns, selCursor, selAnchor, selection, displayRows])
+  }
 
   // ── Copy / Paste ──
 

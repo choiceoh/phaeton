@@ -184,4 +184,3 @@ func (h *MemberHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 }
-

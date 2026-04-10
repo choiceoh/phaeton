@@ -81,7 +81,7 @@ func TestRateLimiterMaxEntries(t *testing.T) {
 
 	// Fill up to max entries
 	for i := range maxRateLimitEntries {
-		rl.RecordFailure(string(rune('A' + i%26)) + string(rune('0'+i/26)))
+		rl.RecordFailure(string(rune('A'+i%26)) + string(rune('0'+i/26)))
 	}
 
 	// New IP should be silently dropped (no panic)

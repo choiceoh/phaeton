@@ -106,7 +106,8 @@ describe('EntryForm', () => {
       expect(screen.getByText('상태')).toBeInTheDocument()
     })
 
-    it('renders multiselect field with checkboxes', () => {
+    it('renders multiselect field with choices in popover', async () => {
+      const user = userEvent.setup()
       renderForm({
         fields: [
           makeField({
@@ -118,9 +119,17 @@ describe('EntryForm', () => {
         ],
       })
 
-      expect(screen.getByText('긴급')).toBeInTheDocument()
-      expect(screen.getByText('일반')).toBeInTheDocument()
-      expect(screen.getByText('낮음')).toBeInTheDocument()
+      expect(screen.getByText('태그')).toBeInTheDocument()
+
+      // Open the popover trigger to reveal choices
+      const trigger = screen.getByText('선택...')
+      await user.click(trigger)
+
+      await waitFor(() => {
+        expect(screen.getByText('긴급')).toBeInTheDocument()
+        expect(screen.getByText('일반')).toBeInTheDocument()
+        expect(screen.getByText('낮음')).toBeInTheDocument()
+      })
     })
 
     it('renders boolean field with checkbox', () => {

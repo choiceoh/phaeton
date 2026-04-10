@@ -52,8 +52,8 @@ func TestAccessConfigAllowsRole(t *testing.T) {
 		{"entry_view", "viewer", false},
 		{"entry_create", "admin", true},
 		{"entry_create", "editor", false},
-		{"entry_edit", "anyone", true},   // empty = all allowed
-		{"entry_delete", "admin", true},  // empty = all allowed
+		{"entry_edit", "anyone", true},  // empty = all allowed
+		{"entry_delete", "admin", true}, // empty = all allowed
 		{"invalid_op", "admin", false},
 	}
 	for _, tc := range cases {
