@@ -456,8 +456,8 @@ export function DataTable<T>({
                     <TableCell key={col.id} className="text-xs">
                       {i === 0 && !summary ? '합계' : ''}
                       {summary ? (
-                        <span title={summary.label}>
-                          {summary.label}: {summary.value}
+                        <span title={String(summary.value)}>
+                          {summary.label}
                         </span>
                       ) : null}
                     </TableCell>

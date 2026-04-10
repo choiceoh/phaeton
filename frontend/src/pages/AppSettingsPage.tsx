@@ -25,6 +25,7 @@ import {
   useCollection,
   useDeleteCollection,
   useDeleteField,
+  useUpdateCollection,
 } from '@/hooks/useCollections'
 import { useMembers, useAddMember, useRemoveMember } from '@/hooks/useMembers'
 import { formatError } from '@/lib/api'
@@ -44,6 +45,7 @@ export default function AppSettingsPage() {
   const addField = useAddField(appId ?? '')
   const deleteField = useDeleteField()
   const deleteCollection = useDeleteCollection()
+  const updateCollection = useUpdateCollection(appId ?? '')
   const { data: members } = useMembers(appId)
   const addMember = useAddMember(appId ?? '')
   const removeMember = useRemoveMember(appId ?? '')
@@ -67,7 +69,7 @@ export default function AppSettingsPage() {
 
   function handleAddField() {
     if (!newField.slug || !newField.label || !newField.field_type) {
-      toast.error('slug, label, 타입은 필수입니다')
+      toast.error('영문 ID, 이름, 타입은 필수입니다')
       return
     }
     const input: CreateFieldIn = {
@@ -161,7 +163,7 @@ export default function AppSettingsPage() {
             <Card className="mb-4 p-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <Label>슬러그 (영문)</Label>
+                  <Label>영문 ID</Label>
                   <Input
                     value={newField.slug ?? ''}
                     onChange={(e) =>
@@ -356,6 +358,42 @@ export default function AppSettingsPage() {
                 </Button>
               </div>
             </Card>
+          </section>
+        </RoleGate>
+
+        <RoleGate roles={['director']}>
+          <section>
+            <h2 className="mb-1 text-lg font-semibold">행 수준 보안 (RLS)</h2>
+            <p className="mb-3 text-sm text-muted-foreground">
+              열람자(viewer) 역할의 멤버가 볼 수 있는 데이터 범위를 제한합니다.
+            </p>
+            <Select
+              value={collection.access_config?.rls_mode || 'none'}
+              onValueChange={(v) => {
+                const mode = v === 'none' ? '' : v
+                updateCollection.mutate(
+                  {
+                    access_config: {
+                      ...collection.access_config,
+                      rls_mode: mode as '' | 'none' | 'creator' | 'department',
+                    },
+                  },
+                  {
+                    onSuccess: () => toast.success('RLS 설정이 저장되었습니다'),
+                    onError: (err) => toast.error(formatError(err)),
+                  },
+                )
+              }}
+            >
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">제한 없음 (모든 행 열람)</SelectItem>
+                <SelectItem value="creator">본인 작성 행만 열람</SelectItem>
+                <SelectItem value="department">같은 부서 행만 열람</SelectItem>
+              </SelectContent>
+            </Select>
           </section>
         </RoleGate>
 

@@ -11,6 +11,8 @@ const (
 	TriggerRecordUpdated = "record_updated"
 	TriggerRecordDeleted = "record_deleted"
 	TriggerStatusChange  = "status_change"
+	TriggerSchedule      = "schedule"
+	TriggerFormSubmit    = "form_submit"
 )
 
 // ActionType constants.
@@ -80,6 +82,17 @@ type Run struct {
 type TriggerStatusConfig struct {
 	FromStatus string `json:"from_status"`
 	ToStatus   string `json:"to_status"`
+}
+
+// ScheduleConfig holds cron expression for schedule triggers.
+type ScheduleConfig struct {
+	Cron     string `json:"cron"`     // cron expression e.g. "0 9 * * *" (every day at 9am)
+	Timezone string `json:"timezone"` // e.g. "Asia/Seoul"
+}
+
+// FormSubmitConfig holds optional form slug filter for form_submit triggers.
+type FormSubmitConfig struct {
+	FormSlug string `json:"form_slug,omitempty"` // if set, only triggers for this form
 }
 
 // NotificationConfig holds config for send_notification actions.

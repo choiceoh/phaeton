@@ -58,6 +58,7 @@ export interface AccessConfig {
   entry_create?: string[]
   entry_edit?: string[]
   entry_delete?: string[]
+  rls_mode?: '' | 'none' | 'creator' | 'department'
 }
 
 export interface Collection {
@@ -322,7 +323,7 @@ export interface UpdateSavedViewReq {
 
 // --- Automations ---
 
-export type TriggerType = 'record_created' | 'record_updated' | 'record_deleted' | 'status_change'
+export type TriggerType = 'record_created' | 'record_updated' | 'record_deleted' | 'status_change' | 'schedule' | 'form_submit'
 export type ActionType = 'send_notification' | 'update_field' | 'call_webhook'
 export type ConditionOperator = 'equals' | 'not_equals' | 'contains' | 'gt' | 'lt' | 'is_empty' | 'is_not_empty'
 

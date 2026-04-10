@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, MessageCircle, Send, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { useAIChat, type ChatMessage } from '@/hooks/useAIChat'
 
 export default function AIChatPanel() {
+  const aiAvailable = useAIAvailable()
+
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -67,6 +70,8 @@ export default function AIChatPanel() {
     }
   }
 
+  if (!aiAvailable) return null
+
   return (
     <>
       {/* Floating trigger button */}
@@ -110,8 +115,8 @@ export default function AIChatPanel() {
                 <div className="mt-3 space-y-1.5">
                   {[
                     '앱을 만들려면 어떻게 하나요?',
+                    '현재 어떤 앱들이 있나요?',
                     '필드 유형에는 어떤 것들이 있나요?',
-                    '칸반 뷰는 어떻게 설정하나요?',
                   ].map((hint) => (
                     <button
                       key={hint}

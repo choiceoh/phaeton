@@ -102,7 +102,7 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
               </div>
             </div>
             {field.slug && (
-              <p className="mt-1 truncate text-xs text-muted-foreground">slug: {field.slug}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">ID: {field.slug}</p>
             )}
           </div>
         ))}

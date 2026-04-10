@@ -1,4 +1,7 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useMemo } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
+
+import { DataTable } from '@/components/common/DataTable'
 import { isLayoutType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { Field } from '@/lib/types'
@@ -10,6 +13,57 @@ interface Props {
 }
 
 export default function ListView({ fields, entries, onRowClick }: Props) {
+  const visibleFields = useMemo(
+    () => fields.filter((f) => !isLayoutType(f.field_type)).slice(0, 8),
+    [fields],
+  )
+
+  const numericFields = useMemo(
+    () => fields.filter((f) => f.field_type === 'number' || f.field_type === 'integer'),
+    [fields],
+  )
+
+  const summaryRow = useMemo(() => {
+    if (numericFields.length === 0 || entries.length === 0) return undefined
+    const summary: Record<string, { label: string; value: string | number }> = {}
+    for (const f of numericFields) {
+      const values = entries
+        .map((e) => Number(e[f.slug]))
+        .filter((n) => !isNaN(n))
+      if (values.length === 0) continue
+      const sum = values.reduce((a, b) => a + b, 0)
+      const avg = sum / values.length
+      summary[f.slug] = {
+        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })}`,
+        value: sum,
+      }
+    }
+    return Object.keys(summary).length > 0 ? summary : undefined
+  }, [numericFields, entries])
+
+  const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
+    const cols: ColumnDef<Record<string, unknown>>[] = visibleFields.map((f) => ({
+      id: f.slug,
+      header: f.label,
+      enableSorting: false,
+      size: f.field_type === 'textarea' ? 250 : 150,
+      cell: ({ row }: { row: { original: Record<string, unknown> } }) =>
+        formatCell(row.original[f.slug], f),
+    }))
+    cols.push({
+      id: 'created_at',
+      header: '작성일',
+      enableSorting: false,
+      size: 100,
+      cell: ({ row }) => {
+        const v = row.original.created_at
+        if (!v) return '-'
+        return new Date(v as string).toLocaleDateString('ko')
+      },
+    })
+    return cols
+  }, [visibleFields])
+
   if (entries.length === 0) {
     return (
       <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
@@ -18,35 +72,12 @@ export default function ListView({ fields, entries, onRowClick }: Props) {
     )
   }
 
-  const visibleFields = fields.filter((f) => !isLayoutType(f.field_type)).slice(0, 6)
-
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {visibleFields.map((f) => (
-            <TableHead key={f.id}>{f.label}</TableHead>
-          ))}
-          <TableHead className="w-24">작성일</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {entries.map((entry, i) => (
-          <TableRow
-            key={(entry.id as string) || i}
-            className="cursor-pointer"
-            onClick={() => onRowClick(entry)}
-          >
-            {visibleFields.map((f) => (
-              <TableCell key={f.id}>{formatCell(entry[f.slug], f)}</TableCell>
-            ))}
-            <TableCell className="text-xs text-muted-foreground">
-              {entry.created_at ? new Date(entry.created_at as string).toLocaleDateString('ko') : ''}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <DataTable
+      columns={columns}
+      data={entries}
+      onRowClick={onRowClick}
+      summaryRow={summaryRow}
+    />
   )
 }
-

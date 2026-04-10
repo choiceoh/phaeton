@@ -53,10 +53,13 @@ func (h *CommentHandler) List(w http.ResponseWriter, r *http.Request) {
 	page, limit, offset := ParsePagination(r.URL.Query())
 
 	var total int64
-	_ = h.pool.QueryRow(r.Context(),
+	if err := h.pool.QueryRow(r.Context(),
 		`SELECT COUNT(*) FROM _meta.comments WHERE collection_id = $1 AND record_id = $2`,
 		col.ID, recordID,
-	).Scan(&total)
+	).Scan(&total); err != nil {
+		writeError(w, http.StatusInternalServerError, "count comments: "+err.Error())
+		return
+	}
 
 	rows, err := h.pool.Query(r.Context(), `
 		SELECT id, collection_id, record_id, user_id, user_name, body, created_at, updated_at
