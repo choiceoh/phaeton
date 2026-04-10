@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 
@@ -81,8 +80,6 @@ func TestClientIP(t *testing.T) {
 }
 
 func TestGenerateToken(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret-key")
-	defer os.Unsetenv("JWT_SECRET")
 
 	deptID := "dept-1"
 	subID := "sub-1"
@@ -95,7 +92,7 @@ func TestGenerateToken(t *testing.T) {
 		SubsidiaryID: &subID,
 	}
 
-	tokenStr, err := generateToken(user)
+	tokenStr, err := generateToken(user, "test-secret-key")
 	if err != nil {
 		t.Fatalf("generateToken() error = %v", err)
 	}
@@ -139,8 +136,6 @@ func TestGenerateToken(t *testing.T) {
 }
 
 func TestGenerateToken_NoDepartment(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret-key")
-	defer os.Unsetenv("JWT_SECRET")
 
 	user := User{
 		ID:    "user-456",
@@ -149,7 +144,7 @@ func TestGenerateToken_NoDepartment(t *testing.T) {
 		Role:  RoleViewer,
 	}
 
-	tokenStr, err := generateToken(user)
+	tokenStr, err := generateToken(user, "test-secret-key")
 	if err != nil {
 		t.Fatalf("generateToken() error = %v", err)
 	}
@@ -167,21 +162,20 @@ func TestGenerateToken_NoDepartment(t *testing.T) {
 	}
 }
 
-func TestGenerateToken_DefaultSecret(t *testing.T) {
-	os.Unsetenv("JWT_SECRET")
-
+func TestGenerateToken_ExplicitSecret(t *testing.T) {
+	secret := "my-custom-secret"
 	user := User{ID: "u1", Email: "a@b.com", Name: "A", Role: RoleViewer}
-	tokenStr, err := generateToken(user)
+	tokenStr, err := generateToken(user, secret)
 	if err != nil {
-		t.Fatalf("generateToken() with default secret: error = %v", err)
+		t.Fatalf("generateToken() error = %v", err)
 	}
 
-	// Should be parseable with the hardcoded default.
+	// Should be parseable with the same secret.
 	_, err = jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
-		return []byte("phaeton-dev-secret-change-in-production"), nil
+		return []byte(secret), nil
 	})
 	if err != nil {
-		t.Errorf("token should be valid with default secret: %v", err)
+		t.Errorf("token should be valid with provided secret: %v", err)
 	}
 }
 

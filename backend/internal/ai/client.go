@@ -8,9 +8,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/phaeton/backend/internal/config"
 )
 
 // Client talks to a local vLLM (OpenAI-compatible) server.
@@ -30,15 +31,10 @@ const modelCacheTTL = 30 * time.Second
 // healthTimeout is the timeout for the lightweight health probe.
 const healthTimeout = 3 * time.Second
 
-func NewClient() *Client {
-	base := os.Getenv("AI_BASE_URL")
-	if base == "" {
-		base = "http://localhost:8000"
-	}
-	model := os.Getenv("AI_MODEL") // empty = auto-detect from vLLM
+func NewClient(cfg config.AIConfig) *Client {
 	return &Client{
-		baseURL: base,
-		model:   model,
+		baseURL: cfg.BaseURL,
+		model:   cfg.Model,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},

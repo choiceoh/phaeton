@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -40,10 +39,10 @@ type WebhookHandler struct {
 
 // NewWebhookHandler creates a handler with optional HMAC-SHA256 verification.
 // Set WEBHOOK_SECRET env var to enable signature validation.
-func NewWebhookHandler(pool *pgxpool.Pool) *WebhookHandler {
+func NewWebhookHandler(pool *pgxpool.Pool, secret string) *WebhookHandler {
 	return &WebhookHandler{
 		pool:     pool,
-		secret:   os.Getenv("WEBHOOK_SECRET"),
+		secret:   secret,
 		handlers: make(map[string]TopicHandler),
 	}
 }

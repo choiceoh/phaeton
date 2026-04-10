@@ -173,7 +173,7 @@ func notifyCommentRecipients(ctx context.Context, pool *pgxpool.Pool, ev events.
 	var rows pgx.Rows
 	var err error
 	if slug != "" {
-		qTable := fmt.Sprintf("%q.%q", "data", slug)
+		qTable := pgutil.QuoteQualified("data", slug)
 		rows, err = pool.Query(ctx, fmt.Sprintf(`
 			SELECT DISTINCT user_id::text FROM (
 				SELECT _created_by AS user_id FROM %s WHERE id = $1 AND deleted_at IS NULL
@@ -221,7 +221,7 @@ func notifyStateChangeRecipients(ctx context.Context, pool *pgxpool.Pool, cache 
 	).Scan(&slug)
 	if err == nil {
 		var creatorID string
-		qTable := fmt.Sprintf("%q.%q", "data", slug)
+		qTable := pgutil.QuoteQualified("data", slug)
 		err = pool.QueryRow(ctx,
 			fmt.Sprintf(`SELECT _created_by::text FROM %s WHERE id = $1 AND deleted_at IS NULL`, qTable),
 			ev.RecordID,

@@ -14,6 +14,7 @@ import (
 
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/migration"
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -349,10 +350,10 @@ func (h *SchemaHandler) MyTasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+		qTable := pgutil.QuoteQualified("data", col.Slug)
 		selCols := []string{"id", `"_status"`, `"_created_at"`}
 		if titleField != nil {
-			selCols = append(selCols, fmt.Sprintf("%q", titleField.Slug))
+			selCols = append(selCols, pgutil.QuoteIdent(titleField.Slug))
 		}
 
 		args := make([]any, len(statusNames))
@@ -484,15 +485,15 @@ func (h *SchemaHandler) GlobalCalendarEvents(w http.ResponseWriter, r *http.Requ
 			continue
 		}
 
-		qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+		qTable := pgutil.QuoteQualified("data", col.Slug)
 
 		// Build select columns.
-		selCols := []string{"id", fmt.Sprintf("%q", dateField.Slug)}
+		selCols := []string{"id", pgutil.QuoteIdent(dateField.Slug)}
 		if endDateField != nil {
-			selCols = append(selCols, fmt.Sprintf("%q", endDateField.Slug))
+			selCols = append(selCols, pgutil.QuoteIdent(endDateField.Slug))
 		}
 		if titleField != nil {
-			selCols = append(selCols, fmt.Sprintf("%q", titleField.Slug))
+			selCols = append(selCols, pgutil.QuoteIdent(titleField.Slug))
 		}
 
 		sql := fmt.Sprintf(

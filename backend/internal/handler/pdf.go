@@ -11,6 +11,7 @@ import (
 	"github.com/go-pdf/fpdf"
 
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -32,7 +33,7 @@ func (h *DynHandler) ExportPDF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := r.URL.Query()
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 
 	where, args, err := ParseFilters(params, fields)
 	if err != nil {

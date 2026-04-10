@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -430,11 +431,11 @@ func generateAddUnique(tableSlug, colSlug string) string {
 }
 
 func quoteIdent(schemaName, name string) string {
-	return fmt.Sprintf("%q.%q", schemaName, name)
+	return pgutil.QuoteQualified(schemaName, name)
 }
 
 func quoteIdentSingle(name string) string {
-	return fmt.Sprintf("%q", name)
+	return pgutil.QuoteIdent(name)
 }
 
 func escapeSQLString(s string) string {

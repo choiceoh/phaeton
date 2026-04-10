@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/notify"
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -62,7 +63,7 @@ func (h *ReportHandler) EmailReport(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch data (same logic as ExportPDF).
 	params := r.URL.Query()
-	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	qTable := pgutil.QuoteQualified("data", col.Slug)
 
 	where, args, err := ParseFilters(params, fields)
 	if err != nil {

@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -28,15 +27,6 @@ type UserClaims struct {
 	SubsidiaryID string `json:"subsidiaryId,omitempty"`
 }
 
-// AuthDisabled returns true when AUTH_DISABLED=true, bypassing JWT validation.
-// Always returns false in production (GO_ENV=production) regardless of the variable.
-func AuthDisabled() bool {
-	if os.Getenv("GO_ENV") == "production" {
-		return false
-	}
-	return strings.EqualFold(os.Getenv("AUTH_DISABLED"), "true")
-}
-
 // DevUser is the hard-coded user injected when auth is disabled.
 var DevUser = UserClaims{
 	UserID: "dev-user",
@@ -46,9 +36,9 @@ var DevUser = UserClaims{
 }
 
 // RequireAuth returns middleware that validates JWT from Authorization header or cookie.
-// When AUTH_DISABLED=true, it skips validation and injects DevUser.
-func RequireAuth() func(http.Handler) http.Handler {
-	if AuthDisabled() {
+// When authDisabled is true, it skips validation and injects DevUser.
+func RequireAuth(jwtSecret string, authDisabled bool) func(http.Handler) http.Handler {
+	if authDisabled {
 		return func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				ctx := context.WithValue(r.Context(), userContextKey, DevUser)
@@ -57,7 +47,7 @@ func RequireAuth() func(http.Handler) http.Handler {
 		}
 	}
 
-	secret := []byte(jwtSecret())
+	secret := []byte(jwtSecret)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := extractToken(r)
@@ -174,13 +164,3 @@ func GetCollectionRole(ctx context.Context) string {
 	return r
 }
 
-// jwtSecret returns the JWT signing secret from the JWT_SECRET env var.
-// Falls back to a hard-coded dev secret if unset. In production, run() in main.go
-// refuses to start without an explicit JWT_SECRET, so the fallback only applies
-// during local development.
-func jwtSecret() string {
-	if s := os.Getenv("JWT_SECRET"); s != "" {
-		return s
-	}
-	return "phaeton-dev-secret-change-in-production"
-}

@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 )
 
 // tokenType classifies lexer tokens.
@@ -401,7 +403,7 @@ func (p *Parser) parsePrimary() (string, error) {
 			return "", fmt.Errorf("unknown field or function %q", t.val)
 		}
 		p.refSlugs = append(p.refSlugs, t.val)
-		return fmt.Sprintf("%q", t.val), nil
+		return pgutil.QuoteIdent(t.val), nil
 
 	case tokLParen:
 		p.advance()
@@ -539,7 +541,7 @@ func (p *Parser) parseCrossCollectionFunc(name string) (string, error) {
 	if !isValidIdent(targetField) {
 		return "", fmt.Errorf("%s: invalid target field %q", name, targetField)
 	}
-	qTargetField := fmt.Sprintf("%q", targetField)
+	qTargetField := pgutil.QuoteIdent(targetField)
 
 	switch name {
 	case "LOOKUP":
