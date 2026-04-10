@@ -17,6 +17,7 @@ import {
   Paperclip,
   Search,
   Sigma,
+  Sheet,
   Square,
   SquareCheck,
   Table2,
@@ -66,6 +67,7 @@ const FIELD_ICONS: Record<FieldType, LucideIcon> = {
   label: Tag,
   line: Minus,
   table: Table2,
+  spreadsheet: Sheet,
   spacer: Square,
 }
 
@@ -93,6 +95,7 @@ const ADVANCED_ENTRIES: PaletteEntry[] = [
   { icon: FIELD_ICONS.rollup, label: FIELD_TYPE_LABELS.rollup, type: 'rollup' },
   { icon: FIELD_ICONS.boolean, label: FIELD_TYPE_LABELS.boolean, type: 'boolean' },
   { icon: FIELD_ICONS.table, label: FIELD_TYPE_LABELS.table, type: 'table' },
+  { icon: FIELD_ICONS.spreadsheet, label: FIELD_TYPE_LABELS.spreadsheet, type: 'spreadsheet' },
   { icon: FIELD_ICONS.json, label: FIELD_TYPE_LABELS.json, type: 'json' },
   { icon: FIELD_ICONS.autonumber, label: FIELD_TYPE_LABELS.autonumber, type: 'autonumber' },
 ]

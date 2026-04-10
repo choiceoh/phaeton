@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { GripVertical, Loader2, Plus, X } from 'lucide-react'
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -440,31 +440,26 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             </section>
           )}
 
-          {/* 테이블 열 설정 — table */}
-          {field.field_type === 'table' && (
-            <section className="space-y-2">
-              <Label className="text-xs font-semibold text-muted-foreground">테이블 열 설정 (JSON)</Label>
-              <Textarea
-                rows={6}
-                value={JSON.stringify(
-                  (opts.sub_columns as unknown[]) || [
-                    { key: 'col1', label: '항목', type: 'text' },
-                    { key: 'col2', label: '값', type: 'text' },
-                  ],
-                  null,
-                  2,
-                )}
-                onChange={(e) => {
-                  try {
-                    const parsed = JSON.parse(e.target.value)
-                    if (Array.isArray(parsed)) updateOption('sub_columns', parsed)
-                  } catch { /* ignore parse errors while typing */ }
-                }}
+          {/* 테이블/스프레드시트 열 설정 */}
+          {(field.field_type === 'table' || field.field_type === 'spreadsheet') && (
+            <SubColumnEditor
+              columns={(opts.sub_columns as SubColumnDef[]) || []}
+              onChange={(cols) => updateOption('sub_columns', cols)}
+            />
+          )}
+
+          {/* 스프레드시트 초기 행 수 */}
+          {field.field_type === 'spreadsheet' && (
+            <section className="space-y-1">
+              <Label className="text-xs font-semibold text-muted-foreground">초기 행 수</Label>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                className="h-7 w-24 text-sm"
+                value={(opts.initial_rows as number) || 5}
+                onChange={(e) => updateOption('initial_rows', Math.max(1, Math.min(100, Number(e.target.value) || 5)))}
               />
-              <p className="text-xs text-muted-foreground">
-                각 열: {'{'}"key", "label", "type"(text|number|select), "choices"(선택시){'}'}<br />
-                예: [{'{'}"key":"item","label":"품목","type":"text"{'}'}, {'{'}"key":"qty","label":"수량","type":"number"{'}'}]
-              </p>
             </section>
           )}
 
@@ -984,6 +979,136 @@ export default function FieldProperties({ field, collections, siblingFields, onC
         </div>
       )}
     </div>
+  )
+}
+
+// -- SubColumnEditor: visual column editor for table field --
+
+interface SubColumnDef {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'select'
+  choices?: string[]
+}
+
+const SUB_COL_TYPES = [
+  { value: 'text', label: '텍스트' },
+  { value: 'number', label: '숫자' },
+  { value: 'select', label: '선택' },
+] as const
+
+let subColCounter = 0
+
+function SubColumnEditor({
+  columns,
+  onChange,
+}: {
+  columns: SubColumnDef[]
+  onChange: (cols: SubColumnDef[]) => void
+}) {
+  function addColumn() {
+    subColCounter += 1
+    onChange([...columns, { key: `col_${subColCounter}`, label: '', type: 'text' }])
+  }
+
+  function updateColumn(idx: number, patch: Partial<SubColumnDef>) {
+    const next = columns.map((c, i) => {
+      if (i !== idx) return c
+      const updated = { ...c, ...patch }
+      // auto-generate key from label
+      if (patch.label !== undefined) {
+        updated.key = patch.label
+          .toLowerCase()
+          .replace(/[^a-z0-9가-힣]/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_|_$/g, '') || c.key
+      }
+      // clear choices when switching away from select
+      if (patch.type && patch.type !== 'select') {
+        delete updated.choices
+      }
+      return updated
+    })
+    onChange(next)
+  }
+
+  function removeColumn(idx: number) {
+    onChange(columns.filter((_, i) => i !== idx))
+  }
+
+  function moveColumn(from: number, to: number) {
+    if (to < 0 || to >= columns.length) return
+    const next = [...columns]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    onChange(next)
+  }
+
+  return (
+    <section className="space-y-2">
+      <Label className="text-xs font-semibold text-muted-foreground">테이블 열 설정</Label>
+      <div className="space-y-1.5">
+        {columns.map((col, idx) => (
+          <div key={col.key + idx} className="space-y-1">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="cursor-grab text-muted-foreground hover:text-foreground"
+                title="위로"
+                onPointerDown={() => moveColumn(idx, idx - 1)}
+              >
+                <GripVertical className="h-3.5 w-3.5" />
+              </button>
+              <Input
+                className="h-7 text-sm flex-1"
+                placeholder="열 이름"
+                value={col.label}
+                onChange={(e) => updateColumn(idx, { label: e.target.value })}
+              />
+              <Select
+                value={col.type}
+                onValueChange={(v) => updateColumn(idx, { type: v as SubColumnDef['type'] })}
+              >
+                <SelectTrigger className="h-7 w-24 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUB_COL_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => removeColumn(idx)}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {col.type === 'select' && (
+              <Input
+                className="ml-5 h-7 text-xs"
+                placeholder="옵션 (쉼표 구분: 대기, 진행, 완료)"
+                value={(col.choices || []).join(', ')}
+                onChange={(e) =>
+                  updateColumn(idx, {
+                    choices: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                  })
+                }
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        onClick={addColumn}
+      >
+        <Plus className="h-3.5 w-3.5" /> 열 추가
+      </button>
+    </section>
   )
 }
 

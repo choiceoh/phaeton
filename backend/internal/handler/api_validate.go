@@ -223,7 +223,7 @@ func validateFieldValue(f schema.Field, v any) error {
 		if !pgutil.ParseUUID(s).Valid {
 			return fmt.Errorf("%w: invalid UUID %q", schema.ErrInvalidInput, s)
 		}
-	case schema.FieldJSON:
+	case schema.FieldJSON, schema.FieldTable, schema.FieldSpreadsheet:
 		// Any JSON value is acceptable; we just need to round-trip through encoding.
 		_ = v
 	default:

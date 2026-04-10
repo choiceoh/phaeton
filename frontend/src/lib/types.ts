@@ -19,6 +19,7 @@ export type FieldType =
   | 'lookup'
   | 'rollup'
   | 'table'
+  | 'spreadsheet'
   | 'label'
   | 'line'
   | 'spacer'

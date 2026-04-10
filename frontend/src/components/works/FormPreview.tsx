@@ -558,6 +558,43 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
           ({FIELD_TYPE_LABELS[field.field_type]}) 자동 계산
         </div>
       )
+    case 'spreadsheet': {
+      const cols = (field.options?.sub_columns as { key: string; label: string }[]) || [
+        { key: 'col1', label: 'A' },
+        { key: 'col2', label: 'B' },
+        { key: 'col3', label: 'C' },
+      ]
+      const rowCount = Math.min((field.options?.initial_rows as number) || 5, 4)
+      return (
+        <div className="rounded-md border overflow-hidden text-xs">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-muted/70">
+                <th className="w-8 border-r border-b px-1 py-0.5 text-center text-[10px] text-muted-foreground" />
+                {cols.map((c, i) => (
+                  <th key={c.key} className="border-r border-b px-2 py-0.5 text-center text-[10px] font-medium text-muted-foreground min-w-[60px]">
+                    <span className="text-muted-foreground/50 mr-0.5">{String.fromCharCode(65 + i)}</span>
+                    {c.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: rowCount }, (_, ri) => (
+                <tr key={ri}>
+                  <td className="border-r border-b px-1 py-0.5 text-center text-[10px] text-muted-foreground bg-muted/30">
+                    {ri + 1}
+                  </td>
+                  {cols.map((c) => (
+                    <td key={c.key} className="border-r border-b px-1 py-0.5 h-6" />
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
     case 'file':
       return (
         <div className="flex items-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
