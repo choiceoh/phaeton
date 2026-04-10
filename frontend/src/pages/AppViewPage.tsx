@@ -109,6 +109,7 @@ import { useUndoToast } from '@/hooks/useUndoToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
+import { highlightText } from '@/lib/highlightText'
 import type { EntryRow, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
 import { emptyFilterGroup, isFilterGroupEmpty, flattenFilterGroup, serializeFilterGroup } from '@/lib/types'
 import { getDisplayType } from '@/lib/fieldGuards'
@@ -266,10 +267,32 @@ export default function AppViewPage() {
   const retryToast = useRetryToast()
   const onConflictError = useConflictAwareUpdate(refetch)
 
+  // Saved view visibility override.
+  const [viewVisibility, setViewVisibility] = useState<Record<string, boolean> | null>(null)
+  const [viewVisKey, setViewVisKey] = useState(0)
+
   // Multi-select state for bulk operations.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
+  const [selectAllFilteredMode, setSelectAllFilteredMode] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
+
+  // Select all filtered results across pages.
+  const handleSelectAllFiltered = useCallback(async () => {
+    if (!collection?.slug || !list?.total) return
+    try {
+      const params = new URLSearchParams()
+      params.set('limit', String(list.total))
+      params.set('fields', 'id')
+      if (searchText) params.set('q', searchText)
+      const res = await fetch(`/api/data/${collection.slug}?${params}`, { credentials: 'include' })
+      if (!res.ok) return
+      const json = await res.json()
+      const allIds = new Set<string>((json.data ?? []).map((r: { id: string }) => r.id))
+      setSelectedRowIds(allIds)
+      setSelectAllFilteredMode(true)
+    } catch { /* ignore */ }
+  }, [collection?.slug, list?.total, searchText])
 
   // Detect views.
   const selectField = useMemo(
@@ -423,9 +446,9 @@ export default function AppViewPage() {
             // Render text display subtypes as clickable links
             if (f.field_type === 'text' && dt && v) {
               const s = String(v)
-              if (dt === 'url') return <a href={s.startsWith('http') ? s : `https://${s}`} target="_blank" rel="noopener noreferrer" className="text-primary underline" onClick={(e) => e.stopPropagation()}>{s}</a>
-              if (dt === 'email') return <a href={`mailto:${s}`} className="text-primary underline" onClick={(e) => e.stopPropagation()}>{s}</a>
-              if (dt === 'phone') return <a href={`tel:${s}`} className="text-primary underline" onClick={(e) => e.stopPropagation()}>{s}</a>
+              if (dt === 'url') return <a href={s.startsWith('http') ? s : `https://${s}`} target="_blank" rel="noopener noreferrer" className="text-primary underline" onClick={(e) => e.stopPropagation()}>{searchText ? highlightText(s, searchText) : s}</a>
+              if (dt === 'email') return <a href={`mailto:${s}`} className="text-primary underline" onClick={(e) => e.stopPropagation()}>{searchText ? highlightText(s, searchText) : s}</a>
+              if (dt === 'phone') return <a href={`tel:${s}`} className="text-primary underline" onClick={(e) => e.stopPropagation()}>{searchText ? highlightText(s, searchText) : s}</a>
             }
 
             // Render progress bar inline
@@ -441,7 +464,11 @@ export default function AppViewPage() {
               )
             }
 
-            return formatCell(v, f)
+            const formatted = formatCell(v, f)
+            if (searchText && typeof formatted === 'string' && ['text', 'textarea'].includes(f.field_type)) {
+              return highlightText(formatted, searchText)
+            }
+            return formatted
           },
         })),
     )
@@ -476,7 +503,7 @@ export default function AppViewPage() {
       ) : null,
     })
     return cols
-  }, [collection, process, processVisible])
+  }, [collection, process, processVisible, searchText])
 
   // Default: hide columns beyond the first 8 data fields, restored from localStorage if available.
   const colVisStorageKey = appId ? `phaeton:colvis:${appId}` : null
@@ -496,13 +523,36 @@ export default function AppViewPage() {
     return vis
   }, [collection, colVisStorageKey])
 
+  const currentVisibilityRef = useRef<Record<string, boolean>>(initialColumnVisibility)
   const handleColumnVisibilityChange = useCallback(
     (visibility: Record<string, boolean>) => {
+      currentVisibilityRef.current = visibility
       if (colVisStorageKey) {
         try { localStorage.setItem(colVisStorageKey, JSON.stringify(visibility)) } catch { /* ignore */ }
       }
     },
     [colVisStorageKey],
+  )
+
+  // Column pinning persistence (same pattern as visibility).
+  const colPinStorageKey = appId ? `phaeton:colpin:${appId}` : null
+  const initialColumnPinning = useMemo(() => {
+    if (colPinStorageKey) {
+      try {
+        const saved = localStorage.getItem(colPinStorageKey)
+        if (saved) return JSON.parse(saved)
+      } catch { /* ignore */ }
+    }
+    return { left: [], right: [] }
+  }, [colPinStorageKey])
+
+  const handleColumnPinningChange = useCallback(
+    (pinning: { left?: string[]; right?: string[] }) => {
+      if (colPinStorageKey) {
+        try { localStorage.setItem(colPinStorageKey, JSON.stringify(pinning)) } catch { /* ignore */ }
+      }
+    },
+    [colPinStorageKey],
   )
 
   // Helper: find _version for a row from the current list data.
@@ -870,6 +920,15 @@ export default function AppViewPage() {
     } else {
       setSortItems([])
     }
+    // Restore visible fields if saved.
+    if (view.visible_fields?.length && collection?.fields) {
+      const vis: Record<string, boolean> = {}
+      collection.fields.filter((f) => !isLayoutType(f.field_type)).forEach((f) => {
+        vis[f.slug] = view.visible_fields!.includes(f.slug)
+      })
+      setViewVisibility(vis)
+      setViewVisKey((k) => k + 1)
+    }
     setPage(1)
   }
 
@@ -877,6 +936,8 @@ export default function AppViewPage() {
     setActiveView(null)
     setFilterGroup(emptyFilterGroup())
     setSortItems([])
+    setViewVisibility(null)
+    setViewVisKey((k) => k + 1)
     setPage(1)
   }
 
@@ -901,11 +962,19 @@ export default function AppViewPage() {
       ? sortItems.map((s) => `${s.desc ? '-' : ''}${s.field}`).join(',')
       : ''
 
+    // Collect visible field slugs from current visibility state.
+    const vis = currentVisibilityRef.current
+    const visibleFields = collection?.fields
+      ?.filter((f) => !isLayoutType(f.field_type))
+      .filter((f) => vis[f.slug] !== false)
+      .map((f) => f.slug)
+
     createSavedView.mutate(
       {
         name: newViewName.trim(),
         filter_config: filterConfig,
         sort_config: sortConfig,
+        visible_fields: visibleFields,
         is_public: true,
       },
       {
@@ -948,6 +1017,11 @@ export default function AppViewPage() {
           </button>
         )}
       </div>
+      {searchText && list && (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {list.total}건 검색됨
+        </span>
+      )}
 
       <Popover>
         <PopoverTrigger
@@ -1291,7 +1365,7 @@ export default function AppViewPage() {
             <ErrorBoundary key="list">
             {selectedRowIds.size > 0 && (
               <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-                <span className="font-medium">{selectedRowIds.size}건 선택</span>
+                <span className="font-medium">{selectAllFilteredMode ? `전체 ${selectedRowIds.size}건 선택` : `${selectedRowIds.size}건 선택`}</span>
                 {process?.is_enabled && (process.statuses?.length ?? 0) > 0 && (
                   <DropdownMenu>
                     <DropdownMenuTrigger
@@ -1383,13 +1457,18 @@ export default function AppViewPage() {
               summaryFn={columnAggFn}
               onSummaryFnChange={handleAggFnChange}
               toolbar={tableToolbar}
-              initialColumnVisibility={initialColumnVisibility}
+              key={viewVisKey}
+              initialColumnVisibility={viewVisibility ?? initialColumnVisibility}
               onColumnVisibilityChange={handleColumnVisibilityChange}
+              initialColumnPinning={initialColumnPinning}
+              onColumnPinningChange={handleColumnPinningChange}
               highlightRows={importedCount}
               newRowId={null}
               selectable
               selectedRowIds={selectedRowIds}
-              onSelectionChange={setSelectedRowIds}
+              onSelectionChange={(ids) => { setSelectedRowIds(ids); setSelectAllFilteredMode(false) }}
+              totalFiltered={list.total}
+              onSelectAllFiltered={handleSelectAllFiltered}
             />
             {list.data.length === 0 && (
               <ViewGuide fields={collection.fields ?? []} />

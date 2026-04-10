@@ -43,6 +43,9 @@ export default function RootLayout() {
   if (isLoading) return <LoadingState />
   if (!user) return null // useEffect will redirect
 
+  const navCls = ({ isActive }: { isActive: boolean }) =>
+    `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`
+
   return (
     <AIAvailabilityProvider>
       <div className="min-h-screen overflow-x-hidden bg-background">
@@ -53,35 +56,25 @@ export default function RootLayout() {
               <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Topworks</span>
             </Link>
             <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto">
-              <NavLink to="/my-tasks" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                내 업무
-              </NavLink>
-              <NavLink to="/apps" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                앱
-              </NavLink>
-              <NavLink to="/dashboard" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                대시보드
-              </NavLink>
-              <NavLink to="/calendar" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                캘린더
-              </NavLink>
-              <NavLink to="/automations" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                자동화
-              </NavLink>
-              <NavLink to="/ai" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                AI
-              </NavLink>
+              {/* 워크스페이스 */}
+              <NavLink to="/my-tasks" className={navCls} viewTransition>내 업무</NavLink>
+              <NavLink to="/apps" className={navCls} viewTransition>앱</NavLink>
+              <NavLink to="/dashboard" className={navCls} viewTransition>대시보드</NavLink>
+              <NavLink to="/calendar" className={navCls} viewTransition>캘린더</NavLink>
+
+              <div className="mx-1.5 h-4 w-px bg-border" aria-hidden="true" />
+
+              {/* 도구 */}
+              <NavLink to="/automations" className={navCls} viewTransition>자동화</NavLink>
+              <NavLink to="/ai" className={navCls} viewTransition>AI</NavLink>
+
+              {/* 관리 */}
               {(user.role === 'director' || user.role === 'pm') && (
                 <>
-                  <NavLink to="/history" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                    이력
-                  </NavLink>
-                  <NavLink to="/admin/users" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                    사용자 관리
-                  </NavLink>
-                  <NavLink to="/settings" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
-                    설정
-                  </NavLink>
+                  <div className="mx-1.5 h-4 w-px bg-border" aria-hidden="true" />
+                  <NavLink to="/history" className={navCls} viewTransition>이력</NavLink>
+                  <NavLink to="/admin/users" className={navCls} viewTransition>사용자 관리</NavLink>
+                  <NavLink to="/settings" className={navCls} viewTransition>설정</NavLink>
                 </>
               )}
             </div>

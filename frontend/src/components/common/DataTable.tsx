@@ -107,12 +107,20 @@ interface Props<T> {
   highlightRows?: number
   /** ID of a newly created row to animate entrance. */
   newRowId?: string | null
+  /** Initial column pinning state (e.g. restored from localStorage). */
+  initialColumnPinning?: ColumnPinningState
+  /** Called when column pinning changes (for persistence). */
+  onColumnPinningChange?: (pinning: ColumnPinningState) => void
   /** Enable row selection with checkboxes */
   selectable?: boolean
   /** Currently selected row IDs (controlled) */
   selectedRowIds?: Set<string>
   /** Called when selection changes */
   onSelectionChange?: (ids: Set<string>) => void
+  /** Total filtered results across all pages (for select-all banner). */
+  totalFiltered?: number
+  /** Called when user clicks "select all filtered". */
+  onSelectAllFiltered?: () => void
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -138,18 +146,21 @@ export function DataTable<T>({
   toolbar,
   initialColumnVisibility,
   onColumnVisibilityChange: onColumnVisibilityChangeProp,
+  initialColumnPinning,
+  onColumnPinningChange: onColumnPinningChangeProp,
   highlightRows = 0,
   newRowId,
   selectable,
   selectedRowIds,
   onSelectionChange,
+  totalFiltered,
+  onSelectAllFiltered,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
-  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
-    left: [],
-    right: [],
-  })
+  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>(
+    initialColumnPinning ?? { left: [], right: [] },
+  )
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({})
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([])
 
@@ -235,7 +246,11 @@ export function DataTable<T>({
       setColumnVisibility(next)
       onColumnVisibilityChangeProp?.(next)
     },
-    onColumnPinningChange: setColumnPinning,
+    onColumnPinningChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(columnPinning) : updater
+      setColumnPinning(next)
+      onColumnPinningChangeProp?.(next)
+    },
     onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
@@ -437,6 +452,27 @@ export function DataTable<T>({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Select-all-filtered banner */}
+      {selectable && selectedRowIds && data.length > 0 && (() => {
+        const allPageIds = data.map((d) => String((d as EntryRow).id))
+        const allPageSelected = allPageIds.length > 0 && allPageIds.every((id) => selectedRowIds.has(id))
+        if (allPageSelected && totalFiltered && totalFiltered > data.length && selectedRowIds.size < totalFiltered) {
+          return (
+            <div className="rounded-md border bg-primary/5 px-3 py-2 text-sm text-center mb-2">
+              현재 페이지의 {data.length}건이 선택되었습니다.{' '}
+              <button
+                type="button"
+                className="text-primary underline font-medium"
+                onClick={() => onSelectAllFiltered?.()}
+              >
+                필터된 전체 {totalFiltered}건 모두 선택
+              </button>
+            </div>
+          )
+        }
+        return null
+      })()}
 
       <div className="relative">
       <div

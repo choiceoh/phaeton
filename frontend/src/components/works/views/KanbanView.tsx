@@ -427,6 +427,10 @@ export default function KanbanView({
     }
   }, [columns, focusedCol, focusedCard, onCardClick])
 
+  const [hideEmpty, setHideEmpty] = useState(false)
+  const emptyCount = columns.filter((c) => c.entries.length === 0).length
+  const visibleColumns = hideEmpty ? columns.filter((c) => c.entries.length > 0) : columns
+
   const toggleCollapse = useCallback((value: string) => {
     setCollapsedColumns((prev) => {
       const next = new Set(prev)
@@ -462,6 +466,20 @@ export default function KanbanView({
   }
 
   return (
+    <>
+    {emptyCount > 0 && (
+      <div className="mb-2 flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs"
+          onClick={() => setHideEmpty(!hideEmpty)}
+        >
+          <LayoutGrid className="h-3.5 w-3.5" />
+          {hideEmpty ? `빈 컬럼 ${emptyCount}개 표시` : '빈 컬럼 숨기기'}
+        </Button>
+      </div>
+    )}
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
@@ -475,7 +493,7 @@ export default function KanbanView({
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
-        {columns.map((col, ci) => (
+        {visibleColumns.map((col, ci) => (
           <DroppableColumn
             key={col.value}
             column={col}
@@ -505,5 +523,6 @@ export default function KanbanView({
         )}
       </DragOverlay>
     </DndContext>
+    </>
   )
 }

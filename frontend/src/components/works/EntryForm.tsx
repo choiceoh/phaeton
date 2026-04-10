@@ -43,6 +43,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { api } from '@/lib/api'
 import { isLayoutType } from '@/lib/constants'
 import type { Field, Process, SubColumn } from '@/lib/types'
@@ -202,26 +208,57 @@ export default function EntryForm({
             </span>
           </div>
           {availableTransitions.length > 0 && (
+            <TooltipProvider>
             <div className="flex flex-wrap gap-2">
               {availableTransitions.map((t, i) => (
                 <div key={i} className="flex flex-col items-start">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1"
-                    onClick={() => setValue('_status', t.to_status)}
-                  >
-                    {t.label}
-                    <span className="text-muted-foreground">→</span>
-                    <span
-                      className="inline-block rounded px-1.5 py-0.5 text-xs text-white"
-                      style={{ backgroundColor: t.to_color || '#6b7280' }}
+                  {t.is_blocked ? (
+                    <Tooltip>
+                      <TooltipTrigger
+                        className="cursor-not-allowed"
+                        onClick={(e) => e.preventDefault()}
+                      >
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 pointer-events-none opacity-50"
+                          disabled
+                          tabIndex={-1}
+                        >
+                          {t.label}
+                          <span className="text-muted-foreground">→</span>
+                          <span
+                            className="inline-block rounded px-1.5 py-0.5 text-xs text-white"
+                            style={{ backgroundColor: t.to_color || '#6b7280' }}
+                          >
+                            {t.to_status}
+                          </span>
+                        </Button>
+                      </TooltipTrigger>
+                      {t.blocked_reason && (
+                        <TooltipContent>{t.blocked_reason}</TooltipContent>
+                      )}
+                    </Tooltip>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      onClick={() => setValue('_status', t.to_status)}
                     >
-                      {t.to_status}
-                    </span>
-                  </Button>
-                  {t.allowed_user_names && t.allowed_user_names.length > 0 && (
+                      {t.label}
+                      <span className="text-muted-foreground">→</span>
+                      <span
+                        className="inline-block rounded px-1.5 py-0.5 text-xs text-white"
+                        style={{ backgroundColor: t.to_color || '#6b7280' }}
+                      >
+                        {t.to_status}
+                      </span>
+                    </Button>
+                  )}
+                  {!t.is_blocked && t.allowed_user_names && t.allowed_user_names.length > 0 && (
                     <span className="mt-0.5 text-[10px] text-muted-foreground">
                       {t.allowed_user_names.join(', ')} 승인 가능
                     </span>
@@ -229,6 +266,7 @@ export default function EntryForm({
                 </div>
               ))}
             </div>
+            </TooltipProvider>
           )}
           {typeof data._status === 'string' && data._status !== currentStatus && (
             <p className="mt-2 text-xs text-muted-foreground">
