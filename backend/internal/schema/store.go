@@ -25,7 +25,7 @@ func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // ---------- Collection ----------
 
-const colCols = `id, slug, label, description, icon, is_system, sort_order, created_at, updated_at, created_by`
+const colCols = `id, slug, label, description, icon, is_system, sort_order, access_config, created_at, updated_at, created_by`
 
 func scanCollection(row pgx.Row) (Collection, error) {
 	var (
@@ -34,10 +34,11 @@ func scanCollection(row pgx.Row) (Collection, error) {
 		createdBy pgtype.UUID
 		desc      *string
 		icon      *string
+		acRaw     []byte
 	)
 	err := row.Scan(
 		&id, &c.Slug, &c.Label, &desc, &icon,
-		&c.IsSystem, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt, &createdBy,
+		&c.IsSystem, &c.SortOrder, &acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy,
 	)
 	if err != nil {
 		return Collection{}, err
@@ -49,6 +50,9 @@ func scanCollection(row pgx.Row) (Collection, error) {
 	}
 	if icon != nil {
 		c.Icon = *icon
+	}
+	if len(acRaw) > 0 {
+		_ = json.Unmarshal(acRaw, &c.AccessConfig)
 	}
 	return c, nil
 }
@@ -120,11 +124,15 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 		id pgtype.UUID
 		c  Collection
 	)
+	var acJSON []byte
+	if req.AccessConfig != nil {
+		acJSON, _ = json.Marshal(req.AccessConfig)
+	}
 	err := tx.QueryRow(ctx, `
-		INSERT INTO _meta.collections (slug, label, description, icon)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO _meta.collections (slug, label, description, icon, access_config)
+		VALUES ($1, $2, $3, $4, COALESCE($5::jsonb, '{}'))
 		RETURNING id, created_at, updated_at`,
-		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon),
+		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), jsonOrNil(acJSON),
 	).Scan(&id, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return Collection{}, fmt.Errorf("insert collection: %w", err)
@@ -166,6 +174,12 @@ func (s *Store) UpdateCollection(ctx context.Context, id string, req *UpdateColl
 	if req.SortOrder != nil {
 		sets = append(sets, fmt.Sprintf("sort_order = $%d", argIdx))
 		args = append(args, *req.SortOrder)
+		argIdx++
+	}
+	if req.AccessConfig != nil {
+		sets = append(sets, fmt.Sprintf("access_config = $%d", argIdx))
+		acJSON, _ := json.Marshal(req.AccessConfig)
+		args = append(args, acJSON)
 		argIdx++
 	}
 

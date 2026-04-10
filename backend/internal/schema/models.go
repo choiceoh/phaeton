@@ -28,6 +28,8 @@ const (
 	FieldJSON        FieldType = "json"
 	FieldUser        FieldType = "user"
 
+	FieldAutonumber FieldType = "autonumber"
+
 	// Layout types — stored in _meta.fields for ordering but produce no DB column.
 	FieldLabel  FieldType = "label"
 	FieldLine   FieldType = "line"
@@ -38,7 +40,7 @@ var validFieldTypes = map[FieldType]bool{
 	FieldText: true, FieldTextarea: true, FieldNumber: true, FieldInteger: true,
 	FieldBoolean: true, FieldDate: true, FieldDatetime: true, FieldTime: true,
 	FieldSelect: true, FieldMultiselect: true, FieldRelation: true,
-	FieldFile: true, FieldJSON: true, FieldUser: true,
+	FieldFile: true, FieldJSON: true, FieldUser: true, FieldAutonumber: true,
 	FieldLabel: true, FieldLine: true, FieldSpacer: true,
 }
 
@@ -58,19 +60,56 @@ const (
 	RelManyToMany RelationType = "many_to_many"
 )
 
+// AccessConfig defines per-collection role-based permissions.
+// Each key maps an operation to a list of allowed roles.
+type AccessConfig struct {
+	EntryView   []string `json:"entry_view,omitempty"`
+	EntryCreate []string `json:"entry_create,omitempty"`
+	EntryEdit   []string `json:"entry_edit,omitempty"`
+	EntryDelete []string `json:"entry_delete,omitempty"`
+}
+
+// AllowsRole checks whether the given role is allowed the specified operation.
+// An empty list means all authenticated roles are allowed.
+func (ac AccessConfig) AllowsRole(operation, role string) bool {
+	var allowed []string
+	switch operation {
+	case "entry_view":
+		allowed = ac.EntryView
+	case "entry_create":
+		allowed = ac.EntryCreate
+	case "entry_edit":
+		allowed = ac.EntryEdit
+	case "entry_delete":
+		allowed = ac.EntryDelete
+	default:
+		return false
+	}
+	if len(allowed) == 0 {
+		return true // no restriction
+	}
+	for _, r := range allowed {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
 // Collection is the top-level schema unit (maps to a PostgreSQL table in the data schema).
 type Collection struct {
-	ID          string    `json:"id"`
-	Slug        string    `json:"slug"`
-	Label       string    `json:"label"`
-	Description string    `json:"description,omitempty"`
-	Icon        string    `json:"icon,omitempty"`
-	IsSystem    bool      `json:"is_system"`
-	SortOrder   int       `json:"sort_order"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	CreatedBy   string    `json:"created_by,omitempty"`
-	Fields      []Field   `json:"fields,omitempty"`
+	ID           string       `json:"id"`
+	Slug         string       `json:"slug"`
+	Label        string       `json:"label"`
+	Description  string       `json:"description,omitempty"`
+	Icon         string       `json:"icon,omitempty"`
+	IsSystem     bool         `json:"is_system"`
+	SortOrder    int          `json:"sort_order"`
+	AccessConfig AccessConfig `json:"access_config"`
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
+	CreatedBy    string       `json:"created_by,omitempty"`
+	Fields       []Field      `json:"fields,omitempty"`
 }
 
 // Field defines a single column inside a collection.
@@ -126,11 +165,12 @@ func parseUUID(s string) (pgtype.UUID, error) {
 // --- Request DTOs ---
 
 type CreateCollectionReq struct {
-	Slug        string          `json:"slug"`
-	Label       string          `json:"label"`
-	Description string          `json:"description,omitempty"`
-	Icon        string          `json:"icon,omitempty"`
-	Fields      []CreateFieldIn `json:"fields,omitempty"`
+	Slug         string          `json:"slug"`
+	Label        string          `json:"label"`
+	Description  string          `json:"description,omitempty"`
+	Icon         string          `json:"icon,omitempty"`
+	AccessConfig *AccessConfig   `json:"access_config,omitempty"`
+	Fields       []CreateFieldIn `json:"fields,omitempty"`
 }
 
 type CreateFieldIn struct {
@@ -155,10 +195,11 @@ type CreateRelIn struct {
 }
 
 type UpdateCollectionReq struct {
-	Label       *string `json:"label,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Icon        *string `json:"icon,omitempty"`
-	SortOrder   *int    `json:"sort_order,omitempty"`
+	Label        *string       `json:"label,omitempty"`
+	Description  *string       `json:"description,omitempty"`
+	Icon         *string       `json:"icon,omitempty"`
+	SortOrder    *int          `json:"sort_order,omitempty"`
+	AccessConfig *AccessConfig `json:"access_config,omitempty"`
 }
 
 type UpdateFieldReq struct {
@@ -171,4 +212,34 @@ type UpdateFieldReq struct {
 	Options      json.RawMessage `json:"options,omitempty"`
 	Width        *int16          `json:"width,omitempty"`
 	Height       *int16          `json:"height,omitempty"`
+}
+
+// --- View ---
+
+// View represents a saved view configuration for a collection.
+type View struct {
+	ID           string          `json:"id"`
+	CollectionID string          `json:"collection_id"`
+	Name         string          `json:"name"`
+	ViewType     string          `json:"view_type"` // list, kanban, calendar, gallery
+	Config       json.RawMessage `json:"config"`
+	SortOrder    int             `json:"sort_order"`
+	IsDefault    bool            `json:"is_default"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+}
+
+type CreateViewReq struct {
+	Name      string          `json:"name"`
+	ViewType  string          `json:"view_type"`
+	Config    json.RawMessage `json:"config,omitempty"`
+	SortOrder int             `json:"sort_order"`
+	IsDefault bool            `json:"is_default"`
+}
+
+type UpdateViewReq struct {
+	Name      *string         `json:"name,omitempty"`
+	Config    json.RawMessage `json:"config,omitempty"`
+	SortOrder *int            `json:"sort_order,omitempty"`
+	IsDefault *bool           `json:"is_default,omitempty"`
 }

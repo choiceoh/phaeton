@@ -207,8 +207,33 @@ export default function AppViewPage() {
           header: f.label,
           enableSorting: true,
           size: f.field_type === 'textarea' ? 250 : 150,
-          cell: ({ row }: { row: { original: Record<string, unknown> } }) =>
-            formatCell(row.original[f.slug], f),
+          cell: ({ row }: { row: { original: Record<string, unknown> } }) => {
+            const v = row.original[f.slug]
+            const dt = f.options?.display_type as string | undefined
+
+            // Render text display subtypes as clickable links
+            if (f.field_type === 'text' && dt && v) {
+              const s = String(v)
+              if (dt === 'url') return <a href={s.startsWith('http') ? s : `https://${s}`} target="_blank" rel="noopener noreferrer" className="text-primary underline" onClick={(e) => e.stopPropagation()}>{s}</a>
+              if (dt === 'email') return <a href={`mailto:${s}`} className="text-primary underline" onClick={(e) => e.stopPropagation()}>{s}</a>
+              if (dt === 'phone') return <a href={`tel:${s}`} className="text-primary underline" onClick={(e) => e.stopPropagation()}>{s}</a>
+            }
+
+            // Render progress bar inline
+            if ((f.field_type === 'number' || f.field_type === 'integer') && dt === 'progress' && v != null) {
+              const num = Number(v)
+              return (
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-16 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, num))}%` }} />
+                  </div>
+                  <span className="text-xs">{num}%</span>
+                </div>
+              )
+            }
+
+            return formatCell(v, f)
+          },
         })),
     )
     cols.push({
@@ -308,6 +333,17 @@ export default function AppViewPage() {
   function handleEntryClick(entry: Record<string, unknown>) {
     setEditEntry(entry)
     setSheetOpen(true)
+  }
+
+  function handleCardMove(entryId: string, newValue: string) {
+    if (!selectField) return
+    updateEntry.mutate(
+      { id: entryId, body: { [selectField.slug]: newValue } },
+      {
+        onSuccess: () => toast.success('이동되었습니다'),
+        onError: (err) => toast.error(formatError(err)),
+      },
+    )
   }
 
   function handleSubmit(data: Record<string, unknown>) {
@@ -541,6 +577,7 @@ export default function AppViewPage() {
                 fields={collection.fields ?? []}
                 entries={list.data}
                 onCardClick={handleEntryClick}
+                onCardMove={handleCardMove}
               />
             </TabsContent>
           )}

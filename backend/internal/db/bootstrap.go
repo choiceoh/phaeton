@@ -57,6 +57,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			created_by  UUID
 		)`,
 
+		// Upgrade: add access_config column for per-collection permissions.
+		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS access_config JSONB DEFAULT '{}'`,
+
 		// --- _meta.fields ---
 		`CREATE TABLE IF NOT EXISTS _meta.fields (
 			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -120,6 +123,19 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			to_status_id    UUID NOT NULL REFERENCES _meta.process_statuses(id) ON DELETE CASCADE,
 			label           VARCHAR(255) NOT NULL,
 			created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+
+		// --- _meta.views ---
+		`CREATE TABLE IF NOT EXISTS _meta.views (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID NOT NULL REFERENCES _meta.collections(id) ON DELETE CASCADE,
+			name            VARCHAR(255) NOT NULL,
+			view_type       VARCHAR(31) NOT NULL DEFAULT 'list',
+			config          JSONB DEFAULT '{}',
+			sort_order      INTEGER NOT NULL DEFAULT 0,
+			is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 
 		// --- _history.schema_migrations ---

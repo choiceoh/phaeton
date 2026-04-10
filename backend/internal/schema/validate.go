@@ -113,6 +113,13 @@ func validateFieldIn(f *CreateFieldIn) error {
 		f.DefaultValue = nil
 		return nil
 	}
+	// Autonumber: auto-managed, normalize constraints.
+	if f.FieldType == FieldAutonumber {
+		f.IsRequired = false
+		f.IsUnique = true
+		f.DefaultValue = nil
+		return nil
+	}
 	if f.Width != 0 && !validWidths[f.Width] {
 		return fmt.Errorf("%w: width must be 1, 2, 3, or 6", ErrInvalidInput)
 	}

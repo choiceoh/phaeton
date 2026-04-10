@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
@@ -34,6 +35,9 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_view") {
 		return
 	}
 
@@ -135,6 +139,9 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_view") {
+		return
+	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	procEnabled := h.hasProcessEnabled(col.ID)
@@ -174,6 +181,9 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_create") {
 		return
 	}
 
@@ -270,6 +280,9 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_edit") {
+		return
+	}
 
 	var body map[string]any
 	if err := readJSON(r, &body); err != nil {
@@ -286,7 +299,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 	idx := 1
 	for _, f := range fields {
-		if f.FieldType.IsLayout() {
+		if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -369,65 +382,115 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 //	field=field_slug   — required for sum/avg/min/max; ignored for count
 //	filter passthrough — same WHERE syntax as List
 //
-// Response: [{ "group": "<value>", "value": <number> }, ...]
+// Supports:
+//   - Multiple groups: ?group=status&group=department → GROUP BY status, department
+//   - Date interval:   ?group=created_at&interval=month → DATE_TRUNC('month', created_at)
+//   - Multiple series: ?fn=count&fn=sum&field=amount → multiple aggregation columns
+//
+// Response: [{ "groups": [...], "values": { "count": N, "sum_amount": N } }, ...]
+// Legacy single-group response: [{ "group": <value>, "value": <number> }, ...]
 func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_view") {
+		return
+	}
 
 	params := r.URL.Query()
-	groupSlug := params.Get("group")
-	if groupSlug == "" {
+	groupSlugs := params["group"]
+	if len(groupSlugs) == 0 {
 		writeError(w, http.StatusBadRequest, "group parameter is required")
 		return
 	}
 
-	// Validate group column.
 	bySlug := make(map[string]schema.Field, len(fields))
 	for _, f := range fields {
 		bySlug[f.Slug] = f
 	}
-	_, ok = bySlug[groupSlug]
-	if !ok {
-		// Allow grouping by certain auto columns too.
-		if groupSlug != "created_at" && groupSlug != "deleted_at" {
-			handleErr(w, r, fmt.Errorf("%w: group field %q not found", schema.ErrInvalidInput, groupSlug))
-			return
-		}
-	}
-	// Grouping by relation (raw UUID) is allowed but unusual; client should expand.
 
-	fn := strings.ToLower(params.Get("fn"))
-	if fn == "" {
-		fn = "count"
+	// Valid date intervals for DATE_TRUNC.
+	validIntervals := map[string]bool{
+		"year": true, "quarter": true, "month": true, "week": true, "day": true, "hour": true,
 	}
-
-	var aggExpr string
-	switch fn {
-	case "count":
-		aggExpr = "COUNT(*)"
-	case "sum", "avg", "min", "max":
-		fieldSlug := params.Get("field")
-		if fieldSlug == "" {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("%s requires field parameter", fn))
-			return
-		}
-		f, ok := bySlug[fieldSlug]
-		if !ok {
-			handleErr(w, r, fmt.Errorf("%w: field %q not found", schema.ErrInvalidInput, fieldSlug))
-			return
-		}
-		if f.FieldType != schema.FieldNumber && f.FieldType != schema.FieldInteger {
-			handleErr(w, r, fmt.Errorf("%w: %s requires numeric field, %s is %s",
-				schema.ErrInvalidInput, fn, fieldSlug, f.FieldType))
-			return
-		}
-		aggExpr = fmt.Sprintf("%s(%q)", strings.ToUpper(fn), fieldSlug)
-	default:
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown aggregation function %q", fn))
+	interval := strings.ToLower(params.Get("interval"))
+	if interval != "" && !validIntervals[interval] {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid interval %q; must be year/quarter/month/week/day/hour", interval))
 		return
+	}
+
+	// Auto columns allowed for grouping.
+	autoColumns := map[string]bool{"created_at": true, "updated_at": true, "deleted_at": true}
+
+	// Build GROUP BY expressions.
+	var groupExprs []string
+	var groupAliases []string
+	for i, gs := range groupSlugs {
+		_, isField := bySlug[gs]
+		if !isField && !autoColumns[gs] {
+			handleErr(w, r, fmt.Errorf("%w: group field %q not found", schema.ErrInvalidInput, gs))
+			return
+		}
+		alias := fmt.Sprintf("g%d", i)
+		qCol := fmt.Sprintf("%q", gs)
+		// Apply DATE_TRUNC for timestamp columns with interval.
+		if interval != "" && (gs == "created_at" || gs == "updated_at" || gs == "deleted_at" ||
+			(isField && (bySlug[gs].FieldType == schema.FieldDate || bySlug[gs].FieldType == schema.FieldDatetime))) {
+			groupExprs = append(groupExprs, fmt.Sprintf("DATE_TRUNC('%s', %s) AS %s", interval, qCol, alias))
+		} else {
+			groupExprs = append(groupExprs, fmt.Sprintf("%s AS %s", qCol, alias))
+		}
+		groupAliases = append(groupAliases, alias)
+	}
+
+	// Build aggregation expressions (support multiple fn + field pairs).
+	fns := params["fn"]
+	aggFields := params["field"]
+	if len(fns) == 0 {
+		fns = []string{"count"}
+	}
+
+	type aggDef struct {
+		expr string
+		key  string
+	}
+	var aggs []aggDef
+	for i, fn := range fns {
+		fn = strings.ToLower(fn)
+		switch fn {
+		case "count":
+			aggs = append(aggs, aggDef{"COUNT(*)", "count"})
+		case "sum", "avg", "min", "max":
+			fieldSlug := ""
+			if i < len(aggFields) {
+				fieldSlug = aggFields[i]
+			} else if len(aggFields) > 0 {
+				fieldSlug = aggFields[0]
+			}
+			if fieldSlug == "" {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("%s requires field parameter", fn))
+				return
+			}
+			f, exists := bySlug[fieldSlug]
+			if !exists {
+				handleErr(w, r, fmt.Errorf("%w: field %q not found", schema.ErrInvalidInput, fieldSlug))
+				return
+			}
+			if f.FieldType != schema.FieldNumber && f.FieldType != schema.FieldInteger && f.FieldType != schema.FieldAutonumber {
+				handleErr(w, r, fmt.Errorf("%w: %s requires numeric field, %s is %s",
+					schema.ErrInvalidInput, fn, fieldSlug, f.FieldType))
+				return
+			}
+			aggs = append(aggs, aggDef{
+				expr: fmt.Sprintf("%s(%q)", strings.ToUpper(fn), fieldSlug),
+				key:  fmt.Sprintf("%s_%s", fn, fieldSlug),
+			})
+		default:
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown aggregation function %q", fn))
+			return
+		}
 	}
 
 	where, args, err := ParseFilters(params, fields)
@@ -437,35 +500,76 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	qGroup := fmt.Sprintf("%q", groupSlug)
 
-	sql := fmt.Sprintf(
-		"SELECT %s AS group_key, %s AS agg_value FROM %s WHERE deleted_at IS NULL %s GROUP BY %s ORDER BY %s",
-		qGroup, aggExpr, qTable, where, qGroup, qGroup,
+	// Build SELECT and GROUP BY clauses.
+	var selectParts []string
+	selectParts = append(selectParts, groupExprs...)
+	for _, a := range aggs {
+		selectParts = append(selectParts, a.expr)
+	}
+	groupByStr := strings.Join(groupAliases, ", ")
+
+	query := fmt.Sprintf(
+		"SELECT %s FROM %s WHERE deleted_at IS NULL %s GROUP BY %s ORDER BY %s",
+		strings.Join(selectParts, ", "), qTable, where, groupByStr, groupByStr,
 	)
 
-	rows, err := h.pool.Query(r.Context(), sql, args...)
+	rows, err := h.pool.Query(r.Context(), query, args...)
 	if err != nil {
 		handleErr(w, r, err)
 		return
 	}
 	defer rows.Close()
 
-	type bucket struct {
-		Group any `json:"group"`
-		Value any `json:"value"`
+	// Single group + single agg: legacy format { group, value }.
+	isLegacy := len(groupSlugs) == 1 && len(aggs) == 1
+
+	if isLegacy {
+		type bucket struct {
+			Group any `json:"group"`
+			Value any `json:"value"`
+		}
+		var result []bucket
+		for rows.Next() {
+			vals, err := rows.Values()
+			if err != nil {
+				handleErr(w, r, err)
+				return
+			}
+			result = append(result, bucket{
+				Group: normalizeValue(vals[0]),
+				Value: normalizeValue(vals[1]),
+			})
+		}
+		if err := rows.Err(); err != nil {
+			handleErr(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
 	}
-	var result []bucket
+
+	// Multi-group or multi-series: { groups: [...], values: { key: val } }.
+	type multiBucket struct {
+		Groups []any          `json:"groups"`
+		Values map[string]any `json:"values"`
+	}
+	var result []multiBucket
 	for rows.Next() {
 		vals, err := rows.Values()
 		if err != nil {
 			handleErr(w, r, err)
 			return
 		}
-		result = append(result, bucket{
-			Group: normalizeValue(vals[0]),
-			Value: normalizeValue(vals[1]),
-		})
+		groups := make([]any, len(groupSlugs))
+		for i := range groupSlugs {
+			groups[i] = normalizeValue(vals[i])
+		}
+		values := make(map[string]any, len(aggs))
+		for i, a := range aggs {
+			values[a.key] = normalizeValue(vals[len(groupSlugs)+i])
+		}
+		result = append(result, multiBucket{Groups: groups, Values: values})
 	}
 	if err := rows.Err(); err != nil {
 		handleErr(w, r, err)
@@ -482,6 +586,9 @@ func (h *DynHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_create") {
 		return
 	}
 
@@ -572,6 +679,9 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_delete") {
+		return
+	}
 
 	var body struct {
 		IDs []string `json:"ids"`
@@ -615,7 +725,7 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []string, placeholders []string, args []any) {
 	idx := 1
 	for _, f := range fields {
-		if f.FieldType.IsLayout() {
+		if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -650,6 +760,9 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.checkAccess(w, r, col, "entry_delete") {
+		return
+	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	sql := fmt.Sprintf("UPDATE %s SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL", qTable)
@@ -667,6 +780,25 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---
+
+// checkAccess verifies the current user is allowed the given operation
+// on the collection's access_config. Returns false and writes a 403 if denied.
+func (h *DynHandler) checkAccess(w http.ResponseWriter, r *http.Request, col schema.Collection, operation string) bool {
+	user, ok := middleware.GetUser(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return false
+	}
+	// Directors always have full access.
+	if user.Role == "director" {
+		return true
+	}
+	if !col.AccessConfig.AllowsRole(operation, user.Role) {
+		writeError(w, http.StatusForbidden, "access denied for this collection")
+		return false
+	}
+	return true
+}
 
 func (h *DynHandler) resolveCollection(w http.ResponseWriter, slug string) (schema.Collection, []schema.Field, bool) {
 	col, ok := h.cache.CollectionBySlug(slug)

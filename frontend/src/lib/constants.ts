@@ -31,6 +31,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   file: '파일',
   json: 'JSON',
   user: '사용자',
+  autonumber: '자동 번호',
   label: '라벨',
   line: '라인',
   spacer: '공백',
@@ -51,6 +52,7 @@ export const FIELD_TYPE_ICONS: Record<FieldType, string> = {
   file: '📎',
   json: '{ }',
   user: '👤',
+  autonumber: '⧣',
   label: 'Lbl',
   line: '━',
   spacer: '⬜',
@@ -90,6 +92,21 @@ export const HEIGHT_OPTIONS = [
   { value: 1, label: '1줄' },
   { value: 2, label: '2줄' },
   { value: 3, label: '3줄' },
+]
+
+export const NUMBER_DISPLAY_TYPES = [
+  { value: 'plain', label: '기본 숫자' },
+  { value: 'currency', label: '통화 (₩)' },
+  { value: 'percent', label: '퍼센트 (%)' },
+  { value: 'rating', label: '별점 (★)' },
+  { value: 'progress', label: '진행률 바' },
+]
+
+export const TEXT_DISPLAY_TYPES = [
+  { value: 'plain', label: '기본 텍스트' },
+  { value: 'url', label: 'URL (링크)' },
+  { value: 'email', label: '이메일' },
+  { value: 'phone', label: '전화번호' },
 ]
 
 export const VALIDATION_OPTIONS = [
