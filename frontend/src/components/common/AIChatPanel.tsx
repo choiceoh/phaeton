@@ -110,8 +110,8 @@ export default function AIChatPanel() {
                 <div className="mt-3 space-y-1.5">
                   {[
                     '앱을 만들려면 어떻게 하나요?',
+                    '현재 어떤 앱들이 있나요?',
                     '필드 유형에는 어떤 것들이 있나요?',
-                    '칸반 뷰는 어떻게 설정하나요?',
                   ].map((hint) => (
                     <button
                       key={hint}

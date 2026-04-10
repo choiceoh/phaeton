@@ -91,7 +91,7 @@ func run() int {
 
 	// AI client (local vLLM).
 	aiClient := ai.NewClient()
-	aiHandler := handler.NewAIHandler(aiClient, store)
+	aiHandler := handler.NewAIHandler(aiClient, store, pool, cache)
 
 	// Notification subscriber.
 	commentHandler := handler.NewCommentHandler(pool, cache, bus)
