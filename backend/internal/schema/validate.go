@@ -113,14 +113,14 @@ func validateFieldIn(f *CreateFieldIn) error {
 		f.DefaultValue = nil
 		return nil
 	}
-	// Formula fields: no DB column, no constraints. Must have expression in options.
-	if f.FieldType == FieldFormula {
+	// Computed fields: no DB column, no data constraints.
+	if f.FieldType.IsComputed() {
 		f.IsRequired = false
 		f.IsUnique = false
 		f.IsIndexed = false
 		f.DefaultValue = nil
-		if err := validateFormulaOptions(f.Options); err != nil {
-			return fmt.Errorf("field %q: %w", f.Slug, err)
+		if err := validateComputedOptions(f); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -263,6 +263,54 @@ func ExtractFormulaOptions(raw json.RawMessage) (*FormulaOptions, error) {
 		return nil, err
 	}
 	return &opts, nil
+}
+
+// validateComputedOptions checks that computed field options are well-formed.
+func validateComputedOptions(f *CreateFieldIn) error {
+	switch f.FieldType {
+	case FieldFormula:
+		if err := validateFormulaOptions(f.Options); err != nil {
+			return fmt.Errorf("field %q: %w", f.Slug, err)
+		}
+	case FieldLookup:
+		if len(f.Options) == 0 || string(f.Options) == "null" {
+			return fmt.Errorf("%w: lookup field %q requires options", ErrInvalidInput, f.Slug)
+		}
+		var opts map[string]any
+		if err := json.Unmarshal(f.Options, &opts); err != nil {
+			return fmt.Errorf("%w: invalid options JSON: %v", ErrInvalidInput, err)
+		}
+		relField, _ := opts["relation_field"].(string)
+		targetField, _ := opts["target_field"].(string)
+		if relField == "" {
+			return fmt.Errorf("%w: lookup field %q requires options.relation_field", ErrInvalidInput, f.Slug)
+		}
+		if targetField == "" {
+			return fmt.Errorf("%w: lookup field %q requires options.target_field", ErrInvalidInput, f.Slug)
+		}
+	case FieldRollup:
+		if len(f.Options) == 0 || string(f.Options) == "null" {
+			return fmt.Errorf("%w: rollup field %q requires options", ErrInvalidInput, f.Slug)
+		}
+		var opts map[string]any
+		if err := json.Unmarshal(f.Options, &opts); err != nil {
+			return fmt.Errorf("%w: invalid options JSON: %v", ErrInvalidInput, err)
+		}
+		relField, _ := opts["relation_field"].(string)
+		targetField, _ := opts["target_field"].(string)
+		fn, _ := opts["function"].(string)
+		if relField == "" {
+			return fmt.Errorf("%w: rollup field %q requires options.relation_field", ErrInvalidInput, f.Slug)
+		}
+		if targetField == "" {
+			return fmt.Errorf("%w: rollup field %q requires options.target_field", ErrInvalidInput, f.Slug)
+		}
+		validFns := map[string]bool{"SUM": true, "COUNT": true, "AVG": true, "MIN": true, "MAX": true, "COUNTA": true}
+		if !validFns[strings.ToUpper(fn)] {
+			return fmt.Errorf("%w: rollup field %q function must be one of SUM/COUNT/AVG/MIN/MAX/COUNTA", ErrInvalidInput, f.Slug)
+		}
+	}
+	return nil
 }
 
 func validateSelectOptions(raw json.RawMessage) error {

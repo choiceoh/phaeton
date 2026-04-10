@@ -16,6 +16,8 @@ export type FieldType =
   | 'json'
   | 'autonumber'
   | 'formula'
+  | 'lookup'
+  | 'rollup'
   | 'label'
   | 'line'
   | 'spacer'

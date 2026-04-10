@@ -74,5 +74,14 @@ export function formatCell(value: unknown, field: Field): string {
     return String(value)
   }
 
+  // Rollup fields: format numbers nicely.
+  if (field.field_type === 'rollup') {
+    if (typeof value === 'number') return value.toLocaleString('ko-KR')
+    return String(value)
+  }
+
+  // Lookup fields: pass through.
+  if (field.field_type === 'lookup') return String(value)
+
   return String(value)
 }

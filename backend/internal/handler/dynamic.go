@@ -149,6 +149,9 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Auto-expand user fields.
 	h.expandUserFields(r.Context(), records, fields)
 
+	// Resolve computed fields (formula, lookup, rollup).
+	h.resolveComputedFields(r.Context(), records, fields)
+
 	writeList(w, records, total, page, limit)
 }
 
@@ -205,6 +208,9 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Auto-expand user fields.
 	h.expandUserFields(r.Context(), records, fields)
 
+	// Resolve computed fields (formula, lookup, rollup).
+	h.resolveComputedFields(r.Context(), records, fields)
+
 	writeJSON(w, http.StatusOK, records[0])
 }
 
@@ -237,7 +243,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 	idx := 1
 	for _, f := range fields {
-		if f.FieldType.IsLayout() {
+		if f.FieldType.NoColumn() {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -308,6 +314,9 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		recordChange(r.Context(), h.pool, col.ID, recID, user.UserID, user.Name, "create", diff)
 	}
 
+	// Resolve computed fields for the created record.
+	h.resolveComputedFields(r.Context(), records, fields)
+
 	writeJSON(w, http.StatusCreated, records[0])
 }
 
@@ -362,7 +371,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	idx++
 
 	for _, f := range fields {
-		if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
+		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -447,6 +456,9 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if len(diff) > 0 {
 		recordChange(r.Context(), h.pool, col.ID, id, user.UserID, user.Name, "update", diff)
 	}
+
+	// Resolve computed fields for the updated record.
+	h.resolveComputedFields(r.Context(), records, fields)
 
 	writeJSON(w, http.StatusOK, records[0])
 }
@@ -816,7 +828,7 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 func buildInsertColumns(body map[string]any, fields []schema.Field, userID string) (cols []string, placeholders []string, args []any) {
 	idx := 1
 	for _, f := range fields {
-		if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
+		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -1223,10 +1235,15 @@ func buildSelectCols(fields []schema.Field, hasStatus bool, opts *selectColOpts)
 		if f.FieldType.IsLayout() {
 			continue
 		}
-		if f.FieldType.IsVirtual() {
+		// Formula: computed as SQL expression in SELECT.
+		// Lookup/Rollup: skipped here, resolved post-fetch.
+		if f.FieldType == schema.FieldFormula {
 			if expr := formulaExpr(f, slugMap, cache, fields); expr != "" {
 				cols = append(cols, fmt.Sprintf(`(%s) AS %q`, expr, f.Slug))
 			}
+			continue
+		}
+		if f.FieldType == schema.FieldLookup || f.FieldType == schema.FieldRollup {
 			continue
 		}
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
@@ -1252,10 +1269,13 @@ func qualifySelectCols(fields []schema.Field, prefix string, hasStatus bool, opt
 		if f.FieldType.IsLayout() {
 			continue
 		}
-		if f.FieldType.IsVirtual() {
+		if f.FieldType == schema.FieldFormula {
 			if expr := formulaExpr(f, slugMap, cache, fields); expr != "" {
 				cols = append(cols, fmt.Sprintf(`(%s) AS %q`, expr, f.Slug))
 			}
+			continue
+		}
+		if f.FieldType == schema.FieldLookup || f.FieldType == schema.FieldRollup {
 			continue
 		}
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
@@ -1273,7 +1293,7 @@ func qualifySelectCols(fields []schema.Field, prefix string, hasStatus bool, opt
 func buildSlugMap(fields []schema.Field) map[string]bool {
 	m := make(map[string]bool, len(fields))
 	for _, f := range fields {
-		if !f.FieldType.IsLayout() && !f.FieldType.IsVirtual() {
+		if !f.FieldType.IsLayout() && !f.FieldType.IsComputed() {
 			m[f.Slug] = true
 		}
 	}

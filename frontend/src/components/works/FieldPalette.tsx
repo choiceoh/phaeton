@@ -29,7 +29,13 @@ const OTHER_DATA: PaletteEntry[] = [
   { icon: FIELD_TYPE_ICONS.file, label: FIELD_TYPE_LABELS.file, type: 'file' },
 ]
 
-const ADVANCED_ORDER: FieldType[] = ['boolean', 'json', 'autonumber', 'formula']
+const COMPUTED_DATA: PaletteEntry[] = [
+  { icon: FIELD_TYPE_ICONS.formula, label: FIELD_TYPE_LABELS.formula, type: 'formula' },
+  { icon: FIELD_TYPE_ICONS.lookup, label: FIELD_TYPE_LABELS.lookup, type: 'lookup' },
+  { icon: FIELD_TYPE_ICONS.rollup, label: FIELD_TYPE_LABELS.rollup, type: 'rollup' },
+]
+
+const ADVANCED_ORDER: FieldType[] = ['boolean', 'json', 'autonumber']
 
 const LAYOUT_ORDER: FieldType[] = ['label', 'line', 'spacer']
 
@@ -47,6 +53,7 @@ function PaletteButton({ icon, label, onClick }: { icon: string, label: string, 
 
 export default function FieldPalette({ onAdd, collapsed = false }: Props) {
   const [dataOpen, setDataOpen] = useState(!collapsed)
+  const [computedOpen, setComputedOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [layoutOpen, setLayoutOpen] = useState(!collapsed)
 
@@ -71,6 +78,27 @@ export default function FieldPalette({ onAdd, collapsed = false }: Props) {
               />
             ))}
             {OTHER_DATA.map((entry) => (
+              <PaletteButton
+                key={entry.type}
+                icon={entry.icon}
+                label={entry.label}
+                onClick={() => onAdd(entry.type, entry.presetOptions)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div>
+        <button
+          onClick={() => setComputedOpen(!computedOpen)}
+          className="mb-2 flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+        >
+          {computedOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          계산 컴포넌트
+        </button>
+        {computedOpen && (
+          <div className="space-y-1">
+            {COMPUTED_DATA.map((entry) => (
               <PaletteButton
                 key={entry.type}
                 icon={entry.icon}

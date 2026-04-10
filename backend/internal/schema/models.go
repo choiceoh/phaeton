@@ -30,9 +30,11 @@ const (
 
 	FieldAutonumber FieldType = "autonumber"
 
-	// Formula type — stored in _meta.fields but produces no DB column.
-	// Values are computed at query time via SQL expressions.
+	// Computed types — stored in _meta.fields but produce no DB column.
+	// Values are calculated at read time from other fields/relations.
 	FieldFormula FieldType = "formula"
+	FieldLookup  FieldType = "lookup"
+	FieldRollup  FieldType = "rollup"
 
 	// Layout types — stored in _meta.fields for ordering but produce no DB column.
 	FieldLabel  FieldType = "label"
@@ -45,7 +47,7 @@ var validFieldTypes = map[FieldType]bool{
 	FieldBoolean: true, FieldDate: true, FieldDatetime: true, FieldTime: true,
 	FieldSelect: true, FieldMultiselect: true, FieldRelation: true,
 	FieldFile: true, FieldJSON: true, FieldUser: true, FieldAutonumber: true,
-	FieldFormula: true,
+	FieldFormula: true, FieldLookup: true, FieldRollup: true,
 	FieldLabel: true, FieldLine: true, FieldSpacer: true,
 }
 
@@ -56,10 +58,14 @@ func (ft FieldType) IsLayout() bool {
 	return ft == FieldLabel || ft == FieldLine || ft == FieldSpacer
 }
 
-// IsVirtual returns true for field types that have no DB column but appear in
-// query results (computed at SELECT time). Formula fields are virtual.
-func (ft FieldType) IsVirtual() bool {
-	return ft == FieldFormula
+// IsComputed returns true for field types that are calculated at read time (no DB column).
+func (ft FieldType) IsComputed() bool {
+	return ft == FieldFormula || ft == FieldLookup || ft == FieldRollup
+}
+
+// NoColumn returns true for field types that do not produce a DB column.
+func (ft FieldType) NoColumn() bool {
+	return ft.IsLayout() || ft.IsComputed()
 }
 
 // RelationType for inter-collection references.
