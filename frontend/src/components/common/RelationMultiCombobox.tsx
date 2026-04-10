@@ -35,7 +35,8 @@ export default function RelationMultiCombobox({
   const [open, setOpen] = useState(false)
 
   const { data: target } = useCollection(targetCollectionId)
-  const { data: entries } = useEntries(target?.slug, { limit: 100 })
+  const shouldFetch = open || (value && value.length > 0)
+  const { data: entries } = useEntries(shouldFetch ? target?.slug : undefined, { limit: 100 })
 
   const labelField = useMemo(() => {
     if (!target?.fields) return null

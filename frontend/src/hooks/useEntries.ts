@@ -67,9 +67,10 @@ export function useCreateEntry(slug: string) {
     mutationFn: (body: Record<string, unknown>) =>
       api.post<Record<string, unknown>>(`/data/${slug}`, body),
     onMutate: async (body) => {
-      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const collectionKey = queryKeys.entries.collection(slug)
+      await qc.cancelQueries({ queryKey: collectionKey })
       const previousLists = qc.getQueriesData<EntryListResult>({
-        queryKey: queryKeys.entries.all,
+        queryKey: collectionKey,
       })
       const tempEntry = {
         ...body,
@@ -78,7 +79,7 @@ export function useCreateEntry(slug: string) {
         _optimistic: true,
       }
       qc.setQueriesData<EntryListResult>(
-        { queryKey: queryKeys.entries.all },
+        { queryKey: collectionKey },
         (old) => {
           if (!old?.data) return old
           return { ...old, data: [tempEntry, ...old.data], total: old.total + 1 }
@@ -94,7 +95,7 @@ export function useCreateEntry(slug: string) {
       }
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.entries.all })
+      qc.invalidateQueries({ queryKey: queryKeys.entries.collection(slug) })
     },
   })
 }
@@ -105,12 +106,13 @@ export function useUpdateEntry(slug: string) {
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch<Record<string, unknown>>(`/data/${slug}/${id}`, body),
     onMutate: async ({ id, body }) => {
-      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const collectionKey = queryKeys.entries.collection(slug)
+      await qc.cancelQueries({ queryKey: collectionKey })
       const previousLists = qc.getQueriesData<EntryListResult>({
-        queryKey: queryKeys.entries.all,
+        queryKey: collectionKey,
       })
       qc.setQueriesData<EntryListResult>(
-        { queryKey: queryKeys.entries.all },
+        { queryKey: collectionKey },
         (old) => {
           if (!old?.data) return old
           return {
@@ -134,7 +136,7 @@ export function useUpdateEntry(slug: string) {
       }
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.entries.all })
+      qc.invalidateQueries({ queryKey: queryKeys.entries.collection(slug) })
     },
   })
 }
@@ -145,13 +147,14 @@ export function useBatchUpdateEntry(slug: string) {
     mutationFn: (updates: { id: string; fields: Record<string, unknown>; _version?: number }[]) =>
       api.patch<Record<string, unknown>[]>(`/data/${slug}/batch`, { updates }),
     onMutate: async (updates) => {
-      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const collectionKey = queryKeys.entries.collection(slug)
+      await qc.cancelQueries({ queryKey: collectionKey })
       const previousLists = qc.getQueriesData<EntryListResult>({
-        queryKey: queryKeys.entries.all,
+        queryKey: collectionKey,
       })
       const updateMap = new Map(updates.map((u) => [u.id, u.fields]))
       qc.setQueriesData<EntryListResult>(
-        { queryKey: queryKeys.entries.all },
+        { queryKey: collectionKey },
         (old) => {
           if (!old?.data) return old
           return {
@@ -173,7 +176,7 @@ export function useBatchUpdateEntry(slug: string) {
       }
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.entries.all })
+      qc.invalidateQueries({ queryKey: queryKeys.entries.collection(slug) })
     },
   })
 }
@@ -183,12 +186,13 @@ export function useDeleteEntry(slug: string) {
   return useMutation({
     mutationFn: (id: string) => api.del<{ status: string }>(`/data/${slug}/${id}`),
     onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const collectionKey = queryKeys.entries.collection(slug)
+      await qc.cancelQueries({ queryKey: collectionKey })
       const previousLists = qc.getQueriesData<EntryListResult>({
-        queryKey: queryKeys.entries.all,
+        queryKey: collectionKey,
       })
       qc.setQueriesData<EntryListResult>(
-        { queryKey: queryKeys.entries.all },
+        { queryKey: collectionKey },
         (old) => {
           if (!old?.data) return old
           return {
@@ -208,7 +212,7 @@ export function useDeleteEntry(slug: string) {
       }
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.entries.all })
+      qc.invalidateQueries({ queryKey: queryKeys.entries.collection(slug) })
     },
   })
 }
@@ -218,13 +222,14 @@ export function useBulkDeleteEntries(slug: string) {
   return useMutation({
     mutationFn: (ids: string[]) => api.del<{ deleted: number }>(`/data/${slug}/bulk`, { ids }),
     onMutate: async (ids) => {
-      await qc.cancelQueries({ queryKey: queryKeys.entries.all })
+      const collectionKey = queryKeys.entries.collection(slug)
+      await qc.cancelQueries({ queryKey: collectionKey })
       const previousLists = qc.getQueriesData<EntryListResult>({
-        queryKey: queryKeys.entries.all,
+        queryKey: collectionKey,
       })
       const idSet = new Set(ids)
       qc.setQueriesData<EntryListResult>(
-        { queryKey: queryKeys.entries.all },
+        { queryKey: collectionKey },
         (old) => {
           if (!old?.data) return old
           return {
@@ -244,7 +249,7 @@ export function useBulkDeleteEntries(slug: string) {
       }
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.entries.all })
+      qc.invalidateQueries({ queryKey: queryKeys.entries.collection(slug) })
     },
   })
 }

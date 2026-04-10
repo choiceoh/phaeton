@@ -36,7 +36,9 @@ export default function RelationCombobox({
   const [open, setOpen] = useState(false)
 
   const { data: target } = useCollection(targetCollectionId)
-  const { data: entries } = useEntries(target?.slug, { limit: 100 })
+  // Only fetch entries when the dropdown is open or a value is selected (to display label).
+  const shouldFetch = open || !!value
+  const { data: entries } = useEntries(shouldFetch ? target?.slug : undefined, { limit: 100 })
 
   // Pick a label field: prefer "name" or "title", otherwise the first text field.
   const labelField = useMemo(() => {
