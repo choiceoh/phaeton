@@ -235,6 +235,10 @@ func run() int {
 			DB:      "connected",
 		}, !isProd)
 
+		if middleware.AuthDisabled() {
+			slog.Warn("AUTH_DISABLED=true — authentication is bypassed, all requests use dev user (director)")
+		}
+
 		go func() {
 			<-ctx.Done()
 			logging.PrintShutdown(os.Stderr, time.Since(startedAt), !isProd)

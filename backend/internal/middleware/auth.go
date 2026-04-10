@@ -28,8 +28,31 @@ type UserClaims struct {
 	SubsidiaryID string `json:"subsidiaryId,omitempty"`
 }
 
+// AuthDisabled returns true when AUTH_DISABLED=true, bypassing JWT validation.
+func AuthDisabled() bool {
+	return strings.EqualFold(os.Getenv("AUTH_DISABLED"), "true")
+}
+
+// DevUser is the hard-coded user injected when auth is disabled.
+var DevUser = UserClaims{
+	UserID: "dev-user",
+	Email:  "dev@topworks.local",
+	Name:   "개발자",
+	Role:   "director",
+}
+
 // RequireAuth returns middleware that validates JWT from Authorization header or cookie.
+// When AUTH_DISABLED=true, it skips validation and injects DevUser.
 func RequireAuth() func(http.Handler) http.Handler {
+	if AuthDisabled() {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx := context.WithValue(r.Context(), userContextKey, DevUser)
+				next.ServeHTTP(w, r.WithContext(ctx))
+			})
+		}
+	}
+
 	secret := []byte(jwtSecret())
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
