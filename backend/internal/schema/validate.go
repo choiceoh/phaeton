@@ -113,6 +113,17 @@ func validateFieldIn(f *CreateFieldIn) error {
 		f.DefaultValue = nil
 		return nil
 	}
+	// Formula fields: no DB column, no constraints. Must have expression in options.
+	if f.FieldType == FieldFormula {
+		f.IsRequired = false
+		f.IsUnique = false
+		f.IsIndexed = false
+		f.DefaultValue = nil
+		if err := validateFormulaOptions(f.Options); err != nil {
+			return fmt.Errorf("field %q: %w", f.Slug, err)
+		}
+		return nil
+	}
 	// Autonumber: auto-managed, normalize constraints.
 	if f.FieldType == FieldAutonumber {
 		f.IsRequired = false
@@ -212,6 +223,46 @@ func ValidateTransitions(transitions []Transition, choices []string) error {
 		}
 	}
 	return nil
+}
+
+// FormulaOptions is the expected shape of `options` for formula fields.
+type FormulaOptions struct {
+	Expression string `json:"expression"`
+	ResultType string `json:"result_type"` // number, integer, text, boolean, date
+	Precision  *int   `json:"precision,omitempty"`
+}
+
+func validateFormulaOptions(raw json.RawMessage) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return fmt.Errorf("%w: formula field requires options.expression", ErrInvalidInput)
+	}
+	var opts FormulaOptions
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		return fmt.Errorf("%w: options must be a JSON object with 'expression': %v", ErrInvalidInput, err)
+	}
+	expr := strings.TrimSpace(opts.Expression)
+	if expr == "" {
+		return fmt.Errorf("%w: formula field requires a non-empty expression", ErrInvalidInput)
+	}
+	switch opts.ResultType {
+	case "", "number", "integer", "text", "boolean", "date":
+		// valid
+	default:
+		return fmt.Errorf("%w: invalid result_type %q; must be number, integer, text, boolean, or date", ErrInvalidInput, opts.ResultType)
+	}
+	return nil
+}
+
+// ExtractFormulaOptions parses the formula options from a raw JSON payload.
+func ExtractFormulaOptions(raw json.RawMessage) (*FormulaOptions, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var opts FormulaOptions
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		return nil, err
+	}
+	return &opts, nil
 }
 
 func validateSelectOptions(raw json.RawMessage) error {

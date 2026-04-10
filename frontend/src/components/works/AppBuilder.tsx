@@ -1,12 +1,14 @@
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Loader2 } from 'lucide-react'
 import { useCollections, useCreateCollection } from '@/hooks/useCollections'
 import type { AIBuildResult } from '@/hooks/useAI'
+import { useAIGenerateSlug } from '@/hooks/useAI'
 import { formatError } from '@/lib/api'
 import type { CreateCollectionReq, FieldType } from '@/lib/types'
 
@@ -19,6 +21,7 @@ export default function AppBuilder() {
   const navigate = useNavigate()
   const fieldCounter = useRef(0)
   const [slug, setSlug] = useState('')
+  const [slugManual, setSlugManual] = useState(false)
   const [label, setLabel] = useState('')
   const [description, setDescription] = useState('')
   const [fields, setFields] = useState<FieldDraft[]>([])
@@ -27,11 +30,46 @@ export default function AppBuilder() {
 
   const { data: collections = [] } = useCollections()
   const createCollection = useCreateCollection()
+  const generateSlug = useAIGenerateSlug()
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
   const selectedField = fields.find((f) => f.id === selectedId) || null
 
+  const requestSlug = useCallback((text: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      generateSlug.mutate(text, {
+        onSuccess: (res) => {
+          setSlug((prev) => {
+            // Only update if user hasn't manually edited
+            if (!slugManual) return res.slug
+            return prev
+          })
+        },
+      })
+    }, 500)
+  }, [slugManual, generateSlug])
+
+  function handleLabelChange(value: string) {
+    setLabel(value)
+    if (!slugManual && value.trim()) {
+      requestSlug(value.trim())
+    }
+    if (!slugManual && !value.trim()) {
+      setSlug('')
+    }
+  }
+
+  function handleSlugChange(value: string) {
+    const sanitized = value.toLowerCase().replace(/[^a-z0-9_]/g, '')
+    setSlug(sanitized)
+    if (sanitized) setSlugManual(true)
+    else setSlugManual(false)
+  }
+
   function handleAIApply(result: AIBuildResult) {
     setSlug(result.slug)
+    setSlugManual(false)
     setLabel(result.label)
     setDescription(result.description || '')
     const drafts: FieldDraft[] = result.fields.map((f) => ({
@@ -131,15 +169,20 @@ export default function AppBuilder() {
       <div className="grid grid-cols-[1fr_1fr_2fr] gap-4">
         <div className="space-y-1">
           <Label>컬렉션 이름 (한글)</Label>
-          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="인허가 체크리스트" />
+          <Input value={label} onChange={(e) => handleLabelChange(e.target.value)} placeholder="인허가 체크리스트" />
         </div>
         <div className="space-y-1">
           <Label>슬러그 (영문)</Label>
-          <Input
-            value={slug}
-            onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-            placeholder="permit_checklist"
-          />
+          <div className="relative">
+            <Input
+              value={slug}
+              onChange={(e) => handleSlugChange(e.target.value)}
+              placeholder="자동 생성됨"
+            />
+            {generateSlug.isPending && (
+              <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+            )}
+          </div>
         </div>
         <div className="space-y-1">
           <Label>설명</Label>

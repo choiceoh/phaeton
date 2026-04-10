@@ -86,6 +86,17 @@ export function useUpdateEntry(slug: string) {
   })
 }
 
+export function useBatchUpdateEntry(slug: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (updates: { id: string; fields: Record<string, unknown> }[]) =>
+      api.patch<Record<string, unknown>[]>(`/data/${slug}/batch`, { updates }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entries.all })
+    },
+  })
+}
+
 export function useDeleteEntry(slug: string) {
   const qc = useQueryClient()
   return useMutation({
