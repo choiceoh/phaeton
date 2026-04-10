@@ -7,6 +7,7 @@ import App from './App'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { OfflineBanner } from './components/common/OfflineBanner'
 import { Toaster } from './components/ui/sonner'
+import { UndoProvider } from './contexts/UndoContext'
 import { queryClient } from './lib/queryClient'
 import './index.css'
 
@@ -20,11 +21,13 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ErrorBoundary>
-        <OfflineBanner />
-        <RouterProvider router={router} />
-      </ErrorBoundary>
-      <Toaster richColors closeButton position="top-right" />
+      <UndoProvider>
+        <ErrorBoundary>
+          <OfflineBanner />
+          <RouterProvider router={router} />
+        </ErrorBoundary>
+        <Toaster richColors closeButton position="top-right" />
+      </UndoProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

@@ -167,6 +167,25 @@ export default function EntryForm({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
         {fields.map((field) => {
+          // Conditional visibility: evaluate visibility_rules against current data.
+          const visRules = field.options?.visibility_rules as
+            | { field_slug: string; operator: string; value?: string }[]
+            | undefined
+          if (visRules && visRules.length > 0) {
+            const allPass = visRules.every((rule) => {
+              const fieldVal = data[rule.field_slug]
+              const strVal = fieldVal != null ? String(fieldVal) : ''
+              switch (rule.operator) {
+                case 'eq': return strVal === (rule.value ?? '')
+                case 'neq': return strVal !== (rule.value ?? '')
+                case 'is_empty': return !strVal
+                case 'is_not_empty': return !!strVal
+                default: return true
+              }
+            })
+            if (!allPass) return null
+          }
+
           if (isLayoutType(field.field_type)) {
             return (
               <div key={field.id} className="col-span-full">
@@ -232,7 +251,7 @@ export default function EntryForm({
           ))}
         </div>
       )}
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="flex justify-end gap-2 pt-2 sticky bottom-0 bg-background pb-2 sm:static sm:pb-0">
         <Button type="button" variant="outline" onClick={onCancel}>
           취소
         </Button>

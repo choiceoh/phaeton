@@ -1,4 +1,4 @@
-import { History, Loader2, MessageSquare } from 'lucide-react'
+import { Copy, History, Loader2, MessageSquare } from 'lucide-react'
 import { useRef, useState } from 'react'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -26,6 +26,7 @@ interface Props {
   slug?: string
   initialData?: Record<string, unknown>
   onSubmit: (data: Record<string, unknown>) => void
+  onDuplicate?: (data: Record<string, unknown>) => void
   submitting?: boolean
   title?: string
   process?: Process
@@ -44,6 +45,7 @@ export default function EntrySheet({
   slug,
   initialData,
   onSubmit,
+  onDuplicate,
   submitting,
   title,
   process,
@@ -77,9 +79,26 @@ export default function EntrySheet({
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) { onClose(); setTab('form') } }}>
-      <SheetContent ref={contentRef} className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[640px] sm:max-w-2xl">
+      <SheetContent ref={contentRef} className="w-screen overflow-y-auto sm:w-[640px] sm:max-w-2xl">
         <SheetHeader>
-          <SheetTitle>{title || '새 항목'}</SheetTitle>
+          <div className="flex items-center justify-between">
+            <SheetTitle>{title || '새 항목'}</SheetTitle>
+            {isEdit && onDuplicate && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={() => {
+                  const { id: _id, _version: _v, created_at: _ca, updated_at: _ua, _optimistic: _o, _created_by: _cb, ...rest } = initialData!
+                  onDuplicate(rest)
+                  onClose()
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                복제
+              </Button>
+            )}
+          </div>
         </SheetHeader>
         <div className="mt-4">
           {isEdit ? (

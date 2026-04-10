@@ -5,6 +5,7 @@ import {
   BookmarkPlus,
   BarChart3,
   Calendar,
+  Copy,
   Download,
   FileText,
   Filter,
@@ -12,6 +13,7 @@ import {
   GanttChart,
   LayoutGrid,
   Loader2,
+  Pencil,
   Power,
   PowerOff,
   Search,
@@ -37,9 +39,12 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { type BatchCellEditEvent, type CellEditEvent, type FieldMeta, DataTable } from '@/components/common/DataTable'
 import ErrorState from '@/components/common/ErrorState'
+import KeyboardShortcutHelp from '@/components/common/KeyboardShortcutHelp'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
+import BulkEditPanel from '@/components/works/BulkEditPanel'
+import CSVImportPreview from '@/components/works/CSVImportPreview'
 import EntrySheet from '@/components/works/EntrySheet'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
@@ -50,6 +55,7 @@ import GalleryView from '@/components/works/views/GalleryView'
 import FormView from '@/components/works/views/FormView'
 import GanttView from '@/components/works/views/GanttView'
 import KanbanView from '@/components/works/views/KanbanView'
+import SetupChecklist from '@/components/works/SetupChecklist'
 import ViewGuide from '@/components/works/views/ViewGuide'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -81,8 +87,7 @@ import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
-import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
-import { useUndoToast } from '@/hooks/useUndoToast'
+import { useUndo } from '@/contexts/UndoContext'
 import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
@@ -214,15 +219,15 @@ export default function AppViewPage() {
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
   const { data: entryDefaults } = useEntryDefaults(collection?.slug)
-  const aiAvailable = useAIAvailable()
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
-  const undoToast = useUndoToast()
+  const undo = useUndo()
 
   // Multi-select state for bulk operations.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
 
   // Detect views.
   const selectField = useMemo(
@@ -421,20 +426,36 @@ export default function AppViewPage() {
       header: '',
       enableSorting: false,
       enableHiding: false,
-      size: 60,
+      size: 80,
       cell: ({ row }) => (
-        <RoleGate roles={['director', 'pm']}>
+        <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
+            className="h-7 w-7"
+            title="복제"
             onClick={(e) => {
               e.stopPropagation()
-              setDeleteId(String(row.original.id))
+              handleDuplicate(row.original)
             }}
           >
-            삭제
+            <Copy className="h-3.5 w-3.5" />
           </Button>
-        </RoleGate>
+          <RoleGate roles={['director', 'pm']}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              title="삭제"
+              onClick={(e) => {
+                e.stopPropagation()
+                setDeleteId(String(row.original.id))
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </RoleGate>
+        </div>
       ),
     })
     return cols
@@ -512,7 +533,7 @@ export default function AppViewPage() {
             }, 1500)
             // Offer undo only when old value differs.
             if (oldValue !== event.value) {
-              undoToast.push('수정되었습니다', () => {
+              undo.push('수정되었습니다', () => {
                 const undoBody: Record<string, unknown> = { [event.columnId]: oldValue }
                 updateEntry.mutate({ id: event.rowId, body: undoBody })
               })
@@ -534,7 +555,7 @@ export default function AppViewPage() {
         },
       )
     },
-    [updateEntry, getRowVersion, refetch, list, undoToast],
+    [updateEntry, getRowVersion, refetch, list, undo],
   )
 
   // Batch edit handler (for paste operations).
@@ -636,16 +657,29 @@ export default function AppViewPage() {
   }
 
   const [importingCSV, setImportingCSV] = useState(false)
-  const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [csvPreviewFile, setCsvPreviewFile] = useState<File | null>(null)
+  const [csvPreviewOpen, setCsvPreviewOpen] = useState(false)
+
+  // Open CSV preview dialog instead of importing directly.
+  const handleImportCSV = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !collection) return
+    if (!file) return
+    setCsvPreviewFile(file)
+    setCsvPreviewOpen(true)
+    e.target.value = ''
+  }, [])
+
+  // Actual import with column map from preview dialog.
+  const handleCSVConfirm = useCallback(async (file: File, columnMap: Record<string, string>) => {
+    if (!collection) return
+    setCsvPreviewOpen(false)
     setImportingCSV(true)
     const toastId = toast.loading('CSV 가져오는 중...')
 
-    const doImport = async (columnMap?: Record<string, string>) => {
+    try {
       const formData = new FormData()
       formData.append('file', file)
-      if (columnMap) {
+      if (Object.keys(columnMap).length > 0) {
         formData.append('column_map', JSON.stringify(columnMap))
       }
       const res = await fetch(`/api/data/${collection.slug}/import`, {
@@ -657,39 +691,7 @@ export default function AppViewPage() {
         const body = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(body.error || body.message || res.statusText)
       }
-      return res.json()
-    }
-
-    try {
-      let result: any
-      try {
-        result = await doImport()
-      } catch (err) {
-        // If column matching failed and AI is available, try AI mapping.
-        const msg = err instanceof Error ? err.message : ''
-        if (msg.includes('no CSV columns matched') && aiAvailable) {
-          toast.loading('컬럼 자동 매핑 중...', { id: toastId })
-          // Read CSV headers from the file.
-          const text = await file.text()
-          const firstLine = text.split('\n')[0]?.replace(/^\xef\xbb\xbf/, '') ?? ''
-          const headers = firstLine.split(',').map((h) => h.trim().replace(/^"|"$/g, ''))
-          if (headers.length > 0) {
-            const columnMap = await api.post<Record<string, string>>(
-              `/ai/map-csv-columns/${collection.slug}`,
-              { headers },
-            )
-            if (Object.keys(columnMap).length > 0) {
-              result = await doImport(columnMap)
-            } else {
-              throw err
-            }
-          } else {
-            throw err
-          }
-        } else {
-          throw err
-        }
-      }
+      const result = await res.json()
       const count = result.data?.imported ?? 0
       toast.success(`${count}건 가져왔습니다`, { id: toastId })
       setImportedCount(count)
@@ -699,9 +701,9 @@ export default function AppViewPage() {
       toast.error(formatError(err), { id: toastId })
     } finally {
       setImportingCSV(false)
-      e.target.value = ''
+      setCsvPreviewFile(null)
     }
-  }, [collection, refetch, aiAvailable])
+  }, [collection, refetch])
 
   const dateFields = useMemo(
     () => collection?.fields?.filter((f) => f.field_type === 'date' || f.field_type === 'datetime') ?? [],
@@ -762,6 +764,27 @@ export default function AppViewPage() {
     }
     return moves
   }, [process, currentUser])
+
+  // Strip system fields for duplication.
+  function stripSystemFields(entry: Record<string, unknown>) {
+    const { id: _id, _version: _v, created_at: _ca, updated_at: _ua, _optimistic: _o, _created_by: _cb, ...rest } = entry
+    return rest
+  }
+
+  function handleDuplicate(entry: Record<string, unknown>) {
+    const data = stripSystemFields(entry)
+    createEntry.mutate(data, {
+      onSuccess: (result) => {
+        toast.success('복제되었습니다')
+        const id = (result as Record<string, unknown>)?.id
+        if (id) {
+          setNewEntryId(String(id))
+          setTimeout(() => setNewEntryId(null), 500)
+        }
+      },
+      onError: (err) => toast.error(formatError(err)),
+    })
+  }
 
   function handleEntryClick(entry: Record<string, unknown>) {
     setEditEntry(entry)
@@ -898,7 +921,7 @@ export default function AppViewPage() {
         setDeleteId(null)
         if (deletedRow) {
           const { id: _id, _version: _v, created_at: _ca, updated_at: _ua, _optimistic: _o, ...rest } = deletedRow as Record<string, unknown>
-          undoToast.push('삭제되었습니다', () => {
+          undo.push('삭제되었습니다', () => {
             createEntry.mutate(rest)
           })
         } else {
@@ -919,6 +942,30 @@ export default function AppViewPage() {
         setBulkDeleteOpen(false)
       },
       onError: (err) => toast.error(formatError(err)),
+    })
+  }
+
+  function handleBulkEdit(fieldSlug: string, value: unknown) {
+    const ids = Array.from(selectedRowIds)
+    if (ids.length === 0) return
+    const updates = ids.map((id) => {
+      const version = getRowVersion(id)
+      return { id, fields: { [fieldSlug]: value }, _version: version }
+    })
+    batchUpdateEntry.mutate(updates, {
+      onSuccess: () => {
+        toast.success(`${ids.length}건 수정되었습니다`)
+        setSelectedRowIds(new Set())
+        setBulkEditOpen(false)
+      },
+      onError: (err) => {
+        if (err instanceof ApiError && err.isConflict()) {
+          toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
+          refetch()
+        } else {
+          toast.error(formatError(err))
+        }
+      },
     })
   }
 
@@ -1141,6 +1188,7 @@ export default function AppViewPage() {
           className="hidden"
           onChange={handleImportCSV}
         />
+        <KeyboardShortcutHelp />
       </div>
 
       {/* ── Group 3: 뷰 관리 ── */}
@@ -1262,23 +1310,44 @@ export default function AppViewPage() {
         description={collection.description}
         actions={
           <>
-            <Link to={`/apps/${collection.id}/dashboard`}>
+            <Link to={`/apps/${collection.id}/dashboard`} className="hidden sm:inline-flex">
               <Button variant="outline" className="gap-1">
                 <BarChart3 className="h-4 w-4" />
                 대시보드
               </Button>
             </Link>
-            <Link to={`/apps/${collection.id}/interface`}>
+            <Link to={`/apps/${collection.id}/interface`} className="hidden sm:inline-flex">
               <Button variant="outline" className="gap-1">
                 <LayoutGrid className="h-4 w-4" />
                 인터페이스
               </Button>
             </Link>
             <RoleGate roles={['director', 'pm']}>
-              <Link to={`/apps/${collection.id}/settings`}>
+              <Link to={`/apps/${collection.id}/settings`} className="hidden sm:inline-flex">
                 <Button variant="outline">설정</Button>
               </Link>
             </RoleGate>
+            {/* Mobile: collapsed navigation */}
+            <div className="sm:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent"
+                >
+                  <Ellipsis className="h-4 w-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => window.location.href = `/apps/${collection.id}/dashboard`}>
+                    대시보드
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => window.location.href = `/apps/${collection.id}/interface`}>
+                    인터페이스
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => window.location.href = `/apps/${collection.id}/settings`}>
+                    설정
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <Button
               onClick={() => {
                 setEditEntry(undefined)
@@ -1297,12 +1366,38 @@ export default function AppViewPage() {
         totalRecords={list?.total ?? 0}
       />
 
+      {list && (list.total ?? 0) < 5 && (
+        <SetupChecklist
+          collectionId={collection.id}
+          items={[
+            {
+              label: '항목(필드) 추가하기',
+              done: (collection.fields?.filter((f) => !isLayoutType(f.field_type)).length ?? 0) >= 2,
+              href: `/apps/${collection.id}/settings`,
+            },
+            {
+              label: '첫 데이터 입력하기',
+              done: (list.total ?? 0) > 0,
+            },
+            {
+              label: '보기(뷰) 저장하기',
+              done: (savedViews?.length ?? 0) > 0,
+            },
+            {
+              label: '프로세스 설정하기',
+              done: !!process?.is_enabled,
+              href: `/apps/${collection.id}/process`,
+            },
+          ]}
+        />
+      )}
+
       {entriesLoading && !list && <LoadingState variant="table" />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
       {list && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-4 max-w-full overflow-x-auto">
+          <TabsList className="mb-4 max-w-full overflow-x-auto scrollbar-none">
             <TabsTrigger value="list">목록</TabsTrigger>
             {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}
             {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
@@ -1334,6 +1429,17 @@ export default function AppViewPage() {
             {selectedRowIds.size > 0 && (
               <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
                 <span className="font-medium">{selectedRowIds.size}건 선택</span>
+                <RoleGate roles={['director', 'pm', 'engineer']}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1"
+                    onClick={() => setBulkEditOpen(true)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    일괄 편집
+                  </Button>
+                </RoleGate>
                 <RoleGate roles={['director', 'pm']}>
                   <Button
                     variant="destructive"
@@ -1371,11 +1477,19 @@ export default function AppViewPage() {
               cellSaveState={cellSaveState}
               fieldMeta={fieldMeta}
               emptyTitle={TERM.noRecords}
-              emptyDescription={TERM.noRecordsDesc}
+              emptyDescription="새 데이터를 추가하거나, CSV 파일을 가져와 시작하세요."
               emptyAction={
-                <Button size="sm" onClick={() => { setEditEntry(undefined); setSheetOpen(true) }}>
-                  {TERM.newRecord}
-                </Button>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => { setEditEntry(undefined); setSheetOpen(true) }}>
+                    {TERM.newRecord}
+                  </Button>
+                  <RoleGate roles={['director', 'pm', 'engineer']}>
+                    <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                      <Upload className="h-3.5 w-3.5 mr-1" />
+                      CSV 가져오기
+                    </Button>
+                  </RoleGate>
+                </div>
               }
               summaryRow={summaryRow}
               summaryFn={columnAggFn}
@@ -1478,6 +1592,7 @@ export default function AppViewPage() {
         slug={collection.slug}
         initialData={editEntry ?? (entryDefaults && Object.keys(entryDefaults).length > 0 ? entryDefaults : undefined)}
         onSubmit={handleSubmit}
+        onDuplicate={handleDuplicate}
         submitting={createEntry.isPending || updateEntry.isPending}
         title={editEntry ? `${TERM.record} 편집` : TERM.newRecord}
         process={process}
@@ -1503,6 +1618,23 @@ export default function AppViewPage() {
         confirmLabel={`${selectedRowIds.size}건 삭제`}
         onConfirm={handleBulkDelete}
         loading={bulkDelete.isPending}
+      />
+
+      <CSVImportPreview
+        open={csvPreviewOpen}
+        onOpenChange={setCsvPreviewOpen}
+        file={csvPreviewFile}
+        fields={collection.fields ?? []}
+        onConfirm={handleCSVConfirm}
+      />
+
+      <BulkEditPanel
+        open={bulkEditOpen}
+        onOpenChange={setBulkEditOpen}
+        fields={collection.fields ?? []}
+        selectedCount={selectedRowIds.size}
+        onApply={handleBulkEdit}
+        loading={batchUpdateEntry.isPending}
       />
 
       {/* Email report dialog */}
