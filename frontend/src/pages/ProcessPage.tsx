@@ -22,6 +22,7 @@ import {
 import { useCollection } from '@/hooks/useCollections'
 import { useProcess, useSaveProcess } from '@/hooks/useProcess'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import { useUsers } from '@/hooks/useUsers'
 import { formatError } from '@/lib/api'
 
 const STATUS_COLORS = [
@@ -47,6 +48,7 @@ interface TransitionDraft {
   to_index: number
   label: string
   allowed_roles: string[]
+  allowed_user_ids: string[]
 }
 
 export default function ProcessPage() {
@@ -55,6 +57,7 @@ export default function ProcessPage() {
   const { data: collection, isLoading: colLoading } = useCollection(appId)
   const { data: process, isLoading: procLoading, isError, error, refetch } = useProcess(appId)
   const saveProcess = useSaveProcess(appId ?? '')
+  const { data: allUsers } = useUsers()
 
   const [isEnabled, setIsEnabled] = useState(false)
   const [statuses, setStatuses] = useState<StatusDraft[]>([])
@@ -85,6 +88,7 @@ export default function ProcessPage() {
               to_index: idToIndex.get(t.to_status_id)!,
               label: t.label,
               allowed_roles: t.allowed_roles ?? [],
+              allowed_user_ids: t.allowed_user_ids ?? [],
             })),
         )
       } else {
@@ -296,10 +300,11 @@ export default function ProcessPage() {
                 <ProcessFlowDiagram
                   statuses={statuses}
                   transitions={transitions}
+                  users={allUsers?.map((u) => ({ id: u.id, name: u.name })) ?? []}
                   onAddTransition={(from, to) => {
                     setTransitions([
                       ...transitions,
-                      { from_index: from, to_index: to, label: '', allowed_roles: [] },
+                      { from_index: from, to_index: to, label: '', allowed_roles: [], allowed_user_ids: [] },
                     ])
                   }}
                   onRemoveTransition={removeTransition}

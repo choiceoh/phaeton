@@ -189,15 +189,29 @@ export default function EntryForm({
           {availableTransitions.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {availableTransitions.map((t, i) => (
-                <Button
-                  key={i}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setValue('_status', t.to_status)}
-                >
-                  {t.label} → {t.to_status}
-                </Button>
+                <div key={i} className="flex flex-col items-start">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={() => setValue('_status', t.to_status)}
+                  >
+                    {t.label}
+                    <span className="text-muted-foreground">→</span>
+                    <span
+                      className="inline-block rounded px-1.5 py-0.5 text-xs text-white"
+                      style={{ backgroundColor: t.to_color || '#6b7280' }}
+                    >
+                      {t.to_status}
+                    </span>
+                  </Button>
+                  {t.allowed_user_names && t.allowed_user_names.length > 0 && (
+                    <span className="mt-0.5 text-[10px] text-muted-foreground">
+                      {t.allowed_user_names.join(', ')} 승인 가능
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           )}

@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -492,10 +494,11 @@ func (h *SchemaHandler) RelationshipGraph(w http.ResponseWriter, r *http.Request
 // ---------------------------------------------------------------------------
 
 type availableTransition struct {
-	ID       string `json:"id"`
-	Label    string `json:"label"`
-	ToStatus string `json:"to_status"`
-	ToColor  string `json:"to_color"`
+	ID               string   `json:"id"`
+	Label            string   `json:"label"`
+	ToStatus         string   `json:"to_status"`
+	ToColor          string   `json:"to_color"`
+	AllowedUserNames []string `json:"allowed_user_names,omitempty"`
 }
 
 type transitionsResponse struct {
@@ -525,6 +528,15 @@ func (h *SchemaHandler) AvailableTransitions(w http.ResponseWriter, r *http.Requ
 		nameToStatus[s.Name] = s
 	}
 
+	// Collect all user IDs from transitions for name resolution.
+	allUserIDs := make(map[string]struct{})
+	for _, t := range proc.Transitions {
+		for _, uid := range t.AllowedUserIDs {
+			allUserIDs[uid] = struct{}{}
+		}
+	}
+	userNames := h.resolveUserNames(r.Context(), allUserIDs)
+
 	// If a specific status is requested, filter transitions from that status.
 	var transitions []availableTransition
 	if statusParam != "" {
@@ -541,26 +553,23 @@ func (h *SchemaHandler) AvailableTransitions(w http.ResponseWriter, r *http.Requ
 				if t.FromStatusID != currentStatus.ID {
 					continue
 				}
-				// Check role permission.
-				if len(t.AllowedRoles) > 0 {
-					allowed := false
-					for _, role := range t.AllowedRoles {
-						if role == user.Role {
-							allowed = true
-							break
-						}
-					}
-					if !allowed {
-						continue
-					}
+				if !isTransitionAllowed(t, user.Role, user.UserID) {
+					continue
 				}
 				toStatus := idToStatus[t.ToStatusID]
-				transitions = append(transitions, availableTransition{
+				at := availableTransition{
 					ID:       t.ID,
 					Label:    t.Label,
 					ToStatus: toStatus.Name,
 					ToColor:  toStatus.Color,
-				})
+				}
+				// Resolve allowed user names for display.
+				for _, uid := range t.AllowedUserIDs {
+					if name, ok := userNames[uid]; ok {
+						at.AllowedUserNames = append(at.AllowedUserNames, name)
+					}
+				}
+				transitions = append(transitions, at)
 			}
 		}
 	}
@@ -569,10 +578,46 @@ func (h *SchemaHandler) AvailableTransitions(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Build full allowed_moves map (for Kanban).
-	allowedMoves := buildAllowedMoves(proc, user.Role)
+	allowedMoves := buildAllowedMoves(proc, user.Role, user.UserID)
 
 	writeJSON(w, http.StatusOK, transitionsResponse{
 		Transitions:  transitions,
 		AllowedMoves: allowedMoves,
 	})
+}
+
+// resolveUserNames batch-queries auth.users for a set of user IDs and returns a map of id→name.
+func (h *SchemaHandler) resolveUserNames(ctx context.Context, ids map[string]struct{}) map[string]string {
+	if len(ids) == 0 {
+		return nil
+	}
+	// Build ($1,$2,...) placeholders and args.
+	args := make([]any, 0, len(ids))
+	placeholders := make([]string, 0, len(ids))
+	i := 1
+	for uid := range ids {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i))
+		args = append(args, uid)
+		i++
+	}
+	query := fmt.Sprintf(
+		`SELECT id::text, name FROM auth.users WHERE id IN (%s)`,
+		strings.Join(placeholders, ","),
+	)
+	rows, err := h.pool.Query(ctx, query, args...)
+	if err != nil {
+		slog.Warn("resolveUserNames query failed", "error", err)
+		return nil
+	}
+	defer rows.Close()
+
+	result := make(map[string]string, len(ids))
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			continue
+		}
+		result[id] = name
+	}
+	return result
 }

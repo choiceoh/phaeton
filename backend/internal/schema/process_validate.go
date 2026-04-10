@@ -52,6 +52,11 @@ func ValidateProcessSave(req *SaveProcessReq) error {
 				return fmt.Errorf("%w: transitions[%d] 유효하지 않은 역할 %q", ErrInvalidInput, i, role)
 			}
 		}
+		for j, uid := range t.AllowedUserIDs {
+			if _, err := parseUUID(uid); err != nil {
+				return fmt.Errorf("%w: transitions[%d].allowed_user_ids[%d] 유효하지 않은 UUID %q", ErrInvalidInput, i, j, uid)
+			}
+		}
 	}
 
 	// Warn about isolated (unreachable) statuses.
