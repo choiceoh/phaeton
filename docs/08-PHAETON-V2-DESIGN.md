@@ -18,7 +18,7 @@
 
 | 레이어 | 기술 | 역할 |
 |--------|------|------|
-| 언어 | **Go 1.24** | API 서버 + 엔진 전체 |
+| 언어 | **Go 1.26** | API 서버 + 엔진 전체 |
 | HTTP | **chi** | 라우터 + 미들웨어 |
 | DB | **pgx v5** | PostgreSQL 드라이버, 커넥션풀, 동적 SQL |
 | 마이그레이션 | **goose** | 시스템 테이블 DDL 버전 관리 |
@@ -60,23 +60,30 @@ Next.js 제거로 Node.js 프로덕션 서버 불필요 → 배포 단순화.
 ### 아키텍처
 
 ```
-┌─────────────────────────────────────────────┐
-│  Go Server (:8080)                          │
-│                                             │
-│  ├─ /api/auth/*       → JWT 인증            │
-│  ├─ /api/apps/*       → 앱 CRUD             │
-│  ├─ /api/apps/:id/fields   → 필드 관리      │
-│  ├─ /api/apps/:id/entries  → 항목 CRUD      │
-│  ├─ /api/apps/:id/views   → 뷰 설정        │
-│  ├─ /api/upload       → 파일 업로드          │
-│  ├─ /api/ai/*         → vLLM 프록시          │
-│  └─ /*                → SPA 정적 파일 서빙   │
-│                                             │
-└──────────────────┬──────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  Go Server (:8080)                               │
+│                                                  │
+│  ├─ /api/auth/*            → JWT 인증 + SAML SSO │
+│  ├─ /api/apps/*            → 앱 CRUD             │
+│  ├─ /api/apps/:id/fields   → 필드 관리           │
+│  ├─ /api/apps/:id/entries  → 항목 CRUD + 필터    │
+│  ├─ /api/apps/:id/views    → 뷰 설정             │
+│  ├─ /api/apps/:id/automations → 자동화 규칙      │
+│  ├─ /api/apps/:id/comments → 댓글                │
+│  ├─ /api/apps/:id/history  → 변경 이력           │
+│  ├─ /api/apps/:id/charts   → 차트/리포트         │
+│  ├─ /api/apps/:id/webhooks → 웹훅                │
+│  ├─ /api/upload            → 파일 업로드         │
+│  ├─ /api/ai/*              → AI (vLLM) 앱생성/챗 │
+│  ├─ /api/notifications     → 알림                │
+│  ├─ /api/events (SSE)      → 실시간 이벤트       │
+│  └─ /*                     → SPA 정적 파일 서빙  │
+│                                                  │
+└──────────────────┬───────────────────────────────┘
                    │
-┌──────────────────▼──────────────────────────┐
-│  PostgreSQL 16 (:5432)                      │
-└─────────────────────────────────────────────┘
+┌──────────────────▼───────────────────────────────┐
+│  PostgreSQL 16 (:5432)                           │
+└──────────────────────────────────────────────────┘
 ```
 
 **단일 서버, 단일 포트, 단일 바이너리.**
@@ -94,30 +101,45 @@ Next.js 제거로 Node.js 프로덕션 서버 불필요 → 배포 단순화.
 ```
 phaeton/
   backend/
-    cmd/server/main.go              진입점
+    cmd/server/main.go              진입점 + SPA 서빙
+    cmd/seed/main.go                시드 스크립트
     internal/
-      engine/
-        schema.go                   Schema Manager — DDL 실행
-        data.go                     Data Manager — CRUD + 쿼리 빌���
-        validation.go               필드 검증
-      handler/
+      ai/                           AI 클라이언트 (vLLM 연동)
+      automation/                   자동화 규칙 엔진
+      db/                           pgx 풀 + goose 마이그레이션
+      events/                       SSE 이벤트 브로커
+      formula/                      수식 필드 파서/평가
+      handler/                      HTTP 핸들러
         auth.go                     로그인/회원가입/토큰갱신
-        apps.go                     앱 CRUD
-        fields.go                   필드 CRUD + ALTER TABLE
-        entries.go                  항목 CRUD + 쿼리
+        dynamic.go                  앱 + 필드 + 항목 CRUD
         views.go                    뷰 설정 CRUD
+        ai.go, ai_chat.go          AI 앱 생성, 챗 어시스턴트
+        ai_automation.go            AI 자동화
+        automation.go               자동화 규칙
+        charts.go                   차트/리포트
+        comments.go                 댓글
+        csv.go                      CSV 가져오기/내보내기
+        filter.go                   필터 빌더
+        history.go                  변경 이력
+        notifications.go            알림
+        schema.go                   스키마 관리
+        sse.go                      SSE 스트리밍
+        template.go                 앱 템플릿
         upload.go                   파일 업로드
-      middleware/
-        auth.go                     JWT 검증 미들웨어
-        cors.go                     CORS
-        logger.go                   요청 로깅
-      model/
-        app.go                      App, Field, View, User 구조체
-        query.go                    필터/정렬/페이지네이션 타입
-      db/
-        db.go                       pgx 풀 초기화
-        migrations/
-          001_system_tables.sql     users, works_apps, works_fields, works_views
+        webhook.go                  웹훅
+      infra/                        로깅(slog), API에러(apierr), 메트릭스, httpretry,
+                                    워커풀, shortid, cfgwatch, lifecycle
+      middleware/                   JWT, CORS, 로깅, 레이트리미터, origin, secpath,
+                                    RBAC, collection_access, apilimit
+      migration/                    DDL 마이그레이션 엔진
+      notify/                       알림 시스템
+      pgutil/                       PostgreSQL 유틸
+      samlsp/                       SAML SSO
+      schema/                       앱 스토어, 뷰 스토어, 프로세스, 캐시, 유효성 검증
+      seed/                         시드 데이터
+      sync/                         동기화 유틸
+      testutil/                     테스트 헬퍼
+    pkg/                            atomicfile, httputil, jsonutil
     go.mod
     go.sum
 
@@ -126,43 +148,98 @@ phaeton/
     vite.config.ts                  Vite 설정 (proxy: /api → :8080)
     src/
       main.tsx                      React 마운트 + RouterProvider
-      router.tsx                    React Router 라우트 정의
-      layouts/
-        RootLayout.tsx              글로벌 레이아웃 + 네비게이션
       pages/
-        Login.tsx                   로그인
+        LoginPage.tsx               로그인
         AppListPage.tsx             앱 목록 (홈)
         AppBuilderPage.tsx          앱 생성/편집 빌더
         AppViewPage.tsx             앱 데이터 뷰
         AppSettingsPage.tsx         앱 설정
-        DashboardPage.tsx           대시보드 (Phase 2)
+        DashboardPage.tsx           앱 대시보드
+        GlobalDashboardPage.tsx     전체 대시보드
+        AutomationsPage.tsx         앱별 자동화
+        GlobalAutomationsPage.tsx   전체 자동화
+        ProcessPage.tsx             프로세스 관리
+        InterfaceDesignerPage.tsx   인터페이스 디자이너
+        OrgChartPage.tsx            조직도
+        MigrationHistoryPage.tsx    마이그레이션 이력
+        UsersPage.tsx               사용자 관리
+        SettingsPage.tsx            설정
+        ProfilePage.tsx             프로필
+        NotFoundPage.tsx            404
       components/
         works/
           AppCard.tsx               앱 카드
-          AppList.tsx               앱 그리드 + 필터
           AppBuilder.tsx            3-패널 스키마 빌더
-          FieldPalette.tsx          필드 타입 팔레트
-          FieldPreview.tsx          폼 미리보기 (드래그 정렬)
+          FieldPalette.tsx          필드 타입 팔레트 (드래그앤드롭)
+          FieldPreview.tsx          폼 미리보기 (드래그 정렬 + 리사이즈)
           FieldProperties.tsx       필드 속성 패널
           EntryForm.tsx             동적 폼 렌더러
           EntrySheet.tsx            항목 상세 슬라이드 패널
+          FilterBuilder.tsx         고급 필터 빌더
+          FilterChips.tsx           필터 칩
+          FormPreview.tsx           폼 프리뷰
+          FormulaEditor.tsx         수식 편집기
+          SortPanel.tsx             정렬 패널
+          TemplateGallery.tsx       앱 템플릿 갤러리
+          PreviewDialog.tsx         미리보기 다이얼로그
+          SchedulePicker.tsx        스케줄 선택
+          AIBuildDialog.tsx         AI 앱 생성 다이얼로그
+          AIAutomationDialog.tsx    AI 자동화 다이얼로그
           views/
             ListView.tsx            @tanstack/react-table
             KanbanView.tsx          @dnd-kit 칸반
-            CalendarView.tsx        월간 캘린더 (Phase 2)
-            GalleryView.tsx         카드 그리드 (Phase 2)
+            CalendarView.tsx        월간 캘린더
+            GalleryView.tsx         카드 그리드
+            GanttView.tsx           간트 차트
+            ChartPanel.tsx          차트/리포트 패널
             ViewTabs.tsx            뷰 전환 탭
+        common/
+          AIChatPanel.tsx           AI 채팅 패널
+          ConfirmDialog.tsx         확인 다이얼로그
+          DataTable.tsx             범용 데이터 테이블
+          EmptyState.tsx            빈 상태 표시
+          ErrorBoundary.tsx         에러 바운더리
+          ErrorState.tsx            에러 상태 표시
+          Form.tsx                  범용 폼
+          GridCell.tsx              그리드 셀
+          LoadingState.tsx          로딩 상태
+          NotificationBell.tsx      알림 벨
+          OfflineBanner.tsx         오프라인 배너
+          PageHeader.tsx            페이지 헤더
+          RelationCombobox.tsx      관계 필드 콤보박스
+          RoleGate.tsx              역할 기반 접근 제어
+          UserCombobox.tsx          사용자 콤보박스
         ui/                         shadcn 컴포넌트
+      hooks/
+        useAuth.ts                  인증 상태
+        useEntries.ts               항목 CRUD
+        useViews.ts                 뷰 관리
+        useAI.ts, useAIChat.ts      AI 연동
+        useAutomations.ts           자동화
+        useCollections.ts           컬렉션
+        useComments.ts              댓글
+        useHistory.ts               변경 이력
+        useMembers.ts               멤버
+        useNotifications.ts         알림
+        useProcess.ts               프로세스
+        useSavedViews.ts            저장된 뷰
+        useUnsavedChanges.ts        미저장 변경 감지
       lib/
-        api.ts                      Go API fetch 래퍼
-        auth.ts                     로그인 상태 관리 (쿠키 기반)
-        constants.ts                카테고리/필드타입/색상 라벨
+        api/                        API 클라이언트 (client.ts, errors.ts)
         types.ts                    API 응답 타입
+        constants.ts                카테고리/필드타입/색상 라벨
+        formatCell.ts               셀 포맷터
+        queryKeys.ts                React Query 키 관리
+        queryClient.ts              React Query 클라이언트
+        clipboard.ts                클립보드 유틸
+        templates.ts                앱 템플릿 정의
+        utils.ts                    유틸리티
     package.json
     tsconfig.json
 
   docker-compose.yml                PostgreSQL + Go (프론트는 Go에서 서빙)
   Makefile                          빌드/실행 명령
+  scripts/                          운영 스크립트 (backup-db.sh 등)
 ```
 
 ---
@@ -440,10 +517,11 @@ Go 미들웨어에서: JWT 디코드 → user.role 확인 → 앱별 access_conf
 └──────────┴──────────────────────┴───────────────────┘
 ```
 
-- FieldPalette: 필드 타입 클릭 → FieldPreview에 추가
-- FieldPreview: @dnd-kit SortableContext로 드래그 정렬
+- FieldPalette: 필드 타입을 드래그앤드롭으로 FieldPreview에 추가
+- FieldPreview: @dnd-kit SortableContext로 드래그 정렬 + 리사이즈
 - FieldProperties: 선택된 필드의 라벨/필수/옵션 편집
 - 저장: POST /apps (앱+필드 한 번에) → Go가 CREATE TABLE 실행
+- AI 빌드: AIBuildDialog에서 자연어로 앱 구조 생성 가능
 
 ### 동적 폼 (EntryForm)
 
@@ -472,8 +550,10 @@ works_fields → shadcn 컴포넌트 매핑:
 - select 필드 기준 컬럼 그룹핑
 - 카드 드래그 → PATCH /entries/:id (optimistic update)
 
-**Calendar View** (Phase 2) — date 필드 기준 월간 그리드
-**Gallery View** (Phase 2) — 카드 레이아웃
+**Calendar View** — date 필드 기준 월간 그리드
+**Gallery View** — 카드 레이아웃
+**Gantt View** — 간트 차트 (시작일/종료일 기반 타임라인)
+**Chart Panel** — 앱 데이터 집계 차트 (Recharts)
 
 ---
 
@@ -492,35 +572,49 @@ works_fields → shadcn 컴포넌트 매핑:
 
 ---
 
-## 구현 순서
+## 구현 현황
 
-### Phase 1: MVP
+### Phase 1: MVP — 완료
 
-| 단계 | 백엔드 (Go) | 프론트엔드 (Vite + React) |
-|------|-------------|--------------------------|
-| **1** | 프로젝트 초기화, pgx 연결, goose 마이그레이션, SPA 서빙 | Vite + React + shadcn/ui 초기화, React Router, Tailwind |
-| **2** | 인증: handler/auth.go, middleware/auth.go | 로그인 페이지, 쿠키 기반 인증, api.ts 래퍼 |
-| **3** | Schema Engine: schema.go (CreateApp, AddField, RemoveField) | — |
-| **4** | handler/apps.go, handler/fields.go | 앱 목록 페이지 (AppList, AppCard) |
-| **5** | — | 앱 빌더 (AppBuilder, FieldPalette, FieldPreview, FieldProperties) |
-| **6** | Data Engine: data.go (CRUD + QueryEntries) | — |
-| **7** | handler/entries.go | List View (ListView) + 입력 폼 (EntryForm, EntrySheet) |
-| **8** | handler/views.go | Kanban View (KanbanView) + ViewTabs |
-| **9** | 시드 스크립트 (프리셋 앱 + 샘플 데이터) | — |
+- 인증 (JWT + httpOnly 쿠키, SAML SSO)
+- Schema Engine (앱/필드 DDL, 트랜잭션)
+- Data Engine (CRUD + 필터/정렬/페이지네이션)
+- 앱 빌더 (3-패널, 드래그앤드롭 필드 추가 + 리사이즈)
+- 뷰: List, Kanban
+- 시드 스크립트 (프리셋 앱)
 
-### Phase 2: 확장
-- Calendar View, Gallery View
-- 자동화 엔진 (works_automations, goroutine 기반 트리거)
-- 커스텀 대시보드 (앱 데이터 집계 + Recharts)
-- 파일 업로드 (S3)
-- Excel 내보내기/가져오기
+### Phase 2: 확장 — 완료
 
-### Phase 3: 고급
-- AI: 자연어로 앱 생성 ("��허가 추적 앱 만들어줘")
-- AI: 데이터 분석 / 리포트 자동 생성
+- 뷰: Calendar, Gallery, Gantt, Chart
+- 자동화 엔진 (트리거 기반 규칙, AI 자동화)
+- 커스텀 대시보드 (앱/전체 대시보드, Recharts)
+- 파일 업로드
+- CSV 가져오기/내보내기
+- 댓글, 변경 이력, 알림
+- 수식 필드 (FormulaEditor)
+- 고급 필터/정렬 (FilterBuilder, SortPanel)
+- 앱 템플릿 (TemplateGallery)
+- SSE 실시간 이벤트
+- 웹훅
+
+### Phase 3: 고급 — 완료
+
+- AI: 자연어 앱 생성 (AIBuildDialog)
+- AI: 챗 어시스턴트 (AIChatPanel)
+- AI: 자동화 생성 (AIAutomationDialog)
+- 프로세스 관리 (상태 머신 + 트랜지션)
+- 조직도 (OrgChartPage)
+- 인터페이스 디자이너 (InterfaceDesignerPage)
+- RBAC + 컬렉션 접근 제어
+- 오프라인 감지 (OfflineBanner)
+
+### 향후 과제
+
+- CI/CD 파이프라인
+- 앱 헬스체크 엔드포인트
 - 앱 간 관계 시각화
-- 알림 (이메일/웹 푸시)
-- 앱 템플릿 마켓
+- 이메일/웹 푸시 알림
+
 
 ---
 

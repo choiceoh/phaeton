@@ -1,5 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
+import { Loader2, Sparkles, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   BarChart,
   Bar,
@@ -19,6 +21,11 @@ import {
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
+import { useAIBuildChart } from '@/hooks/useAI'
+import { useCharts, useCreateChart, useDeleteChart } from '@/hooks/useCharts'
 import { useCollection } from '@/hooks/useCollections'
 import { useAggregate, useCollectionCount } from '@/hooks/useEntries'
 import type { Field } from '@/lib/types'
@@ -32,6 +39,12 @@ const COLORS = [
 export default function DashboardPage() {
   const { appId } = useParams()
   const { data: collection, isLoading, isError, error } = useCollection(appId)
+  const aiAvailable = useAIAvailable()
+  const buildChart = useAIBuildChart(appId)
+  const createChart = useCreateChart(appId ?? '')
+  const deleteChart = useDeleteChart(appId ?? '')
+  const { data: savedCharts } = useCharts(appId)
+  const [chartPrompt, setChartPrompt] = useState('')
 
   if (isLoading) return <LoadingState variant="summary" />
   if (isError) return <ErrorState error={error} />
@@ -45,6 +58,25 @@ export default function DashboardPage() {
   const dateField = fields.find(
     (f) => f.field_type === 'date' || f.field_type === 'datetime',
   )
+
+  function handleBuildChart() {
+    if (!chartPrompt.trim() || buildChart.isPending) return
+    buildChart.mutate(chartPrompt.trim(), {
+      onSuccess: (res) => {
+        createChart.mutate({
+          name: res.name,
+          chart_type: res.chart_type,
+          config: res.config,
+        }, {
+          onSuccess: () => {
+            toast.success('차트가 추가되었습니다')
+            setChartPrompt('')
+          },
+          onError: (err) => toast.error(String(err)),
+        })
+      },
+    })
+  }
 
   return (
     <div>
@@ -70,7 +102,49 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Charts grid */}
+      {/* AI chart builder */}
+      {aiAvailable && (
+        <div className="mb-6 flex gap-2">
+          <Input
+            value={chartPrompt}
+            onChange={(e) => setChartPrompt(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleBuildChart()}
+            placeholder="차트를 설명하세요 (예: 담당자별 완료 건수 막대 차트)"
+            className="max-w-md"
+            disabled={buildChart.isPending || createChart.isPending}
+          />
+          <Button
+            size="sm"
+            disabled={!chartPrompt.trim() || buildChart.isPending || createChart.isPending}
+            onClick={handleBuildChart}
+            className="gap-1"
+          >
+            {buildChart.isPending || createChart.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            차트 추가
+          </Button>
+        </div>
+      )}
+
+      {/* Saved charts */}
+      {savedCharts?.data && savedCharts.data.length > 0 && (
+        <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+          {savedCharts.data.map((chart) => (
+            <SavedChartCard
+              key={chart.id}
+              chart={chart}
+              slug={collection.slug}
+              fields={fields}
+              onDelete={() => deleteChart.mutate(chart.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Auto-generated charts */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         {selectFields.map((sf) => (
           <ChartCard
@@ -256,6 +330,87 @@ function TimelineCard({ slug, dateField }: { slug: string; dateField: Field }) {
             activeDot={{ r: 5 }}
           />
         </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// -- Saved chart card (from AI or manual creation) --
+function SavedChartCard({
+  chart,
+  slug,
+  onDelete,
+}: {
+  chart: { id: string; name: string; chart_type: string; config: Record<string, unknown> }
+  slug: string
+  fields: Field[]
+  onDelete: () => void
+}) {
+  const groupField = String(chart.config.group_field ?? '')
+  const valueField = String(chart.config.value_field ?? '')
+  const aggregation = String(chart.config.aggregation ?? 'count')
+
+  const { data, isLoading } = useAggregate(slug, {
+    group: groupField,
+    fn: aggregation !== 'count' ? aggregation : undefined,
+    field: valueField || undefined,
+  })
+
+  const chartData = useMemo(() => {
+    if (!data) return []
+    return data.map((d) => ({
+      group: d.group || '(없음)',
+      value: d.value ?? 0,
+    }))
+  }, [data])
+
+  if (isLoading) return <div className="rounded-lg border bg-card p-4 h-[300px] flex items-center justify-center"><Loader2 className="animate-spin" /></div>
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-medium">{chart.name}</h3>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onDelete}>
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
+      <ResponsiveContainer width="100%" height={260}>
+        {chart.chart_type === 'pie' || chart.chart_type === 'doughnut' ? (
+          <PieChart>
+            <Pie
+              data={chartData}
+              dataKey="value"
+              nameKey="group"
+              cx="50%"
+              cy="50%"
+              innerRadius={chart.chart_type === 'doughnut' ? 40 : 0}
+              outerRadius={90}
+              label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`}
+            >
+              {chartData.map((_: unknown, i: number) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip />
+            <Legend />
+          </PieChart>
+        ) : chart.chart_type === 'line' || chart.chart_type === 'area' ? (
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="group" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} width={50} />
+            <Tooltip />
+            <Line type="monotone" dataKey="value" stroke="#1f2937" strokeWidth={2} />
+          </LineChart>
+        ) : (
+          <BarChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="group" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} width={50} />
+            <Tooltip />
+            <Bar dataKey="value" fill="#1f2937" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        )}
       </ResponsiveContainer>
     </div>
   )
