@@ -147,3 +147,31 @@ export function useCollectionCount(slug: string | undefined) {
     staleTime: 60_000,
   })
 }
+
+export function useEntryDefaults(slug: string | undefined) {
+  return useQuery({
+    queryKey: [...queryKeys.entries.all, slug, 'defaults'],
+    queryFn: () => api.get<Record<string, unknown>>(`/data/${slug}/defaults`),
+    enabled: !!slug,
+    staleTime: 120_000,
+  })
+}
+
+export interface SimilarRecord {
+  id: string
+  value: string
+  created_at: string
+}
+
+export function useSimilarRecords(slug: string | undefined, query: string, field?: string) {
+  return useQuery({
+    queryKey: [...queryKeys.entries.all, slug, 'similar', query, field],
+    queryFn: () => {
+      const params = new URLSearchParams({ q: query })
+      if (field) params.set('field', field)
+      return api.get<SimilarRecord[]>(`/data/${slug}/similar?${params}`)
+    },
+    enabled: !!slug && query.length >= 2,
+    staleTime: 30_000,
+  })
+}

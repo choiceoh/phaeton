@@ -93,4 +93,10 @@ export const queryKeys = {
     runs: (id: string) =>
       [...queryKeys.automations.all, 'runs', id] as const,
   },
+
+  charts: {
+    all: ['charts'] as const,
+    list: (collectionId: string) =>
+      [...queryKeys.charts.all, 'list', collectionId] as const,
+  },
 } as const

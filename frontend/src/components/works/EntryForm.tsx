@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import RelationCombobox from '@/components/common/RelationCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
 import { useCurrentUser } from '@/hooks/useAuth'
+import { useSimilarRecords } from '@/hooks/useEntries'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -28,6 +29,7 @@ interface Props {
   onCancel: () => void
   submitting?: boolean
   process?: Process
+  slug?: string
 }
 
 // EntryForm renders a dynamic form built from a collection's fields.
@@ -44,11 +46,31 @@ export default function EntryForm({
   onCancel,
   submitting,
   process,
+  slug,
 }: Props) {
   const [data, setData] = useState<Record<string, unknown>>(initialData ?? {})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [shakeKey, setShakeKey] = useState(0)
   const { data: currentUser } = useCurrentUser()
+
+  // Similar records detection: track the first text field value with debounce.
+  const isNew = !initialData?.id
+  const firstTextField = isNew ? fields.find((f) => f.field_type === 'text') : undefined
+  const [similarQuery, setSimilarQuery] = useState('')
+  const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const { data: similarRecords } = useSimilarRecords(
+    isNew ? slug : undefined,
+    similarQuery,
+    firstTextField?.slug,
+  )
+
+  useEffect(() => {
+    if (!firstTextField || !isNew) return
+    const val = String(data[firstTextField.slug] ?? '')
+    if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
+    similarDebounceRef.current = setTimeout(() => setSimilarQuery(val), 800)
+    return () => { if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current) }
+  }, [data, firstTextField, isNew])
 
   function setValue(name: string, value: unknown) {
     setData((prev) => ({ ...prev, [name]: value }))
@@ -188,6 +210,19 @@ export default function EntryForm({
           )
         })}
       </div>
+      {similarRecords && similarRecords.length > 0 && (
+        <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+          <span>유사한 항목:</span>
+          {similarRecords.slice(0, 3).map((r) => (
+            <span key={r.id} className="ml-2">
+              &ldquo;{r.value}&rdquo;
+              <span className="ml-1 opacity-60">
+                ({new Date(r.created_at).toLocaleDateString('ko')})
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onCancel}>
           취소

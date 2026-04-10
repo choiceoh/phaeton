@@ -60,12 +60,15 @@ import {
   useCreateEntry,
   useDeleteEntry,
   useEntries,
+  useEntryDefaults,
   useUpdateEntry,
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
+import { useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
-import { ApiError, formatError } from '@/lib/api'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
+import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { FilterCondition, SavedView } from '@/lib/types'
@@ -114,6 +117,7 @@ export default function AppViewPage() {
   const { data: collection, isLoading: colLoading, isError: colError, error: colErr } =
     useCollection(appId)
   const { data: process } = useProcess(appId)
+  const { data: currentUser } = useCurrentUser()
 
   // Show toast when automation runs are detected.
   useAutomationRunToasts(collection?.id)
@@ -184,6 +188,8 @@ export default function AppViewPage() {
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
+  const { data: entryDefaults } = useEntryDefaults(collection?.slug)
+  const aiAvailable = useAIAvailable()
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
@@ -564,11 +570,15 @@ export default function AppViewPage() {
   const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !collection) return
-    const formData = new FormData()
-    formData.append('file', file)
     setImportingCSV(true)
     const toastId = toast.loading('CSV 가져오는 중...')
-    try {
+
+    const doImport = async (columnMap?: Record<string, string>) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      if (columnMap) {
+        formData.append('column_map', JSON.stringify(columnMap))
+      }
       const res = await fetch(`/api/data/${collection.slug}/import`, {
         method: 'POST',
         body: formData,
@@ -578,7 +588,39 @@ export default function AppViewPage() {
         const body = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(body.error || body.message || res.statusText)
       }
-      const result = await res.json()
+      return res.json()
+    }
+
+    try {
+      let result: any
+      try {
+        result = await doImport()
+      } catch (err) {
+        // If column matching failed and AI is available, try AI mapping.
+        const msg = err instanceof Error ? err.message : ''
+        if (msg.includes('no CSV columns matched') && aiAvailable) {
+          toast.loading('컬럼 자동 매핑 중...', { id: toastId })
+          // Read CSV headers from the file.
+          const text = await file.text()
+          const firstLine = text.split('\n')[0]?.replace(/^\xef\xbb\xbf/, '') ?? ''
+          const headers = firstLine.split(',').map((h) => h.trim().replace(/^"|"$/g, ''))
+          if (headers.length > 0) {
+            const columnMap = await api.post<Record<string, string>>(
+              `/ai/map-csv-columns/${collection.slug}`,
+              { headers },
+            )
+            if (Object.keys(columnMap).length > 0) {
+              result = await doImport(columnMap)
+            } else {
+              throw err
+            }
+          } else {
+            throw err
+          }
+        } else {
+          throw err
+        }
+      }
       const count = result.data?.imported ?? 0
       toast.success(`${count}건 가져왔습니다`, { id: toastId })
       setImportedCount(count)
@@ -590,7 +632,7 @@ export default function AppViewPage() {
       setImportingCSV(false)
       e.target.value = ''
     }
-  }, [collection, refetch])
+  }, [collection, refetch, aiAvailable])
 
   const dateFields = useMemo(
     () => collection?.fields?.filter((f) => f.field_type === 'date' || f.field_type === 'datetime') ?? [],
@@ -605,6 +647,52 @@ export default function AppViewPage() {
   const hasCalendar = !!dateField
   const hasGallery = !!fileField
   const hasGantt = dateFields.length >= 1
+  const hasProcessKanban = process?.is_enabled && (process.statuses?.length ?? 0) > 0
+
+  // Build synthetic field for process status kanban
+  const processGroupField = useMemo(() => {
+    if (!hasProcessKanban || !process) return undefined
+    return {
+      id: '_status',
+      collection_id: '',
+      slug: '_status',
+      label: '상태',
+      field_type: 'select' as const,
+      is_required: false,
+      is_unique: false,
+      is_indexed: false,
+      width: 6,
+      height: 1,
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+      options: {
+        choices: process.statuses.map((s) => s.name),
+      },
+    }
+  }, [hasProcessKanban, process])
+
+  // Build allowedMoves map for process kanban based on transitions + user role
+  const processAllowedMoves = useMemo(() => {
+    if (!process?.is_enabled || !process.transitions?.length || !process.statuses?.length) return undefined
+    const userRole = currentUser?.role
+    const statusById = new Map(process.statuses.map((s) => [s.id, s.name]))
+    const moves = new Map<string, Set<string>>()
+    // Initialize all statuses with empty sets
+    for (const s of process.statuses) {
+      moves.set(s.name, new Set())
+    }
+    for (const t of process.transitions) {
+      // Check role permission
+      if (t.allowed_roles.length > 0 && (!userRole || !t.allowed_roles.includes(userRole))) continue
+      const fromName = statusById.get(t.from_status_id)
+      const toName = statusById.get(t.to_status_id)
+      if (fromName && toName) {
+        moves.get(fromName)!.add(toName)
+      }
+    }
+    return moves
+  }, [process, currentUser])
 
   function handleEntryClick(entry: Record<string, unknown>) {
     setEditEntry(entry)
@@ -639,6 +727,26 @@ export default function AppViewPage() {
       { id: entryId, body },
       {
         onSuccess: () => toast.success('이동되었습니다'),
+        onError: (err) => {
+          if (err instanceof ApiError && err.isConflict()) {
+            toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
+            refetch()
+          } else {
+            toast.error(formatError(err))
+          }
+        },
+      },
+    )
+  }
+
+  function handleProcessCardMove(entryId: string, newValue: string) {
+    const body: Record<string, unknown> = { _status: newValue }
+    const version = getRowVersion(entryId)
+    if (version != null) body._version = version
+    updateEntry.mutate(
+      { id: entryId, body },
+      {
+        onSuccess: () => toast.success('상태가 변경되었습니다'),
         onError: (err) => {
           if (err instanceof ApiError && err.isConflict()) {
             toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
@@ -776,12 +884,12 @@ export default function AppViewPage() {
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
     <>
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-2 flex-wrap w-full">
       {/* ── Group 1: 데이터 조회 (검색·필터·정렬) ── */}
-      <div className="relative">
+      <div className="relative w-full sm:w-auto order-first">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          className="h-8 w-[200px] pl-8 text-sm"
+          className="h-8 w-full sm:w-[200px] pl-8 text-sm"
           placeholder="검색..."
           value={searchInputValue}
           onChange={(e) => handleSearchInput(e.target.value)}
@@ -818,6 +926,7 @@ export default function AppViewPage() {
           <FilterBuilder
             fields={collection.fields ?? []}
             conditions={filterConditions}
+            slug={collection.slug}
             onChange={(conds) => {
               setFilterConditions(conds)
               setPage(1)
@@ -872,7 +981,7 @@ export default function AppViewPage() {
       </Popover>
 
       {/* ── Group 2: 데이터 입출력 + 프로세스 ── */}
-      <div className="flex items-center gap-2 border-l pl-3 ml-1">
+      <div className="flex items-center gap-2 shrink-0 sm:border-l sm:pl-3 sm:ml-1">
         {process?.is_enabled && (
           <Button
             variant={processVisible ? 'default' : 'outline'}
@@ -1080,9 +1189,10 @@ export default function AppViewPage() {
 
       {list && (
         <Tabs defaultValue="list">
-          {(hasKanban || hasCalendar || hasGallery || hasGantt) && (
-            <TabsList className="mb-4">
+          {(hasKanban || hasProcessKanban || hasCalendar || hasGallery || hasGantt) && (
+            <TabsList className="mb-4 max-w-full overflow-x-auto">
               <TabsTrigger value="list">목록</TabsTrigger>
+              {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}
               {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
               {hasCalendar && (
                 <TabsTrigger value="calendar" className="gap-1">
@@ -1160,6 +1270,19 @@ export default function AppViewPage() {
             />
           </TabsContent>
 
+          {hasProcessKanban && processGroupField && (
+            <TabsContent value="status-kanban" className="mt-0">
+              <KanbanView
+                groupField={processGroupField}
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onCardClick={handleEntryClick}
+                onCardMove={handleProcessCardMove}
+                allowedMoves={processAllowedMoves}
+              />
+            </TabsContent>
+          )}
+
           {hasKanban && selectField && (
             <TabsContent value="kanban" className="mt-0">
               <KanbanView
@@ -1212,7 +1335,7 @@ export default function AppViewPage() {
         onClose={() => setSheetOpen(false)}
         fields={collection.fields ?? []}
         slug={collection.slug}
-        initialData={editEntry}
+        initialData={editEntry ?? (entryDefaults && Object.keys(entryDefaults).length > 0 ? entryDefaults : undefined)}
         onSubmit={handleSubmit}
         submitting={createEntry.isPending || updateEntry.isPending}
         title={editEntry ? `${TERM.record} 편집` : TERM.newRecord}
