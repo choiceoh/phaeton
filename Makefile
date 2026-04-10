@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-ui build clean db db-stop lint lint-go lint-ui test test-go test-ui test-integration fmt up down backup backup-start backup-stop backup-logs
+.PHONY: dev dev-api dev-ui build clean db db-stop lint lint-go lint-ui test test-go test-ui test-integration fmt check-fmt ci up down backup backup-start backup-stop backup-logs
 
 ifneq (,$(wildcard .env))
 include .env
@@ -85,3 +85,12 @@ backup-logs:
 fmt:
 	cd backend && gofmt -w .
 	cd frontend && npx eslint . --fix
+
+# 포맷 검사 (CI용)
+check-fmt:
+	@cd backend && test -z "$$(gofmt -l .)" || (echo "gofmt 위반 파일:"; gofmt -l .; exit 1)
+
+# 로컬 CI (PR 전 전체 검증)
+ci: check-fmt lint test
+	cd frontend && npx tsc --noEmit
+	cd backend && go build ./cmd/server

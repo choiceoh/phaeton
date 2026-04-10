@@ -19,3 +19,4 @@ backend/cmd/server/static/assets/
 # Editor / OS
 .DS_Store
 *.swp
+node_modules/

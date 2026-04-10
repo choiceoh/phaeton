@@ -187,7 +187,7 @@ func TestBuildCollection_MissingDescription(t *testing.T) {
 	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if body.Message != "description is required" {
-		t.Errorf("error = %q", body.Message)
+		t.Errorf("message = %q", body.Message)
 	}
 }
 
@@ -290,7 +290,7 @@ func TestBuildCollection_VLLMDown(t *testing.T) {
 	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if !strings.Contains(body.Message, "AI 서버") {
-		t.Errorf("error should mention AI server, got %q", body.Message)
+		t.Errorf("message should mention AI server, got %q", body.Message)
 	}
 }
 
@@ -354,7 +354,7 @@ func TestBuildCollection_VLLMReturnsGarbage(t *testing.T) {
 	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if !strings.Contains(body.Message, "파싱") {
-		t.Errorf("error should mention parsing, got %q", body.Message)
+		t.Errorf("message should mention parsing, got %q", body.Message)
 	}
 }
 
