@@ -227,7 +227,8 @@ func run() int {
 
 		// Start sync runner and automation scheduler in background.
 		go syncRunner.Start(ctx)
-		autoScheduler.Start()
+		autoEngine.SetBaseContext(ctx)
+		autoScheduler.Start(ctx)
 
 		logging.PrintBanner(os.Stderr, logging.BannerInfo{
 			Version: version,
