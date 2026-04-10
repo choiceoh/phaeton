@@ -280,6 +280,137 @@ func (h *SchemaHandler) RollbackMigration(w http.ResponseWriter, r *http.Request
 }
 
 // ---------------------------------------------------------------------------
+// My Tasks  GET /api/my-tasks
+// ---------------------------------------------------------------------------
+
+type myTaskItem struct {
+	ID              string `json:"id"`
+	Label           string `json:"label"`
+	Status          string `json:"status"`
+	CreatedAt       string `json:"createdAt"`
+	CollectionID    string `json:"collectionId"`
+	CollectionLabel string `json:"collectionLabel"`
+	CollectionSlug  string `json:"collectionSlug"`
+	CollectionIcon  string `json:"collectionIcon,omitempty"`
+}
+
+// MyTasks returns entries across all process-enabled collections where the
+// current user is allowed to perform a transition from the entry's current status.
+func (h *SchemaHandler) MyTasks(w http.ResponseWriter, r *http.Request) {
+	user, _ := middleware.GetUser(r.Context())
+
+	cols := h.cache.Collections()
+	var items []myTaskItem
+
+	for _, col := range cols {
+		if !col.AccessConfig.AllowsRole("entry_view", user.Role) {
+			continue
+		}
+
+		proc, ok := h.cache.ProcessByCollectionID(col.ID)
+		if !ok || !proc.IsEnabled {
+			continue
+		}
+
+		// Build set of status names where current user can act.
+		idToName := make(map[string]string, len(proc.Statuses))
+		for _, s := range proc.Statuses {
+			idToName[s.ID] = s.Name
+		}
+
+		actionableStatuses := make(map[string]struct{})
+		for _, t := range proc.Transitions {
+			if isTransitionAllowed(t, user.Role, user.UserID) {
+				if name, ok := idToName[t.FromStatusID]; ok {
+					actionableStatuses[name] = struct{}{}
+				}
+			}
+		}
+		if len(actionableStatuses) == 0 {
+			continue
+		}
+
+		// Build IN clause for status names.
+		statusNames := make([]string, 0, len(actionableStatuses))
+		for name := range actionableStatuses {
+			statusNames = append(statusNames, name)
+		}
+
+		// Find first text field for label.
+		fields := h.cache.Fields(col.ID)
+		var titleField *schema.Field
+		for i := range fields {
+			if fields[i].FieldType == schema.FieldText && titleField == nil {
+				titleField = &fields[i]
+			}
+		}
+
+		qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+		selCols := []string{"id", `"_status"`, `"_created_at"`}
+		if titleField != nil {
+			selCols = append(selCols, fmt.Sprintf("%q", titleField.Slug))
+		}
+
+		args := make([]any, len(statusNames))
+		placeholders := make([]string, len(statusNames))
+		for i, name := range statusNames {
+			args[i] = name
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+		}
+
+		sql := fmt.Sprintf(
+			"SELECT %s FROM %s WHERE deleted_at IS NULL AND \"_status\" IN (%s) ORDER BY \"_created_at\" DESC LIMIT 200",
+			strings.Join(selCols, ", "), qTable, strings.Join(placeholders, ", "),
+		)
+
+		rows, err := h.pool.Query(r.Context(), sql, args...)
+		if err != nil {
+			continue
+		}
+		records, err := collectRows(rows)
+		rows.Close()
+		if err != nil {
+			continue
+		}
+
+		for _, rec := range records {
+			label := "(무제)"
+			if titleField != nil {
+				if v := rec[titleField.Slug]; v != nil {
+					label = fmt.Sprintf("%v", v)
+				}
+			}
+
+			status := ""
+			if v, ok := rec["_status"].(string); ok {
+				status = v
+			}
+
+			createdAt := ""
+			if v, ok := rec["_created_at"]; v != nil && ok {
+				createdAt = fmt.Sprintf("%v", v)
+			}
+
+			items = append(items, myTaskItem{
+				ID:              fmt.Sprintf("%v", rec["id"]),
+				Label:           label,
+				Status:          status,
+				CreatedAt:       createdAt,
+				CollectionID:    col.ID,
+				CollectionLabel: col.Label,
+				CollectionSlug:  col.Slug,
+				CollectionIcon:  col.Icon,
+			})
+		}
+	}
+
+	if items == nil {
+		items = []myTaskItem{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// ---------------------------------------------------------------------------
 // Global Calendar  GET /api/calendar/events
 // ---------------------------------------------------------------------------
 
