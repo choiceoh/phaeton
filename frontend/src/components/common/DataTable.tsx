@@ -76,6 +76,8 @@ interface Props<T> {
   summaryRow?: Record<string, { label: string; value: string | number }>
   toolbar?: React.ReactNode
   initialColumnVisibility?: VisibilityState
+  /** Called when column visibility changes */
+  onColumnVisibilityChange?: (visibility: VisibilityState) => void
   /** Number of top rows to highlight (e.g. after CSV import). */
   highlightRows?: number
   /** Enable row selection with checkboxes */
@@ -108,6 +110,7 @@ export function DataTable<T>({
   summaryRow,
   toolbar,
   initialColumnVisibility,
+  onColumnVisibilityChange: onColumnVisibilityChangeProp,
   highlightRows = 0,
   selectable,
   selectedRowIds,
@@ -177,7 +180,11 @@ export function DataTable<T>({
       setSorting(next)
       onSortChange?.(next)
     },
-    onColumnVisibilityChange: setColumnVisibility,
+    onColumnVisibilityChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(columnVisibility) : updater
+      setColumnVisibility(next)
+      onColumnVisibilityChangeProp?.(next)
+    },
     onColumnPinningChange: setColumnPinning,
     onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
