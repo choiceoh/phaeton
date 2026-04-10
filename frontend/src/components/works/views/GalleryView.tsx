@@ -1,5 +1,5 @@
 import { ImageOff, LayoutGrid } from 'lucide-react'
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { Card } from '@/components/ui/card'
 import EmptyState from '@/components/common/EmptyState'
@@ -17,6 +17,36 @@ interface Props {
 function isImageUrl(url: string): boolean {
   const lower = url.toLowerCase()
   return /\.(jpe?g|png|gif|webp|svg|bmp|avif)(\?|$)/i.test(lower)
+}
+
+function GalleryImage({ src, alt }: { src: string; alt: string }) {
+  const [state, setState] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const handleLoad = useCallback(() => setState('loaded'), [])
+  const handleError = useCallback(() => setState('error'), [])
+
+  if (state === 'error') {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+        <ImageOff className="h-8 w-8" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {state === 'loading' && (
+        <div className="absolute inset-0 animate-pulse bg-muted" />
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={`h-full w-full object-cover transition-opacity ${state === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+        loading="lazy"
+        onLoad={handleLoad}
+        onError={handleError}
+      />
+    </>
+  )
 }
 
 export default function GalleryView({ imageField, fields, entries, onEntryClick }: Props) {
@@ -51,18 +81,21 @@ export default function GalleryView({ imageField, fields, entries, onEntryClick 
         return (
           <Card
             key={String(entry.id)}
-            className="cursor-pointer overflow-hidden transition-colors hover:bg-accent"
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             onClick={() => onEntryClick(entry)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onEntryClick(entry)
+              }
+            }}
           >
             {/* Image area */}
             <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
               {hasImage ? (
-                <img
-                  src={imageUrl}
-                  alt={title}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
+                <GalleryImage src={imageUrl!} alt={title} />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-muted-foreground">
                   <ImageOff className="h-8 w-8" />
