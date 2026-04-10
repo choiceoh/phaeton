@@ -131,7 +131,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
         </section>
         <Separator />
         <section className="space-y-2">
-          <Label className="text-xs font-semibold text-muted-foreground">슬러그 (영문)</Label>
+          <Label className="text-xs font-semibold text-muted-foreground">영문 ID</Label>
           <Input
             value={field.slug}
             onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}

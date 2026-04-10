@@ -118,12 +118,12 @@ export default function AppBuilder() {
   function handleSave() {
     setError('')
     if (!slug.trim() || !label.trim()) {
-      setError('slug과 label은 필수입니다.')
+      setError('영문 ID와 이름은 필수입니다.')
       return
     }
     for (const f of fields) {
       if (!f.slug) {
-        setError(`필드 "${f.label}"의 slug이 비어 있습니다.`)
+        setError(`필드 "${f.label}"의 영문 ID가 비어 있습니다.`)
         return
       }
     }
@@ -167,33 +167,6 @@ export default function AppBuilder() {
         <AIBuildDialog onApply={handleAIApply} />
       </div>
 
-      <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-        <p className="text-sm font-medium text-muted-foreground">기본 정보</p>
-        <div className="grid grid-cols-[1fr_1fr_2fr] gap-4">
-          <div className="space-y-1">
-            <Label>컬렉션 이름 (한글)</Label>
-            <Input value={label} onChange={(e) => handleLabelChange(e.target.value)} placeholder="인허가 체크리스트" />
-          </div>
-          <div className="space-y-1">
-            <Label>슬러그 (영문)</Label>
-            <div className="relative">
-              <Input
-                value={slug}
-                onChange={(e) => handleSlugChange(e.target.value)}
-                placeholder="자동 생성됨"
-              />
-              {generateSlug.isPending && (
-                <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-              )}
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label>설명</Label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="컬렉션 설명" />
-          </div>
-        </div>
-      </div>
-
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
@@ -206,7 +179,33 @@ export default function AppBuilder() {
             </>
           )}
         </div>
-        <div className="rounded-lg border p-3">
+        <div className="rounded-lg border p-3 space-y-4">
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-muted-foreground">기본 정보</p>
+            <div className="grid grid-cols-6 gap-2">
+              <div className="col-span-2 space-y-1">
+                <Label>컬렉션 이름 (한글)</Label>
+                <Input value={label} onChange={(e) => handleLabelChange(e.target.value)} placeholder="인허가 체크리스트" />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label>영문 ID</Label>
+                <div className="relative">
+                  <Input
+                    value={slug}
+                    onChange={(e) => handleSlugChange(e.target.value)}
+                    placeholder="자동 생성됨"
+                  />
+                  {generateSlug.isPending && (
+                    <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label>설명</Label>
+                <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="컬렉션 설명" />
+              </div>
+            </div>
+          </div>
           <FieldPreview
             fields={fields}
             selectedId={selectedId}

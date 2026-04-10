@@ -67,7 +67,7 @@ export default function AppSettingsPage() {
 
   function handleAddField() {
     if (!newField.slug || !newField.label || !newField.field_type) {
-      toast.error('slug, label, 타입은 필수입니다')
+      toast.error('영문 ID, 이름, 타입은 필수입니다')
       return
     }
     const input: CreateFieldIn = {
@@ -161,7 +161,7 @@ export default function AppSettingsPage() {
             <Card className="mb-4 p-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <Label>슬러그 (영문)</Label>
+                  <Label>영문 ID</Label>
                   <Input
                     value={newField.slug ?? ''}
                     onChange={(e) =>
