@@ -103,7 +103,7 @@ export default function AppBuilder() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-[1fr_1fr_2fr] gap-4">
         <div className="space-y-1">
           <Label>컬렉션 이름 (한글)</Label>
           <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="인허가 체크리스트" />
@@ -116,11 +116,10 @@ export default function AppBuilder() {
             placeholder="permit_checklist"
           />
         </div>
-      </div>
-
-      <div className="space-y-1">
-        <Label>설명</Label>
-        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <div className="space-y-1">
+          <Label>설명</Label>
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="컬렉션 설명" />
+        </div>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
