@@ -16,11 +16,13 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { GripVertical, Trash2 } from 'lucide-react'
+import { Calendar, ChevronsUpDown, GripVertical, Search, Trash2, Upload, User } from 'lucide-react'
 
 import { FIELD_TYPE_LABELS, isLayoutType } from '@/lib/constants'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -449,7 +451,17 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
       )
     }
     case 'date':
-      return <Input readOnly tabIndex={-1} placeholder="날짜 선택" />
+      return (
+        <Button
+          variant="outline"
+          type="button"
+          disabled
+          className="w-full justify-start text-left font-normal text-muted-foreground"
+        >
+          <Calendar className="mr-2 h-4 w-4" />
+          날짜 선택
+        </Button>
+      )
     case 'datetime':
       return <Input type="datetime-local" readOnly tabIndex={-1} />
     case 'boolean':
@@ -478,7 +490,7 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
       return (
         <Select disabled>
           <SelectTrigger>
-            <SelectValue placeholder="항목 선택" />
+            <SelectValue placeholder={choices.length > 0 ? `항목 선택 (${choices.length}개)` : '항목 선택'} />
           </SelectTrigger>
         </Select>
       )
@@ -486,22 +498,56 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
     case 'multiselect': {
       const choices = (field.options?.choices as string[]) || []
       return (
-        <div className="space-y-1">
-          {choices.length > 0 ? choices.map((c) => (
-            <label key={c} className="flex items-center gap-2 text-sm">
-              <Checkbox disabled />
-              {c}
-            </label>
-          )) : (
-            <span className="text-xs text-muted-foreground">선택지를 추가하세요</span>
+        <div className="flex min-h-9 w-full flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm shadow-xs opacity-70">
+          {choices.length > 0 ? (
+            <>
+              {choices.slice(0, 3).map((c) => (
+                <Badge key={c} variant="secondary" className="text-xs">
+                  {c}
+                </Badge>
+              ))}
+              {choices.length > 3 && (
+                <span className="text-xs text-muted-foreground">+{choices.length - 3}</span>
+              )}
+            </>
+          ) : (
+            <span className="text-muted-foreground">선택...</span>
           )}
         </div>
       )
     }
-    case 'relation':
-      return <Input readOnly tabIndex={-1} placeholder="관계 항목 선택" className="bg-muted/50" />
+    case 'relation': {
+      const isMany = field.relation?.relation_type === 'many_to_many'
+      return (
+        <Button
+          variant="outline"
+          type="button"
+          disabled
+          className="w-full justify-between font-normal text-muted-foreground"
+        >
+          <span className="flex items-center gap-2">
+            <Search className="h-4 w-4" />
+            {isMany ? '관계 항목 검색 (다중)' : '관계 항목 검색'}
+          </span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0" />
+        </Button>
+      )
+    }
     case 'user':
-      return <Input readOnly tabIndex={-1} placeholder="사용자 선택" className="bg-muted/50" />
+      return (
+        <Button
+          variant="outline"
+          type="button"
+          disabled
+          className="w-full justify-between font-normal text-muted-foreground"
+        >
+          <span className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            사용자 선택
+          </span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0" />
+        </Button>
+      )
     case 'autonumber':
       return <Input readOnly tabIndex={-1} value="(자동 생성)" className="bg-muted" />
     case 'formula':
@@ -513,7 +559,47 @@ function DraftFieldInput({ field }: { field: FieldDraft }) {
         </div>
       )
     case 'file':
-      return <Input type="file" disabled tabIndex={-1} />
+      return (
+        <div className="flex items-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          <Upload className="h-4 w-4" />
+          파일 업로드
+        </div>
+      )
+    case 'table': {
+      const subColumns = (field.options?.sub_columns as { key: string, label: string }[]) || [
+        { key: 'col1', label: '항목' },
+        { key: 'col2', label: '값' },
+      ]
+      return (
+        <div className="space-y-2">
+          <div className="overflow-hidden rounded-md border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="w-8 px-2 py-1.5 text-left text-xs font-medium text-muted-foreground">#</th>
+                  {subColumns.map((col) => (
+                    <th key={col.key} className="px-2 py-1.5 text-left text-xs font-medium text-muted-foreground">
+                      {col.label}
+                    </th>
+                  ))}
+                  <th className="w-8 px-2 py-1.5" />
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={subColumns.length + 2} className="px-2 py-3 text-center text-xs text-muted-foreground">
+                    행을 추가하세요
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <Button type="button" variant="outline" size="sm" disabled className="text-xs">
+            + 행 추가
+          </Button>
+        </div>
+      )
+    }
     case 'json':
       return <Textarea readOnly tabIndex={-1} rows={Math.max(4, h * 2)} placeholder="{ }" />
     default:
