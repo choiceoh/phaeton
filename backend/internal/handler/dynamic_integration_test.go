@@ -54,7 +54,7 @@ func createTestCollection(t *testing.T, router *chi.Mux, slug, label string) (id
 	body := fmt.Sprintf(`{"slug":%q,"label":%q}`, slug, label)
 	req := httptest.NewRequest("POST", "/api/schema/collections", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = injectUser(req, middleware.UserClaims{UserID: "test-user", Role: "director"})
+	req = injectUser(req, middleware.UserClaims{UserID: "00000000-0000-0000-0000-000000000001", Role: "director"})
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -78,7 +78,7 @@ func addTestField(t *testing.T, router *chi.Mux, collectionID, slug, label, fiel
 	url := fmt.Sprintf("/api/schema/collections/%s/fields", collectionID)
 	req := httptest.NewRequest("POST", url, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = injectUser(req, middleware.UserClaims{UserID: "test-user", Role: "director"})
+	req = injectUser(req, middleware.UserClaims{UserID: "00000000-0000-0000-0000-000000000001", Role: "director"})
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -96,7 +96,7 @@ func addTestField(t *testing.T, router *chi.Mux, collectionID, slug, label, fiel
 }
 
 var testClaims = middleware.UserClaims{
-	UserID: "test-user",
+	UserID: "00000000-0000-0000-0000-000000000001",
 	Email:  "test@test.com",
 	Name:   "Tester",
 	Role:   "director",
@@ -341,7 +341,7 @@ func TestDynIntegration_Get_NotFound(t *testing.T) {
 
 	createTestCollection(t, router, "nftest", "NotFound")
 
-	req := httptest.NewRequest("GET", "/api/data/nftest/nonexistent-id", nil)
+	req := httptest.NewRequest("GET", "/api/data/nftest/00000000-0000-0000-0000-ffffffffffff", nil)
 	req = injectUser(req, testClaims)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

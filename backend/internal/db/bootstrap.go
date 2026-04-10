@@ -11,7 +11,19 @@ import (
 // and their tables if they don't already exist.
 // All operations run inside a single transaction for atomicity.
 func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
-	tx, err := pool.Begin(ctx)
+	// Acquire an advisory lock so parallel test processes serialise bootstrap.
+	// The lock is session-level and released when the connection is returned.
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire conn for advisory lock: %w", err)
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock(42)` /* 42 = bootstrap */); err != nil {
+		return fmt.Errorf("advisory lock: %w", err)
+	}
+	defer conn.Exec(ctx, `SELECT pg_advisory_unlock(42)`) //nolint:errcheck
+
+	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin bootstrap tx: %w", err)
 	}

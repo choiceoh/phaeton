@@ -401,7 +401,7 @@ func TestAuthIntegration_ListUsers(t *testing.T) {
 func TestAuthIntegration_GetUser_NotFound(t *testing.T) {
 	router := setupAuthRouter(t)
 
-	req := httptest.NewRequest("GET", "/api/users/nonexistent-id", nil)
+	req := httptest.NewRequest("GET", "/api/users/00000000-0000-0000-0000-ffffffffffff", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
