@@ -136,7 +136,7 @@ func run() int {
 	// Notification subscriber.
 	commentHandler := handler.NewCommentHandler(pool, cache, bus)
 	notifHandler := handler.NewNotificationHandler(pool)
-	handler.SubscribeNotifications(pool, bus)
+	handler.SubscribeNotifications(pool, bus, cache)
 
 	// Automation engine.
 	wp := workerpool.New(0)

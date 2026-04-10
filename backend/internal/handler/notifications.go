@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/phaeton/backend/internal/events"
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/pgutil"
+	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
 // Notification represents a user notification.
@@ -146,13 +147,13 @@ func scanNotifications(rows pgx.Rows) ([]Notification, error) {
 
 // SubscribeNotifications registers a handler on the event bus that creates
 // notifications for relevant users when events are published.
-func SubscribeNotifications(pool *pgxpool.Pool, bus *events.Bus) {
+func SubscribeNotifications(pool *pgxpool.Pool, bus *events.Bus, cache *schema.Cache) {
 	bus.Subscribe(func(ctx context.Context, ev events.Event) {
 		switch ev.Type {
 		case events.EventComment:
 			notifyCommentRecipients(ctx, pool, ev)
 		case events.EventStateChange:
-			notifyRecordCreator(ctx, pool, ev)
+			notifyStateChangeRecipients(ctx, pool, cache, ev)
 		}
 	})
 }
@@ -206,29 +207,64 @@ func notifyCommentRecipients(ctx context.Context, pool *pgxpool.Pool, ev events.
 	}
 }
 
-// notifyRecordCreator sends a notification to the record creator.
-func notifyRecordCreator(ctx context.Context, pool *pgxpool.Pool, ev events.Event) {
-	// We don't have a direct way to get the record creator from a generic collection,
-	// so we query the data table. The collection slug is needed, but we have collection_id.
-	// Look up the slug first.
+// notifyStateChangeRecipients sends notifications for status changes:
+// 1. Record creator is notified about the status change.
+// 2. Designated approvers (allowed_user_ids on outgoing transitions from the new status) are notified.
+func notifyStateChangeRecipients(ctx context.Context, pool *pgxpool.Pool, cache *schema.Cache, ev events.Event) {
+	title := fmt.Sprintf("상태 변경: %s → %s", ev.StatusFrom, ev.StatusTo)
+	body := fmt.Sprintf("항목이 '%s' 단계로 이동했습니다.", ev.StatusTo)
+
+	// 1. Notify record creator.
 	var slug string
 	err := pool.QueryRow(ctx,
 		`SELECT slug FROM _meta.collections WHERE id = $1`, ev.CollectionID,
 	).Scan(&slug)
-	if err != nil {
+	if err == nil {
+		var creatorID string
+		qTable := fmt.Sprintf("%q.%q", "data", slug)
+		err = pool.QueryRow(ctx,
+			fmt.Sprintf(`SELECT _created_by::text FROM %s WHERE id = $1 AND deleted_at IS NULL`, qTable),
+			ev.RecordID,
+		).Scan(&creatorID)
+		if err == nil && creatorID != "" && creatorID != ev.ActorUserID {
+			insertNotification(ctx, pool, creatorID, "state_change", title, body, ev.CollectionID, ev.RecordID)
+		}
+	}
+
+	// 2. Notify designated approvers for the next stage.
+	proc, ok := cache.ProcessByCollectionID(ev.CollectionID)
+	if !ok || !proc.IsEnabled {
 		return
 	}
 
-	var creatorID string
-	qTable := fmt.Sprintf("%q.%q", "data", slug)
-	err = pool.QueryRow(ctx,
-		fmt.Sprintf(`SELECT created_by::text FROM %s WHERE id = $1 AND deleted_at IS NULL`, qTable),
-		ev.RecordID,
-	).Scan(&creatorID)
-	if err != nil || creatorID == "" || creatorID == ev.ActorUserID {
+	// Find the status ID for the new status.
+	var toStatusID string
+	for _, s := range proc.Statuses {
+		if s.Name == ev.StatusTo {
+			toStatusID = s.ID
+			break
+		}
+	}
+	if toStatusID == "" {
 		return
 	}
-	insertNotification(ctx, pool, creatorID, string(ev.Type), ev.Title, ev.Body, ev.CollectionID, ev.RecordID)
+
+	// Collect user IDs from outgoing transitions of the new status.
+	notified := make(map[string]bool)
+	notified[ev.ActorUserID] = true // Don't notify the actor.
+	approverBody := fmt.Sprintf("항목이 '%s' 단계로 이동했습니다. 다음 단계 전환을 처리해주세요.", ev.StatusTo)
+	for _, t := range proc.Transitions {
+		if t.FromStatusID != toStatusID {
+			continue
+		}
+		for _, uid := range t.AllowedUserIDs {
+			if notified[uid] {
+				continue
+			}
+			notified[uid] = true
+			insertNotification(ctx, pool, uid, "state_change", title, approverBody, ev.CollectionID, ev.RecordID)
+		}
+	}
 }
 
 func insertNotification(ctx context.Context, pool *pgxpool.Pool, userID, ntype, title, body, refCollectionID, refRecordID string) {

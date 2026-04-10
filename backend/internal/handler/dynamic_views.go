@@ -790,7 +790,7 @@ func (h *DynHandler) KanbanView(w http.ResponseWriter, r *http.Request) {
 		proc, hasProc := h.cache.ProcessByCollectionID(col.ID)
 		if hasProc && proc.IsEnabled {
 			user, _ := middleware.GetUser(r.Context())
-			resp.AllowedMoves = buildAllowedMoves(proc, user.Role)
+			resp.AllowedMoves = buildAllowedMoves(proc, user.Role, user.UserID)
 		}
 	}
 
@@ -923,7 +923,7 @@ func extractChoiceColors(opts []byte) map[string]string {
 }
 
 // buildAllowedMoves constructs the allowed_moves map from process transitions.
-func buildAllowedMoves(proc schema.Process, userRole string) map[string][]string {
+func buildAllowedMoves(proc schema.Process, userRole, userID string) map[string][]string {
 	// Build ID → name lookup.
 	idToName := make(map[string]string, len(proc.Statuses))
 	for _, s := range proc.Statuses {
@@ -936,18 +936,8 @@ func buildAllowedMoves(proc schema.Process, userRole string) map[string][]string
 	}
 
 	for _, t := range proc.Transitions {
-		// Check role permission.
-		if len(t.AllowedRoles) > 0 {
-			allowed := false
-			for _, r := range t.AllowedRoles {
-				if r == userRole {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				continue
-			}
+		if !isTransitionAllowed(t, userRole, userID) {
+			continue
 		}
 		fromName := idToName[t.FromStatusID]
 		toName := idToName[t.ToStatusID]
@@ -957,6 +947,24 @@ func buildAllowedMoves(proc schema.Process, userRole string) map[string][]string
 	}
 
 	return moves
+}
+
+// isTransitionAllowed checks if a user (by role and/or ID) is permitted to perform a transition.
+func isTransitionAllowed(t schema.ProcessTransition, userRole, userID string) bool {
+	if len(t.AllowedRoles) == 0 && len(t.AllowedUserIDs) == 0 {
+		return true
+	}
+	for _, r := range t.AllowedRoles {
+		if r == userRole {
+			return true
+		}
+	}
+	for _, uid := range t.AllowedUserIDs {
+		if uid == userID {
+			return true
+		}
+	}
+	return false
 }
 
 // parseCalendarFilters is like ParseFilters but excludes view-specific params.

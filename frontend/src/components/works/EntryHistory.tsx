@@ -66,7 +66,28 @@ export default function EntryHistory({ slug, recordId, fields }: Props) {
           </div>
           {change.operation === 'update' && (
             <div className="mt-2 space-y-1">
-              {Object.entries(change.diff).map(([key, val]) => (
+              {/* Status change highlight */}
+              {change.diff._status_change && (
+                <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-1.5">
+                  <span className="text-xs font-medium">상태 변경:</span>
+                  <span
+                    className="inline-block rounded px-2 py-0.5 text-xs font-medium text-white"
+                    style={{ backgroundColor: (change.diff._status_change as Record<string, unknown>).from_color as string ?? '#6b7280' }}
+                  >
+                    {(change.diff._status_change as Record<string, unknown>).from as string}
+                  </span>
+                  <span className="text-xs">→</span>
+                  <span
+                    className="inline-block rounded px-2 py-0.5 text-xs font-medium text-white"
+                    style={{ backgroundColor: (change.diff._status_change as Record<string, unknown>).to_color as string ?? '#6b7280' }}
+                  >
+                    {(change.diff._status_change as Record<string, unknown>).to as string}
+                  </span>
+                </div>
+              )}
+              {Object.entries(change.diff)
+                .filter(([key]) => key !== '_status_change' && key !== '_status')
+                .map(([key, val]) => (
                 <div key={key} className="text-xs">
                   <span className="font-medium">{fieldLabel(fields, key)}</span>:{' '}
                   <span className="text-muted-foreground">{formatValue(val.old)}</span>

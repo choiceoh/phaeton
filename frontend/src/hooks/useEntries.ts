@@ -544,6 +544,7 @@ export interface AvailableTransition {
   label: string
   to_status: string
   to_color: string
+  allowed_user_names?: string[]
 }
 
 export interface TransitionsResult {

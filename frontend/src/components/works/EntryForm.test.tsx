@@ -335,8 +335,8 @@ describe('EntryForm', () => {
         { id: 's3', process_id: 'p1', name: '완료', color: '#10b981', sort_order: 2, is_initial: false },
       ],
       transitions: [
-        { id: 't1', process_id: 'p1', from_status_id: 's1', to_status_id: 's2', label: '처리 시작', allowed_roles: [] },
-        { id: 't2', process_id: 'p1', from_status_id: 's2', to_status_id: 's3', label: '완료 처리', allowed_roles: ['director'] },
+        { id: 't1', process_id: 'p1', from_status_id: 's1', to_status_id: 's2', label: '처리 시작', allowed_roles: [], allowed_user_ids: [] },
+        { id: 't2', process_id: 'p1', from_status_id: 's2', to_status_id: 's3', label: '완료 처리', allowed_roles: ['director'], allowed_user_ids: [] },
       ],
     }
 
@@ -377,7 +377,7 @@ describe('EntryForm', () => {
         process: {
           ...process,
           transitions: [
-            { id: 't2', process_id: 'p1', from_status_id: 's2', to_status_id: 's3', label: '완료 처리', allowed_roles: ['pm'] },
+            { id: 't2', process_id: 'p1', from_status_id: 's2', to_status_id: 's3', label: '완료 처리', allowed_roles: ['pm'], allowed_user_ids: [] },
           ],
         },
         collectionId: 'c1-restricted',

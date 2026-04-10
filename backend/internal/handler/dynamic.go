@@ -516,7 +516,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		if currentStatus != nil {
 			fromStatus = *currentStatus
 		}
-		if err := h.validateStatusTransition(col.ID, fromStatus, newStatusStr, user.Role); err != nil {
+		if err := h.validateStatusTransition(col.ID, fromStatus, newStatusStr, user.Role, user.UserID); err != nil {
 			handleErr(w, r, err)
 			return
 		}
@@ -589,6 +589,32 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Record change history.
 	diff := computeDiff(oldRow, records[0], fields)
+
+	// Detect status change early (used for both history enrichment and events).
+	oldStatus, _ := oldRow["_status"].(string)
+	newStatus, _ := records[0]["_status"].(string)
+	statusChanged := oldStatus != "" && newStatus != "" && newStatus != oldStatus
+
+	// Enrich diff with status change metadata for prominent history display.
+	if statusChanged {
+		sc := map[string]any{
+			"from":  oldStatus,
+			"to":    newStatus,
+			"actor": user.Name,
+		}
+		if proc, ok := h.cache.ProcessByCollectionID(col.ID); ok {
+			for _, s := range proc.Statuses {
+				if s.Name == oldStatus {
+					sc["from_color"] = s.Color
+				}
+				if s.Name == newStatus {
+					sc["to_color"] = s.Color
+				}
+			}
+		}
+		diff["_status_change"] = sc
+	}
+
 	if len(diff) > 0 {
 		recordChange(r.Context(), h.pool, col.ID, id, user.UserID, user.Name, "update", diff)
 	}
@@ -610,14 +636,17 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		OldRecord:      oldRow,
 		NewRecord:      records[0],
 	}
-	// Detect status change.
-	if oldStatus, _ := oldRow["_status"].(string); oldStatus != "" {
-		if newStatus, _ := records[0]["_status"].(string); newStatus != "" && newStatus != oldStatus {
-			ev.StatusFrom = oldStatus
-			ev.StatusTo = newStatus
-		}
+	if statusChanged {
+		ev.StatusFrom = oldStatus
+		ev.StatusTo = newStatus
 	}
 	h.bus.Publish(r.Context(), ev)
+	// Publish a separate EventStateChange so notification/automation subscribers fire.
+	if ev.StatusFrom != "" && ev.StatusTo != "" {
+		stateEv := ev
+		stateEv.Type = events.EventStateChange
+		h.bus.Publish(r.Context(), stateEv)
+	}
 
 	writeJSON(w, http.StatusOK, records[0])
 }
@@ -1592,8 +1621,8 @@ func (h *DynHandler) initialStatusName(collectionID string) string {
 	return ""
 }
 
-// validateStatusTransition checks if a status transition is allowed for the given user role.
-func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus, userRole string) error {
+// validateStatusTransition checks if a status transition is allowed for the given user role and user ID.
+func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus, userRole, userID string) error {
 	p, ok := h.cache.ProcessByCollectionID(collectionID)
 	if !ok || !p.IsEnabled {
 		return fmt.Errorf("%w: 이 업무에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
@@ -1616,17 +1645,23 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 
 	for _, t := range p.Transitions {
 		if t.FromStatusID == fromID && t.ToStatusID == toID {
-			// If allowed_roles is empty, any role can perform the transition.
-			if len(t.AllowedRoles) == 0 {
+			// If both allowed_roles and allowed_user_ids are empty, any user can perform the transition.
+			if len(t.AllowedRoles) == 0 && len(t.AllowedUserIDs) == 0 {
 				return nil
 			}
+			// Check if user matches either role OR user ID.
 			for _, r := range t.AllowedRoles {
 				if r == userRole {
 					return nil
 				}
 			}
-			return fmt.Errorf("%w: 역할 %q은(는) %q → %q 상태 이동을 수행할 수 없습니다",
-				schema.ErrInvalidInput, userRole, fromStatus, toStatus)
+			for _, uid := range t.AllowedUserIDs {
+				if uid == userID {
+					return nil
+				}
+			}
+			return fmt.Errorf("%w: %q → %q 상태 이동 권한이 없습니다",
+				schema.ErrInvalidInput, fromStatus, toStatus)
 		}
 	}
 
