@@ -204,7 +204,7 @@ export default function AppViewPage() {
       f.q = searchText
     }
     return Object.keys(f).length > 0 ? f : undefined
-  }, [filterConditions, searchText, collection])
+  }, [filterConditions, searchText])
 
   const {
     data: list,
@@ -454,7 +454,7 @@ export default function AppViewPage() {
       ) : null,
     })
     return cols
-  }, [collection, process, processVisible])
+  }, [collection, process, processVisible, canManage])
 
   // Build fieldMeta map for type-specific inline editors.
   const fieldMeta = useMemo<Record<string, FieldMeta>>(() => {
@@ -909,7 +909,10 @@ export default function AppViewPage() {
       onSuccess: () => {
         setDeleteId(null)
         if (deletedRow) {
-          const { id: _id, _version: _v, created_at: _ca, updated_at: _ua, _optimistic: _o, ...rest } = deletedRow as Record<string, unknown>
+          const excludeKeys = new Set(['id', '_version', 'created_at', 'updated_at', '_optimistic'])
+          const rest = Object.fromEntries(
+            Object.entries(deletedRow as Record<string, unknown>).filter(([k]) => !excludeKeys.has(k)),
+          )
           undoToast.push(
             '삭제되었습니다',
             () => { createEntry.mutate(rest) },
