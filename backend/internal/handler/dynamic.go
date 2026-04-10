@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/choiceoh/phaeton/backend/internal/formula"
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
@@ -821,6 +822,195 @@ func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []stri
 	return cols, placeholders, args
 }
 
+// --- FormulaPreview ---
+
+// FormulaPreview validates a formula expression and returns sample results.
+// POST /api/data/{slug}/formula-preview
+// Body: { "expression": "price * quantity", "result_type": "number" }
+func (h *DynHandler) FormulaPreview(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	col, fields, ok := h.resolveCollection(w, slug)
+	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_view") {
+		return
+	}
+
+	var body struct {
+		Expression string `json:"expression"`
+		ResultType string `json:"result_type"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	slugMap := buildSlugMap(fields)
+	sqlExpr, refs, err := formula.Parse(body.Expression, slugMap)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"valid":   false,
+			"error":   err.Error(),
+			"sql":     "",
+			"refs":    []string{},
+			"samples": []any{},
+		})
+		return
+	}
+
+	// Fetch up to 5 sample rows to show computed values.
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	sampleSQL := fmt.Sprintf("SELECT (%s) AS result FROM %s WHERE deleted_at IS NULL LIMIT 5", sqlExpr, qTable)
+
+	rows, err := h.pool.Query(r.Context(), sampleSQL)
+	var samples []any
+	if err == nil {
+		for rows.Next() {
+			vals, e := rows.Values()
+			if e != nil {
+				break
+			}
+			if len(vals) > 0 {
+				samples = append(samples, normalizeValue(vals[0]))
+			}
+		}
+		rows.Close()
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"valid":   true,
+		"error":   "",
+		"sql":     sqlExpr,
+		"refs":    refs,
+		"samples": samples,
+	})
+}
+
+// --- BatchUpdate ---
+
+// BatchUpdate applies partial updates to multiple rows in a single transaction.
+// Body: { "updates": [{ "id": "uuid", "fields": { "col": value, ... } }, ...] }
+func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	col, fields, ok := h.resolveCollection(w, slug)
+	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_edit") {
+		return
+	}
+
+	var body struct {
+		Updates []struct {
+			ID     string         `json:"id"`
+			Fields map[string]any `json:"fields"`
+		} `json:"updates"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(body.Updates) == 0 {
+		writeError(w, http.StatusBadRequest, "empty batch payload")
+		return
+	}
+	if len(body.Updates) > 1000 {
+		writeError(w, http.StatusBadRequest, "batch payload too large (max 1000)")
+		return
+	}
+
+	// Validate all payloads up front.
+	for i, u := range body.Updates {
+		if u.ID == "" {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("updates[%d]: id is required", i))
+			return
+		}
+		if err := validatePayload(r.Context(), h.pool, h.cache, u.Fields, fields, false); err != nil {
+			handleErr(w, r, fmt.Errorf("updates[%d]: %w", i, err))
+			return
+		}
+	}
+
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	procEnabled := h.hasProcessEnabled(col.ID)
+	selectCols := buildSelectCols(fields, procEnabled)
+	user, _ := middleware.GetUser(r.Context())
+
+	type changeMeta struct {
+		recordID string
+		diff     map[string]any
+	}
+
+	updated := make([]map[string]any, 0, len(body.Updates))
+	changes := make([]changeMeta, 0, len(body.Updates))
+
+	for i, u := range body.Updates {
+		sets := []string{`"updated_at" = now()`}
+		args := []any{}
+		idx := 1
+		for _, f := range fields {
+			if f.FieldType.IsLayout() || f.FieldType == schema.FieldAutonumber {
+				continue
+			}
+			v, exists := u.Fields[f.Slug]
+			if !exists {
+				continue
+			}
+			sets = append(sets, fmt.Sprintf("%q = $%d", f.Slug, idx))
+			args = append(args, coerceValue(v, f.FieldType))
+			idx++
+		}
+
+		if len(sets) == 1 {
+			continue
+		}
+
+		args = append(args, u.ID)
+		sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL RETURNING %s",
+			qTable, strings.Join(sets, ", "), idx, selectCols)
+
+		rows, err := tx.Query(r.Context(), sql, args...)
+		if err != nil {
+			handleErr(w, r, fmt.Errorf("updates[%d]: %w", i, err))
+			return
+		}
+		recs, err := collectRows(rows)
+		rows.Close()
+		if err != nil {
+			handleErr(w, r, fmt.Errorf("updates[%d]: %w", i, err))
+			return
+		}
+		if len(recs) > 0 {
+			updated = append(updated, recs[0])
+			diff := make(map[string]any)
+			for k, v := range u.Fields {
+				diff[k] = map[string]any{"new": v}
+			}
+			changes = append(changes, changeMeta{recordID: u.ID, diff: diff})
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		handleErr(w, r, err)
+		return
+	}
+
+	// Record change history after successful commit.
+	for _, c := range changes {
+		recordChange(r.Context(), h.pool, col.ID, c.recordID, user.UserID, user.Name, "update", c.diff)
+	}
+
+	writeJSON(w, http.StatusOK, updated)
+}
+
 // --- Delete (soft) ---
 
 func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -960,8 +1150,15 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 
 func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 	cols := []string{`"id"`}
+	slugMap := buildSlugMap(fields)
 	for _, f := range fields {
 		if f.FieldType.IsLayout() {
+			continue
+		}
+		if f.FieldType.IsVirtual() {
+			if expr := formulaExpr(f, slugMap); expr != "" {
+				cols = append(cols, fmt.Sprintf(`(%s) AS %q`, expr, f.Slug))
+			}
 			continue
 		}
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
@@ -978,8 +1175,15 @@ func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 // row scanner sees the same field names.
 func qualifySelectCols(fields []schema.Field, prefix string, hasStatus ...bool) string {
 	cols := []string{fmt.Sprintf(`%s.%q AS %q`, prefix, "id", "id")}
+	slugMap := buildSlugMap(fields)
 	for _, f := range fields {
 		if f.FieldType.IsLayout() {
+			continue
+		}
+		if f.FieldType.IsVirtual() {
+			if expr := formulaExpr(f, slugMap); expr != "" {
+				cols = append(cols, fmt.Sprintf(`(%s) AS %q`, expr, f.Slug))
+			}
 			continue
 		}
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
@@ -991,6 +1195,31 @@ func qualifySelectCols(fields []schema.Field, prefix string, hasStatus ...bool) 
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, "_status", "_status"))
 	}
 	return strings.Join(cols, ", ")
+}
+
+// buildSlugMap creates a set of valid field slugs for formula parsing.
+func buildSlugMap(fields []schema.Field) map[string]bool {
+	m := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		if !f.FieldType.IsLayout() && !f.FieldType.IsVirtual() {
+			m[f.Slug] = true
+		}
+	}
+	return m
+}
+
+// formulaExpr parses a formula field's expression and returns a safe SQL fragment.
+// Returns empty string on parse error (field is silently omitted from SELECT).
+func formulaExpr(f schema.Field, slugMap map[string]bool) string {
+	opts, err := schema.ExtractFormulaOptions(f.Options)
+	if err != nil || opts == nil || opts.Expression == "" {
+		return ""
+	}
+	sql, _, err := formula.Parse(opts.Expression, slugMap)
+	if err != nil {
+		return ""
+	}
+	return sql
 }
 
 // collectRows uses pgx.RowToMap and normalizes types.

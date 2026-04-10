@@ -83,7 +83,7 @@ func run() int {
 
 	// AI client (local vLLM).
 	aiClient := ai.NewClient()
-	aiHandler := handler.NewAIHandler(aiClient)
+	aiHandler := handler.NewAIHandler(aiClient, store)
 
 	// Event bus + notification subscriber.
 	bus := events.NewBus()
@@ -266,6 +266,8 @@ func buildRouter(
 				r.Use(middleware.RequireRole("director", "pm", "engineer"))
 				r.Post("/{slug}", dynH.Create)
 				r.Post("/{slug}/bulk", dynH.BulkCreate)
+				r.Post("/{slug}/formula-preview", dynH.FormulaPreview)
+				r.Patch("/{slug}/batch", dynH.BatchUpdate)
 				r.Delete("/{slug}/bulk", dynH.BulkDelete)
 				r.Post("/{slug}/import", dynH.ImportCSV)
 				r.Patch("/{slug}/{id}", dynH.Update)
@@ -289,6 +291,7 @@ func buildRouter(
 
 		// AI endpoints.
 		r.Post("/api/ai/build-collection", aiH.BuildCollection)
+		r.Post("/api/ai/generate-slug", aiH.GenerateSlug)
 
 		// Notifications
 		r.Get("/api/notifications", notifH.List)

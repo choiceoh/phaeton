@@ -348,8 +348,8 @@ func (e *Engine) AddField(ctx context.Context, collectionID string, req *schema.
 
 	var ddlUp, ddlDown []string
 
-	// Layout fields produce no DDL.
-	if !f.FieldType.IsLayout() {
+	// Layout and virtual (formula) fields produce no DDL.
+	if !f.FieldType.IsLayout() && !f.FieldType.IsVirtual() {
 		ddlUp, ddlDown = GenerateAddColumn(col.Slug, f)
 		if err := execStmts(ctx, tx, ddlUp); err != nil {
 			return schema.Field{}, nil, fmt.Errorf("exec add column: %w", err)
@@ -406,6 +406,11 @@ func (e *Engine) AlterField(ctx context.Context, fieldID string, req *schema.Upd
 		// Block layout ↔ non-layout conversion.
 		if old.FieldType.IsLayout() != req.FieldType.IsLayout() {
 			return nil, fmt.Errorf("%w: cannot convert between layout and data field types",
+				schema.ErrInvalidInput)
+		}
+		// Block virtual ↔ non-virtual conversion.
+		if old.FieldType.IsVirtual() != req.FieldType.IsVirtual() {
+			return nil, fmt.Errorf("%w: cannot convert between formula and data field types",
 				schema.ErrInvalidInput)
 		}
 		allowed, conditional := CheckCompat(old.FieldType, *req.FieldType)
@@ -511,11 +516,11 @@ func (e *Engine) PreviewDropField(ctx context.Context, fieldID string) (Preview,
 		return Preview{}, fmt.Errorf("collection %s: %w", f.CollectionID, schema.ErrNotFound)
 	}
 
-	// Layout fields have no data — always safe to drop.
-	if f.FieldType.IsLayout() {
+	// Layout and virtual (formula) fields have no data — always safe to drop.
+	if f.FieldType.IsLayout() || f.FieldType.IsVirtual() {
 		return Preview{
 			SafetyLevel: Safe,
-			Description: fmt.Sprintf("레이아웃 필드 %s.%s 삭제", col.Slug, f.Slug),
+			Description: fmt.Sprintf("레이아웃/수식 필드 %s.%s 삭제", col.Slug, f.Slug),
 		}, nil
 	}
 
@@ -555,8 +560,8 @@ func (e *Engine) DropField(ctx context.Context, fieldID string) error {
 
 	var ddlUp, ddlDown []string
 
-	// Layout fields have no DB column — just delete the meta row.
-	if f.FieldType.IsLayout() {
+	// Layout and virtual fields have no DB column — just delete the meta row.
+	if f.FieldType.IsLayout() || f.FieldType.IsVirtual() {
 		// no DDL needed
 	} else if f.Relation != nil && f.Relation.RelationType == schema.RelManyToMany {
 		// Many-to-many fields are backed by a junction table, not a column on the owner table.

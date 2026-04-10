@@ -29,7 +29,7 @@ const OTHER_DATA: PaletteEntry[] = [
   { icon: FIELD_TYPE_ICONS.file, label: FIELD_TYPE_LABELS.file, type: 'file' },
 ]
 
-const ADVANCED_ORDER: FieldType[] = ['boolean', 'json', 'autonumber']
+const ADVANCED_ORDER: FieldType[] = ['boolean', 'json', 'autonumber', 'formula']
 
 const LAYOUT_ORDER: FieldType[] = ['label', 'line', 'spacer']
 
