@@ -43,6 +43,6 @@ func main() {
 	if err := seed.Run(ctx, engine, cache); err != nil {
 		log.Fatal("seed collections:", err)
 	}
-	fmt.Fprintln(os.Stderr, "✓ preset collections (projects, milestones, staff)")
+	fmt.Fprintln(os.Stderr, "✓ preset collections seeded")
 	fmt.Fprintln(os.Stderr, "seed complete")
 }

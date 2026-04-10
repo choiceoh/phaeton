@@ -29,6 +29,11 @@ func Presets() []Preset {
 		milestonesPreset(),
 		staffPreset(),
 		documentsPreset(),
+		customersPreset(),
+		inventoryPreset(),
+		requestsPreset(),
+		meetingsPreset(),
+		expensesPreset(),
 	}
 }
 
