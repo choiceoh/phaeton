@@ -30,7 +30,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   relation: '연결',
   user: '사용자',
   file: '파일',
-  json: 'JSON 데이터',
+  json: 'json',
   autonumber: '자동 번호',
   formula: '수식',
   lookup: '참조값',
