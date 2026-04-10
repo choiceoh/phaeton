@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, Outlet, useNavigate } from 'react-router'
 
 import LoadingState from '@/components/common/LoadingState'
+import NotificationBell from '@/components/common/NotificationBell'
 import { Button } from '@/components/ui/button'
 import { useCurrentUser, useLogout } from '@/hooks/useAuth'
 import { ROLE_LABELS } from '@/lib/constants'
@@ -44,6 +45,7 @@ export default function RootLayout() {
           )}
         </div>
         <div className="flex items-center gap-3 text-sm text-stone-500">
+          <NotificationBell />
           <Link to="/profile" className="hover:text-stone-900">
             {user.name} ({ROLE_LABELS[user.role] || user.role})
           </Link>

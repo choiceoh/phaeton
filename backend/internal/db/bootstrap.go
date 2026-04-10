@@ -180,7 +180,90 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 	}
 
-	for _, stmt := range stmts {
+	// --- comments ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.comments (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID NOT NULL,
+			record_id       UUID NOT NULL,
+			user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+			user_name       VARCHAR(255) NOT NULL,
+			body            TEXT NOT NULL,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_comments_lookup ON _meta.comments(collection_id, record_id)`,
+	)
+
+	// --- notifications ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.notifications (
+			id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id             UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+			type                VARCHAR(31) NOT NULL,
+			title               VARCHAR(255) NOT NULL,
+			body                TEXT,
+			ref_collection_id   UUID,
+			ref_record_id       UUID,
+			is_read             BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_user ON _meta.notifications(user_id, is_read) WHERE is_read = FALSE`,
+	)
+
+	// --- collection members (app-level access control) ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.collection_members (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID NOT NULL REFERENCES _meta.collections(id) ON DELETE CASCADE,
+			user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+			role            VARCHAR(15) NOT NULL DEFAULT 'viewer',
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE(collection_id, user_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_collection_members_user ON _meta.collection_members(user_id)`,
+	)
+
+	// --- record change history ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _history.record_changes (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID NOT NULL,
+			record_id       UUID NOT NULL,
+			user_id         UUID,
+			user_name       VARCHAR(255),
+			operation       VARCHAR(15) NOT NULL,
+			diff            JSONB NOT NULL DEFAULT '{}',
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_record_changes_lookup ON _history.record_changes(collection_id, record_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_record_changes_time ON _history.record_changes(created_at DESC)`,
+	)
+
+	// --- saved views ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.saved_views (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID NOT NULL REFERENCES _meta.collections(id) ON DELETE CASCADE,
+			name            VARCHAR(255) NOT NULL,
+			filter_config   JSONB NOT NULL DEFAULT '{}',
+			sort_config     VARCHAR(255) NOT NULL DEFAULT '',
+			visible_fields  JSONB,
+			is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+			is_public       BOOLEAN NOT NULL DEFAULT TRUE,
+			created_by      UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_saved_views_collection ON _meta.saved_views(collection_id)`,
+	)
+
+	// --- incremental schema evolution (safe for existing deployments) ---
+	alters := []string{
+		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS process_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+	}
+
+	for _, stmt := range append(stmts, alters...) {
 		if _, err := tx.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("bootstrap exec: %w", err)
 		}

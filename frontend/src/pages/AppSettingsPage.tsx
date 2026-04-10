@@ -26,6 +26,7 @@ import {
   useDeleteCollection,
   useDeleteField,
 } from '@/hooks/useCollections'
+import { useMembers, useAddMember, useRemoveMember } from '@/hooks/useMembers'
 import { formatError } from '@/lib/api'
 import { FIELD_TYPE_LABELS } from '@/lib/constants'
 import type { CreateFieldIn, FieldType } from '@/lib/types'
@@ -43,7 +44,12 @@ export default function AppSettingsPage() {
   const addField = useAddField(appId ?? '')
   const deleteField = useDeleteField()
   const deleteCollection = useDeleteCollection()
+  const { data: members } = useMembers(appId)
+  const addMember = useAddMember(appId ?? '')
+  const removeMember = useRemoveMember(appId ?? '')
 
+  const [newMemberUserId, setNewMemberUserId] = useState('')
+  const [newMemberRole, setNewMemberRole] = useState('viewer')
   const [newFieldOpen, setNewFieldOpen] = useState(false)
   const [newField, setNewField] = useState<Partial<CreateFieldIn>>({
     field_type: 'text',
@@ -265,6 +271,77 @@ export default function AppSettingsPage() {
                 프로세스 설정
               </Button>
             </Link>
+          </section>
+        </RoleGate>
+
+        <RoleGate roles={['director']}>
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">멤버 ({members?.length ?? 0})</h2>
+            <div className="space-y-2">
+              {members?.map((m) => (
+                <Card key={m.id} className="flex items-center justify-between p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{m.user_name || m.user_email}</span>
+                    <Badge variant="secondary">{m.role}</Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      removeMember.mutate(m.user_id, {
+                        onSuccess: () => toast.success('멤버가 제거되었습니다'),
+                        onError: (err) => toast.error(formatError(err)),
+                      })
+                    }}
+                  >
+                    제거
+                  </Button>
+                </Card>
+              ))}
+            </div>
+            <Card className="mt-3 p-4">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Label>사용자 ID</Label>
+                  <Input
+                    value={newMemberUserId}
+                    onChange={(e) => setNewMemberUserId(e.target.value)}
+                    placeholder="UUID"
+                  />
+                </div>
+                <div>
+                  <Label>역할</Label>
+                  <Select value={newMemberRole} onValueChange={(v) => v && setNewMemberRole(v)}>
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="owner">소유자</SelectItem>
+                      <SelectItem value="editor">편집자</SelectItem>
+                      <SelectItem value="viewer">열람자</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={!newMemberUserId.trim() || addMember.isPending}
+                  onClick={() => {
+                    addMember.mutate(
+                      { user_id: newMemberUserId.trim(), role: newMemberRole },
+                      {
+                        onSuccess: () => {
+                          toast.success('멤버가 추가되었습니다')
+                          setNewMemberUserId('')
+                        },
+                        onError: (err) => toast.error(formatError(err)),
+                      },
+                    )
+                  }}
+                >
+                  추가
+                </Button>
+              </div>
+            </Card>
           </section>
         </RoleGate>
 

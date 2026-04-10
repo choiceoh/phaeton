@@ -33,6 +33,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
@@ -42,10 +49,11 @@ import {
   useUpdateEntry,
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
+import { useViews, useCreateView, useDeleteView } from '@/hooks/useViews'
 import { formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
-import type { FilterCondition } from '@/lib/types'
+import type { FilterCondition, View } from '@/lib/types'
 
 const DEFAULT_LIMIT = 20
 
@@ -72,6 +80,11 @@ export default function AppViewPage() {
   // Process toggle (frontend-only)
   const [processVisible, setProcessVisible] = useState(true)
 
+  // Saved views state
+  const [activeView, setActiveView] = useState<View | null>(null)
+  const [savingView, setSavingView] = useState(false)
+  const [newViewName, setNewViewName] = useState('')
+
   const { data: collection, isLoading: colLoading, isError: colError, error: colErr } =
     useCollection(appId)
   const { data: process } = useProcess(appId)
@@ -82,6 +95,10 @@ export default function AppViewPage() {
     const rels = collection.fields.filter((f) => f.field_type === 'relation').map((f) => f.slug)
     return rels.length > 0 ? rels.join(',') : undefined
   }, [collection])
+
+  const { data: savedViews } = useViews(collection?.id)
+  const createView = useCreateView(collection?.id ?? '')
+  const deleteView = useDeleteView(collection?.id ?? '')
 
   // Build sort param from either column header sorting or sort panel.
   const sortParam = useMemo(() => {
@@ -559,6 +576,97 @@ export default function AppViewPage() {
         }
       />
 
+      {/* Saved views bar */}
+      {savedViews && savedViews.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <Select
+            value={activeView?.id ?? '__none__'}
+            onValueChange={(v) => {
+              if (v === '__none__') {
+                setActiveView(null)
+                setPage(1)
+              } else {
+                const view = savedViews.find((sv) => sv.id === v)
+                if (view) {
+                  setActiveView(view)
+                  setPage(1)
+                }
+              }
+            }}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="뷰 선택" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">전체 (기본)</SelectItem>
+              {savedViews.map((v) => (
+                <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {activeView && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                deleteView.mutate(activeView.id, {
+                  onSuccess: () => {
+                    toast.success('뷰가 삭제되었습니다')
+                    setActiveView(null)
+                  },
+                  onError: (err) => toast.error(formatError(err)),
+                })
+              }}
+            >
+              삭제
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Save current view */}
+      {!savingView ? (
+        <div className="mb-4">
+          <Button variant="outline" size="sm" onClick={() => setSavingView(true)}>
+            현재 뷰 저장
+          </Button>
+        </div>
+      ) : (
+        <div className="mb-4 flex items-center gap-2">
+          <Input
+            className="w-48"
+            placeholder="뷰 이름"
+            value={newViewName}
+            onChange={(e) => setNewViewName(e.target.value)}
+          />
+          <Button
+            size="sm"
+            disabled={!newViewName.trim() || createView.isPending}
+            onClick={() => {
+              createView.mutate(
+                {
+                  name: newViewName.trim(),
+                  view_type: 'list',
+                },
+                {
+                  onSuccess: () => {
+                    toast.success('뷰가 저장되었습니다')
+                    setNewViewName('')
+                    setSavingView(false)
+                  },
+                  onError: (err) => toast.error(formatError(err)),
+                },
+              )
+            }}
+          >
+            저장
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => { setSavingView(false); setNewViewName('') }}>
+            취소
+          </Button>
+        </div>
+      )}
+
       {entriesLoading && !list && <LoadingState />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
@@ -625,6 +733,7 @@ export default function AppViewPage() {
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         fields={collection.fields ?? []}
+        slug={collection.slug}
         initialData={editEntry}
         onSubmit={handleSubmit}
         submitting={createEntry.isPending || updateEntry.isPending}

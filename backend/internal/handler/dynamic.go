@@ -84,13 +84,26 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	where += " " + searchClause
 	args = append(args, searchArgs...)
 
+	// Row-level security: viewers only see their own rows.
+	rlsClause := ""
+	colRole := middleware.GetCollectionRole(r.Context())
+	if colRole == "viewer" {
+		user, _ := middleware.GetUser(r.Context())
+		args = append(args, user.UserID)
+		if len(sortJoins) > 0 {
+			rlsClause = fmt.Sprintf(" AND %s.created_by = $%d", qTable, len(args))
+		} else {
+			rlsClause = fmt.Sprintf(" AND created_by = $%d", len(args))
+		}
+	}
+
 	// Count total. Sort joins are not needed for COUNT, but we use the same
 	// WHERE prefix to keep parameter ordering consistent.
 	deletedClause := "deleted_at IS NULL"
 	if len(sortJoins) > 0 {
 		deletedClause = fmt.Sprintf("%s.deleted_at IS NULL", qTable)
 	}
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s %s", qTable, deletedClause, where)
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s %s%s", qTable, deletedClause, where, rlsClause)
 	var total int64
 	if err := h.pool.QueryRow(r.Context(), countSQL, args...).Scan(&total); err != nil {
 		handleErr(w, r, err)
@@ -113,8 +126,8 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	} else {
 		selectCols = buildSelectCols(fields, procEnabled)
 	}
-	dataSQL := fmt.Sprintf("SELECT %s FROM %s%s WHERE %s %s %s LIMIT %d OFFSET %d",
-		selectCols, qTable, joinClause, deletedClause, where, orderBy, limit, offset)
+	dataSQL := fmt.Sprintf("SELECT %s FROM %s%s WHERE %s %s%s %s LIMIT %d OFFSET %d",
+		selectCols, qTable, joinClause, deletedClause, where, rlsClause, orderBy, limit, offset)
 
 	rows, err := h.pool.Query(r.Context(), dataSQL, args...)
 	if err != nil {
@@ -158,9 +171,19 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	procEnabled := h.hasProcessEnabled(col.ID)
 	selectCols := buildSelectCols(fields, procEnabled)
-	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1 AND deleted_at IS NULL", selectCols, qTable)
 
-	rows, err := h.pool.Query(r.Context(), sql, id)
+	// RLS: viewer can only see own rows.
+	getArgs := []any{id}
+	rlsGet := ""
+	if colRole := middleware.GetCollectionRole(r.Context()); colRole == "viewer" {
+		user, _ := middleware.GetUser(r.Context())
+		getArgs = append(getArgs, user.UserID)
+		rlsGet = fmt.Sprintf(" AND created_by = $%d", len(getArgs))
+	}
+
+	getSQL := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1 AND deleted_at IS NULL%s", selectCols, qTable, rlsGet)
+
+	rows, err := h.pool.Query(r.Context(), getSQL, getArgs...)
 	if err != nil {
 		handleErr(w, r, err)
 		return
@@ -283,6 +306,14 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "insert returned no rows")
 		return
 	}
+
+	// Record change history.
+	user, _ := middleware.GetUser(r.Context())
+	if recID, ok := records[0]["id"].(string); ok {
+		diff := createDiff(records[0], fields)
+		recordChange(r.Context(), h.pool, col.ID, recID, user.UserID, user.Name, "create", diff)
+	}
+
 	writeJSON(w, http.StatusCreated, records[0])
 }
 
@@ -308,6 +339,23 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := validatePayload(r.Context(), h.pool, h.cache, body, fields, false); err != nil {
 		handleErr(w, r, err)
 		return
+	}
+
+	// Fetch current row for transition check and change history.
+	oldRow, err := h.fetchRow(r.Context(), col, fields, id)
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+
+	user, _ := middleware.GetUser(r.Context())
+
+	// Process transition check: if collection has process_enabled, enforce transition rules.
+	if col.ProcessEnabled {
+		if err := checkTransitions(oldRow, body, fields, user.Role); err != nil {
+			handleErr(w, r, err)
+			return
+		}
 	}
 
 	sets := []string{`"updated_at" = now()`}
@@ -384,6 +432,13 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "record not found")
 		return
 	}
+
+	// Record change history.
+	diff := computeDiff(oldRow, records[0], fields)
+	if len(diff) > 0 {
+		recordChange(r.Context(), h.pool, col.ID, id, user.UserID, user.Name, "update", diff)
+	}
+
 	writeJSON(w, http.StatusOK, records[0])
 }
 
@@ -791,6 +846,11 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "record not found")
 		return
 	}
+
+	// Record change history.
+	user, _ := middleware.GetUser(r.Context())
+	recordChange(r.Context(), h.pool, col.ID, id, user.UserID, user.Name, "delete", map[string]any{"_deleted": true})
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
@@ -1153,6 +1213,26 @@ func (h *DynHandler) expandUserFields(ctx context.Context, records []map[string]
 			}
 		}
 	}
+}
+
+// fetchRow loads a single record by ID. Used for pre-update comparisons.
+func (h *DynHandler) fetchRow(ctx context.Context, col schema.Collection, fields []schema.Field, id string) (map[string]any, error) {
+	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
+	selectCols := buildSelectCols(fields)
+	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1 AND deleted_at IS NULL", selectCols, qTable)
+	rows, err := h.pool.Query(ctx, sql, id)
+	if err != nil {
+		return nil, err
+	}
+	records, err := collectRows(rows)
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, fmt.Errorf("record %s: %w", id, schema.ErrNotFound)
+	}
+	return records[0], nil
 }
 
 // coerceValue ensures the Go value matches what pgx expects for the column type.

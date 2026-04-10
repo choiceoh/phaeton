@@ -37,6 +37,29 @@ export const queryKeys = {
       [...queryKeys.process.all, collectionId] as const,
   },
 
+  comments: {
+    all: ['comments'] as const,
+    list: (slug: string, recordId: string) =>
+      [...queryKeys.comments.all, slug, recordId] as const,
+  },
+
+  notifications: {
+    all: ['notifications'] as const,
+    list: () => [...queryKeys.notifications.all, 'list'] as const,
+    unreadCount: () => [...queryKeys.notifications.all, 'unread'] as const,
+  },
+
+  members: {
+    all: ['members'] as const,
+    list: (collectionId: string) => [...queryKeys.members.all, 'list', collectionId] as const,
+  },
+
+  history: {
+    all: ['history'] as const,
+    record: (slug: string, recordId: string) =>
+      [...queryKeys.history.all, slug, recordId] as const,
+  },
+
   views: {
     all: ['views'] as const,
     list: (collectionId: string) =>

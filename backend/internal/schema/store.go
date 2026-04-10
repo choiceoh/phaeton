@@ -25,7 +25,7 @@ func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // ---------- Collection ----------
 
-const colCols = `id, slug, label, description, icon, is_system, sort_order, access_config, created_at, updated_at, created_by`
+const colCols = `id, slug, label, description, icon, is_system, process_enabled, sort_order, access_config, created_at, updated_at, created_by`
 
 func scanCollection(row pgx.Row) (Collection, error) {
 	var (
@@ -38,7 +38,7 @@ func scanCollection(row pgx.Row) (Collection, error) {
 	)
 	err := row.Scan(
 		&id, &c.Slug, &c.Label, &desc, &icon,
-		&c.IsSystem, &c.SortOrder, &acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy,
+		&c.IsSystem, &c.ProcessEnabled, &c.SortOrder, &acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy,
 	)
 	if err != nil {
 		return Collection{}, err
@@ -174,6 +174,11 @@ func (s *Store) UpdateCollection(ctx context.Context, id string, req *UpdateColl
 	if req.SortOrder != nil {
 		sets = append(sets, fmt.Sprintf("sort_order = $%d", argIdx))
 		args = append(args, *req.SortOrder)
+		argIdx++
+	}
+	if req.ProcessEnabled != nil {
+		sets = append(sets, fmt.Sprintf("process_enabled = $%d", argIdx))
+		args = append(args, *req.ProcessEnabled)
 		argIdx++
 	}
 	if req.AccessConfig != nil {

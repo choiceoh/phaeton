@@ -172,6 +172,48 @@ func ExtractChoices(raw json.RawMessage) ([]string, error) {
 	return opts.Choices, nil
 }
 
+// ExtractTransitions returns the transitions from a select field's options, if any.
+func ExtractTransitions(raw json.RawMessage) ([]Transition, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var opts SelectOptionsWithTransitions
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		return nil, err
+	}
+	return opts.Transitions, nil
+}
+
+// ValidateTransitions checks that transitions reference valid choices and roles.
+func ValidateTransitions(transitions []Transition, choices []string) error {
+	choiceSet := make(map[string]bool, len(choices))
+	for _, c := range choices {
+		choiceSet[c] = true
+	}
+	validRoles := map[string]bool{"director": true, "pm": true, "engineer": true, "viewer": true}
+
+	for i, t := range transitions {
+		if !choiceSet[t.From] {
+			return fmt.Errorf("%w: transitions[%d].from %q is not a valid choice", ErrInvalidInput, i, t.From)
+		}
+		if !choiceSet[t.To] {
+			return fmt.Errorf("%w: transitions[%d].to %q is not a valid choice", ErrInvalidInput, i, t.To)
+		}
+		if t.From == t.To {
+			return fmt.Errorf("%w: transitions[%d] from and to cannot be the same", ErrInvalidInput, i)
+		}
+		if len(t.AllowedRoles) == 0 {
+			return fmt.Errorf("%w: transitions[%d].allowed_roles cannot be empty", ErrInvalidInput, i)
+		}
+		for _, role := range t.AllowedRoles {
+			if !validRoles[role] {
+				return fmt.Errorf("%w: transitions[%d] invalid role %q", ErrInvalidInput, i, role)
+			}
+		}
+	}
+	return nil
+}
+
 func validateSelectOptions(raw json.RawMessage) error {
 	choices, err := ExtractChoices(raw)
 	if err != nil {
@@ -189,6 +231,17 @@ func validateSelectOptions(raw json.RawMessage) error {
 			return fmt.Errorf("%w: duplicate choice %q", ErrInvalidInput, c)
 		}
 		seen[c] = true
+	}
+
+	// Validate transitions if present.
+	transitions, err := ExtractTransitions(raw)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	if len(transitions) > 0 {
+		if err := ValidateTransitions(transitions, choices); err != nil {
+			return err
+		}
 	}
 	return nil
 }

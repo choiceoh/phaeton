@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/choiceoh/phaeton/backend/internal/db"
+	"github.com/choiceoh/phaeton/backend/internal/events"
 	"github.com/choiceoh/phaeton/backend/internal/handler"
 	"github.com/choiceoh/phaeton/backend/internal/infra/lifecycle"
 	"github.com/choiceoh/phaeton/backend/internal/infra/logging"
@@ -76,6 +77,14 @@ func run() int {
 	schemaHandler := handler.NewSchemaHandler(store, cache, migEngine)
 	dynHandler := handler.NewDynHandler(pool, cache)
 	viewHandler := handler.NewViewHandler(store)
+	historyHandler := handler.NewHistoryHandler(pool, cache)
+	memberHandler := handler.NewMemberHandler(pool)
+
+	// Event bus + notification subscriber.
+	bus := events.NewBus()
+	commentHandler := handler.NewCommentHandler(pool, cache, bus)
+	notifHandler := handler.NewNotificationHandler(pool)
+	handler.SubscribeNotifications(pool, bus)
 
 	// Login rate limiter: 5 failures / 15 minutes → 30 minute lockout.
 	loginLimiter := middleware.NewRateLimiter(5, 15*60*1000, 30*60*1000)
@@ -93,7 +102,7 @@ func run() int {
 	}
 
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, logger, loginLimiter, samlMiddleware)
+	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, historyHandler, memberHandler, commentHandler, notifHandler, logger, loginLimiter, samlMiddleware)
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -140,6 +149,10 @@ func buildRouter(
 	schemaH *handler.SchemaHandler,
 	dynH *handler.DynHandler,
 	viewH *handler.ViewHandler,
+	histH *handler.HistoryHandler,
+	memberH *handler.MemberHandler,
+	commentH *handler.CommentHandler,
+	notifH *handler.NotificationHandler,
 	logger *slog.Logger,
 	loginLimiter *middleware.RateLimiter,
 	samlMW *samlsp.Middleware,
@@ -221,6 +234,12 @@ func buildRouter(
 				r.Post("/migrations/rollback/{migrationId}", schemaH.RollbackMigration)
 			})
 
+			// Collection members
+			r.Get("/collections/{id}/members", memberH.List)
+			r.Post("/collections/{id}/members", memberH.Add)
+			r.Patch("/collections/{id}/members/{userId}", memberH.Update)
+			r.Delete("/collections/{id}/members/{userId}", memberH.Remove)
+
 			// Views: read/write for all authenticated users.
 			r.Get("/collections/{id}/views", viewH.ListViews)
 			r.Post("/collections/{id}/views", viewH.CreateView)
@@ -230,7 +249,7 @@ func buildRouter(
 
 		// Dynamic API — auto-generated CRUD for data tables.
 		r.Route("/api/data", func(r chi.Router) {
-			// Read: all authenticated users.
+			r.Use(middleware.CollectionAccess(pool))
 			r.Get("/{slug}", dynH.List)
 			r.Get("/{slug}/aggregate", dynH.Aggregate)
 			r.Get("/{slug}/export.csv", dynH.ExportCSV)
@@ -246,12 +265,27 @@ func buildRouter(
 				r.Patch("/{slug}/{id}", dynH.Update)
 				r.Delete("/{slug}/{id}", dynH.Delete)
 			})
+
+			// Record history
+			r.Get("/{slug}/{id}/history", histH.ListRecordHistory)
+
+			// Comments
+			r.Get("/{slug}/{id}/comments", commentH.List)
+			r.Post("/{slug}/{id}/comments", commentH.Create)
+			r.Patch("/{slug}/{id}/comments/{commentId}", commentH.Update)
+			r.Delete("/{slug}/{id}/comments/{commentId}", commentH.Delete)
 		})
 
 		// File upload & download (authenticated).
 		r.Post("/api/upload", handler.Upload)
 		r.Handle("/api/uploads/*", http.StripPrefix("/api/uploads/",
 			http.FileServer(http.Dir("uploads"))))
+
+		// Notifications
+		r.Get("/api/notifications", notifH.List)
+		r.Get("/api/notifications/unread-count", notifH.UnreadCount)
+		r.Patch("/api/notifications/{id}/read", notifH.MarkRead)
+		r.Post("/api/notifications/read-all", notifH.MarkAllRead)
 	})
 
 	// SPA static files — catch-all for non-API routes.

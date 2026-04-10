@@ -116,6 +116,21 @@ func extractToken(r *http.Request) string {
 	return ""
 }
 
+// --- Collection-level role (set by CollectionAccess middleware) ---
+
+const collectionRoleKey contextKey = "collectionRole"
+
+// SetCollectionRole stores the collection-level role in the request context.
+func SetCollectionRole(ctx context.Context, role string) context.Context {
+	return context.WithValue(ctx, collectionRoleKey, role)
+}
+
+// GetCollectionRole returns the collection-level role from context ("owner", "editor", "viewer", or "").
+func GetCollectionRole(ctx context.Context) string {
+	r, _ := ctx.Value(collectionRoleKey).(string)
+	return r
+}
+
 func jwtSecret() string {
 	if s := os.Getenv("JWT_SECRET"); s != "" {
 		return s

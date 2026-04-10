@@ -98,18 +98,19 @@ func (ac AccessConfig) AllowsRole(operation, role string) bool {
 
 // Collection is the top-level schema unit (maps to a PostgreSQL table in the data schema).
 type Collection struct {
-	ID           string       `json:"id"`
-	Slug         string       `json:"slug"`
-	Label        string       `json:"label"`
-	Description  string       `json:"description,omitempty"`
-	Icon         string       `json:"icon,omitempty"`
-	IsSystem     bool         `json:"is_system"`
-	SortOrder    int          `json:"sort_order"`
-	AccessConfig AccessConfig `json:"access_config"`
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
-	CreatedBy    string       `json:"created_by,omitempty"`
-	Fields       []Field      `json:"fields,omitempty"`
+	ID             string       `json:"id"`
+	Slug           string       `json:"slug"`
+	Label          string       `json:"label"`
+	Description    string       `json:"description,omitempty"`
+	Icon           string       `json:"icon,omitempty"`
+	IsSystem       bool         `json:"is_system"`
+	ProcessEnabled bool         `json:"process_enabled"`
+	SortOrder      int          `json:"sort_order"`
+	AccessConfig   AccessConfig `json:"access_config"`
+	CreatedAt      time.Time    `json:"created_at"`
+	UpdatedAt      time.Time    `json:"updated_at"`
+	CreatedBy      string       `json:"created_by,omitempty"`
+	Fields         []Field      `json:"fields,omitempty"`
 }
 
 // Field defines a single column inside a collection.
@@ -141,6 +142,19 @@ type Relation struct {
 	RelationType       RelationType `json:"relation_type"`
 	JunctionTable      string       `json:"junction_table,omitempty"`
 	OnDelete           string       `json:"on_delete"`
+}
+
+// Transition defines a state transition in a process-enabled select field.
+type Transition struct {
+	From         string   `json:"from"`
+	To           string   `json:"to"`
+	AllowedRoles []string `json:"allowed_roles"`
+}
+
+// SelectOptionsWithTransitions extends SelectOptions with workflow transitions.
+type SelectOptionsWithTransitions struct {
+	Choices     []string     `json:"choices"`
+	Transitions []Transition `json:"transitions,omitempty"`
 }
 
 // --- pgtype UUID helpers (thin wrappers around pgutil) ---
@@ -195,11 +209,12 @@ type CreateRelIn struct {
 }
 
 type UpdateCollectionReq struct {
-	Label        *string       `json:"label,omitempty"`
-	Description  *string       `json:"description,omitempty"`
-	Icon         *string       `json:"icon,omitempty"`
-	SortOrder    *int          `json:"sort_order,omitempty"`
-	AccessConfig *AccessConfig `json:"access_config,omitempty"`
+	Label          *string       `json:"label,omitempty"`
+	Description    *string       `json:"description,omitempty"`
+	Icon           *string       `json:"icon,omitempty"`
+	SortOrder      *int          `json:"sort_order,omitempty"`
+	ProcessEnabled *bool         `json:"process_enabled,omitempty"`
+	AccessConfig   *AccessConfig `json:"access_config,omitempty"`
 }
 
 type UpdateFieldReq struct {

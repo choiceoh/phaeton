@@ -64,6 +64,7 @@ export interface Collection {
   description?: string
   icon?: string
   is_system: boolean
+  process_enabled: boolean
   sort_order: number
   access_config: AccessConfig
   created_at: string
@@ -219,6 +220,82 @@ export interface UpdateViewReq {
   config?: Record<string, unknown>
   sort_order?: number
   is_default?: boolean
+}
+
+// --- Comments ---
+
+export interface Comment {
+  id: string
+  collection_id: string
+  record_id: string
+  user_id: string
+  user_name: string
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+// --- Notifications ---
+
+export interface Notification {
+  id: string
+  user_id: string
+  type: 'comment' | 'state_change' | 'record_update'
+  title: string
+  body?: string
+  ref_collection_id?: string
+  ref_record_id?: string
+  is_read: boolean
+  created_at: string
+}
+
+// --- Collection members ---
+
+export interface CollectionMember {
+  id: string
+  collection_id: string
+  user_id: string
+  user_name?: string
+  user_email?: string
+  role: 'owner' | 'editor' | 'viewer'
+  created_at: string
+}
+
+// --- Process transitions ---
+
+export interface Transition {
+  from: string
+  to: string
+  allowed_roles: string[]
+}
+
+// --- Change history ---
+
+export interface RecordChange {
+  id: string
+  collection_id: string
+  record_id: string
+  user_id?: string
+  user_name?: string
+  operation: 'create' | 'update' | 'delete'
+  diff: Record<string, { old?: unknown, new?: unknown }>
+  created_at: string
+}
+
+// --- Saved views ---
+
+export interface SavedView {
+  id: string
+  collection_id: string
+  name: string
+  filter_config: Record<string, string>
+  sort_config: string
+  visible_fields?: string[]
+  is_default: boolean
+  is_public: boolean
+  created_by?: string
+  created_at: string
+  updated_at: string
 }
 
 // --- Envelope responses ---
