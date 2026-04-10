@@ -1,3 +1,16 @@
+/**
+ * CRUD hooks for collection (app) metadata.
+ *
+ * Each "collection" maps to a dynamically-created PostgreSQL table.
+ * These hooks manage the schema-level metadata (name, icon, fields),
+ * not the row data itself (see useEntries for that).
+ *
+ * Destructive mutations (delete collection, add/delete field) use a
+ * preview-then-confirm two-step pattern: the first call (confirm=false)
+ * returns a preview of what will be affected; the second call
+ * (confirm=true) executes the change and invalidates the cache.
+ */
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
@@ -6,6 +19,7 @@ import type { Collection, CreateCollectionReq, CreateFieldIn, Field } from '@/li
 
 // --- Reads ---
 
+/** Fetch the full list of collections the current user can access. */
 export function useCollections() {
   return useQuery({
     queryKey: queryKeys.collections.list(),
@@ -13,7 +27,11 @@ export function useCollections() {
   })
 }
 
-/** Fetch all collection counts in a single request (slug → row count). */
+/**
+ * Fetch row counts for all collections in a single bulk request.
+ * Returns a Record<slug, number>. Uses staleTime of 60s to avoid
+ * excessive refetching on the app list page.
+ */
 export function useCollectionCounts() {
   return useQuery({
     queryKey: [...queryKeys.collections.all, 'counts'],
@@ -22,6 +40,11 @@ export function useCollectionCounts() {
   })
 }
 
+/**
+ * Fetch a single collection by ID, including its fields array.
+ * Disabled when `id` is undefined (`enabled: !!id`) to support
+ * conditional rendering before the ID is known.
+ */
 export function useCollection(id: string | undefined) {
   return useQuery({
     queryKey: queryKeys.collections.detail(id ?? ''),
@@ -32,6 +55,11 @@ export function useCollection(id: string | undefined) {
 
 // --- Mutations ---
 
+/**
+ * Create a new collection. On success, optimistically appends the new
+ * collection to the list cache, then invalidates to pull the canonical
+ * version (which includes server-computed fields like slug).
+ */
 export function useCreateCollection() {
   const qc = useQueryClient()
   return useMutation({
@@ -49,6 +77,7 @@ export function useCreateCollection() {
   })
 }
 
+/** Update collection metadata (label, icon, access config, etc.). */
 export function useUpdateCollection(id: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -61,6 +90,11 @@ export function useUpdateCollection(id: string) {
   })
 }
 
+/**
+ * Delete a collection (DROP TABLE). Two-step pattern:
+ * 1. `confirm: false` — returns a preview of affected data (row count, relations).
+ * 2. `confirm: true` — executes the deletion and invalidates collection caches.
+ */
 export function useDeleteCollection() {
   const qc = useQueryClient()
   return useMutation({
@@ -76,6 +110,11 @@ export function useDeleteCollection() {
   })
 }
 
+/**
+ * Add a field (ALTER TABLE ADD COLUMN). Two-step preview/confirm pattern:
+ * first call returns a preview; second call with `confirm: true` commits
+ * the DDL change and invalidates detail + list caches.
+ */
 export function useAddField(collectionId: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -93,6 +132,10 @@ export function useAddField(collectionId: string) {
   })
 }
 
+/**
+ * Delete a field (ALTER TABLE DROP COLUMN). Same two-step preview/confirm
+ * pattern as useDeleteCollection — preview shows affected data before commit.
+ */
 export function useDeleteField() {
   const qc = useQueryClient()
   return useMutation({

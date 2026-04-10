@@ -1,3 +1,18 @@
+/**
+ * EntryForm — Dynamic form that renders input fields based on collection schema.
+ *
+ * Uses plain useState instead of react-hook-form because the form shape is
+ * determined at runtime by the collection's field definitions.
+ *
+ * Features:
+ * - Field-type-specific inputs (text, select, relation combobox, date picker, etc.)
+ * - Server-side validation with inline error display
+ * - Client-side required/range validation on blur
+ * - Autosave mode (1.5s debounce) for edit forms
+ * - Similar records detection for duplicate prevention
+ * - Process workflow transition buttons
+ * - Layout fields (label, line, spacer) for visual grouping
+ */
 import { Check } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'

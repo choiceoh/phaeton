@@ -1,3 +1,23 @@
+/**
+ * GanttView — Timeline chart for entries with start/end date fields.
+ *
+ * Data is fetched server-side via useGanttView, which returns GanttRow[]
+ * containing pre-computed date ranges and display metadata.
+ *
+ * Layout:
+ * - Left panel: collapsible entry list with title and date summary.
+ * - Right panel: SVG-based timeline with day-width columns and horizontal bars.
+ * - Synchronized scrolling: vertical scroll is linked between the list and
+ *   the timeline; horizontal scroll controls the visible date range.
+ *
+ * Key behaviors:
+ * - Bar coloring: deterministic hue assignment by assignee or status field
+ *   using a hash function over the field value string.
+ * - Drag-to-resize: grab bar edges to adjust start/end dates, firing
+ *   onEntryUpdate with the new date range.
+ * - Responsive: left panel auto-collapses on small screens (<640px).
+ * - Today marker: vertical red line indicating the current date.
+ */
 import { GanttChart, Loader2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 

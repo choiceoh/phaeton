@@ -17,6 +17,11 @@ func evaluateConditions(conditions []Condition, record map[string]any) bool {
 	return true
 }
 
+// evaluateOne tests a single condition against a record. It handles each operator:
+//   - is_empty / is_not_empty: check field existence and empty string
+//   - equals / not_equals: string comparison after stringify
+//   - contains: substring match
+//   - gt / lt: numeric comparison with fallback to lexicographic order
 func evaluateOne(c Condition, record map[string]any) bool {
 	val, exists := record[c.FieldSlug]
 
@@ -76,6 +81,8 @@ func matchTriggerConfig(a Automation, statusFrom, statusTo, formSlug string) boo
 	}
 }
 
+// stringify converts any value to its string representation for comparison.
+// nil becomes "", json.Number uses its string form, and everything else uses fmt.Sprintf.
 func stringify(v any) string {
 	if v == nil {
 		return ""
@@ -90,6 +97,9 @@ func stringify(v any) string {
 	}
 }
 
+// compareNumeric attempts to parse both strings as float64 and returns -1, 0, or 1.
+// If either value cannot be parsed as a number, it falls back to lexicographic
+// string comparison via strings.Compare.
 func compareNumeric(a, b string) int {
 	var fa, fb float64
 	if _, err := fmt.Sscanf(a, "%f", &fa); err != nil {

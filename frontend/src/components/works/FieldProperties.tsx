@@ -1,3 +1,16 @@
+/**
+ * FieldProperties — Schema editor panel for configuring a single field.
+ *
+ * Rendered in the right panel of AppBuilderPage when a field is selected.
+ *
+ * Features:
+ * - Field type selector with sensible defaults per type
+ * - Type-specific option panels (select choices, relation config, formula editor, etc.)
+ * - AI-powered slug generation from the field label via useAIGenerateSlug
+ * - Collision detection: appends _2, _3, ... suffix when a slug already exists
+ * - Basic / Advanced tab split to avoid overwhelming new users
+ * - Lookup and rollup configuration with relation field chaining
+ */
 import { useCallback, useRef, useState } from 'react'
 import { GripVertical, Loader2, Plus, X } from 'lucide-react'
 

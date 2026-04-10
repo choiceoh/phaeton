@@ -1,3 +1,18 @@
+/**
+ * DataTable — Spreadsheet-like grid built on @tanstack/react-table.
+ *
+ * Features:
+ * - Keyboard navigation (arrows, Tab, Enter, Ctrl+A) via useGridNavigation
+ * - Inline cell editing with type-specific editors (GridCell)
+ * - Column visibility, pinning (left/right), resizing
+ * - Row selection with checkboxes
+ * - Copy/paste (Ctrl+C/V) via clipboard.ts
+ * - Cell save state visual feedback (spinner -> checkmark)
+ * - Summary row with aggregate functions (sum/avg/min/max/count)
+ * - Pagination with page size selector
+ *
+ * This is a controlled component: parent owns data, sort, filter, and pagination state.
+ */
 import {
   type Column,
   type ColumnDef,

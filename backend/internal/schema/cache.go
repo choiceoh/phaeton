@@ -81,7 +81,9 @@ func (c *Cache) Invalidate(ctx context.Context) error {
 	return c.Load(ctx)
 }
 
-// ReloadCollection refreshes a single collection (and its fields) from the DB.
+// ReloadCollection fetches a single collection (plus its fields and relations) from
+// the database and updates both the byID and bySlug maps in the cache.
+// If the collection's slug changed, the stale slug mapping is removed first.
 // Used after CreateCollection, AddField, AlterField, DropField — any change that
 // modifies exactly one collection.
 func (c *Cache) ReloadCollection(ctx context.Context, id string) error {
@@ -102,8 +104,8 @@ func (c *Cache) ReloadCollection(ctx context.Context, id string) error {
 	return nil
 }
 
-// RemoveCollection deletes a single collection from the cache.
-// Used after DropCollection.
+// RemoveCollection deletes a single collection from both the byID and bySlug maps.
+// Used after DropCollection. Safe to call with an ID that is not in the cache.
 func (c *Cache) RemoveCollection(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -134,8 +136,9 @@ func (c *Cache) Collections() []Collection {
 	return out
 }
 
-// CollectionByID returns a collection by its UUID.
-// The returned Collection is a copy — mutating it does not affect the cache.
+// CollectionByID returns a collection by its UUID, along with a boolean indicating
+// whether the collection was found. The returned Collection is a value copy —
+// mutating it does not affect the cache.
 func (c *Cache) CollectionByID(id string) (Collection, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -143,7 +146,8 @@ func (c *Cache) CollectionByID(id string) (Collection, bool) {
 	return col, ok
 }
 
-// CollectionBySlug returns a collection by its slug.
+// CollectionBySlug returns a collection by its slug (e.g. "permit_checklist").
+// The returned Collection is a value copy.
 func (c *Cache) CollectionBySlug(slug string) (Collection, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -178,7 +182,8 @@ func (c *Cache) Fields(collectionID string) []Field {
 	return out
 }
 
-// ProcessByCollectionID returns the process config for a collection.
+// ProcessByCollectionID returns the process config (워크플로우 설정) for a collection.
+// Returns false if the collection has no process configured or process is not enabled.
 func (c *Cache) ProcessByCollectionID(collectionID string) (Process, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -186,7 +191,9 @@ func (c *Cache) ProcessByCollectionID(collectionID string) (Process, bool) {
 	return p, ok
 }
 
-// ReloadProcess refreshes the process config for a single collection from the DB.
+// ReloadProcess fetches the process config for a single collection from the DB
+// and updates the cache. If the collection has no process (empty ID), the entry
+// is removed from the cache instead.
 func (c *Cache) ReloadProcess(ctx context.Context, collectionID string) error {
 	proc, err := c.store.GetProcess(ctx, collectionID)
 	if err != nil {
@@ -203,7 +210,7 @@ func (c *Cache) ReloadProcess(ctx context.Context, collectionID string) error {
 	return nil
 }
 
-// RemoveProcess deletes a process from the cache.
+// RemoveProcess deletes a process entry from the cache by collection ID.
 func (c *Cache) RemoveProcess(collectionID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

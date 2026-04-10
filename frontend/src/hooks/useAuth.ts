@@ -1,3 +1,11 @@
+/**
+ * Authentication hooks.
+ *
+ * Auth state is managed via React Query with aggressive caching
+ * (staleTime: Infinity) since the current user rarely changes mid-session.
+ * Login seeds the cache to avoid an extra /api/auth/me fetch.
+ */
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 
@@ -15,8 +23,12 @@ interface LoginResponse {
   user: User
 }
 
-// useCurrentUser fetches /api/auth/me. Cached aggressively — only refetched
-// when explicitly invalidated (login, logout, role change).
+/**
+ * Fetch the current authenticated user from GET /api/auth/me.
+ *
+ * - `staleTime: Infinity` — cached until explicitly invalidated (login/logout/role change).
+ * - `retry: false` — a 401 means the user is unauthenticated; retrying would be pointless.
+ */
 export function useCurrentUser() {
   return useQuery({
     queryKey: queryKeys.auth.me(),
@@ -26,6 +38,11 @@ export function useCurrentUser() {
   })
 }
 
+/**
+ * Login mutation. On success, seeds the React Query cache with the returned
+ * user via `setQueryData` so the app can render immediately without an
+ * extra GET /api/auth/me round-trip.
+ */
 export function useLogin() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -41,6 +58,10 @@ export function useLogin() {
   })
 }
 
+/**
+ * Logout mutation. Clears all auth-related query cache via `removeQueries`
+ * and redirects to /login.
+ */
 export function useLogout() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -54,14 +75,19 @@ export function useLogout() {
   })
 }
 
-// hasRole returns true if the user has at least one of the listed roles.
+/**
+ * Check if a user holds at least one of the given roles.
+ * Returns false for null/undefined users (unauthenticated state).
+ */
 export function hasRole(user: User | null | undefined, roles: User['role'][]): boolean {
   if (!user) return false
   return roles.includes(user.role)
 }
 
-// canManageCollection returns true if the user is director/pm or is the
-// creator of the given collection.
+/**
+ * Check if a user can manage (edit/delete) a collection.
+ * Allowed when the user is a director or PM, or is the collection's creator.
+ */
 export function canManageCollection(
   user: User | null | undefined,
   collectionCreatedBy?: string,

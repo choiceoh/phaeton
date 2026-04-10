@@ -1,3 +1,19 @@
+/**
+ * CRUD hooks for dynamic table entries (records).
+ *
+ * This is the most complex hook file — it handles:
+ * - Paginated listing with keepPreviousData for smooth pagination
+ * - Optimistic updates for all mutations (create/update/delete/bulk)
+ * - View-specific server-computed endpoints (calendar, kanban, gantt)
+ * - Aggregation queries (totals, group-by)
+ * - Duplicate detection (similar records)
+ *
+ * Optimistic update pattern:
+ * 1. onMutate: cancel in-flight queries, snapshot cache, apply update
+ * 2. onError: revert to snapshot
+ * 3. onSettled: invalidate to refetch canonical data
+ */
+
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
@@ -41,9 +57,14 @@ function buildQueryString(params: EntryListParams): string {
   return qs ? `?${qs}` : ''
 }
 
-// useEntries fetches a paginated list of entries for a collection.
-// Pagination + filter changes use keepPreviousData so the table doesn't
-// flash empty between pages.
+/**
+ * Fetch a paginated list of entries for a collection.
+ *
+ * Uses `keepPreviousData` so the table retains its content while
+ * navigating between pages or changing filters (no empty flash).
+ * The query key includes the full params object, so each unique
+ * page/sort/filter combination is cached independently.
+ */
 export function useEntries(slug: string | undefined, params: EntryListParams = {}) {
   return useQuery({
     queryKey: queryKeys.entries.list(slug ?? '', params as Record<string, unknown>),
@@ -54,6 +75,11 @@ export function useEntries(slug: string | undefined, params: EntryListParams = {
   })
 }
 
+/**
+ * Fetch a single entry by ID. The optional `expand` parameter is a
+ * comma-separated list of relation field slugs to resolve inline,
+ * avoiding N+1 fetches for related records.
+ */
 export function useEntry(slug: string | undefined, id: string | undefined, expand?: string) {
   return useQuery({
     queryKey: queryKeys.entries.detail(slug ?? '', id ?? ''),
@@ -65,6 +91,14 @@ export function useEntry(slug: string | undefined, id: string | undefined, expan
   })
 }
 
+/**
+ * Create a new entry with optimistic insert.
+ *
+ * A temporary entry with a `__temp_` prefixed ID and `_optimistic: true`
+ * flag is prepended to all cached list queries for the collection.
+ * The flag lets the UI render optimistic rows with a subtle visual
+ * distinction (e.g., skeleton shimmer) until the server confirms.
+ */
 export function useCreateEntry(slug: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -104,6 +138,14 @@ export function useCreateEntry(slug: string) {
   })
 }
 
+/**
+ * Update a single entry with optimistic patch.
+ *
+ * Uses `setQueriesData` (plural) to simultaneously update ALL cached
+ * list queries for the collection (every page/filter variant), ensuring
+ * the change is visible regardless of which list view is mounted.
+ * Also updates the detail cache on server success.
+ */
 export function useUpdateEntry(slug: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -145,6 +187,13 @@ export function useUpdateEntry(slug: string) {
   })
 }
 
+/**
+ * Batch-update multiple entries in a single request.
+ *
+ * Builds a `Map<id, fields>` for O(1) lookup during the optimistic
+ * cache update, then patches all matching rows across every cached
+ * list query for the collection.
+ */
 export function useBatchUpdateEntry(slug: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -185,6 +234,7 @@ export function useBatchUpdateEntry(slug: string) {
   })
 }
 
+/** Delete a single entry with optimistic removal from all cached lists. */
 export function useDeleteEntry(slug: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -221,6 +271,11 @@ export function useDeleteEntry(slug: string) {
   })
 }
 
+/**
+ * Bulk-delete multiple entries. Converts the ID array to a `Set` for
+ * O(1) membership testing during the optimistic filter pass, which
+ * matters when deleting from large cached lists.
+ */
 export function useBulkDeleteEntries(slug: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -258,8 +313,11 @@ export function useBulkDeleteEntries(slug: string) {
   })
 }
 
-// useTotals fetches server-side totals (sum/avg/min/max/count) for all numeric
-// fields in a collection. Supports same filter params as List.
+/**
+ * Fetch server-side totals (sum/avg/min/max/count) for all numeric fields.
+ * Accepts the same filter params as the list endpoint so totals reflect
+ * the currently filtered view. Stale after 30s.
+ */
 export function useTotals(slug: string | undefined, filters?: Record<string, string>) {
   const search = new URLSearchParams()
   if (filters) {
@@ -278,7 +336,11 @@ export function useTotals(slug: string | undefined, filters?: Record<string, str
   })
 }
 
-// useAggregate fetches aggregate data (count/sum/avg/min/max) for a collection.
+/**
+ * Fetch grouped aggregate data (count/sum/avg/min/max) for a collection.
+ * Params: `group` (field to group by), `fn` (aggregate function),
+ * `field` (numeric field to aggregate). Used by chart panels and dashboards.
+ */
 export function useAggregate(
   slug: string | undefined,
   params: { group: string; fn?: string; field?: string },
@@ -296,7 +358,7 @@ export function useAggregate(
   })
 }
 
-// useCollectionCount fetches the total entry count for a collection (lightweight).
+/** Fetch the total entry count for a single collection (lightweight, limit=1 request). */
 export function useCollectionCount(slug: string | undefined) {
   return useQuery({
     queryKey: [...queryKeys.entries.all, slug, 'count'],
@@ -309,6 +371,7 @@ export function useCollectionCount(slug: string | undefined) {
   })
 }
 
+/** Fetch server-computed default values for new entries (e.g., auto-increment, current user). */
 export function useEntryDefaults(slug: string | undefined) {
   return useQuery({
     queryKey: [...queryKeys.entries.all, slug, 'defaults'],
@@ -324,6 +387,11 @@ export interface SimilarRecord {
   created_at: string
 }
 
+/**
+ * Search for similar/duplicate records based on a text query.
+ * Only enabled when the query is at least 2 characters. Used by the
+ * duplicate-detection UI during entry creation.
+ */
 export function useSimilarRecords(slug: string | undefined, query: string, field?: string) {
   return useQuery({
     queryKey: [...queryKeys.entries.all, slug, 'similar', query, field],
@@ -365,6 +433,11 @@ export interface CalendarViewResult {
   weeks: CalendarWeek[]
 }
 
+/**
+ * Fetch server-computed calendar layout for a collection.
+ * The server returns pre-computed week rows with multi-day span
+ * placement (track assignments), avoiding complex client-side layout math.
+ */
 export function useCalendarView(
   slug: string | undefined,
   params: {
@@ -419,6 +492,11 @@ export interface GanttViewResult {
   months: GanttMonth[]
 }
 
+/**
+ * Fetch server-computed Gantt chart data. Returns rows with start/end
+ * dates, progress percentages, and dependency links, plus a global
+ * date range and month grid for the timeline header.
+ */
 export function useGanttView(
   slug: string | undefined,
   params: {
@@ -457,6 +535,11 @@ export interface KanbanViewResult {
   allowed_moves?: Record<string, string[]>
 }
 
+/**
+ * Fetch server-computed Kanban board data grouped by a status/select field.
+ * Returns columns with their entries pre-sorted, plus `allowed_moves` when
+ * a process workflow is active (restricts drag-and-drop between columns).
+ */
 export function useKanbanView(
   slug: string | undefined,
   params: {
@@ -519,6 +602,7 @@ export interface GlobalCalendarEvent {
   collectionIcon?: string
 }
 
+/** Fetch calendar events across all collections for the global calendar dashboard. */
 export function useGlobalCalendarEvents(year: number, month: number) {
   return useQuery({
     queryKey: ['globalCalendar', year, month],
@@ -554,6 +638,7 @@ export interface RelationshipGraphResult {
   edges: GraphEdge[]
 }
 
+/** Fetch the collection relationship graph (nodes + edges) for visualization. */
 export function useRelationshipGraphAPI() {
   return useQuery({
     queryKey: ['relationshipGraph'],
@@ -579,6 +664,12 @@ export interface TransitionsResult {
   allowed_moves: Record<string, string[]>
 }
 
+/**
+ * Fetch available workflow transitions for an entry's current status.
+ * Returns the list of valid next statuses and any user restrictions
+ * (allowed_user_names). Used by the status change UI to show only
+ * permitted transitions.
+ */
 export function useAvailableTransitions(
   collectionId: string | undefined,
   status?: string,

@@ -1,9 +1,15 @@
-// Typed fetch client that:
-// - unwraps the {data, error} envelope returned by /api/* endpoints
-// - converts non-2xx responses into ApiError (never raw Error or string)
-// - redirects to /login on 401 (single source of truth for auth fallout)
-// - is the only place that touches global window state — everything else is
-//   pure functions on top of this.
+/**
+ * HTTP client for the Topworks API.
+ *
+ * All endpoints return a `{data, error}` envelope. This client unwraps the
+ * envelope: successful calls return `T` directly, failures throw `ApiError`.
+ *
+ * Features:
+ * - Automatic 401 -> redirect to /login (single auth fallback)
+ * - 30s request timeout via AbortSignal
+ * - credentials: 'include' for httpOnly cookie auth
+ * - Type-safe generic methods: get<T>, post<T>, patch<T>, put<T>, del<T>
+ */
 
 import { ApiError } from './errors'
 
@@ -34,6 +40,12 @@ interface RequestOptions {
   timeout?: number
 }
 
+/**
+ * Core fetch wrapper. Sends a JSON request, unwraps the `{data}` envelope,
+ * and throws {@link ApiError} on non-2xx responses. On 401, redirects the
+ * browser to /login. Returns `undefined` for 204 No Content. When `opts.raw`
+ * is true, skips envelope unwrapping (used by `getList` for paginated responses).
+ */
 async function request<T>(
   method: string,
   path: string,
@@ -88,12 +100,17 @@ async function request<T>(
   return json as T
 }
 
+/** Response from a successful file upload. */
 export interface UploadResult {
   url: string
   name: string
   size: number
 }
 
+/**
+ * Upload a file via multipart/form-data to `/api/upload`.
+ * Does NOT set Content-Type manually — the browser adds the boundary automatically.
+ */
 async function uploadFile(file: File): Promise<UploadResult> {
   const form = new FormData()
   form.append('file', file)
@@ -120,7 +137,13 @@ async function uploadFile(file: File): Promise<UploadResult> {
 }
 
 export const api = {
+  /** GET a single resource; envelope-unwrapped to `T`. */
   get: <T>(path: string, opts?: RequestOptions) => request<T>('GET', path, undefined, opts),
+  /**
+   * GET a paginated list. Returns the full {@link ListEnvelope} with
+   * `data` (array), `total`, `page`, `limit`, and `total_pages`.
+   * Defaults `data` to `[]` if the server returns null.
+   */
   getList: <T>(path: string, opts?: RequestOptions) =>
     request<ListEnvelope<T>>('GET', path, undefined, { ...opts, raw: true }).then(
       (res) => ({ ...res, data: res.data ?? [] }),
@@ -132,5 +155,6 @@ export const api = {
   put: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>('PUT', path, body, opts),
   del: <T>(path: string, body?: unknown, opts?: RequestOptions) => request<T>('DELETE', path, body, opts),
+  /** Upload a file via multipart/form-data. Returns the stored URL, name, and size. */
   upload: uploadFile,
 }

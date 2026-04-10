@@ -43,6 +43,20 @@ func main() {
 	os.Exit(run())
 }
 
+// run initializes and starts the HTTP server. Initialization order:
+//  1. Logging (JSON in prod, colored console in dev)
+//  2. JWT_SECRET validation (required in prod)
+//  3. Database pool (pgxpool with configurable limits)
+//  4. Bootstrap (idempotent schema creation: auth, _meta, data schemas)
+//  5. Seed director (creates initial admin user if none exist)
+//  6. Schema layer (Store -> Cache.Load -> MigrationEngine)
+//  7. Event bus (in-process pub/sub)
+//  8. HTTP handlers (Schema, Dynamic, View, AI, etc.)
+//  9. Rate limiters (API: 60 req/s per user, Login: 5 failures -> 30min lockout)
+// 10. Optional integrations (SAML SP, Amaranth sync, email notifier)
+// 11. Automation (engine + scheduler subscribe to event bus)
+// 12. Router (chi with global + per-route middleware)
+// 13. HTTP server with graceful shutdown (lifecycle.RunWithSignals)
 func run() int {
 	// Logging: JSON in production, console otherwise.
 	isProd := os.Getenv("GO_ENV") == "production"
@@ -288,6 +302,18 @@ type routerConfig struct {
 	samlMW       *samlsp.Middleware
 }
 
+// buildRouter assembles the chi router with the following route groups:
+//   - /api/health, /metrics: public health check and Prometheus metrics
+//   - /api/auth/*: public login/logout + SAML endpoints
+//   - /api/hooks/*: public webhook receiver (HMAC-verified)
+//   - Protected group (RequireAuth + API rate limiter):
+//   - /api/auth/me: current user profile
+//   - /api/users, /api/subsidiaries, /api/departments: org management
+//   - /api/schema/*: collection/field/view/automation CRUD (role-gated)
+//   - /api/data/*: dynamic record CRUD with collection-level access control
+//   - /api/ai/*: AI-powered features (build, chat, formula, filter, etc.)
+//   - /api/notifications, /api/webhooks, /api/events: notifications + SSE
+//   - /*: SPA catch-all serving embedded static files with index.html fallback
 func buildRouter(cfg routerConfig) *chi.Mux {
 	r := chi.NewRouter()
 

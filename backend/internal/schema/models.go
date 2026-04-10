@@ -1,3 +1,16 @@
+// Package schema defines the meta-model for Topworks collections (apps).
+//
+// Each collection maps to a real PostgreSQL table in the "data" schema.
+// The meta-model (stored in _meta.collections, _meta.fields, _meta.relations)
+// describes the structure of these dynamic tables.
+//
+// Field types fall into three categories:
+//   - Regular fields: produce a DB column, support INSERT/UPDATE (text, number, date, select, relation, etc.)
+//   - Layout fields: schema-only, no DB column (label, line, spacer) — for form layout ordering
+//   - Computed fields: no DB column, calculated at query time (formula, lookup, rollup)
+//
+// Use NoColumn() to check whether a field type produces a DB column.
+// Use IsLayout() and IsComputed() for finer-grained checks.
 package schema
 
 import (
@@ -13,22 +26,22 @@ import (
 type FieldType string
 
 const (
-	FieldText        FieldType = "text"
-	FieldTextarea    FieldType = "textarea"
-	FieldNumber      FieldType = "number"
-	FieldInteger     FieldType = "integer"
-	FieldBoolean     FieldType = "boolean"
-	FieldDate        FieldType = "date"
-	FieldDatetime    FieldType = "datetime"
-	FieldTime        FieldType = "time"
-	FieldSelect      FieldType = "select"
-	FieldMultiselect FieldType = "multiselect"
-	FieldRelation    FieldType = "relation"
-	FieldUser        FieldType = "user"
-	FieldFile        FieldType = "file"
-	FieldJSON        FieldType = "json"
+	FieldText        FieldType = "text"        // Single-line text (VARCHAR-like).
+	FieldTextarea    FieldType = "textarea"    // Multi-line text (TEXT column).
+	FieldNumber      FieldType = "number"      // Decimal number (DOUBLE PRECISION).
+	FieldInteger     FieldType = "integer"     // Whole number (BIGINT).
+	FieldBoolean     FieldType = "boolean"     // True/false toggle (BOOLEAN).
+	FieldDate        FieldType = "date"        // Calendar date without time (DATE).
+	FieldDatetime    FieldType = "datetime"    // Timestamp with timezone (TIMESTAMPTZ).
+	FieldTime        FieldType = "time"        // Time of day without date (TIME).
+	FieldSelect      FieldType = "select"      // Single-choice dropdown; choices stored in Options JSON.
+	FieldMultiselect FieldType = "multiselect" // Multi-choice; stored as JSONB array.
+	FieldRelation    FieldType = "relation"    // Foreign key to another collection; see Relation struct.
+	FieldUser        FieldType = "user"        // Reference to a platform user (UUID FK to _meta.users).
+	FieldFile        FieldType = "file"        // File attachment; stores upload metadata as JSONB.
+	FieldJSON        FieldType = "json"        // Arbitrary JSON value (JSONB column).
 
-	FieldAutonumber  FieldType = "autonumber"
+	FieldAutonumber  FieldType = "autonumber"  // Auto-incrementing sequence; managed by the engine.
 	FieldTable       FieldType = "table"       // Inline repeating table stored as JSONB.
 	FieldSpreadsheet FieldType = "spreadsheet" // Excel-like spreadsheet stored as JSONB.
 
@@ -141,23 +154,25 @@ func (ac AccessConfig) AllowsRole(operation, role string) bool {
 }
 
 // Collection is the top-level schema unit (maps to a PostgreSQL table in the data schema).
+// The actual data table lives at wd_<slug> in the public schema.
 type Collection struct {
 	ID             string       `json:"id"`
-	Slug           string       `json:"slug"`
-	Label          string       `json:"label"`
+	Slug           string       `json:"slug"`           // Immutable identifier; becomes the DB table suffix (wd_<slug>).
+	Label          string       `json:"label"`           // Human-readable display name shown in UI.
 	Description    string       `json:"description,omitempty"`
 	Icon           string       `json:"icon,omitempty"`
-	IsSystem       bool         `json:"is_system"`
-	ProcessEnabled bool         `json:"process_enabled"`
-	SortOrder      int          `json:"sort_order"`
-	AccessConfig   AccessConfig `json:"access_config"`
+	IsSystem       bool         `json:"is_system"`       // System collections (e.g. users, departments) cannot be deleted by end users.
+	ProcessEnabled bool         `json:"process_enabled"` // When true, entries have a _status column and follow a workflow (프로세스 관리).
+	SortOrder      int          `json:"sort_order"`      // Display ordering in the sidebar app list.
+	AccessConfig   AccessConfig `json:"access_config"`   // Role-based + row-level security configuration.
 	CreatedAt      time.Time    `json:"created_at"`
 	UpdatedAt      time.Time    `json:"updated_at"`
 	CreatedBy      string       `json:"created_by,omitempty"`
-	Fields         []Field      `json:"fields,omitempty"`
+	Fields         []Field      `json:"fields,omitempty"` // Populated by GetCollection / cache; empty for list queries.
 }
 
 // Field defines a single column inside a collection.
+// For layout and computed fields, no physical DB column exists — see NoColumn().
 type Field struct {
 	ID           string          `json:"id"`
 	CollectionID string          `json:"collection_id"`
@@ -168,24 +183,26 @@ type Field struct {
 	IsUnique     bool            `json:"is_unique"`
 	IsIndexed    bool            `json:"is_indexed"`
 	DefaultValue json.RawMessage `json:"default_value,omitempty"`
-	Options      json.RawMessage `json:"options,omitempty"`
-	Width        int16           `json:"width"`
-	Height       int16           `json:"height"`
+	Options      json.RawMessage `json:"options,omitempty"` // Type-specific config: choices for select, expression for formula, min/max for number, etc.
+	Width        int16           `json:"width"`             // Form layout grid width (1, 2, 3, or 6 columns out of 6).
+	Height       int16           `json:"height"`            // Form layout grid height (1, 2, or 3 rows).
 	SortOrder    int             `json:"sort_order"`
-	IsLayout     bool            `json:"is_layout"`
+	IsLayout     bool            `json:"is_layout"`         // True for label/line/spacer fields; denormalized from FieldType for query convenience.
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
-	Relation     *Relation       `json:"relation,omitempty"`
+	Relation     *Relation       `json:"relation,omitempty"` // Non-nil only when FieldType == FieldRelation.
 }
 
 // Relation describes how a relation-type field links to another collection.
+// For 1:1 and 1:N relations, the source collection holds a UUID FK column.
+// For M:N relations, a separate junction table stores the pairs (no FK column on either side).
 type Relation struct {
 	ID                 string       `json:"id"`
 	FieldID            string       `json:"field_id"`
 	TargetCollectionID string       `json:"target_collection_id"`
 	RelationType       RelationType `json:"relation_type"`
-	JunctionTable      string       `json:"junction_table,omitempty"`
-	OnDelete           string       `json:"on_delete"`
+	JunctionTable      string       `json:"junction_table,omitempty"` // Only set for M:N relations (M:N 관계에서만 사용되는 중간 테이블).
+	OnDelete           string       `json:"on_delete"`               // PostgreSQL ON DELETE action: CASCADE, SET NULL, RESTRICT, etc.
 }
 
 // Transition defines a state transition in a process-enabled select field.
@@ -221,7 +238,12 @@ func parseUUID(s string) (pgtype.UUID, error) {
 }
 
 // --- Request DTOs ---
+//
+// DTOs use pointer fields (*string, *bool) to distinguish "not provided" from zero-value
+// in partial-update requests. The CreatedBy field uses `json:"-"` because it is set
+// server-side by the handler from the JWT claims, never from client JSON.
 
+// CreateCollectionReq is the input for creating a new collection (app).
 type CreateCollectionReq struct {
 	Slug         string          `json:"slug"`
 	Label        string          `json:"label"`

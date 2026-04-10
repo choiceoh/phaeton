@@ -36,6 +36,21 @@ func NewDynHandler(pool *pgxpool.Pool, cache *schema.Cache, bus *events.Bus) *Dy
 
 // --- List ---
 
+// List returns a paginated, filtered, sorted list of records from a dynamic data
+// table. The full query pipeline is:
+//
+//  1. Resolve the collection from the schema cache by URL slug
+//  2. Check access: verify the authenticated user's role is allowed entry_view
+//  3. Parse pagination (page/limit), sort spec (with relation LEFT JOINs for
+//     dot-notation like "-subsidiary.name"), filters (JSON _filter or legacy
+//     query params), and text search (?q= across all text/textarea fields via
+//     GIN-indexed _tsv column)
+//  4. Build an RLS (row-level security) clause for viewer-role users based on
+//     the collection's rls_mode (creator/department/subsidiary/filter)
+//  5. Execute COUNT(*) for total, then a paginated SELECT with all clauses
+//  6. Post-processing: expand relations (?expand=), auto-expand user fields,
+//     resolve computed fields (formula/lookup/rollup), load M:N links, and
+//     optionally apply display formatting (?format=display)
 func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
@@ -255,6 +270,15 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // --- Create ---
 
+// Create inserts a new record into a dynamic data table. After validating the
+// payload against the collection's field definitions, it builds an INSERT
+// statement, auto-sets created_by from the authenticated user, and injects the
+// initial process status if the collection has an active workflow. M:N relation
+// values are separated and synced to their junction tables after the main INSERT.
+//
+// On success, the handler records a change history entry, resolves computed fields,
+// loads M:N links, and publishes an EventRecordCreate event to the automation bus
+// so that automation rules (e.g., notifications, webhooks) can fire.
 func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
@@ -408,6 +432,18 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // --- Update ---
 
+// Update performs a partial update on an existing record. It fetches the current
+// row for change history diffing and process transition validation, then builds
+// a dynamic UPDATE SET clause from only the provided fields. Key behaviors:
+//
+//   - Optimistic locking: if the request body includes _version, the WHERE clause
+//     checks it matches the current version; a mismatch returns 409 Conflict.
+//   - Process transitions: if the collection has process_enabled and _status is
+//     being changed, the transition is validated against allowed roles/users.
+//   - RLS: viewers can only update rows they created.
+//   - After commit: records a change history diff, resolves computed fields,
+//     syncs M:N junction tables, and publishes EventRecordUpdate (plus a
+//     separate EventStateChange if the status changed) for automation triggers.
 func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	id := chi.URLParam(r, "id")
@@ -1434,6 +1470,11 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 
 // --- Delete (soft) ---
 
+// Delete performs a soft delete on a record by setting its deleted_at timestamp
+// to now(). The record remains in the table but is excluded from all queries via
+// the standard "WHERE deleted_at IS NULL" filter. Viewers can only soft-delete
+// rows they created (RLS enforcement). A change history entry is recorded and an
+// EventRecordDelete event is published for automation triggers.
 func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	id := chi.URLParam(r, "id")
@@ -1488,8 +1529,11 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // --- helpers ---
 
-// checkAccess verifies the current user is allowed the given operation
-// on the collection's access_config. Returns false and writes a 403 if denied.
+// checkAccess verifies the current user is allowed the given operation (e.g.,
+// "entry_view", "entry_create", "entry_edit", "entry_delete") on the collection's
+// access_config. Directors always have full access. For other roles, it checks
+// the collection's AccessConfig.AllowsRole. Returns false and writes a 403
+// response if denied, so the caller can short-circuit.
 func (h *DynHandler) checkAccess(w http.ResponseWriter, r *http.Request, col schema.Collection, operation string) bool {
 	user, ok := middleware.GetUser(r.Context())
 	if !ok {
@@ -1611,6 +1655,9 @@ func resolveRLSValue(value string, user middleware.UserClaims) string {
 	}
 }
 
+// resolveCollection looks up a collection by its URL slug in the in-memory schema
+// cache and loads its field definitions. If the collection is not found, it writes
+// a 404 response and returns false so the caller can short-circuit.
 func (h *DynHandler) resolveCollection(w http.ResponseWriter, slug string) (schema.Collection, []schema.Field, bool) {
 	col, ok := h.cache.CollectionBySlug(slug)
 	if !ok {

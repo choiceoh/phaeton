@@ -1,4 +1,26 @@
-// Field types supported by the schema engine.
+/**
+ * Core domain types for the Topworks no-code app platform.
+ *
+ * Hierarchy: Collection → Field[] → Entry (row data)
+ * Each Collection maps to a real PostgreSQL table in the "data" schema.
+ *
+ * Field types fall into 3 categories:
+ * - Regular: produce a DB column (text, number, select, relation, etc.)
+ * - Layout: no DB column, form ordering only (label, line, spacer)
+ * - Computed: no DB column, calculated at query time (formula, lookup, rollup)
+ */
+
+/**
+ * All field types supported by the schema engine.
+ *
+ * Regular (produce a DB column): text, textarea, number, integer, boolean,
+ * date, datetime, time, select, multiselect, relation, user, file, json,
+ * autonumber, table, spreadsheet.
+ *
+ * Layout (form-only, no DB column): label, line, spacer.
+ *
+ * Computed (evaluated at query time, no DB column): formula, lookup, rollup.
+ */
 export type FieldType =
   | 'text'
   | 'textarea'
@@ -24,8 +46,10 @@ export type FieldType =
   | 'line'
   | 'spacer'
 
+/** Cardinality of a relation between two collections. */
 export type RelationType = 'one_to_one' | 'one_to_many' | 'many_to_many'
 
+/** FK metadata linking one collection's field to another collection's rows. */
 export interface Relation {
   id: string
   field_id: string
@@ -35,6 +59,16 @@ export interface Relation {
   on_delete: string
 }
 
+/**
+ * A single field (column) within a collection.
+ *
+ * - `slug` is the actual PostgreSQL column name (snake_case).
+ * - `options` is a JSON bag whose shape varies by `field_type`
+ *   (see {@link FieldOptionsMap} for per-type shapes).
+ * - `relation` is only populated when `field_type === 'relation'`.
+ * - `is_layout` is true for layout-only fields (label, line, spacer)
+ *   that do not produce a DB column.
+ */
 export interface Field {
   id: string
   collection_id: string
@@ -57,6 +91,7 @@ export interface Field {
 
 // --- Per-field-type option interfaces ---
 
+/** Base options shared by all field types (e.g. conditional visibility). */
 export interface CommonFieldOptions {
   visibility_rules?: { field_slug: string; operator: string; value?: string }[]
 }
@@ -148,6 +183,7 @@ export interface SpreadsheetFieldOptions extends CommonFieldOptions {
   merged_cells?: MergedCell[]
 }
 
+/** Maps each {@link FieldType} to its strongly-typed options interface. */
 export interface FieldOptionsMap {
   text: TextFieldOptions
   textarea: TextareaFieldOptions
@@ -177,6 +213,7 @@ export interface FieldOptionsMap {
 
 // --- Entry row (dynamic table row with known system columns) ---
 
+/** A related record expanded inline (e.g. relation or user fields). */
 export interface ExpandedRecord {
   id: string
   name?: string
@@ -186,6 +223,12 @@ export interface ExpandedRecord {
   [key: string]: unknown
 }
 
+/**
+ * A single row from a dynamic table. System columns (_created_by, _status,
+ * etc.) are optional; all user-defined columns are accessed via string index.
+ * `_version` supports optimistic concurrency; `_optimistic` flags client-side
+ * pending rows.
+ */
 export interface EntryRow extends Record<string, unknown> {
   id: string
   _version?: number
@@ -198,12 +241,26 @@ export interface EntryRow extends Record<string, unknown> {
   _updated_at?: string
 }
 
+/** A single row-level security filter rule. `value` may be a literal or a
+ *  variable like `$user.id`, `$user.department_id`, `$user.subsidiary_id`. */
 export interface RLSFilter {
   field: string
   op: 'eq' | 'neq' | 'in' | 'contains'
   value: string // literal or $user.id, $user.department_id, $user.subsidiary_id, etc.
 }
 
+/**
+ * Per-collection access control configuration.
+ *
+ * `entry_*` arrays list role names allowed to perform each CRUD operation.
+ *
+ * `rls_mode` controls row-level security:
+ * - `''` / `'none'` — no row filtering, all rows visible.
+ * - `'creator'`     — users see only rows they created.
+ * - `'department'`  — users see rows created by anyone in their department.
+ * - `'subsidiary'`  — users see rows created by anyone in their subsidiary.
+ * - `'filter'`      — custom filter rules defined in `rls_filters`.
+ */
 export interface AccessConfig {
   entry_view?: string[]
   entry_create?: string[]
@@ -213,6 +270,16 @@ export interface AccessConfig {
   rls_filters?: RLSFilter[]
 }
 
+/**
+ * A collection (app) in the platform. Each collection maps 1:1 to a
+ * PostgreSQL table named `wd_{slug}` in the data schema.
+ *
+ * - `slug` — table identifier (immutable after creation).
+ * - `access_config` — role-based + row-level security settings.
+ * - `process_enabled` — when true, rows carry a `_status` column governed
+ *   by the associated {@link Process} state machine.
+ * - `fields` — eagerly loaded when fetching a single collection detail.
+ */
 export interface Collection {
   id: string
   slug: string
@@ -229,6 +296,13 @@ export interface Collection {
   fields?: Field[]
 }
 
+/**
+ * Platform user. `role` determines global permission level:
+ * - `director` — full admin: manage users, collections, settings.
+ * - `pm`       — project manager: create/edit collections, manage members.
+ * - `engineer` — standard user: CRUD entries per collection access_config.
+ * - `viewer`   — read-only access to permitted collections.
+ */
 export interface User {
   id: string
   email: string
@@ -248,6 +322,7 @@ export interface User {
   subsidiary_name?: string | null
 }
 
+/** Organizational department, may belong to a subsidiary. Supports parent_id for tree nesting. */
 export interface Department {
   id: string
   name: string
@@ -259,6 +334,7 @@ export interface Department {
   updated_at: string
 }
 
+/** Top-level legal entity (subsidiary / affiliate company). */
 export interface Subsidiary {
   id: string
   external_code?: string | null
@@ -271,6 +347,7 @@ export interface Subsidiary {
 
 // --- Request payloads ---
 
+/** Payload for adding a new field to a collection (triggers ALTER TABLE ADD COLUMN). */
 export interface CreateFieldIn {
   slug: string
   label: string
@@ -290,6 +367,7 @@ export interface CreateFieldIn {
   }
 }
 
+/** Payload for creating a new collection (triggers CREATE TABLE). */
 export interface CreateCollectionReq {
   slug: string
   label: string
@@ -300,8 +378,14 @@ export interface CreateCollectionReq {
 
 // --- Schema migration preview ---
 
+/** Risk level for a proposed DDL migration. */
 export type SafetyLevel = 'SAFE' | 'CAUTIOUS' | 'DANGEROUS'
 
+/**
+ * Server-generated preview of a schema migration (field type change, rename,
+ * etc.). Shows the DDL, affected row count, and any data-loss warnings so the
+ * user can confirm before execution.
+ */
 export interface Preview {
   safety_level: SafetyLevel
   description: string
@@ -315,6 +399,10 @@ export interface Preview {
 
 // --- Process (workflow) ---
 
+/**
+ * A named state within a {@link Process} workflow (e.g. "접수", "검토중", "완료").
+ * Exactly one status must have `is_initial: true` — new entries start there.
+ */
 export interface ProcessStatus {
   id: string
   process_id: string
@@ -324,6 +412,11 @@ export interface ProcessStatus {
   is_initial: boolean
 }
 
+/**
+ * A directed edge in the process state machine: allows moving a record
+ * from `from_status_id` to `to_status_id`. Gated by `allowed_roles` and/or
+ * `allowed_user_ids` — only those users may trigger the transition.
+ */
 export interface ProcessTransition {
   id: string
   process_id: string
@@ -334,6 +427,12 @@ export interface ProcessTransition {
   allowed_user_ids: string[]
 }
 
+/**
+ * Workflow state machine attached to a collection.
+ * When `is_enabled`, every entry carries a `_status` column whose value
+ * must be one of the defined {@link ProcessStatus} items, and transitions
+ * between statuses are constrained by {@link ProcessTransition} rules.
+ */
 export interface Process {
   id: string
   collection_id: string
@@ -350,15 +449,24 @@ export interface SaveProcessReq {
 
 // --- Filter condition (frontend-only) ---
 
+/**
+ * A single filter predicate used in list queries.
+ * `field` is the field slug, `operator` is one of:
+ * eq, neq, gt, gte, lt, lte, like, in, is_null.
+ * Serialized into the `_filter` query parameter via {@link serializeFilterGroup}.
+ */
 export interface FilterCondition {
   id: string
-  field: string // field slug
-  operator: string // eq, neq, gt, gte, lt, lte, like, in, is_null
+  /** Field slug to filter on. */
+  field: string
+  /** Comparison operator: eq, neq, gt, gte, lt, lte, like, in, is_null. */
+  operator: string
   value: string
 }
 
 export type FilterLogic = 'and' | 'or'
 
+/** Recursive filter tree: conditions joined by `logic`, with nested sub-groups. */
 export interface FilterGroup {
   id: string
   logic: FilterLogic
@@ -417,8 +525,18 @@ export interface TotalsResult {
 
 // --- Views ---
 
+/**
+ * Supported view layouts for a collection:
+ * - `list`     — spreadsheet-style data grid (default).
+ * - `kanban`   — card columns grouped by a select/status field.
+ * - `calendar` — entries plotted on a date/datetime field.
+ * - `gallery`  — card grid with image thumbnails.
+ * - `gantt`    — timeline bar chart for date-range fields.
+ * - `form`     — public or internal data-entry form.
+ */
 export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery' | 'gantt' | 'form'
 
+/** A saved view configuration for a collection. */
 export interface View {
   id: string
   collection_id: string
@@ -448,6 +566,7 @@ export interface UpdateViewReq {
 
 // --- Comments ---
 
+/** A comment on a specific record within a collection. */
 export interface Comment {
   id: string
   collection_id: string
@@ -461,6 +580,7 @@ export interface Comment {
 
 // --- Notifications ---
 
+/** In-app notification delivered via SSE. `type` determines the icon and routing. */
 export interface Notification {
   id: string
   user_id: string
@@ -475,6 +595,7 @@ export interface Notification {
 
 // --- Collection members ---
 
+/** A user's membership and role within a specific collection. */
 export interface CollectionMember {
   id: string
   collection_id: string
@@ -495,6 +616,7 @@ export interface Transition {
 
 // --- Change history ---
 
+/** Audit log entry for a single record mutation. `diff` maps field slugs to old/new values. */
 export interface RecordChange {
   id: string
   collection_id: string
@@ -508,6 +630,7 @@ export interface RecordChange {
 
 // --- Saved views ---
 
+/** A user-saved combination of filters, sort order, and visible fields for quick recall. */
 export interface SavedView {
   id: string
   collection_id: string
@@ -542,10 +665,17 @@ export interface UpdateSavedViewReq {
 
 // --- Automations ---
 
+/** Event that fires an automation rule. */
 export type TriggerType = 'record_created' | 'record_updated' | 'record_deleted' | 'status_change' | 'schedule' | 'form_submit'
+/** Side-effect an automation can perform when its conditions pass. */
 export type ActionType = 'send_notification' | 'update_field' | 'call_webhook'
+/** Comparison operators for automation condition predicates. */
 export type ConditionOperator = 'equals' | 'not_equals' | 'contains' | 'gt' | 'lt' | 'is_empty' | 'is_not_empty'
 
+/**
+ * A guard condition in an automation rule. All conditions must pass (AND logic)
+ * for the automation's actions to execute.
+ */
 export interface AutomationCondition {
   id: string
   field_slug: string
@@ -554,6 +684,7 @@ export interface AutomationCondition {
   sort_order: number
 }
 
+/** A side-effect to perform when an automation fires. `action_config` shape depends on `action_type`. */
 export interface AutomationAction {
   id: string
   action_type: ActionType
@@ -561,6 +692,11 @@ export interface AutomationAction {
   sort_order: number
 }
 
+/**
+ * An automation rule: trigger → conditions → actions.
+ * When `trigger_type` fires and all {@link AutomationCondition}s pass,
+ * each {@link AutomationAction} executes in `sort_order`.
+ */
 export interface Automation {
   id: string
   collection_id: string
@@ -576,6 +712,7 @@ export interface Automation {
   action_count?: number
 }
 
+/** Execution log for a single automation invocation. */
 export interface AutomationRun {
   id: string
   automation_id: string
@@ -599,6 +736,7 @@ export interface CreateAutomationReq {
 
 // --- Webhook events ---
 
+/** Inbound webhook event received from an external system. */
 export interface WebhookEvent {
   id: string
   topic: string
@@ -610,11 +748,13 @@ export interface WebhookEvent {
 
 // --- Envelope responses ---
 
+/** Standard API response wrapper for single-item endpoints. */
 export interface DataEnvelope<T> {
   data: T
   error?: string
 }
 
+/** Paginated API response wrapper for list endpoints. */
 export interface ListEnvelope<T> {
   data: T[]
   total: number

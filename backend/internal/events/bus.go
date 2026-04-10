@@ -1,3 +1,12 @@
+// Package events provides an in-process event bus and SSE broker.
+//
+// The Bus is a synchronous pub/sub: Publish blocks until all handlers return.
+// Handlers should dispatch heavy work to goroutines or worker pools.
+//
+// The Broker fans out events to SSE clients (EventSource in browsers).
+// Each client gets a buffered channel (64 messages). If a client falls behind,
+// messages are dropped (non-blocking send) to prevent slow clients from
+// affecting the event loop.
 package events
 
 import (

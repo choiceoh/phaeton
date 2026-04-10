@@ -1,3 +1,20 @@
+/**
+ * AppViewPage — Primary data viewer for a collection (app).
+ *
+ * This is the most complex page in the application. It manages:
+ * - Multi-view rendering: list (default), kanban, calendar, form, gallery, gantt, chart
+ * - Data fetching with pagination, sorting, filtering
+ * - Inline cell editing with optimistic updates
+ * - Bulk operations (delete, edit selected)
+ * - CSV import/export
+ * - Process workflow transitions
+ * - Real-time updates via SSE
+ *
+ * State management:
+ * - Server state: React Query (useEntries, useCollections, useProcess)
+ * - UI state: useState (activeTab, filters, sort, selection, modals)
+ * - Cell save feedback: Map<"rowId:colId", "saving"|"saved"> for visual indicators
+ */
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
 import {
   ArrowDownUp,
@@ -119,12 +136,19 @@ export default function AppViewPage() {
       return next
     }, { replace: true })
   }, [setSearchParams])
+  /** Current page number for server-side pagination (1-based). */
   const [page, setPage] = useState(1)
+  /** Rows per page; user-selectable via DataTable page size dropdown. */
   const [limit, setLimit] = useState(DEFAULT_LIMIT)
+  /** Column-header sorting state consumed by @tanstack/react-table. */
   const [sorting, setSorting] = useState<SortingState>([])
+  /** ID of the entry pending deletion (drives the ConfirmDialog). */
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  /** Hidden file input ref for CSV import trigger. */
   const fileInputRef = useRef<HTMLInputElement>(null)
+  /** Count of rows imported in the last CSV upload (shown in toast). */
   const [importedCount, setImportedCount] = useState(0)
+  /** Whether the keyboard shortcut help dialog is open. */
   const [hotkeyHelpOpen, setHotkeyHelpOpen] = useState(false)
 
   // Filter state — uses FilterGroup for AND/OR support

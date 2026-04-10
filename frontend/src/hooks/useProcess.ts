@@ -4,6 +4,11 @@ import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
 import type { Process, SaveProcessReq } from '@/lib/types'
 
+/**
+ * Fetch the workflow (process) configuration for a collection.
+ * Returns statuses, transitions, and assignment rules.
+ * Disabled when collectionId is undefined.
+ */
 export function useProcess(collectionId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.process.detail(collectionId ?? ''),
@@ -12,6 +17,15 @@ export function useProcess(collectionId: string | undefined) {
   })
 }
 
+/**
+ * Save (create or update) a workflow process configuration.
+ *
+ * Invalidates three cache families on success:
+ * - process detail — the config itself changed
+ * - collection detail — process_enabled flag may have toggled
+ * - all entries — workflow changes affect status display, allowed
+ *   transitions, and kanban column ordering
+ */
 export function useSaveProcess(collectionId: string) {
   const qc = useQueryClient()
   return useMutation({
