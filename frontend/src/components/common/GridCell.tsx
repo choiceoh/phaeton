@@ -265,7 +265,7 @@ export default function GridCell({
         if (editable) onDoubleClick()
       }}
     >
-      {children}
+      <span className="block truncate">{children}</span>
       {saving && (
         <span className="absolute right-0.5 top-1/2 -translate-y-1/2">
           <Loader2Icon className="size-3 animate-spin text-muted-foreground" />
