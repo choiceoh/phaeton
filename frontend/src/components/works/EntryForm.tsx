@@ -47,6 +47,7 @@ export default function EntryForm({
 }: Props) {
   const [data, setData] = useState<Record<string, unknown>>(initialData ?? {})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [shakeKey, setShakeKey] = useState(0)
   const { data: currentUser } = useCurrentUser()
 
   function setValue(name: string, value: unknown) {
@@ -66,6 +67,7 @@ export default function EntryForm({
     }
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
+      setShakeKey((k) => k + 1)
       return
     }
     onSubmit(data)
@@ -179,7 +181,7 @@ export default function EntryForm({
                   onChange={(v) => setValue(field.slug, v)}
                 />
                 {errors[field.slug] && (
-                  <p className="mt-1 text-xs text-destructive">{errors[field.slug]}</p>
+                  <p key={shakeKey} className="mt-1 text-xs text-destructive animate-shake">{errors[field.slug]}</p>
                 )}
               </div>
             </div>

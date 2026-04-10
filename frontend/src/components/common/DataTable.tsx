@@ -85,6 +85,8 @@ interface Props<T> {
   onColumnVisibilityChange?: (visibility: VisibilityState) => void
   /** Number of top rows to highlight (e.g. after CSV import). */
   highlightRows?: number
+  /** ID of a newly created row to animate entrance. */
+  newRowId?: string | null
   /** Enable row selection with checkboxes */
   selectable?: boolean
   /** Currently selected row IDs (controlled) */
@@ -119,6 +121,7 @@ export function DataTable<T>({
   initialColumnVisibility,
   onColumnVisibilityChange: onColumnVisibilityChangeProp,
   highlightRows = 0,
+  newRowId,
   selectable,
   selectedRowIds,
   onSelectionChange,
@@ -493,10 +496,13 @@ export function DataTable<T>({
                 </TableCell>
               </TableRow>
             ) : (
-              visibleRows.map((row, rowIdx) => (
+              visibleRows.map((row, rowIdx) => {
+                const rowId = String((row.original as Record<string, unknown>).id ?? row.id)
+                const isNewRow = newRowId != null && rowId === newRowId
+                return (
                 <TableRow
                   key={row.id}
-                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''}`}
+                  className={`${onRowClick && !onCellEdit ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''}`}
                   onClick={() => {
                     // Only trigger row click if no cell is active (user clicking outside grid cells).
                     if (!grid.activeCell && onRowClick) {
@@ -562,7 +568,7 @@ export function DataTable<T>({
                     )
                   })}
                 </TableRow>
-              ))
+                )})
             )}
           </TableBody>
           {/* Summary row */}

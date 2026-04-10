@@ -227,3 +227,70 @@
 .nav-link:hover::after {
   transform: scaleX(1);
 }
+
+/* ─── Functional animations ─── */
+
+/* Shake for form validation errors */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-3px); }
+  40%, 80% { transform: translateX(3px); }
+}
+.animate-shake {
+  animation: shake 0.3s ease-out;
+}
+
+/* Scale bounce for kanban card drop */
+@keyframes scale-bounce {
+  0% { transform: scale(1.03); }
+  50% { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+.animate-scale-bounce {
+  animation: scale-bounce 0.25s ease-out;
+}
+
+/* Fade out (for item removal) */
+@keyframes fade-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-4px); }
+}
+.animate-fade-out {
+  animation: fade-out 0.2s ease-in forwards;
+}
+
+/* Row entrance for newly added items */
+@keyframes row-enter {
+  from { opacity: 0; transform: translateY(6px); background-color: oklch(0.92 0.02 240); }
+  to { opacity: 1; transform: translateY(0); background-color: transparent; }
+}
+.animate-row-enter {
+  animation: row-enter 0.4s ease-out both;
+}
+
+/* Drag ghost feedback */
+.dragging-source {
+  opacity: 0.4;
+  transform: scale(0.97);
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+}
+
+/* Reduced motion: disable all custom animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-shake,
+  .animate-scale-bounce,
+  .animate-fade-out,
+  .animate-row-enter,
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-scale-in,
+  .animate-slide-down,
+  .animate-highlight-row,
+  .animate-cell-saved,
+  .animate-check-fade {
+    animation: none !important;
+  }
+  .dragging-source {
+    transition: none !important;
+  }
+}
