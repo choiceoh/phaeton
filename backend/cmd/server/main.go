@@ -359,6 +359,9 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Delete("/api/departments/{id}", handler.DeleteDepartment(cfg.pool))
 		})
 
+		// Global calendar (cross-collection).
+		r.Get("/api/calendar/events", cfg.schemaH.GlobalCalendarEvents)
+
 		// Schema API — collection/field/migration management.
 		r.Route("/api/schema", func(r chi.Router) {
 			// Read-only: all authenticated users.
@@ -366,6 +369,8 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Get("/collections/counts", cfg.schemaH.CollectionCounts)
 			r.Get("/collections/{id}", cfg.schemaH.GetCollection)
 			r.Get("/migrations/history", cfg.schemaH.MigrationHistory)
+			r.Get("/relationship-graph", cfg.schemaH.RelationshipGraph)
+			r.Get("/collections/{id}/process/transitions", cfg.schemaH.AvailableTransitions)
 
 			// Create collection: all authenticated users.
 			r.Post("/collections", cfg.schemaH.CreateCollection)
@@ -444,6 +449,9 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Get("/{slug}/similar", cfg.dynH.SimilarRecords)
 			r.Get("/{slug}/aggregate", cfg.dynH.Aggregate)
 			r.Post("/{slug}/aggregate/batch", cfg.dynH.BatchAggregate)
+			r.Get("/{slug}/calendar", cfg.dynH.CalendarView)
+			r.Get("/{slug}/gantt", cfg.dynH.GanttView)
+			r.Get("/{slug}/kanban", cfg.dynH.KanbanView)
 			r.Get("/{slug}/export.csv", cfg.dynH.ExportCSV)
 			r.Get("/{slug}/export.pdf", cfg.dynH.ExportPDF)
 			r.Post("/{slug}/email-report", cfg.reportH.EmailReport)

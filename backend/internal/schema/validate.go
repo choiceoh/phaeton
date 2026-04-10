@@ -170,6 +170,28 @@ type SelectOptions struct {
 	Choices []string `json:"choices"`
 }
 
+// NumberRange holds optional min/max constraints from a number field's options.
+type NumberRange struct {
+	Min *float64 `json:"min,omitempty"`
+	Max *float64 `json:"max,omitempty"`
+}
+
+// ExtractNumberRange returns min/max constraints from a number/integer field's
+// options, or nil if none are set.
+func ExtractNumberRange(raw json.RawMessage) *NumberRange {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var opts NumberRange
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		return nil
+	}
+	if opts.Min == nil && opts.Max == nil {
+		return nil
+	}
+	return &opts
+}
+
 // ExtractChoices returns the allowed choices from a raw JSON options payload,
 // or nil if none are set. Used by both validation and the Dynamic API.
 func ExtractChoices(raw json.RawMessage) ([]string, error) {

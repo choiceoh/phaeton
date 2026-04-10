@@ -6,8 +6,7 @@ import RelationCombobox from '@/components/common/RelationCombobox'
 import RelationMultiCombobox from '@/components/common/RelationMultiCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
 import SpreadsheetInput from './SpreadsheetInput'
-import { useCurrentUser } from '@/hooks/useAuth'
-import { useSimilarRecords } from '@/hooks/useEntries'
+import { useAvailableTransitions, useSimilarRecords } from '@/hooks/useEntries'
 import { X } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -41,6 +40,8 @@ interface Props {
   submitting?: boolean
   process?: Process
   slug?: string
+  /** Collection UUID — used to fetch server-side transitions. */
+  collectionId?: string
   /** When true, debounce-saves on every field change (edit mode). */
   autosave?: boolean
   /** Visual autosave state shown in the form footer. */
@@ -62,6 +63,7 @@ export default function EntryForm({
   submitting,
   process,
   slug,
+  collectionId,
   autosave,
   autosaveStatus,
 }: Props) {
@@ -69,8 +71,6 @@ export default function EntryForm({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [validated, setValidated] = useState<Set<string>>(new Set())
   const [shakeKey, setShakeKey] = useState(0)
-  const { data: currentUser } = useCurrentUser()
-
   // Similar records detection: track the first text field value with debounce.
   const isNew = !initialData?.id
 
@@ -159,26 +159,13 @@ export default function EntryForm({
     onSubmit(data)
   }
 
-  // Process status transitions (only when editing an existing entry).
-  // Filter by the current user's role when allowed_roles is specified.
+  // Process status transitions — fetched from the server (role-filtered).
   const currentStatus = initialData?._status as string | undefined
-  const availableTransitions = (() => {
-    if (!process?.is_enabled || !currentStatus || !initialData?.id || !process.statuses?.length) return []
-    const statusByName = new Map(process.statuses.map((s) => [s.name, s]))
-    const currentStatusObj = statusByName.get(currentStatus)
-    if (!currentStatusObj) return []
-    const userRole = currentUser?.role
-    return process.transitions
-      .filter((t) => {
-        if (t.from_status_id !== currentStatusObj.id) return false
-        if (t.allowed_roles.length > 0 && (!userRole || !t.allowed_roles.includes(userRole))) return false
-        return true
-      })
-      .map((t) => {
-        const target = process.statuses.find((s) => s.id === t.to_status_id)
-        return { label: t.label, targetName: target?.name ?? '', targetColor: target?.color ?? '#6b7280' }
-      })
-  })()
+  const { data: transitionsData } = useAvailableTransitions(
+    process?.is_enabled && currentStatus && initialData?.id ? collectionId : undefined,
+    currentStatus,
+  )
+  const availableTransitions = transitionsData?.transitions ?? []
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -205,9 +192,9 @@ export default function EntryForm({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setValue('_status', t.targetName)}
+                  onClick={() => setValue('_status', t.to_status)}
                 >
-                  {t.label} → {t.targetName}
+                  {t.label} → {t.to_status}
                 </Button>
               ))}
             </div>

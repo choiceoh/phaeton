@@ -1,4 +1,3 @@
-import { useQueries } from '@tanstack/react-query'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -8,10 +7,7 @@ import ErrorState from '@/components/common/ErrorState'
 import PageHeader from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useCollections } from '@/hooks/useCollections'
-import { api } from '@/lib/api'
-import { queryKeys } from '@/lib/queryKeys'
-import type { Collection, Field } from '@/lib/types'
+import { useGlobalCalendarEvents, type GlobalCalendarEvent } from '@/hooks/useEntries'
 
 // Palette for distinguishing collections on the calendar.
 const COLORS = [
@@ -25,33 +21,11 @@ const COLORS = [
   { bg: 'bg-pink-500/15', border: 'border-pink-500', text: 'text-pink-700', badge: 'bg-pink-100 text-pink-700' },
 ]
 
-interface CalendarEvent {
-  id: string
-  label: string
-  date: string // YYYY-MM-DD
-  endDate: string | null
-  collectionId: string
-  collectionLabel: string
-  collectionSlug: string
-  colorIndex: number
-}
-
-interface CollectionWithDate {
-  collection: Collection
-  dateField: Field
-  endDateField: Field | null
-  titleField: Field | null
+interface CalendarEvent extends GlobalCalendarEvent {
   colorIndex: number
 }
 
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토']
-
-function toDateStr(v: unknown): string | null {
-  if (!v) return null
-  const s = String(v).slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
-  return s
-}
 
 function makeDateStr(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -60,7 +34,6 @@ function makeDateStr(year: number, month: number, day: number) {
 type Direction = 'left' | 'right' | null
 
 export default function GlobalCalendarPage() {
-  const { data: collections, isLoading, isError, error } = useCollections()
   const navigate = useNavigate()
   const [viewDate, setViewDate] = useState(() => new Date())
   const [direction, setDirection] = useState<Direction>(null)
@@ -70,79 +43,25 @@ export default function GlobalCalendarPage() {
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth()
 
-  // Collections with date fields.
-  const dateCollections: CollectionWithDate[] = useMemo(() => {
-    if (!collections) return []
-    let colorIdx = 0
-    return collections
-      .filter((c) => c.fields?.some((f) => f.field_type === 'date' || f.field_type === 'datetime'))
-      .map((collection) => {
-        const fields = collection.fields ?? []
-        const dateField = fields.find((f) => f.field_type === 'date' || f.field_type === 'datetime')!
-        const endDateField = fields.find(
-          (f) => (f.field_type === 'date' || f.field_type === 'datetime') && f.id !== dateField.id,
-        ) ?? null
-        const titleField = fields.find((f) => f.field_type === 'text') ?? null
-        return { collection, dateField, endDateField, titleField, colorIndex: colorIdx++ % COLORS.length }
-      })
-  }, [collections])
+  const { data: rawEvents, isLoading, isError, error } = useGlobalCalendarEvents(year, month + 1)
 
-  // Date range for the visible month (with padding for partial weeks).
-  const monthStart = makeDateStr(year, month, 1)
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const monthEnd = makeDateStr(year, month, daysInMonth)
-
-  // Fetch entries from all date-collections in parallel.
-  const entryQueries = useQueries({
-    queries: dateCollections.map(({ collection, dateField }) => ({
-      queryKey: [...queryKeys.entries.all, collection.slug, 'calendar', monthStart, monthEnd],
-      queryFn: () =>
-        api.getList<Record<string, unknown>>(
-          `/data/${collection.slug}?limit=500&${dateField.slug}=gte:${monthStart}&${dateField.slug}=lte:${monthEnd}`,
-        ),
-      staleTime: 30_000,
-    })),
-  })
-
-  const isLoadingEntries = entryQueries.some((q) => q.isLoading)
-
-  // Flatten all entries into CalendarEvents.
+  // Assign a stable color index per collection.
   const events: CalendarEvent[] = useMemo(() => {
-    const result: CalendarEvent[] = []
-    for (let i = 0; i < dateCollections.length; i++) {
-      const { collection, dateField, endDateField, titleField, colorIndex } = dateCollections[i]
-      const query = entryQueries[i]
-      if (!query.data?.data) continue
-
-      for (const entry of query.data.data) {
-        const date = toDateStr(entry[dateField.slug])
-        if (!date) continue
-
-        const rawEnd = endDateField ? toDateStr(entry[endDateField.slug]) : null
-        const endDate = rawEnd && rawEnd > date ? rawEnd : null
-
-        let label = '(무제)'
-        if (titleField) {
-          const v = entry[titleField.slug]
-          if (v) label = String(v)
-        }
-
-        result.push({
-          id: String(entry.id),
-          label,
-          date,
-          endDate,
-          collectionId: collection.id,
-          collectionLabel: collection.label,
-          collectionSlug: collection.slug,
-          colorIndex,
-        })
+    if (!rawEvents) return []
+    const colorMap = new Map<string, number>()
+    let nextColor = 0
+    return rawEvents.map((ev) => {
+      let colorIndex = colorMap.get(ev.collectionId)
+      if (colorIndex === undefined) {
+        colorIndex = nextColor++ % COLORS.length
+        colorMap.set(ev.collectionId, colorIndex)
       }
-    }
-    return result
-  }, [dateCollections, entryQueries])
+      return { ...ev, colorIndex }
+    })
+  }, [rawEvents])
 
   // Calendar grid.
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
   const firstDayOfMonth = new Date(year, month, 1)
   const startDay = firstDayOfMonth.getDay()
 
@@ -273,18 +192,23 @@ export default function GlobalCalendarPage() {
 
   // Active collection legend (only those with events).
   const activeCollections = useMemo(() => {
-    const seen = new Set<string>()
-    return dateCollections.filter(({ collection }) => {
-      if (seen.has(collection.id)) return false
-      seen.add(collection.id)
-      return true
-    })
-  }, [dateCollections])
+    const seen = new Map<string, { id: string; label: string; icon?: string; colorIndex: number }>()
+    for (const ev of events) {
+      if (seen.has(ev.collectionId)) continue
+      seen.set(ev.collectionId, {
+        id: ev.collectionId,
+        label: ev.collectionLabel,
+        icon: ev.collectionIcon,
+        colorIndex: ev.colorIndex,
+      })
+    }
+    return [...seen.values()]
+  }, [events])
 
   if (isLoading) return <LoadingState variant="summary" />
   if (isError) return <ErrorState error={error} />
 
-  if (dateCollections.length === 0) {
+  if (events.length === 0 && !isLoading) {
     return (
       <div>
         <PageHeader title="캘린더" description="전체 앱의 일정을 한눈에 확인합니다" />
@@ -306,9 +230,9 @@ export default function GlobalCalendarPage() {
       {/* Legend */}
       {activeCollections.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-2">
-          {activeCollections.map(({ collection, colorIndex }) => (
-            <Badge key={collection.id} variant="secondary" className={COLORS[colorIndex].badge}>
-              {collection.label}
+          {activeCollections.map(({ id, label, colorIndex }) => (
+            <Badge key={id} variant="secondary" className={COLORS[colorIndex].badge}>
+              {label}
             </Badge>
           ))}
         </div>
@@ -329,9 +253,6 @@ export default function GlobalCalendarPage() {
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            {isLoadingEntries && (
-              <span className="text-xs text-muted-foreground">불러오는 중...</span>
-            )}
             <Button variant="outline" size="sm" onClick={goToday}>
               오늘
             </Button>
@@ -475,7 +396,7 @@ export default function GlobalCalendarPage() {
           </div>
 
           {/* Empty month */}
-          {events.length === 0 && !isLoadingEntries && (
+          {events.length === 0 && !isLoading && (
             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground text-sm">
               <Calendar className="h-8 w-8 mb-2 opacity-40" />
               <p>이번 달에 해당하는 일정이 없습니다</p>

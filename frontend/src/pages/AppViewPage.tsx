@@ -156,12 +156,8 @@ export default function AppViewPage() {
   // Show toast when automation runs are detected.
   useAutomationRunToasts(collection?.id)
 
-  // Build expand string from all relation fields.
-  const expand = useMemo(() => {
-    if (!collection?.fields) return undefined
-    const rels = collection.fields.filter((f) => f.field_type === 'relation').map((f) => f.slug)
-    return rels.length > 0 ? rels.join(',') : undefined
-  }, [collection])
+  // Let the backend auto-expand all relation fields.
+  const expand = 'auto'
 
   const { data: savedViews } = useSavedViews(collection?.id)
   const createSavedView = useCreateSavedView(collection?.id ?? '')
@@ -300,7 +296,7 @@ export default function AppViewPage() {
   const totalsSlug = numericFields.length > 0 ? collection?.slug : undefined
   const { data: totals } = useTotals(totalsSlug, filters)
 
-  // Build summary row from server-side totals with page-level fallback.
+  // Build summary row from server-side totals only.
   const summaryRow = useMemo(() => {
     if (numericFields.length === 0 || !list?.data?.length) return undefined
     const summary: Record<string, { label: string; value: string | number }> = {}
@@ -310,49 +306,38 @@ export default function AppViewPage() {
       const fn = columnAggFn[f.slug] || 'sum'
       const fnLabel = fnLabels[fn] || fn
 
-      // Server-side totals (preferred).
       const serverField = totals?.[f.slug]
       const serverAgg = typeof serverField === 'object' && serverField !== null
         ? serverField as { sum: number; avg: number; min: number; max: number }
         : null
       const serverCount = totals?._count as number | undefined
 
-      // Page-level fallback.
-      const pageValues = list.data
-        .map((e) => Number(e[f.slug]))
-        .filter((n) => !isNaN(n))
-      if (pageValues.length === 0 && !serverAgg) continue
-      const pageSum = pageValues.reduce((a, b) => a + b, 0)
-      const pageAvg = pageValues.length > 0 ? pageSum / pageValues.length : 0
-
-      let displayValue: number
-      let label: string
+      let displayValue: number | undefined
 
       switch (fn) {
         case 'sum':
-          displayValue = serverAgg?.sum ?? pageSum
+          displayValue = serverAgg?.sum
           break
         case 'avg':
-          displayValue = serverAgg?.avg ?? pageAvg
+          displayValue = serverAgg?.avg
           break
         case 'count':
-          displayValue = serverCount ?? list.total ?? pageValues.length
+          displayValue = serverCount ?? list.total
           break
         case 'min':
-          displayValue = serverAgg?.min ?? Math.min(...pageValues)
+          displayValue = serverAgg?.min
           break
         case 'max':
-          displayValue = serverAgg?.max ?? Math.max(...pageValues)
+          displayValue = serverAgg?.max
           break
         default:
-          displayValue = serverAgg?.sum ?? pageSum
+          displayValue = serverAgg?.sum
       }
 
-      label = `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: fn === 'count' ? 0 : 1 })}`
-      if (serverAgg && list.total != null && list.data.length < list.total) {
-        label += ' (전체)'
-      }
-      summary[f.slug] = { label, value: displayValue }
+      const label = displayValue != null
+        ? `${fnLabel} ${displayValue.toLocaleString('ko', { maximumFractionDigits: fn === 'count' ? 0 : 1 })}`
+        : `${fnLabel} -`
+      summary[f.slug] = { label, value: displayValue ?? '-' }
     }
     return Object.keys(summary).length > 0 ? summary : undefined
   }, [numericFields, list, columnAggFn, totals])
@@ -733,28 +718,6 @@ export default function AppViewPage() {
     }
   }, [process])
 
-  // Build allowedMoves map for process kanban based on transitions + user role
-  const processAllowedMoves = useMemo(() => {
-    if (!process?.is_enabled || !process.transitions?.length || !process.statuses?.length) return undefined
-    const userRole = currentUser?.role
-    const statusById = new Map(process.statuses.map((s) => [s.id, s.name]))
-    const moves = new Map<string, Set<string>>()
-    // Initialize all statuses with empty sets
-    for (const s of process.statuses) {
-      moves.set(s.name, new Set())
-    }
-    for (const t of process.transitions) {
-      // Check role permission
-      if (t.allowed_roles.length > 0 && (!userRole || !t.allowed_roles.includes(userRole))) continue
-      const fromName = statusById.get(t.from_status_id)
-      const toName = statusById.get(t.to_status_id)
-      if (fromName && toName) {
-        moves.get(fromName)!.add(toName)
-      }
-    }
-    return moves
-  }, [process, currentUser])
-
   if (colLoading) return <LoadingState variant="table" />
   if (colError) return <ErrorState error={colErr} />
   if (!collection) return null
@@ -768,6 +731,14 @@ export default function AppViewPage() {
   function handleEntryClick(entry: Record<string, unknown>) {
     setEditEntry(entry)
     setSheetOpen(true)
+  }
+
+  function handleEntryClickById(entryId: string) {
+    const entry = list?.data.find((e) => String(e.id) === entryId)
+    if (entry) {
+      setEditEntry(entry)
+      setSheetOpen(true)
+    }
   }
 
   function handleGanttUpdate(entryId: string, updates: Record<string, unknown>) {
@@ -1540,12 +1511,12 @@ export default function AppViewPage() {
           {hasProcessKanban && processGroupField && (
             <TabsContent value="status-kanban" className="mt-0">
               <KanbanView
+                slug={collection.slug}
                 groupField={processGroupField}
                 fields={collection.fields ?? []}
-                entries={list.data}
+                filters={filters}
                 onCardClick={handleEntryClick}
                 onCardMove={handleProcessCardMove}
-                allowedMoves={processAllowedMoves}
                 onAddEntry={() => { setEditEntry(undefined); setSheetOpen(true) }}
               />
             </TabsContent>
@@ -1554,9 +1525,10 @@ export default function AppViewPage() {
           {hasKanban && selectField && (
             <TabsContent value="kanban" className="mt-0">
               <KanbanView
+                slug={collection.slug}
                 groupField={selectField}
                 fields={collection.fields ?? []}
-                entries={list.data}
+                filters={filters}
                 onCardClick={handleEntryClick}
                 onCardMove={handleCardMove}
                 onAddEntry={() => { setEditEntry(undefined); setSheetOpen(true) }}
@@ -1567,9 +1539,10 @@ export default function AppViewPage() {
           {hasCalendar && dateField && (
             <TabsContent value="calendar" className="mt-0">
               <CalendarView
+                slug={collection.slug}
                 dateField={dateField}
                 fields={collection.fields ?? []}
-                entries={list.data}
+                filters={filters}
                 onEntryClick={handleEntryClick}
                 onEntryUpdate={handleGanttUpdate}
               />
@@ -1590,9 +1563,9 @@ export default function AppViewPage() {
           {hasGantt && (
             <TabsContent value="gantt" className="mt-0">
               <GanttView
+                slug={collection.slug}
                 fields={collection.fields ?? []}
-                entries={list.data}
-                onEntryClick={handleEntryClick}
+                onEntryClick={handleEntryClickById}
                 onEntryUpdate={handleGanttUpdate}
               />
             </TabsContent>
@@ -1608,6 +1581,7 @@ export default function AppViewPage() {
               submitting={createEntry.isPending || updateEntry.isPending}
               process={process}
               slug={collection.slug}
+              collectionId={collection.id}
               total={list.total}
             />
           </TabsContent>
@@ -1619,6 +1593,7 @@ export default function AppViewPage() {
         onClose={() => { setSheetOpen(false); setDuplicateData(undefined) }}
         fields={collection.fields ?? []}
         slug={collection.slug}
+        collectionId={collection.id}
         initialData={editEntry ?? duplicateData ?? (entryDefaults && Object.keys(entryDefaults).length > 0 ? entryDefaults : undefined)}
         onSubmit={handleSubmit}
         submitting={createEntry.isPending || updateEntry.isPending}

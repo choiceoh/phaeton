@@ -125,8 +125,17 @@ func validateFieldValue(f schema.Field, v any) error {
 			return fmt.Errorf("%w: expected string", schema.ErrInvalidInput)
 		}
 	case schema.FieldNumber:
-		if _, ok := v.(float64); !ok {
+		num, ok := v.(float64)
+		if !ok {
 			return fmt.Errorf("%w: expected number", schema.ErrInvalidInput)
+		}
+		if rng := schema.ExtractNumberRange(f.Options); rng != nil {
+			if rng.Min != nil && num < *rng.Min {
+				return fmt.Errorf("%w: value %v is below minimum %v", schema.ErrInvalidInput, num, *rng.Min)
+			}
+			if rng.Max != nil && num > *rng.Max {
+				return fmt.Errorf("%w: value %v exceeds maximum %v", schema.ErrInvalidInput, num, *rng.Max)
+			}
 		}
 	case schema.FieldInteger:
 		f64, ok := v.(float64)
@@ -135,6 +144,14 @@ func validateFieldValue(f schema.Field, v any) error {
 		}
 		if f64 != float64(int64(f64)) {
 			return fmt.Errorf("%w: expected whole number, got %v", schema.ErrInvalidInput, f64)
+		}
+		if rng := schema.ExtractNumberRange(f.Options); rng != nil {
+			if rng.Min != nil && f64 < *rng.Min {
+				return fmt.Errorf("%w: value %v is below minimum %v", schema.ErrInvalidInput, f64, *rng.Min)
+			}
+			if rng.Max != nil && f64 > *rng.Max {
+				return fmt.Errorf("%w: value %v exceeds maximum %v", schema.ErrInvalidInput, f64, *rng.Max)
+			}
 		}
 	case schema.FieldBoolean:
 		if _, ok := v.(bool); !ok {

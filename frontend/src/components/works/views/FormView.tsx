@@ -17,6 +17,7 @@ interface Props {
   submitting?: boolean
   process?: Process
   slug?: string
+  collectionId?: string
   total?: number
 }
 
@@ -28,6 +29,7 @@ export default function FormView({
   submitting,
   process,
   slug,
+  collectionId,
   total,
 }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -100,6 +102,7 @@ export default function FormView({
           submitting={submitting}
           process={process}
           slug={slug}
+          collectionId={collectionId}
         />
       </div>
     )
@@ -117,6 +120,7 @@ export default function FormView({
           submitting={submitting}
           process={process}
           slug={slug}
+          collectionId={collectionId}
         />
       </div>
     )

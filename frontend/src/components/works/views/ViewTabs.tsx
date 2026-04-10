@@ -5,14 +5,16 @@ import KanbanView from './KanbanView'
 import ListView from './ListView'
 
 interface Props {
+  slug: string
   fields: Field[]
   entries: Record<string, unknown>[]
+  filters?: Record<string, string>
   onEntryClick: (entry: Record<string, unknown>) => void
   onCardMove?: (entryId: string, newValue: string) => void
   process?: Process
 }
 
-export default function ViewTabs({ fields, entries, onEntryClick, onCardMove, process }: Props) {
+export default function ViewTabs({ slug, fields, entries, filters, onEntryClick, onCardMove, process }: Props) {
   const selectField = fields.find((f) => f.field_type === 'select')
   const hasKanban = !!selectField
   const hasProcessKanban = process?.is_enabled && (process.statuses?.length ?? 0) > 0
@@ -52,9 +54,10 @@ export default function ViewTabs({ fields, entries, onEntryClick, onCardMove, pr
       {hasProcessKanban && processGroupField && (
         <TabsContent value="status-kanban" className="mt-4">
           <KanbanView
+            slug={slug}
             groupField={processGroupField}
             fields={fields}
-            entries={entries}
+            filters={filters}
             onCardClick={onEntryClick}
             onCardMove={onCardMove}
           />
@@ -63,9 +66,10 @@ export default function ViewTabs({ fields, entries, onEntryClick, onCardMove, pr
       {hasKanban && selectField && (
         <TabsContent value="kanban" className="mt-4">
           <KanbanView
+            slug={slug}
             groupField={selectField}
             fields={fields}
-            entries={entries}
+            filters={filters}
             onCardClick={onEntryClick}
             onCardMove={onCardMove}
           />

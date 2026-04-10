@@ -11,13 +11,16 @@ import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 
 import EmptyState from '@/components/common/EmptyState'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { useCalendarView } from '@/hooks/useEntries'
 import type { Field } from '@/lib/types'
 
 interface Props {
+  slug: string
   dateField: Field
   fields: Field[]
-  entries: Record<string, unknown>[]
+  filters?: Record<string, string>
   onEntryClick: (entry: Record<string, unknown>) => void
   onEntryUpdate?: (entryId: string, updates: Record<string, unknown>) => void
 }
@@ -48,27 +51,14 @@ function diffDays(a: string, b: string): number {
   return Math.round((db.getTime() - da.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-/** Represents a multi-day spanning event placed on a specific week row */
-interface SpanEvent {
-  entry: Record<string, unknown>
-  label: string
-  startDate: string
-  endDate: string
-  /** Column index (0-6) where this span starts in its week */
-  startCol: number
-  /** Number of columns this span occupies */
-  colSpan: number
-  /** Track index for vertical stacking */
-  track: number
-}
-
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토']
 const MAX_VISIBLE_SPANS = 3
 
 export default function CalendarView({
+  slug,
   dateField,
   fields,
-  entries,
+  filters,
   onEntryClick,
   onEntryUpdate,
 }: Props) {
@@ -111,134 +101,19 @@ export default function CalendarView({
     [titleField],
   )
 
-  // Calendar grid setup
-  const firstDayOfMonth = new Date(year, month, 1)
-  const startDay = firstDayOfMonth.getDay()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  // Fetch server-computed calendar data
+  const { data: calendarData, isLoading } = useCalendarView(slug, {
+    year,
+    month: month + 1, // API uses 1-indexed months
+    dateField: dateField.slug,
+    endDateField: endDateField?.slug,
+    filters,
+  })
 
-  const calendarDays: (number | null)[] = []
-  for (let i = 0; i < startDay; i++) calendarDays.push(null)
-  for (let d = 1; d <= daysInMonth; d++) calendarDays.push(d)
-  while (calendarDays.length % 7 !== 0) calendarDays.push(null)
-
-  const weeks: (number | null)[][] = []
-  for (let i = 0; i < calendarDays.length; i += 7) {
-    weeks.push(calendarDays.slice(i, i + 7))
-  }
-
-  // Compute the actual date for each cell position
-  const weekDateRanges = useMemo(() => {
-    return weeks.map((week) => {
-      const dates: (string | null)[] = week.map((day) => {
-        if (day === null) return null
-        return makeDateStr(year, month, day)
-      })
-      return dates
-    })
-  }, [weeks, year, month])
-
-  // Build spanning events per week
-  const { spansByWeek, singlesByDate, monthHasEvents } = useMemo(() => {
-    const spansByWeek: SpanEvent[][] = weeks.map(() => [])
-    const singlesByDate = new Map<string, Record<string, unknown>[]>()
-    let monthHasEvents = false
-
-    const monthStart = makeDateStr(year, month, 1)
-    const monthEnd = makeDateStr(year, month, daysInMonth)
-
-    for (const entry of entries) {
-      const rawStart = toDateStr(entry[dateField.slug])
-      if (!rawStart) continue
-
-      const rawEnd = endDateField ? toDateStr(entry[endDateField.slug]) : null
-      const entryEnd = rawEnd && rawEnd > rawStart ? rawEnd : rawStart
-      const isMultiDay = entryEnd !== rawStart
-
-      // Check if this entry overlaps with current month
-      if (entryEnd < monthStart || rawStart > monthEnd) continue
-      monthHasEvents = true
-
-      if (!isMultiDay) {
-        // Single-day event
-        const existing = singlesByDate.get(rawStart) ?? []
-        existing.push(entry)
-        singlesByDate.set(rawStart, existing)
-        continue
-      }
-
-      // Multi-day event: split across weeks
-      const label = getLabel(entry)
-
-      for (let wi = 0; wi < weeks.length; wi++) {
-        const weekDates = weekDateRanges[wi]
-        // Find the actual first and last dates of this week
-        let weekStart: string | null = null
-        let weekEnd: string | null = null
-        let weekStartCol = 0
-        let weekEndCol = 6
-
-        for (let di = 0; di < 7; di++) {
-          if (weekDates[di]) {
-            if (!weekStart) {
-              weekStart = weekDates[di]!
-              weekStartCol = di
-            }
-            weekEnd = weekDates[di]!
-            weekEndCol = di
-          }
-        }
-
-        if (!weekStart || !weekEnd) continue
-        if (rawStart > weekEnd || entryEnd < weekStart) continue
-
-        // Clamp to this week
-        const clampedStart = rawStart > weekStart ? rawStart : weekStart
-        const clampedEnd = entryEnd < weekEnd ? entryEnd : weekEnd
-
-        // Find column positions
-        let startCol = weekStartCol
-        let endCol = weekEndCol
-        for (let di = 0; di < 7; di++) {
-          if (weekDates[di] === clampedStart) startCol = di
-          if (weekDates[di] === clampedEnd) endCol = di
-        }
-
-        spansByWeek[wi].push({
-          entry,
-          label,
-          startDate: rawStart,
-          endDate: entryEnd,
-          startCol,
-          colSpan: endCol - startCol + 1,
-          track: 0, // assigned below
-        })
-      }
-    }
-
-    // Assign tracks (vertical stacking position) per week
-    for (const spans of spansByWeek) {
-      // Sort by startCol then by wider spans first
-      spans.sort((a, b) => a.startCol - b.startCol || b.colSpan - a.colSpan)
-      const trackEnds: number[] = [] // track index → last occupied column
-      for (const span of spans) {
-        let assigned = -1
-        for (let t = 0; t < trackEnds.length; t++) {
-          if (trackEnds[t] < span.startCol) {
-            assigned = t
-            break
-          }
-        }
-        if (assigned === -1) {
-          assigned = trackEnds.length
-          trackEnds.push(0)
-        }
-        span.track = assigned
-        trackEnds[assigned] = span.startCol + span.colSpan - 1
-      }
-    }
-
-    return { spansByWeek, singlesByDate, monthHasEvents }
-  }, [entries, dateField.slug, endDateField, weeks, weekDateRanges, year, month, daysInMonth, getLabel])
+  const weeks = calendarData?.weeks ?? []
+  const monthHasEvents = weeks.some(
+    (w) => w.spans.length > 0 || Object.keys(w.singles).length > 0,
+  )
 
   const today = new Date()
   const isToday = (d: number) =>
@@ -267,10 +142,27 @@ export default function CalendarView({
     setDirection(null)
   }
 
+  // Build a flat lookup of all entries from server data for drag handling
+  const allEntries = useMemo(() => {
+    if (!calendarData) return new Map<string, Record<string, unknown>>()
+    const map = new Map<string, Record<string, unknown>>()
+    for (const w of calendarData.weeks) {
+      for (const span of w.spans) {
+        map.set(String(span.entry.id), span.entry)
+      }
+      for (const entries of Object.values(w.singles)) {
+        for (const e of entries) {
+          map.set(String(e.id), e)
+        }
+      }
+    }
+    return map
+  }, [calendarData])
+
   // Drag handlers
   function handleDragStart(event: DragStartEvent) {
     const id = String(event.active.id)
-    const entry = entries.find((e) => String(e.id) === id)
+    const entry = allEntries.get(id)
     if (entry) setDragEntry(entry)
   }
 
@@ -280,7 +172,7 @@ export default function CalendarView({
 
     const entryId = String(event.active.id)
     const targetDate = String(event.over.id)
-    const entry = entries.find((e) => String(e.id) === entryId)
+    const entry = allEntries.get(entryId)
     if (!entry) return
 
     const currentDate = toDateStr(entry[dateField.slug])
@@ -300,7 +192,7 @@ export default function CalendarView({
     onEntryUpdate(entryId, updates)
   }
 
-  if (entries.length === 0) {
+  if (!isLoading && calendarData && !monthHasEvents && weeks.length === 0) {
     return (
       <EmptyState
         icon={<Calendar className="h-10 w-10" />}
@@ -359,8 +251,15 @@ export default function CalendarView({
             }
             onAnimationEnd={handleAnimationEnd}
           >
-            {weeks.map((week, wi) => {
-              const weekSpans = spansByWeek[wi]
+            {isLoading && (
+              <div className="space-y-1 p-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-[100px] w-full" />
+                ))}
+              </div>
+            )}
+            {!isLoading && weeks.map((week, wi) => {
+              const weekSpans = week.spans
               const maxTrack = weekSpans.length > 0
                 ? Math.min(Math.max(...weekSpans.map((s) => s.track)) + 1, MAX_VISIBLE_SPANS)
                 : 0
@@ -376,18 +275,13 @@ export default function CalendarView({
                       const widthPct = (span.colSpan / 7) * 100
                       const top = 24 + span.track * 22
 
-                      const isStart = span.startDate >= makeDateStr(year, month, week[span.startCol] ?? 1)
-                      const isEnd =
-                        span.endDate <=
-                        makeDateStr(year, month, week[span.startCol + span.colSpan - 1] ?? daysInMonth)
-
                       return (
                         <button
                           key={`${String(span.entry.id)}-${wi}`}
                           type="button"
                           className={`absolute z-10 truncate bg-primary/15 text-xs px-1.5 py-0.5 hover:bg-primary/25 cursor-pointer border-l-2 border-primary ${
-                            isStart ? 'rounded-l' : ''
-                          } ${isEnd ? 'rounded-r' : ''}`}
+                            span.isStart ? 'rounded-l' : ''
+                          } ${span.isEnd ? 'rounded-r' : ''}`}
                           style={{
                             left: `calc(${leftPct}% + 2px)`,
                             width: `calc(${widthPct}% - 4px)`,
@@ -397,14 +291,14 @@ export default function CalendarView({
                           }}
                           onClick={() => onEntryClick(span.entry)}
                         >
-                          {isStart ? span.label : `… ${span.label}`}
+                          {span.isStart ? span.label : `… ${span.label}`}
                         </button>
                       )
                     })}
 
                   {/* Day cells */}
-                  {week.map((day, di) => {
-                    if (day === null) {
+                  {week.days.map((dateStr, di) => {
+                    if (!dateStr) {
                       return (
                         <DroppableCell key={di} id={`empty-${wi}-${di}`} disabled>
                           <div className="min-h-[100px] bg-muted/20" />
@@ -412,8 +306,8 @@ export default function CalendarView({
                       )
                     }
 
-                    const dateStr = makeDateStr(year, month, day)
-                    const dayEntries = singlesByDate.get(dateStr) ?? []
+                    const dayNum = parseInt(dateStr.slice(8, 10), 10)
+                    const dayEntries = week.singles[dateStr] ?? []
                     // Reserve space for spanning bars
                     const spanOffset = maxTrack * 22
 
@@ -421,19 +315,19 @@ export default function CalendarView({
                       <DroppableCell key={di} id={dateStr}>
                         <div
                           className={`min-h-[100px] border-b border-r p-1 ${
-                            isToday(day) ? 'bg-primary/5' : ''
+                            isToday(dayNum) ? 'bg-primary/5' : ''
                           }`}
                         >
                           <div
                             className={`mb-1 text-xs font-medium ${
                               di === 0 ? 'text-red-500' : di === 6 ? 'text-blue-500' : ''
                             } ${
-                              isToday(day)
+                              isToday(dayNum)
                                 ? 'rounded-full bg-primary text-primary-foreground w-5 h-5 flex items-center justify-center'
                                 : ''
                             }`}
                           >
-                            {day}
+                            {dayNum}
                           </div>
                           <div className="space-y-0.5" style={{ marginTop: `${spanOffset}px` }}>
                             {dayEntries.slice(0, 3).map((entry) => (
@@ -466,7 +360,7 @@ export default function CalendarView({
           </div>
 
           {/* Empty month message */}
-          {!monthHasEvents && entries.length > 0 && (
+          {!isLoading && !monthHasEvents && weeks.length > 0 && (
             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground text-sm">
               <Calendar className="h-8 w-8 mb-2 opacity-40" />
               <p>이번 달에 해당하는 일정이 없습니다</p>

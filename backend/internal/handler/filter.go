@@ -11,7 +11,7 @@ import (
 
 // reserved query params — not treated as field filters.
 var reservedParams = map[string]bool{
-	"sort": true, "page": true, "limit": true, "confirm": true, "expand": true, "q": true,
+	"sort": true, "page": true, "limit": true, "confirm": true, "expand": true, "q": true, "format": true,
 }
 
 // BuildSearchClause generates a full-text search condition using the _tsv

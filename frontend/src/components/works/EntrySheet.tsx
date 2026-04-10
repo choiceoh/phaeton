@@ -24,6 +24,7 @@ interface Props {
   onClose: () => void
   fields: Field[]
   slug?: string
+  collectionId?: string
   initialData?: Record<string, unknown>
   onSubmit: (data: Record<string, unknown>) => void
   submitting?: boolean
@@ -43,6 +44,7 @@ export default function EntrySheet({
   onClose,
   fields,
   slug,
+  collectionId,
   initialData,
   onSubmit,
   submitting,
@@ -130,6 +132,7 @@ export default function EntrySheet({
                   fields={fields}
                   initialData={initialData}
                   slug={slug}
+                  collectionId={collectionId}
                   autosave
                   autosaveStatus={autosaveStatus}
                   onSubmit={(data) => {
@@ -327,6 +330,7 @@ export default function EntrySheet({
                 fields={fields}
                 initialData={prefillData ?? initialData}
                 slug={slug}
+                collectionId={collectionId}
                 onSubmit={(data) => {
                   onSubmit(data)
                   onClose()

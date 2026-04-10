@@ -1,7 +1,8 @@
-import { GanttChart } from 'lucide-react'
+import { GanttChart, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import EmptyState from '@/components/common/EmptyState'
+import { useGanttView, type GanttRow } from '@/hooks/useEntries'
 import type { Field } from '@/lib/types'
 
 const DAY_WIDTH = 36
@@ -32,17 +33,11 @@ function hashColor(key: string): string {
 }
 
 interface Props {
+  slug: string
   fields: Field[]
-  entries: Record<string, unknown>[]
-  onEntryClick: (entry: Record<string, unknown>) => void
+  filters?: Record<string, string>
+  onEntryClick: (entryId: string) => void
   onEntryUpdate?: (entryId: string, updates: Record<string, unknown>) => void
-}
-
-function toDateStr(v: unknown): string | null {
-  if (!v) return null
-  const s = String(v).slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
-  return s
 }
 
 function parseDate(s: string): Date {
@@ -67,19 +62,14 @@ function diffDays(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate }: Props) {
-  // Auto-detect fields
+export default function GanttView({ slug, fields, filters, onEntryClick, onEntryUpdate }: Props) {
+  // Detect date fields for drag updates
   const dateFields = useMemo(
     () => fields.filter((f) => f.field_type === 'date' || f.field_type === 'datetime'),
     [fields],
   )
   const startDateField = dateFields[0]
   const endDateField = dateFields.length >= 2 ? dateFields[1] : dateFields[0]
-
-  const titleField = useMemo(
-    () => fields.find((f) => f.field_type === 'text'),
-    [fields],
-  )
 
   const userField = useMemo(
     () => fields.find((f) => f.field_type === 'user'),
@@ -98,87 +88,17 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
     [fields],
   )
 
-  const statusField = useMemo(
-    () => fields.find((f) => f.field_type === 'select'),
-    [fields],
-  )
+  // Fetch gantt data from server
+  const { data, isLoading } = useGanttView(slug, {
+    startField: startDateField?.slug ?? '',
+    endField: endDateField?.slug,
+    filters,
+  })
 
-  const relationField = useMemo(
-    () => fields.find((f) => f.field_type === 'relation'),
-    [fields],
-  )
-
-  // Parse entries into rows
-  const rows = useMemo(() => {
-    return entries.map((entry) => {
-      const startStr = toDateStr(entry[startDateField?.slug ?? ''])
-      const endStr = toDateStr(entry[endDateField?.slug ?? ''])
-      const title = titleField
-        ? String(entry[titleField.slug] ?? '')
-        : String(entry.id ?? '').slice(0, 8)
-      const user = userField ? entry[userField.slug] : null
-      const progress = progressField ? Number(entry[progressField.slug] ?? 0) : null
-
-      // Get related IDs for dependencies
-      let dependencyIds: string[] = []
-      if (relationField) {
-        const relVal = entry[relationField.slug]
-        if (Array.isArray(relVal)) {
-          dependencyIds = relVal.map((v: unknown) =>
-            typeof v === 'object' && v !== null
-              ? String((v as Record<string, unknown>).id ?? v)
-              : String(v),
-          )
-        } else if (relVal && typeof relVal === 'object') {
-          dependencyIds = [String((relVal as Record<string, unknown>).id ?? '')]
-        } else if (relVal) {
-          dependencyIds = [String(relVal)]
-        }
-      }
-
-      const status = statusField ? String(entry[statusField.slug] ?? '') : ''
-      // Color by assignee if available, else by status, else default
-      const colorKey = (typeof user === 'object' && user !== null
-        ? String((user as Record<string, unknown>).name ?? '')
-        : user ? String(user) : '') || status
-
-      return {
-        id: String(entry.id),
-        entry,
-        title: title || '(무제)',
-        startDate: startStr,
-        endDate: endStr || startStr,
-        user:
-          typeof user === 'object' && user !== null
-            ? String((user as Record<string, unknown>).name ?? '')
-            : user
-              ? String(user)
-              : '',
-        progress,
-        dependencyIds,
-        status,
-        color: colorKey ? hashColor(colorKey) : BAR_PALETTE[0],
-      }
-    })
-  }, [entries, startDateField, endDateField, titleField, userField, progressField, relationField, statusField])
-
-  // Calculate date range
-  const { rangeStart, totalDays } = useMemo(() => {
-    const dates: Date[] = []
-    for (const row of rows) {
-      if (row.startDate) dates.push(parseDate(row.startDate))
-      if (row.endDate) dates.push(parseDate(row.endDate))
-    }
-    if (dates.length === 0) {
-      const today = new Date()
-      return { rangeStart: addDays(today, -7), totalDays: 37 }
-    }
-    const min = new Date(Math.min(...dates.map((d) => d.getTime())))
-    const max = new Date(Math.max(...dates.map((d) => d.getTime())))
-    const rs = addDays(min, -7)
-    const re = addDays(max, 14)
-    return { rangeStart: rs, totalDays: diffDays(rs, re) + 1 }
-  }, [rows])
+  const rows = data?.rows ?? []
+  const rangeStart = data?.range ? parseDate(data.range.start) : addDays(new Date(), -7)
+  const totalDays = data?.range?.totalDays ?? 37
+  const monthHeaders = data?.months ?? []
 
   // Generate day columns
   const days = useMemo(() => {
@@ -187,29 +107,7 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
       result.push(addDays(rangeStart, i))
     }
     return result
-  }, [rangeStart, totalDays])
-
-  // Generate month headers
-  const monthHeaders = useMemo(() => {
-    const headers: { label: string; startIdx: number; span: number }[] = []
-    let currentMonth = -1
-    let currentYear = -1
-    for (let i = 0; i < days.length; i++) {
-      const d = days[i]
-      if (d.getMonth() !== currentMonth || d.getFullYear() !== currentYear) {
-        currentMonth = d.getMonth()
-        currentYear = d.getFullYear()
-        headers.push({
-          label: `${currentYear}년 ${currentMonth + 1}월`,
-          startIdx: i,
-          span: 1,
-        })
-      } else {
-        headers[headers.length - 1].span++
-      }
-    }
-    return headers
-  }, [days])
+  }, [rangeStart.getTime(), totalDays])
 
   // Synchronized scrolling
   const leftBodyRef = useRef<HTMLDivElement>(null)
@@ -341,16 +239,16 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
       map.set(row.id, { rowIdx, startIdx, endIdx })
     })
     return map
-  }, [rows, rangeStart])
+  }, [rows, rangeStart.getTime()])
 
   // Dependency lines
   const dependencies = useMemo(() => {
     const lines: { fromX: number; fromY: number; toX: number; toY: number }[] = []
     for (const row of rows) {
-      if (row.dependencyIds.length === 0) continue
+      if (row.dependencies.length === 0) continue
       const fromPos = entryPositions.get(row.id)
       if (!fromPos) continue
-      for (const depId of row.dependencyIds) {
+      for (const depId of row.dependencies) {
         const toPos = entryPositions.get(depId)
         if (!toPos) continue
         lines.push({
@@ -376,7 +274,7 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
   const bodyHeight = rows.length * ROW_HEIGHT
 
   // Compute bar position with drag delta applied
-  function getBarPosition(row: (typeof rows)[number]) {
+  function getBarPosition(row: GanttRow) {
     if (!row.startDate || !row.endDate) return null
     let sDate = parseDate(row.startDate)
     let eDate = parseDate(row.endDate)
@@ -408,7 +306,15 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
     }
   }
 
-  if (entries.length === 0) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 320px)', minHeight: 400 }}>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (rows.length === 0) {
     return (
       <EmptyState
         icon={<GanttChart className="h-10 w-10" />}
@@ -463,7 +369,7 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
               key={row.id}
               className="flex border-b hover:bg-muted/20 cursor-pointer"
               style={{ height: ROW_HEIGHT }}
-              onClick={() => onEntryClick(row.entry)}
+              onClick={() => onEntryClick(row.id)}
             >
               <div className="flex-1 px-3 flex items-center text-sm truncate">
                 {row.title}
@@ -525,7 +431,7 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
             <div className="flex" style={{ height: HEADER_HEIGHT / 2 }}>
               {monthHeaders.map((mh) => (
                 <div
-                  key={`${mh.label}-${mh.startIdx}`}
+                  key={`${mh.label}-${mh.startIndex}`}
                   className="border-r border-b flex items-center justify-center text-xs font-medium"
                   style={{ width: mh.span * DAY_WIDTH }}
                 >
@@ -605,7 +511,7 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
               if (!pos) return null
               const barTop = rowIdx * ROW_HEIGHT + BAR_Y_OFFSET
               const isDragging = dragState?.rowId === row.id
-              const barColor = row.color
+              const barColor = row.colorKey ? hashColor(row.colorKey) : BAR_PALETTE[0]
 
               return (
                 <div
@@ -624,7 +530,7 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      onEntryClick(row.entry)
+                      onEntryClick(row.id)
                     }
                     if (!onEntryUpdate || !row.startDate || !row.endDate) return
                     const shift = e.shiftKey ? 7 : 1
@@ -659,7 +565,7 @@ export default function GanttView({ fields, entries, onEntryClick, onEntryUpdate
                     }
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (!dragState) onEntryClick(row.entry)
+                      if (!dragState) onEntryClick(row.id)
                     }}
                   >
                     {/* Progress fill */}
