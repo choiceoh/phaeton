@@ -72,6 +72,11 @@ export default function EntryForm({
 
   // Similar records detection: track the first text field value with debounce.
   const isNew = !initialData?.id
+
+  // First editable field slug — used to autoFocus on new entry creation.
+  const firstEditableSlug = isNew
+    ? fields.find((f) => !isLayoutType(f.field_type) && !['formula', 'autonumber', 'lookup', 'rollup'].includes(f.field_type))?.slug
+    : undefined
   const firstTextField = isNew ? fields.find((f) => f.field_type === 'text') : undefined
   const [similarQuery, setSimilarQuery] = useState('')
   const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -81,13 +86,13 @@ export default function EntryForm({
     firstTextField?.slug,
   )
 
+  const firstTextFieldValue = firstTextField ? String(data[firstTextField.slug] ?? '') : ''
   useEffect(() => {
     if (!firstTextField || !isNew) return
-    const val = String(data[firstTextField.slug] ?? '')
     if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
-    similarDebounceRef.current = setTimeout(() => setSimilarQuery(val), 800)
+    similarDebounceRef.current = setTimeout(() => setSimilarQuery(firstTextFieldValue), 800)
     return () => { if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current) }
-  }, [data, firstTextField, isNew])
+  }, [firstTextFieldValue, firstTextField, isNew])
 
   // Autosave: debounce submit when data changes (edit mode only).
   const autosaveRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -216,6 +221,25 @@ export default function EntryForm({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
         {fields.map((field) => {
+          // Conditional visibility: evaluate visibility_rules against current data.
+          const visRules = field.options?.visibility_rules as
+            | { field_slug: string; operator: string; value?: string }[]
+            | undefined
+          if (visRules && visRules.length > 0) {
+            const allPass = visRules.every((rule) => {
+              const fieldVal = data[rule.field_slug]
+              const strVal = fieldVal != null ? String(fieldVal) : ''
+              switch (rule.operator) {
+                case 'eq': return strVal === (rule.value ?? '')
+                case 'neq': return strVal !== (rule.value ?? '')
+                case 'is_empty': return !strVal
+                case 'is_not_empty': return !!strVal
+                default: return true
+              }
+            })
+            if (!allPass) return null
+          }
+
           if (isLayoutType(field.field_type)) {
             return (
               <div key={field.id} className="col-span-full">
@@ -260,6 +284,7 @@ export default function EntryForm({
                   value={extractValue(data[field.slug], field)}
                   onChange={(v) => setValue(field.slug, v)}
                   onBlur={() => handleBlur(field)}
+                  autoFocus={field.slug === firstEditableSlug}
                 />
                 {errors[field.slug] ? (
                   <p key={shakeKey} className="mt-1 text-xs text-destructive animate-shake animate-fade-in">{errors[field.slug]}</p>
@@ -287,7 +312,7 @@ export default function EntryForm({
           ))}
         </div>
       )}
-      <div className="flex items-center justify-end gap-2 pt-2">
+      <div className="flex items-center justify-end gap-2 pt-2 sticky bottom-0 bg-background pb-2 sm:static sm:pb-0">
         {autosave && autosaveStatus && autosaveStatus !== 'idle' && (
           <span className="mr-auto text-xs text-muted-foreground animate-fade-in">
             {autosaveStatus === 'saving' ? '저장 중...' : autosaveStatus === 'saved' ? (
@@ -354,11 +379,13 @@ function FieldInput({
   value,
   onChange,
   onBlur,
+  autoFocus,
 }: {
   field: Field
   value: unknown
   onChange: (v: unknown) => void
   onBlur?: () => void
+  autoFocus?: boolean
 }) {
   const h = field.height || 1
 
@@ -371,6 +398,7 @@ function FieldInput({
           onBlur={onBlur}
           rows={(field.options?.rows as number) || Math.max(4, h * 2)}
           required={field.is_required}
+          autoFocus={autoFocus}
         />
       )
     case 'time':
@@ -407,6 +435,7 @@ function FieldInput({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           required={field.is_required}
+          autoFocus={autoFocus}
         />
       )
     }
@@ -647,7 +676,7 @@ function FieldInput({
       )
     default:
       return (
-        <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
+        <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} autoFocus={autoFocus} />
       )
   }
 }

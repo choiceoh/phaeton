@@ -16,7 +16,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { GripVertical } from 'lucide-react'
+import { GripVertical, Trash2 } from 'lucide-react'
 
 import { FIELD_TYPE_LABELS, isLayoutType } from '@/lib/constants'
 
@@ -145,6 +145,12 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     4: 'sm:col-span-4', 5: 'sm:col-span-5', 6: 'sm:col-span-6',
   }
 
+  const rowSpan: Record<number, string> = {
+    1: '',
+    2: 'row-span-2 min-h-24',
+    3: 'row-span-3 min-h-36',
+  }
+
   const activeField = activeId ? fields.find((f) => f.id === activeId) : null
 
   return (
@@ -153,7 +159,6 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
       <div
         className="rounded-lg border bg-muted/50 p-4"
         onDragOver={(e) => {
-          // Allow palette drops on the container
           if (e.dataTransfer.types.includes('application/palette-field')) {
             e.preventDefault()
             e.currentTarget.classList.add('ring-2', 'ring-primary/30')
@@ -188,6 +193,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                     isSelected={selectedId === field.id}
                     isResizing={resizingId === field.id}
                     smSpan={smSpan}
+                    rowSpan={rowSpan}
                     onSelect={onSelect}
                     onRemove={setRemoveTargetId}
                     onResizeStart={handleResizeStart}
@@ -233,13 +239,14 @@ interface SortableFieldItemProps {
   isSelected: boolean
   isResizing: boolean
   smSpan: Record<number, string>
+  rowSpan: Record<number, string>
   onSelect: (id: string) => void
   onRemove: (id: string) => void
   onResizeStart: (e: React.MouseEvent, field: FieldDraft) => void
 }
 
 function SortableFieldItem({
-  field, span, isLayout, isSelected, isResizing, smSpan,
+  field, span, isLayout, isSelected, isResizing, smSpan, rowSpan,
   onSelect, onRemove, onResizeStart,
 }: SortableFieldItemProps) {
   const {
@@ -264,7 +271,7 @@ function SortableFieldItem({
         className={`col-span-full ${isDragging ? 'z-10 opacity-40' : ''}`}
       >
         <div
-          className={`flex items-center gap-1 cursor-pointer rounded-md px-1 py-0.5 transition-colors ${
+          className={`relative flex items-center gap-1 cursor-pointer rounded-md px-1 py-0.5 transition-colors ${
             isSelected ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
           }`}
           onClick={() => onSelect(field.id)}
@@ -279,6 +286,13 @@ function SortableFieldItem({
           <div className="flex-1">
             <LayoutPreview field={field} />
           </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove(field.id) }}
+            className="absolute top-1 right-1 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive [div:hover>&]:opacity-100"
+            type="button"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     )
@@ -288,7 +302,7 @@ function SortableFieldItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'} ${isDragging ? 'z-10 opacity-40' : ''}`}
+      className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'} ${rowSpan[field.height] ?? ''} ${isDragging ? 'z-10 opacity-40' : ''}`}
     >
       <div
         className={`relative cursor-pointer rounded-md p-2 transition-all duration-200 ${
@@ -316,10 +330,10 @@ function SortableFieldItem({
             )}
             <button
               onClick={(e) => { e.stopPropagation(); onRemove(field.id) }}
-              className="text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive [div:hover>&]:opacity-100"
+              className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive [div:hover>&]:opacity-100"
               type="button"
             >
-              ×
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
