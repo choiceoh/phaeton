@@ -151,10 +151,10 @@ export default function FieldProperties({ field, collections, onChange }: Props)
         <h3 className="text-sm font-medium">속성</h3>
       </div>
 
-      {/* ── 유형 전환 (그룹 내) ── */}
-      {variantGroup && (
-        <>
-          <section className="space-y-2">
+      {/* ── 유형 전환 + 폭/높이 ── */}
+      <section className="space-y-2">
+        {variantGroup && (
+          <>
             <Label className="text-xs font-semibold text-muted-foreground">유형</Label>
             <Select
               value={field.field_type}
@@ -169,10 +169,48 @@ export default function FieldProperties({ field, collections, onChange }: Props)
                 ))}
               </SelectContent>
             </Select>
-          </section>
-          <Separator />
-        </>
-      )}
+          </>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold text-muted-foreground">폭</Label>
+            <Select
+              value={String(field.width)}
+              onValueChange={(v) => update({ width: Number(v) })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WIDTH_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={String(o.value)}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold text-muted-foreground">높이</Label>
+            <Select
+              value={String(field.height)}
+              onValueChange={(v) => update({ height: Number(v) })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HEIGHT_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={String(o.value)}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </section>
+      <Separator />
 
       {/* ── 이름 (Label) ── */}
       <section className="space-y-2">
@@ -415,50 +453,6 @@ export default function FieldProperties({ field, collections, onChange }: Props)
         </>
       )}
 
-      {/* ── 폭 / 높이 (그리드 사이즈) ── */}
-      <section className="space-y-2">
-        <Label className="text-xs font-semibold text-muted-foreground">그리드 크기</Label>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label className="text-xs">폭</Label>
-            <Select
-              value={String(field.width)}
-              onValueChange={(v) => update({ width: Number(v) })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {WIDTH_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={String(o.value)}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">높이</Label>
-            <Select
-              value={String(field.height)}
-              onValueChange={(v) => update({ height: Number(v) })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {HEIGHT_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={String(o.value)}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </section>
-
-      <Separator />
 
       {/* ── 입력 너비 조절 (입력 박스 크기) ── */}
       <section className="space-y-2">
