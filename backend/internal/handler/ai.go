@@ -102,7 +102,7 @@ Output ONLY valid JSON — no markdown fences, no explanation, no extra text.
 }
 
 ## Field Types & Options
-Valid field types: text, textarea, number, integer, boolean, date, datetime, time, select, multiselect, user, file, autonumber, relation, json.
+Valid field types: text, textarea, number, integer, boolean, date, datetime, time, select, multiselect, user, file, autonumber, relation, json, formula, lookup, rollup.
 
 Layout types (visual only, no data): label, line, spacer.
 
@@ -114,6 +114,9 @@ Option rules:
 - text (phone) → "options": {"display_type": "phone"}
 - autonumber → "options": {"prefix": "XXX-", "start": 1} (auto-incrementing ID)
 - label → "options": {"text": "섹션 제목 텍스트"} (section header)
+- formula → "options": {"expression": "price * quantity"} (computed from other fields)
+- lookup → "options": {"relation_field": "relation_slug", "target_field": "target_slug"} (value from related record)
+- rollup → "options": {"relation_field": "relation_slug", "target_field": "target_slug", "function": "SUM"} (aggregate related records; functions: SUM/COUNT/AVG/MIN/MAX/COUNTA)
 
 ## Slug Rules
 - Start with lowercase letter, only [a-z0-9_], max 63 chars.
