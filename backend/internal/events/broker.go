@@ -2,7 +2,9 @@ package events
 
 import (
 	"encoding/json"
+	"log/slog"
 	"sync"
+	"sync/atomic"
 )
 
 // SSEMessage is the payload sent to SSE clients.
@@ -17,8 +19,9 @@ type SSEMessage struct {
 
 // Broker fans out events to connected SSE clients.
 type Broker struct {
-	mu      sync.RWMutex
-	clients map[chan []byte]struct{}
+	mu       sync.RWMutex
+	clients  map[chan []byte]struct{}
+	dropCount atomic.Int64
 }
 
 func NewBroker() *Broker {
@@ -57,7 +60,14 @@ func (b *Broker) Broadcast(msg SSEMessage) {
 		select {
 		case c <- data:
 		default:
-			// client buffer full, drop message
+			n := b.dropCount.Add(1)
+			if n%100 == 1 { // log every 100 drops to avoid log spam
+				slog.Warn("sse: message dropped (client buffer full)",
+					"type", msg.Type,
+					"total_drops", n,
+					"clients", len(b.clients),
+				)
+			}
 		}
 	}
 }

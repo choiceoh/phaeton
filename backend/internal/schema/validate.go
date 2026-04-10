@@ -192,6 +192,21 @@ func ExtractNumberRange(raw json.RawMessage) *NumberRange {
 	return &opts
 }
 
+// ExtractMaxLength returns the max_length constraint from a text/textarea
+// field's options, or 0 if not set.
+func ExtractMaxLength(raw json.RawMessage) int {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0
+	}
+	var opts struct {
+		MaxLength int `json:"max_length"`
+	}
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		return 0
+	}
+	return opts.MaxLength
+}
+
 // ExtractChoices returns the allowed choices from a raw JSON options payload,
 // or nil if none are set. Used by both validation and the Dynamic API.
 func ExtractChoices(raw json.RawMessage) ([]string, error) {

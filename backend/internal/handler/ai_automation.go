@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -98,6 +99,9 @@ Output ONLY valid JSON — no markdown fences, no explanation.
 
 // BuildAutomation generates an automation config from a natural-language description.
 func (h *AIHandler) BuildAutomation(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 120*time.Second)
+	defer cancel()
+
 	collectionID := chi.URLParam(r, "id")
 
 	var req aiAutomationRequest

@@ -63,6 +63,9 @@ User: "김영수가 등록한 대기 건"
 
 // BuildFilter generates filter conditions from a natural language query.
 func (h *AIHandler) BuildFilter(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 120*time.Second)
+	defer cancel()
+
 	collectionSlug := chi.URLParam(r, "slug")
 
 	var req aiFilterRequest

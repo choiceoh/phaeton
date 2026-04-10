@@ -49,6 +49,9 @@ Return a JSON object where keys are field slugs and values are the extracted dat
 
 // Prefill generates field values from a natural language description of a record.
 func (h *AIHandler) Prefill(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 120*time.Second)
+	defer cancel()
+
 	collectionSlug := chi.URLParam(r, "slug")
 
 	var req aiPrefillRequest

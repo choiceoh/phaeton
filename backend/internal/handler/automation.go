@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -187,8 +188,12 @@ func (h *AutomationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.Name == "" || req.TriggerType == "" {
-		writeError(w, http.StatusBadRequest, "name and trigger_type are required")
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if err := validateAutomationReq(req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if req.TriggerConfig == nil {
@@ -258,6 +263,10 @@ func (h *AutomationHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var req createAutomationReq
 	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validateAutomationReq(req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -397,4 +406,49 @@ func (h *AutomationHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
 
 	page, _, _ := ParsePagination(params)
 	writeList(w, result, total, page, limit)
+}
+
+// --- Validation ---
+
+var validTriggerTypes = map[string]bool{
+	"record_created": true, "record_updated": true, "record_deleted": true,
+	"status_change": true, "schedule": true, "form_submit": true,
+}
+
+var validActionTypes = map[string]bool{
+	"send_notification": true, "update_field": true, "call_webhook": true,
+}
+
+var validConditionOperators = map[string]bool{
+	"equals": true, "not_equals": true, "contains": true,
+	"gt": true, "lt": true, "is_empty": true, "is_not_empty": true,
+}
+
+func validateAutomationReq(req createAutomationReq) error {
+	if req.TriggerType == "" {
+		return fmt.Errorf("trigger_type is required")
+	}
+	if !validTriggerTypes[req.TriggerType] {
+		return fmt.Errorf("invalid trigger_type %q; allowed: record_created, record_updated, record_deleted, status_change, schedule, form_submit", req.TriggerType)
+	}
+	for i, c := range req.Conditions {
+		if c.FieldSlug == "" {
+			return fmt.Errorf("conditions[%d].field_slug is required", i)
+		}
+		if c.Operator == "" {
+			return fmt.Errorf("conditions[%d].operator is required", i)
+		}
+		if !validConditionOperators[c.Operator] {
+			return fmt.Errorf("conditions[%d]: invalid operator %q; allowed: equals, not_equals, contains, gt, lt, is_empty, is_not_empty", i, c.Operator)
+		}
+	}
+	for i, a := range req.Actions {
+		if a.ActionType == "" {
+			return fmt.Errorf("actions[%d].action_type is required", i)
+		}
+		if !validActionTypes[a.ActionType] {
+			return fmt.Errorf("actions[%d]: invalid action_type %q; allowed: send_notification, update_field, call_webhook", i, a.ActionType)
+		}
+	}
+	return nil
 }

@@ -28,7 +28,20 @@ func (h *ChartHandler) List(w http.ResponseWriter, r *http.Request) {
 	if charts == nil {
 		charts = []schema.Chart{}
 	}
-	writeJSON(w, http.StatusOK, charts)
+
+	// Apply pagination.
+	total := int64(len(charts))
+	page, limit, offset := ParsePagination(r.URL.Query())
+	if offset >= len(charts) {
+		charts = []schema.Chart{}
+	} else {
+		end := offset + limit
+		if end > len(charts) {
+			end = len(charts)
+		}
+		charts = charts[offset:end]
+	}
+	writeList(w, charts, total, page, limit)
 }
 
 func (h *ChartHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +57,11 @@ func (h *ChartHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ChartType == "" {
 		writeError(w, http.StatusBadRequest, "chart_type is required")
+		return
+	}
+	validChartTypes := map[string]bool{"bar": true, "line": true, "pie": true, "doughnut": true, "area": true}
+	if !validChartTypes[req.ChartType] {
+		writeError(w, http.StatusBadRequest, "invalid chart_type; allowed: bar, line, pie, doughnut, area")
 		return
 	}
 
