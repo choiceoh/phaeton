@@ -38,12 +38,13 @@ backend/
     db/                        pgx 풀 + goose 마이그레이션
     events/                    SSE 이벤트 브로커
     formula/                   수식 필드 파서/평가
-    handler/                   HTTP 핸들러 (auth, schema, dynamic, views, filter, ai, ai_chat,
-                               ai_automation, ai_chart, ai_csv, ai_filter, ai_formula, ai_prefill,
-                               ai_chat_guide, ai_tools, automation, charts, comments, computed, csv,
-                               department, dynamic_defaults, dynamic_similar, history, members,
-                               notifications, pdf, report, saved_views, sse, subsidiary, template,
-                               upload, webhook, api_validate, middleware, json)
+    handler/                   HTTP 핸들러 (ai, ai_automation, ai_chart, ai_chat, ai_chat_guide,
+                               ai_csv, ai_filter, ai_formula, ai_prefill, ai_solar_domain,
+                               ai_tools, api_validate, auth, automation, charts, comments,
+                               computed, csv, department, dynamic, dynamic_defaults,
+                               dynamic_similar, dynamic_views, filter, format_display, history,
+                               json, members, middleware, notifications, pdf, report, saved_views,
+                               schema, sse, subsidiary, template, upload, views, webhook)
     infra/                     로깅, API 에러, 메트릭스, httpretry, 워커풀, shortid, cfgwatch, lifecycle
     middleware/                JWT, CORS, 로깅, 레이트리미터, origin, secpath, RBAC, collection_access, apilimit
     migration/                 DDL 마이그레이션 엔진
@@ -57,33 +58,41 @@ backend/
   pkg/                         atomicfile, httputil, jsonutil
 frontend/
   src/
-    pages/                     AppListPage, AppBuilderPage, AppViewPage, AppSettingsPage,
-                               AutomationsPage, DashboardPage, GlobalAutomationsPage,
-                               GlobalDashboardPage, InterfaceDesignerPage, LoginPage,
-                               MigrationHistoryPage, OrgChartPage, ProcessPage, ProfilePage,
-                               RelationshipPage, SettingsPage, UsersPage, NotFoundPage
-    components/works/          AppCard, AppBuilder, FieldPalette, FieldPreview, FieldProperties,
-                               EntryForm, EntrySheet, FilterBuilder, FilterChips, FormPreview,
-                               FormulaEditor, SortPanel, TemplateGallery, PreviewDialog,
-                               SchedulePicker, AIBuildDialog, AIAutomationDialog,
-                               BulkEditPanel, CSVImportPreview, IconPicker, ProcessFlowDiagram,
-                               RelationshipGraph, SetupChecklist, SpreadsheetInput
-    components/works/views/    ListView, KanbanView, CalendarView, GalleryView, GanttView,
-                               FormView, ChartPanel, ViewTabs, ViewGuide
+    layouts/                   RootLayout
+    contexts/                  AIAvailabilityContext, UndoContext
+    pages/                     AIChatPage, AppBuilderPage, AppListPage, AppSettingsPage,
+                               AppViewPage, AutomationsPage, DashboardPage, EntryPage,
+                               GlobalAutomationsPage, GlobalCalendarPage, GlobalDashboardPage,
+                               InterfaceDesignerPage, LoginPage, MigrationHistoryPage,
+                               MyTasksPage, NotFoundPage, OrgChartPage, ProcessPage,
+                               ProfilePage, RelationshipPage, SettingsPage, UsersPage
+    components/works/          AIAutomationDialog, AIBuildDialog, AppBuilder, AppCard,
+                               BulkEditPanel, CSVImportPreview, EntryComments, EntryForm,
+                               EntryHistory, FieldPalette, FieldPreview, FieldProperties,
+                               FilterBuilder, FilterChips, FormPreview, FormulaEditor,
+                               IconPicker, PreviewDialog, ProcessFlowDiagram,
+                               RelationshipGraph, SchedulePicker, SetupChecklist,
+                               SortPanel, SpreadsheetInput, TemplateGallery
+    components/works/views/    CalendarDayView, CalendarView, CalendarWeekView, ChartPanel,
+                               FormView, GalleryView, GanttView, KanbanView, ViewGuide
     components/common/         AIChatPanel, CoachMark, CommandPalette, ConfirmDialog, DataTable,
-                               EmptyState, ErrorBoundary, ErrorState, Form, GridCell,
+                               EmptyState, ErrorBoundary, ErrorState, Form,
                                HotkeyHelpDialog, LoadingState, NotificationBell, OfflineBanner,
                                PageHeader, RelationCombobox, RelationMultiCombobox, RoleGate,
                                UserCombobox
+    components/admin/          DepartmentPanel, OrgTree, SubsidiaryPanel, UserFormDialog
     components/ui/             shadcn 컴포넌트
-    hooks/                     useAuth, useEntries, useViews, useAI, useAIChat, useAIAutomation,
-                               useAIHealth, useAutomations, useAutomationRunToasts, useCharts,
-                               useCollections, useComments, useDepartments, useGridNavigation,
-                               useHistory, useHotkeys, useMembers, useMigrations, useNotifications,
-                               useProcess, useRelationshipGraph, useRetryToast, useSavedViews,
-                               useSSE, useSubsidiaries, useUndoToast, useUnsavedChanges, useUsers
-    lib/                       types.ts, constants.ts, fieldHints.ts, formatCell.ts, queryKeys.ts,
-                               queryClient.ts, clipboard.ts, utils.ts, templates.ts
+    hooks/                     useAI, useAIAutomation, useAIChat, useAIHealth, useAuth,
+                               useAutomationRunToasts, useAutomations, useCharts,
+                               useCollections, useComments, useConflictAwareUpdate,
+                               useDepartments, useEntries, useGridNavigation, useHistory,
+                               useHotkeys, useIsMobile, useMembers, useMigrations,
+                               useNotifications, useProcess, useRelationshipGraph,
+                               useRetryToast, useSavedViews, useSSE, useSubsidiaries,
+                               useUndoToast, useUnsavedChanges, useUsers, useViews
+    lib/                       types.ts, constants.ts, fieldGuards.ts, fieldHints.ts,
+                               formatCell.ts, queryClient.ts, queryKeys.ts, clipboard.ts,
+                               utils.ts, templates.ts
     lib/api/                   client.ts, errors.ts, index.ts
 ```
 
