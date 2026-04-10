@@ -4,6 +4,7 @@ import RootLayout from '@/layouts/RootLayout'
 import AppBuilderPage from '@/pages/AppBuilderPage'
 import AppListPage from '@/pages/AppListPage'
 import AppSettingsPage from '@/pages/AppSettingsPage'
+import AutomationsPage from '@/pages/AutomationsPage'
 import DashboardPage from '@/pages/DashboardPage'
 import ProcessPage from '@/pages/ProcessPage'
 import AppViewPage from '@/pages/AppViewPage'
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/apps/:appId/dashboard" element={<DashboardPage />} />
         <Route path="/apps/:appId/settings" element={<AppSettingsPage />} />
         <Route path="/apps/:appId/process" element={<ProcessPage />} />
+        <Route path="/apps/:appId/automations" element={<AutomationsPage />} />
         <Route path="/history" element={<MigrationHistoryPage />} />
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/org" element={<OrgChartPage />} />

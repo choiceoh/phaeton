@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/choiceoh/phaeton/backend/internal/events"
 	"github.com/choiceoh/phaeton/backend/internal/formula"
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/pgutil"
@@ -24,10 +25,11 @@ import (
 type DynHandler struct {
 	pool  *pgxpool.Pool
 	cache *schema.Cache
+	bus   *events.Bus
 }
 
-func NewDynHandler(pool *pgxpool.Pool, cache *schema.Cache) *DynHandler {
-	return &DynHandler{pool: pool, cache: cache}
+func NewDynHandler(pool *pgxpool.Pool, cache *schema.Cache, bus *events.Bus) *DynHandler {
+	return &DynHandler{pool: pool, cache: cache, bus: bus}
 }
 
 // --- List ---
@@ -317,6 +319,18 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Resolve computed fields for the created record.
 	h.resolveComputedFields(r.Context(), records, fields)
 
+	// Publish automation event.
+	if recID, ok := records[0]["id"].(string); ok {
+		h.bus.Publish(r.Context(), events.Event{
+			Type:         events.EventRecordCreate,
+			CollectionID: col.ID,
+			RecordID:     recID,
+			ActorUserID:  user.UserID,
+			ActorName:    user.Name,
+			NewRecord:    records[0],
+		})
+	}
+
 	writeJSON(w, http.StatusCreated, records[0])
 }
 
@@ -459,6 +473,25 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve computed fields for the updated record.
 	h.resolveComputedFields(r.Context(), records, fields)
+
+	// Publish automation event.
+	ev := events.Event{
+		Type:         events.EventRecordUpdate,
+		CollectionID: col.ID,
+		RecordID:     id,
+		ActorUserID:  user.UserID,
+		ActorName:    user.Name,
+		OldRecord:    oldRow,
+		NewRecord:    records[0],
+	}
+	// Detect status change.
+	if oldStatus, _ := oldRow["_status"].(string); oldStatus != "" {
+		if newStatus, _ := records[0]["_status"].(string); newStatus != "" && newStatus != oldStatus {
+			ev.StatusFrom = oldStatus
+			ev.StatusTo = newStatus
+		}
+	}
+	h.bus.Publish(r.Context(), ev)
 
 	writeJSON(w, http.StatusOK, records[0])
 }
@@ -1088,6 +1121,15 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	// Record change history.
 	recordChange(r.Context(), h.pool, col.ID, id, user.UserID, user.Name, "delete", map[string]any{"_deleted": true})
+
+	// Publish automation event.
+	h.bus.Publish(r.Context(), events.Event{
+		Type:         events.EventRecordDelete,
+		CollectionID: col.ID,
+		RecordID:     id,
+		ActorUserID:  user.UserID,
+		ActorName:    user.Name,
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

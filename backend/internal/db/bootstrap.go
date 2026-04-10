@@ -259,6 +259,56 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_saved_views_collection ON _meta.saved_views(collection_id)`,
 	)
 
+	// --- automations ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.automations (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			collection_id   UUID NOT NULL REFERENCES _meta.collections(id) ON DELETE CASCADE,
+			name            VARCHAR(255) NOT NULL,
+			is_enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+			trigger_type    VARCHAR(31) NOT NULL,
+			trigger_config  JSONB NOT NULL DEFAULT '{}',
+			created_by      UUID,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_automations_collection ON _meta.automations(collection_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_automations_trigger ON _meta.automations(collection_id, trigger_type) WHERE is_enabled = TRUE`,
+
+		`CREATE TABLE IF NOT EXISTS _meta.automation_conditions (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			automation_id   UUID NOT NULL REFERENCES _meta.automations(id) ON DELETE CASCADE,
+			field_slug      VARCHAR(63) NOT NULL,
+			operator        VARCHAR(31) NOT NULL,
+			value           TEXT,
+			sort_order      INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_automation_conditions_auto ON _meta.automation_conditions(automation_id)`,
+
+		`CREATE TABLE IF NOT EXISTS _meta.automation_actions (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			automation_id   UUID NOT NULL REFERENCES _meta.automations(id) ON DELETE CASCADE,
+			action_type     VARCHAR(31) NOT NULL,
+			action_config   JSONB NOT NULL DEFAULT '{}',
+			sort_order      INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_automation_actions_auto ON _meta.automation_actions(automation_id)`,
+
+		`CREATE TABLE IF NOT EXISTS _history.automation_runs (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			automation_id   UUID NOT NULL,
+			collection_id   UUID NOT NULL,
+			record_id       UUID NOT NULL,
+			trigger_type    VARCHAR(31) NOT NULL,
+			status          VARCHAR(15) NOT NULL DEFAULT 'success',
+			error_message   TEXT,
+			duration_ms     INTEGER,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_automation_runs_auto ON _history.automation_runs(automation_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_automation_runs_collection ON _history.automation_runs(collection_id, created_at DESC)`,
+	)
+
 	// --- incremental schema evolution (safe for existing deployments) ---
 	alters := []string{
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS process_enabled BOOLEAN NOT NULL DEFAULT FALSE`,

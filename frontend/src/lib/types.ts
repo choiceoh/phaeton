@@ -320,6 +320,63 @@ export interface UpdateSavedViewReq {
   is_public?: boolean
 }
 
+// --- Automations ---
+
+export type TriggerType = 'record_created' | 'record_updated' | 'record_deleted' | 'status_change'
+export type ActionType = 'send_notification' | 'update_field' | 'call_webhook'
+export type ConditionOperator = 'equals' | 'not_equals' | 'contains' | 'gt' | 'lt' | 'is_empty' | 'is_not_empty'
+
+export interface AutomationCondition {
+  id: string
+  field_slug: string
+  operator: ConditionOperator
+  value: string
+  sort_order: number
+}
+
+export interface AutomationAction {
+  id: string
+  action_type: ActionType
+  action_config: Record<string, unknown>
+  sort_order: number
+}
+
+export interface Automation {
+  id: string
+  collection_id: string
+  name: string
+  is_enabled: boolean
+  trigger_type: TriggerType
+  trigger_config: Record<string, unknown>
+  conditions: AutomationCondition[]
+  actions: AutomationAction[]
+  created_by?: string
+  created_at: string
+  updated_at: string
+  action_count?: number
+}
+
+export interface AutomationRun {
+  id: string
+  automation_id: string
+  collection_id: string
+  record_id: string
+  trigger_type: string
+  status: 'success' | 'error' | 'skipped'
+  error_message?: string
+  duration_ms: number
+  created_at: string
+}
+
+export interface CreateAutomationReq {
+  name: string
+  is_enabled: boolean
+  trigger_type: TriggerType
+  trigger_config?: Record<string, unknown>
+  conditions: { field_slug: string, operator: ConditionOperator, value: string }[]
+  actions: { action_type: ActionType, action_config: Record<string, unknown> }[]
+}
+
 // --- Envelope responses ---
 
 export interface DataEnvelope<T> {
