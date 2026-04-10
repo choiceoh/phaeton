@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 
 import AIChatPanel from '@/components/common/AIChatPanel'
 import { AIAvailabilityProvider } from '@/contexts/AIAvailabilityContext'
@@ -33,32 +33,32 @@ export default function RootLayout() {
       <div className="min-h-screen bg-stone-50">
         <nav className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-3">
           <div className="flex items-center gap-6">
-            <Link to="/" className="text-lg font-semibold text-stone-900">
+            <Link to="/" className="text-lg font-semibold text-stone-900" viewTransition>
               Phaeton
             </Link>
-            <Link to="/apps" className="nav-link text-sm text-stone-600 hover:text-stone-900">
+            <NavLink to="/apps" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
               업무
-            </Link>
-            <Link to="/dashboard" className="nav-link text-sm text-stone-600 hover:text-stone-900">
+            </NavLink>
+            <NavLink to="/dashboard" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
               대시보드
-            </Link>
-            <Link to="/admin/org" className="nav-link text-sm text-stone-600 hover:text-stone-900">
+            </NavLink>
+            <NavLink to="/admin/org" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
               조직도
-            </Link>
-            <Link to="/automations" className="nav-link text-sm text-stone-600 hover:text-stone-900">
+            </NavLink>
+            <NavLink to="/automations" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
               자동화
-            </Link>
+            </NavLink>
             {(user.role === 'director' || user.role === 'pm') && (
               <>
-                <Link to="/history" className="nav-link text-sm text-stone-600 hover:text-stone-900">
+                <NavLink to="/history" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
                   이력
-                </Link>
-                <Link to="/admin/users" className="nav-link text-sm text-stone-600 hover:text-stone-900">
+                </NavLink>
+                <NavLink to="/admin/users" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
                   사용자 관리
-                </Link>
-                <Link to="/settings" className="nav-link text-sm text-stone-600 hover:text-stone-900">
+                </NavLink>
+                <NavLink to="/settings" className="nav-link text-sm text-stone-600 hover:text-stone-900" viewTransition>
                   설정
-                </Link>
+                </NavLink>
               </>
             )}
           </div>
@@ -73,9 +73,7 @@ export default function RootLayout() {
           </div>
         </nav>
         <main className="mx-auto max-w-7xl p-6">
-          <div key={pathname} className="animate-fade-in-up">
-            <Outlet />
-          </div>
+          <Outlet />
         </main>
         <AIChatPanel />
       </div>

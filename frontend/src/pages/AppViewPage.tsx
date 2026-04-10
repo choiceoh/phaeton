@@ -49,6 +49,7 @@ import ChartPanel from '@/components/works/views/ChartPanel'
 import GalleryView from '@/components/works/views/GalleryView'
 import GanttView from '@/components/works/views/GanttView'
 import KanbanView from '@/components/works/views/KanbanView'
+import ViewGuide from '@/components/works/views/ViewGuide'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -80,6 +81,7 @@ import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/u
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
+import { useUndoToast } from '@/hooks/useUndoToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
@@ -205,6 +207,7 @@ export default function AppViewPage() {
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
+  const undoToast = useUndoToast()
 
   // Multi-select state for bulk operations.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
@@ -462,13 +465,17 @@ export default function AppViewPage() {
     [list],
   )
 
-  // Inline edit handler with cell-level visual feedback.
+  // Inline edit handler with cell-level visual feedback + undo.
   const handleCellEdit = useCallback(
     (event: CellEditEvent) => {
       const cellKey = `${event.rowId}:${event.columnId}`
       const body: Record<string, unknown> = { [event.columnId]: event.value }
       const version = getRowVersion(event.rowId)
       if (version != null) body._version = version
+
+      // Capture old value for undo.
+      const oldValue = list?.data?.find((r) => String(r.id) === event.rowId)?.[event.columnId]
+
       setCellSaveState((prev) => new Map(prev).set(cellKey, 'saving'))
       updateEntry.mutate(
         { id: event.rowId, body },
@@ -482,6 +489,13 @@ export default function AppViewPage() {
                 return next
               })
             }, 1500)
+            // Offer undo only when old value differs.
+            if (oldValue !== event.value) {
+              undoToast.push('수정되었습니다', () => {
+                const undoBody: Record<string, unknown> = { [event.columnId]: oldValue }
+                updateEntry.mutate({ id: event.rowId, body: undoBody })
+              })
+            }
           },
           onError: (err) => {
             setCellSaveState((prev) => {
@@ -499,7 +513,7 @@ export default function AppViewPage() {
         },
       )
     },
-    [updateEntry, getRowVersion, refetch],
+    [updateEntry, getRowVersion, refetch, list, undoToast],
   )
 
   // Batch edit handler (for paste operations).
@@ -829,10 +843,19 @@ export default function AppViewPage() {
 
   function handleDelete() {
     if (!deleteId) return
+    // Capture entry data for undo (recreate).
+    const deletedRow = list?.data?.find((r) => String(r.id) === deleteId)
     deleteEntry.mutate(deleteId, {
       onSuccess: () => {
-        toast.success('삭제되었습니다')
         setDeleteId(null)
+        if (deletedRow) {
+          const { id: _id, _version: _v, created_at: _ca, updated_at: _ua, _optimistic: _o, ...rest } = deletedRow as Record<string, unknown>
+          undoToast.push('삭제되었습니다', () => {
+            createEntry.mutate(rest)
+          })
+        } else {
+          toast.success('삭제되었습니다')
+        }
       },
       onError: (err) => toast.error(formatError(err)),
     })
@@ -1310,6 +1333,9 @@ export default function AppViewPage() {
               selectedRowIds={selectedRowIds}
               onSelectionChange={setSelectedRowIds}
             />
+            {list.data.length === 0 && (
+              <ViewGuide fields={collection.fields ?? []} />
+            )}
           </TabsContent>
 
           {hasProcessKanban && processGroupField && (
