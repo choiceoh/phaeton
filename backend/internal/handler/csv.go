@@ -112,6 +112,9 @@ func formatCSVValue(v any) string {
 // ImportCSV parses an uploaded CSV file and bulk-creates records.
 // The first row must be a header row containing field slugs.
 func (h *DynHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
+	r, cancel := withDeadline(r, 60*time.Second)
+	defer cancel()
+
 	slug := chi.URLParam(r, "slug")
 	col, fields, ok := h.resolveCollection(w, slug)
 	if !ok {
@@ -329,11 +332,36 @@ func coerceCSVValue(val string, f schema.Field) (any, error) {
 		}
 		return val, nil
 	case schema.FieldSelect:
+		choices, err := schema.ExtractChoices(f.Options)
+		if err == nil && len(choices) > 0 {
+			found := false
+			for _, c := range choices {
+				if c == val {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("value %q is not in allowed choices %v", val, choices)
+			}
+		}
 		return val, nil
 	case schema.FieldMultiselect:
 		parts := strings.Split(val, ",")
 		for i := range parts {
 			parts[i] = strings.TrimSpace(parts[i])
+		}
+		choices, err := schema.ExtractChoices(f.Options)
+		if err == nil && len(choices) > 0 {
+			choiceSet := make(map[string]bool, len(choices))
+			for _, c := range choices {
+				choiceSet[c] = true
+			}
+			for _, p := range parts {
+				if !choiceSet[p] {
+					return nil, fmt.Errorf("value %q is not in allowed choices %v", p, choices)
+				}
+			}
 		}
 		return parts, nil
 	case schema.FieldRelation, schema.FieldUser, schema.FieldFile:

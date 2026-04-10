@@ -61,19 +61,22 @@ func validatePayload(
 
 		if !present {
 			if isCreate && f.IsRequired {
-				return fmt.Errorf("%w: field %q is required", schema.ErrInvalidInput, f.Slug)
+				label := fieldLabel(f)
+				return fmt.Errorf("%w: field %s is required", schema.ErrInvalidInput, label)
 			}
 			continue
 		}
 		if v == nil {
 			if f.IsRequired {
-				return fmt.Errorf("%w: field %q cannot be null", schema.ErrInvalidInput, f.Slug)
+				label := fieldLabel(f)
+				return fmt.Errorf("%w: field %s cannot be null", schema.ErrInvalidInput, label)
 			}
 			continue
 		}
 
 		if err := validateFieldValue(f, v); err != nil {
-			return fmt.Errorf("field %q: %w", f.Slug, err)
+			label := fieldLabel(f)
+			return fmt.Errorf("field %s: %w", label, err)
 		}
 
 		// Relation: confirm the target row(s) exist (and aren't soft-deleted).
@@ -121,8 +124,12 @@ func validatePayload(
 func validateFieldValue(f schema.Field, v any) error {
 	switch f.FieldType {
 	case schema.FieldText, schema.FieldTextarea:
-		if _, ok := v.(string); !ok {
+		s, ok := v.(string)
+		if !ok {
 			return fmt.Errorf("%w: expected string", schema.ErrInvalidInput)
+		}
+		if maxLen := schema.ExtractMaxLength(f.Options); maxLen > 0 && len([]rune(s)) > maxLen {
+			return fmt.Errorf("%w: value exceeds maximum length of %d characters", schema.ErrInvalidInput, maxLen)
 		}
 	case schema.FieldNumber:
 		num, ok := v.(float64)
@@ -325,6 +332,14 @@ func checkTransitions(
 		}
 	}
 	return nil
+}
+
+// fieldLabel returns a human-readable identifier for a field (label if available, slug otherwise).
+func fieldLabel(f schema.Field) string {
+	if f.Label != "" {
+		return fmt.Sprintf("%q (%s)", f.Label, f.Slug)
+	}
+	return fmt.Sprintf("%q", f.Slug)
 }
 
 // checkRelationTarget confirms the referenced row exists and is not soft-deleted.

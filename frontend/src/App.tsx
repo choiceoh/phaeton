@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router'
 
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import RootLayout from '@/layouts/RootLayout'
 import AppBuilderPage from '@/pages/AppBuilderPage'
 import AppListPage from '@/pages/AppListPage'
@@ -28,27 +29,27 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RootLayout />}>
-        <Route index element={<AppListPage />} />
-        <Route path="/apps" element={<AppListPage />} />
-        <Route path="/apps/relationships" element={<RelationshipPage />} />
-        <Route path="/apps/new" element={<AppBuilderPage />} />
-        <Route path="/apps/:appId" element={<AppViewPage />} />
-        <Route path="/apps/:appId/entries/new" element={<EntryPage />} />
-        <Route path="/apps/:appId/entries/:entryId" element={<EntryPage />} />
-        <Route path="/apps/:appId/dashboard" element={<DashboardPage />} />
-        <Route path="/apps/:appId/interface" element={<InterfaceDesignerPage />} />
-        <Route path="/apps/:appId/settings" element={<AppSettingsPage />} />
-        <Route path="/apps/:appId/process" element={<ProcessPage />} />
-        <Route path="/apps/:appId/automations" element={<AutomationsPage />} />
-        <Route path="/dashboard" element={<GlobalDashboardPage />} />
-        <Route path="/calendar" element={<GlobalCalendarPage />} />
-        <Route path="/automations" element={<GlobalAutomationsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/history" element={<MigrationHistoryPage />} />
-        <Route path="/admin/users" element={<UsersPage />} />
-        <Route path="/admin/org" element={<OrgChartPage />} />
-        <Route path="/ai" element={<AIChatPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route index element={<ErrorBoundary><AppListPage /></ErrorBoundary>} />
+        <Route path="/apps" element={<ErrorBoundary><AppListPage /></ErrorBoundary>} />
+        <Route path="/apps/relationships" element={<ErrorBoundary><RelationshipPage /></ErrorBoundary>} />
+        <Route path="/apps/new" element={<ErrorBoundary><AppBuilderPage /></ErrorBoundary>} />
+        <Route path="/apps/:appId" element={<ErrorBoundary><AppViewPage /></ErrorBoundary>} />
+        <Route path="/apps/:appId/entries/new" element={<ErrorBoundary><EntryPage /></ErrorBoundary>} />
+        <Route path="/apps/:appId/entries/:entryId" element={<ErrorBoundary><EntryPage /></ErrorBoundary>} />
+        <Route path="/apps/:appId/dashboard" element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
+        <Route path="/apps/:appId/interface" element={<ErrorBoundary><InterfaceDesignerPage /></ErrorBoundary>} />
+        <Route path="/apps/:appId/settings" element={<ErrorBoundary><AppSettingsPage /></ErrorBoundary>} />
+        <Route path="/apps/:appId/process" element={<ErrorBoundary><ProcessPage /></ErrorBoundary>} />
+        <Route path="/apps/:appId/automations" element={<ErrorBoundary><AutomationsPage /></ErrorBoundary>} />
+        <Route path="/dashboard" element={<ErrorBoundary><GlobalDashboardPage /></ErrorBoundary>} />
+        <Route path="/calendar" element={<ErrorBoundary><GlobalCalendarPage /></ErrorBoundary>} />
+        <Route path="/automations" element={<ErrorBoundary><GlobalAutomationsPage /></ErrorBoundary>} />
+        <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+        <Route path="/history" element={<ErrorBoundary><MigrationHistoryPage /></ErrorBoundary>} />
+        <Route path="/admin/users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
+        <Route path="/admin/org" element={<ErrorBoundary><OrgChartPage /></ErrorBoundary>} />
+        <Route path="/ai" element={<ErrorBoundary><AIChatPage /></ErrorBoundary>} />
+        <Route path="/profile" element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

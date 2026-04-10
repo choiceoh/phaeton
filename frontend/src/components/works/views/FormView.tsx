@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { isLayoutType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { Field, Process } from '@/lib/types'
+import { getDisplayType, getFieldOptions, isExpandedRecord } from '@/lib/fieldGuards'
 
 interface Props {
   fields: Field[]
@@ -227,8 +228,8 @@ export default function FormView({
               )}
               {!!currentEntry._created_by && (
                 <span>
-                  작성자: {typeof currentEntry._created_by === 'object'
-                    ? String((currentEntry._created_by as Record<string, unknown>).name ?? '')
+                  작성자: {isExpandedRecord(currentEntry._created_by)
+                    ? String(currentEntry._created_by.name ?? '')
                     : String(currentEntry._created_by)}
                 </span>
               )}
@@ -289,7 +290,7 @@ function FieldDisplay({ field, value }: { field: Field; value: unknown }) {
   // Progress
   if (
     (field.field_type === 'number' || field.field_type === 'integer') &&
-    field.options?.display_type === 'progress'
+    getDisplayType(field) === 'progress'
   ) {
     const num = Number(value)
     return (
@@ -308,9 +309,9 @@ function FieldDisplay({ field, value }: { field: Field; value: unknown }) {
   // Rating
   if (
     (field.field_type === 'number' || field.field_type === 'integer') &&
-    field.options?.display_type === 'rating'
+    getDisplayType(field) === 'rating'
   ) {
-    const max = (field.options?.max_rating as number) || 5
+    const max = getFieldOptions(field, 'number')?.max_rating || 5
     const current = Number(value) || 0
     return (
       <span>

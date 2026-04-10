@@ -55,6 +55,149 @@ export interface Field {
   relation?: Relation
 }
 
+// --- Per-field-type option interfaces ---
+
+export interface CommonFieldOptions {
+  visibility_rules?: { field_slug: string; operator: string; value?: string }[]
+}
+
+export interface TextFieldOptions extends CommonFieldOptions {
+  display_type?: 'url' | 'email' | 'phone'
+}
+
+export interface TextareaFieldOptions extends CommonFieldOptions {
+  rows?: number
+}
+
+export interface NumberFieldOptions extends CommonFieldOptions {
+  min?: number
+  max?: number
+  display_type?: 'currency' | 'percent' | 'rating' | 'progress'
+  currency_code?: string
+  max_rating?: number
+}
+
+export type IntegerFieldOptions = NumberFieldOptions
+
+export interface SelectFieldOptions extends CommonFieldOptions {
+  choices?: string[]
+  display?: 'dropdown' | 'radio'
+}
+
+export interface MultiselectFieldOptions extends CommonFieldOptions {
+  choices?: string[]
+}
+
+export interface FormulaFieldOptions extends CommonFieldOptions {
+  expression?: string
+  result_type?: 'text' | 'number' | 'integer' | 'boolean' | 'date'
+  precision?: number
+}
+
+export interface LookupFieldOptions extends CommonFieldOptions {
+  relation_field?: string
+  lookup_field?: string
+}
+
+export interface RollupFieldOptions extends CommonFieldOptions {
+  relation_field?: string
+  rollup_field?: string
+  rollup_fn?: string
+}
+
+export interface LabelFieldOptions extends CommonFieldOptions {
+  content?: string
+}
+
+export interface SpacerFieldOptions extends CommonFieldOptions {
+  height?: number
+}
+
+export interface SubColumn {
+  key: string
+  label: string
+  type?: string
+  formula?: string
+  choices?: string[]
+}
+
+export interface TableFieldOptions extends CommonFieldOptions {
+  sub_columns?: SubColumn[]
+  initial_rows?: number
+}
+
+export interface ConditionalRule {
+  id: string
+  colIdx: number
+  operator: string
+  value: string
+  style: Record<string, string>
+}
+
+export interface MergedCell {
+  startRow: number
+  startCol: number
+  endRow: number
+  endCol: number
+}
+
+export interface SpreadsheetFieldOptions extends CommonFieldOptions {
+  sub_columns?: (SubColumn & { formula?: string })[]
+  initial_rows?: number
+  conditional_rules?: ConditionalRule[]
+  merged_cells?: MergedCell[]
+}
+
+export interface FieldOptionsMap {
+  text: TextFieldOptions
+  textarea: TextareaFieldOptions
+  number: NumberFieldOptions
+  integer: IntegerFieldOptions
+  select: SelectFieldOptions
+  multiselect: MultiselectFieldOptions
+  formula: FormulaFieldOptions
+  lookup: LookupFieldOptions
+  rollup: RollupFieldOptions
+  label: LabelFieldOptions
+  spacer: SpacerFieldOptions
+  table: TableFieldOptions
+  spreadsheet: SpreadsheetFieldOptions
+  // These field types don't have specific options
+  boolean: CommonFieldOptions
+  date: CommonFieldOptions
+  datetime: CommonFieldOptions
+  time: CommonFieldOptions
+  relation: CommonFieldOptions
+  user: CommonFieldOptions
+  file: CommonFieldOptions
+  json: CommonFieldOptions
+  autonumber: CommonFieldOptions
+  line: CommonFieldOptions
+}
+
+// --- Entry row (dynamic table row with known system columns) ---
+
+export interface ExpandedRecord {
+  id: string
+  name?: string
+  title?: string
+  label?: string
+  email?: string
+  [key: string]: unknown
+}
+
+export interface EntryRow extends Record<string, unknown> {
+  id: string
+  _version?: number
+  _optimistic?: boolean
+  _created_by?: string | ExpandedRecord
+  _status?: string
+  created_at?: string
+  updated_at?: string
+  _created_at?: string
+  _updated_at?: string
+}
+
 export interface RLSFilter {
   field: string
   op: 'eq' | 'neq' | 'in' | 'contains'
@@ -214,6 +357,51 @@ export interface FilterCondition {
   value: string
 }
 
+export type FilterLogic = 'and' | 'or'
+
+export interface FilterGroup {
+  id: string
+  logic: FilterLogic
+  conditions: FilterCondition[]
+  groups: FilterGroup[]
+}
+
+/** Create an empty root filter group */
+export function emptyFilterGroup(): FilterGroup {
+  return { id: 'root', logic: 'and', conditions: [], groups: [] }
+}
+
+/** Check if a filter group has any conditions (flat or nested) */
+export function isFilterGroupEmpty(group: FilterGroup): boolean {
+  return group.conditions.length === 0 && group.groups.every(isFilterGroupEmpty)
+}
+
+/** Flatten a FilterGroup into a flat list of conditions (for display in chips) */
+export function flattenFilterGroup(group: FilterGroup): FilterCondition[] {
+  const result: FilterCondition[] = [...group.conditions]
+  for (const sub of group.groups) {
+    result.push(...flattenFilterGroup(sub))
+  }
+  return result
+}
+
+/** Serialize a FilterGroup to JSON for the _filter query param */
+export function serializeFilterGroup(group: FilterGroup): string | undefined {
+  if (isFilterGroupEmpty(group)) return undefined
+  function strip(g: FilterGroup): unknown {
+    return {
+      logic: g.logic,
+      conditions: g.conditions.map((c) => ({
+        field: c.field,
+        operator: c.operator,
+        value: c.value,
+      })),
+      groups: g.groups.filter((sg) => !isFilterGroupEmpty(sg)).map(strip),
+    }
+  }
+  return JSON.stringify(strip(group))
+}
+
 // --- Aggregate response ---
 
 export interface AggregateResult {
@@ -324,7 +512,7 @@ export interface SavedView {
   id: string
   collection_id: string
   name: string
-  filter_config: Record<string, string>
+  filter_config: Record<string, unknown>
   sort_config: string
   visible_fields?: string[]
   is_default: boolean
@@ -336,7 +524,7 @@ export interface SavedView {
 
 export interface CreateSavedViewReq {
   name: string
-  filter_config?: Record<string, string>
+  filter_config?: Record<string, unknown>
   sort_config?: string
   visible_fields?: string[]
   is_default?: boolean
@@ -345,7 +533,7 @@ export interface CreateSavedViewReq {
 
 export interface UpdateSavedViewReq {
   name?: string
-  filter_config?: Record<string, string>
+  filter_config?: Record<string, unknown>
   sort_config?: string
   visible_fields?: string[]
   is_default?: boolean

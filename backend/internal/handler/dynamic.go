@@ -62,14 +62,19 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	orderBy, sortJoins := ParseSortWithRelations(params.Get("sort"), fields, resolveRel)
 
-	// Filters: when sort joins are present, columns must be qualified to avoid
-	// ambiguous-column errors against the joined target tables.
+	// Filters: support both legacy query params and JSON _filter param.
 	var (
 		where string
 		args  []any
 		err   error
 	)
-	if len(sortJoins) > 0 {
+	if jsonFilter := params.Get("_filter"); jsonFilter != "" {
+		prefix := ""
+		if len(sortJoins) > 0 {
+			prefix = qTable
+		}
+		where, args, err = ParseJSONFilter(jsonFilter, fields, prefix)
+	} else if len(sortJoins) > 0 {
 		where, args, err = ParseFiltersWithPrefix(params, fields, qTable)
 	} else {
 		where, args, err = ParseFilters(params, fields)
@@ -684,7 +689,16 @@ func (h *DynHandler) Totals(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 
-	where, args, err := ParseFilters(params, fields)
+	var (
+		where string
+		args  []any
+		err   error
+	)
+	if jsonFilter := params.Get("_filter"); jsonFilter != "" {
+		where, args, err = ParseJSONFilter(jsonFilter, fields, "")
+	} else {
+		where, args, err = ParseFilters(params, fields)
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

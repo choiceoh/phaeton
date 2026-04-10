@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRecordHistory } from '@/hooks/useHistory'
 import type { Field } from '@/lib/types'
+import { isExpandedRecord } from '@/lib/fieldGuards'
 
 const OP_LABELS: Record<string, string> = {
   create: '생성',
@@ -120,11 +121,13 @@ function formatValue(v: unknown): string {
 function formatSingleValue(v: unknown): string {
   if (v == null) return '-'
   if (typeof v === 'object') {
-    const obj = v as Record<string, unknown>
-    if ('display_value' in obj && obj.display_value != null) return String(obj.display_value)
-    if ('name' in obj && obj.name != null) return String(obj.name)
-    if ('label' in obj && obj.label != null) return String(obj.label)
-    if ('title' in obj && obj.title != null) return String(obj.title)
+    if (isExpandedRecord(v)) {
+      const obj = v
+      if ('display_value' in obj && obj.display_value != null) return String(obj.display_value)
+      if (obj.name != null) return String(obj.name)
+      if (obj.label != null) return String(obj.label)
+      if (obj.title != null) return String(obj.title)
+    }
     return JSON.stringify(v)
   }
   return String(v)

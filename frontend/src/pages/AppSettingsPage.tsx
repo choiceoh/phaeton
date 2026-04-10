@@ -22,31 +22,20 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
-  useAddField,
   useCollection,
   useDeleteCollection,
-  useDeleteField,
   useUpdateCollection,
 } from '@/hooks/useCollections'
 import { useMembers, useAddMember, useRemoveMember } from '@/hooks/useMembers'
 import { formatError } from '@/lib/api'
-import { FIELD_TYPE_LABELS } from '@/lib/constants'
-import type { CreateFieldIn, FieldType, RLSFilter } from '@/lib/types'
-
-const FIELD_TYPES: FieldType[] = [
-  'text', 'number', 'integer', 'boolean', 'date', 'datetime',
-  'select', 'multiselect', 'relation', 'file', 'json',
-]
+import type { RLSFilter } from '@/lib/types'
 
 export default function AppSettingsPage() {
   const { appId } = useParams()
   const navigate = useNavigate()
   const { data: collection, isLoading, isError, error, refetch } = useCollection(appId)
 
-  const addField = useAddField(appId ?? '')
-  const deleteField = useDeleteField()
   const deleteCollection = useDeleteCollection()
   const updateCollection = useUpdateCollection(appId ?? '')
   const { data: members } = useMembers(appId)
@@ -57,15 +46,6 @@ export default function AppSettingsPage() {
 
   const [newMemberUserId, setNewMemberUserId] = useState('')
   const [newMemberRole, setNewMemberRole] = useState('viewer')
-  const [newFieldOpen, setNewFieldOpen] = useState(false)
-  const [newField, setNewField] = useState<Partial<CreateFieldIn>>({
-    field_type: 'text',
-    is_required: false,
-    is_unique: false,
-    is_indexed: false,
-  })
-
-  const [confirmDeleteField, setConfirmDeleteField] = useState<string | null>(null)
   const [confirmDeleteCollection, setConfirmDeleteCollection] = useState(false)
   const isMobile = useIsMobile()
 
@@ -89,62 +69,6 @@ export default function AppSettingsPage() {
   if (isLoading) return <LoadingState />
   if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!collection) return null
-
-  function handleAddField() {
-    if (!newField.slug || !newField.label || !newField.field_type) {
-      toast.error('영문 ID, 이름, 타입은 필수입니다')
-      return
-    }
-    const input: CreateFieldIn = {
-      slug: newField.slug,
-      label: newField.label,
-      field_type: newField.field_type,
-      is_required: newField.is_required ?? false,
-      is_unique: newField.is_unique ?? false,
-      is_indexed: newField.is_indexed ?? false,
-    }
-    // Two-phase: first try without confirm, server returns preview if dangerous.
-    addField.mutate(
-      { input, confirm: false },
-      {
-        onSuccess: (data) => {
-          if (typeof data === 'object' && data && 'confirmation_required' in data) {
-            // Re-submit with confirm flag
-            addField.mutate(
-              { input, confirm: true },
-              {
-                onSuccess: () => {
-                  toast.success('항목이 추가되었습니다')
-                  setNewFieldOpen(false)
-                  setNewField({ field_type: 'text', is_required: false, is_unique: false, is_indexed: false })
-                },
-                onError: (err) => toast.error(formatError(err)),
-              },
-            )
-          } else {
-            toast.success('항목이 추가되었습니다')
-            setNewFieldOpen(false)
-            setNewField({ field_type: 'text', is_required: false, is_unique: false, is_indexed: false })
-          }
-        },
-        onError: (err) => toast.error(formatError(err)),
-      },
-    )
-  }
-
-  function handleDeleteField() {
-    if (!confirmDeleteField) return
-    deleteField.mutate(
-      { fieldId: confirmDeleteField, confirm: true },
-      {
-        onSuccess: () => {
-          toast.success('항목이 삭제되었습니다')
-          setConfirmDeleteField(null)
-        },
-        onError: (err) => toast.error(formatError(err)),
-      },
-    )
-  }
 
   function handleDeleteCollection() {
     deleteCollection.mutate(
@@ -193,119 +117,6 @@ export default function AppSettingsPage() {
             </Card>
           </section>
         )}
-
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">항목 ({collection.fields?.length ?? 0})</h2>
-            {canManage && (
-              <Button size="sm" onClick={() => setNewFieldOpen(!newFieldOpen)}>
-                {newFieldOpen ? '취소' : '+ 항목 추가'}
-              </Button>
-            )}
-          </div>
-
-          {newFieldOpen && (
-            <Card className="mb-4 p-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <Label>영문 ID</Label>
-                  <Input
-                    value={newField.slug ?? ''}
-                    onChange={(e) =>
-                      setNewField({
-                        ...newField,
-                        slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''),
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>라벨</Label>
-                  <Input
-                    value={newField.label ?? ''}
-                    onChange={(e) => setNewField({ ...newField, label: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label>타입</Label>
-                  <Select
-                    value={newField.field_type}
-                    onValueChange={(v) =>
-                      v && setNewField({ ...newField, field_type: v as FieldType })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FIELD_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {FIELD_TYPE_LABELS[t]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 pt-6">
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={newField.is_required}
-                      onCheckedChange={(c) =>
-                        setNewField({ ...newField, is_required: !!c })
-                      }
-                    />
-                    필수
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={newField.is_unique}
-                      onCheckedChange={(c) => setNewField({ ...newField, is_unique: !!c })}
-                    />
-                    고유
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={newField.is_indexed}
-                      onCheckedChange={(c) =>
-                        setNewField({ ...newField, is_indexed: !!c })
-                      }
-                    />
-                    인덱스
-                  </label>
-                </div>
-              </div>
-              <div className="mt-3 flex justify-end">
-                <Button onClick={handleAddField} disabled={addField.isPending}>
-                  {addField.isPending ? '추가 중...' : '항목 추가'}
-                </Button>
-              </div>
-            </Card>
-          )}
-
-          <div className="space-y-2">
-            {collection.fields?.map((f) => (
-              <Card key={f.id} className="flex items-center justify-between p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{f.label}</span>
-                  <Badge variant="secondary">{FIELD_TYPE_LABELS[f.field_type]}</Badge>
-                  <span className="text-xs text-muted-foreground">{f.slug}</span>
-                  {f.is_required && <Badge variant="outline">필수</Badge>}
-                  {f.is_unique && <Badge variant="outline">고유</Badge>}
-                  {f.is_indexed && <Badge variant="outline">인덱스</Badge>}
-                </div>
-                {canManage && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setConfirmDeleteField(f.id)}
-                  >
-                    삭제
-                  </Button>
-                )}
-              </Card>
-            ))}
-          </div>
-        </section>
 
         {canManage && (
           <section>
@@ -483,17 +294,6 @@ export default function AppSettingsPage() {
           </section>
         )}
       </div>
-
-      <ConfirmDialog
-        open={!!confirmDeleteField}
-        onOpenChange={(open) => !open && setConfirmDeleteField(null)}
-        title="항목을 삭제하시겠습니까?"
-        description="기존 데이터의 해당 컬럼이 영구히 사라집니다."
-        variant="destructive"
-        confirmLabel="삭제"
-        onConfirm={handleDeleteField}
-        loading={deleteField.isPending}
-      />
 
       <ConfirmDialog
         open={confirmDeleteCollection}

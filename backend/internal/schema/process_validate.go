@@ -59,5 +59,19 @@ func ValidateProcessSave(req *SaveProcessReq) error {
 		}
 	}
 
+	// Warn about isolated (unreachable) statuses.
+	// A non-initial status that has no incoming transition is unreachable.
+	if len(req.Transitions) > 0 {
+		hasIncoming := make(map[int]bool, len(req.Statuses))
+		for _, t := range req.Transitions {
+			hasIncoming[t.ToIndex] = true
+		}
+		for i, s := range req.Statuses {
+			if !s.IsInitial && !hasIncoming[i] {
+				return fmt.Errorf("%w: 상태 %q(은)는 어떤 전이에서도 도달할 수 없습니다", ErrInvalidInput, s.Name)
+			}
+		}
+	}
+
 	return nil
 }

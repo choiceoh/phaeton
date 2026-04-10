@@ -13,26 +13,33 @@ import (
 type Scheduler struct {
 	engine   *Engine
 	interval time.Duration
-	stop     chan struct{}
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // NewScheduler creates a scheduler that checks every interval.
 func NewScheduler(engine *Engine, interval time.Duration) *Scheduler {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
 		engine:   engine,
 		interval: interval,
-		stop:     make(chan struct{}),
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 }
 
 // Start begins the scheduler loop in a goroutine.
-func (s *Scheduler) Start() {
+// The ctx controls the scheduler lifecycle — cancelling it stops the loop
+// and propagates to all in-flight automation executions.
+func (s *Scheduler) Start(ctx context.Context) {
+	s.cancel() // cancel the placeholder context
+	s.ctx, s.cancel = context.WithCancel(ctx)
 	go s.run()
 }
 
 // Stop signals the scheduler to stop.
 func (s *Scheduler) Stop() {
-	close(s.stop)
+	s.cancel()
 }
 
 func (s *Scheduler) run() {
@@ -41,7 +48,7 @@ func (s *Scheduler) run() {
 
 	for {
 		select {
-		case <-s.stop:
+		case <-s.ctx.Done():
 			return
 		case now := <-ticker.C:
 			s.tick(now)
@@ -50,7 +57,8 @@ func (s *Scheduler) run() {
 }
 
 func (s *Scheduler) tick(now time.Time) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(s.ctx, 2*time.Minute)
+	defer cancel()
 
 	// Fetch all enabled schedule automations.
 	rows, err := s.engine.pool.Query(ctx, `

@@ -19,6 +19,7 @@ const depthKey contextKey = "automation_depth"
 
 // Engine orchestrates the trigger→condition→action pipeline.
 type Engine struct {
+	baseCtx context.Context
 	pool    *pgxpool.Pool
 	cache   *schema.Cache
 	wp      *workerpool.Pool
@@ -28,11 +29,19 @@ type Engine struct {
 // New creates an automation engine.
 func New(pool *pgxpool.Pool, cache *schema.Cache, wp *workerpool.Pool) *Engine {
 	return &Engine{
+		baseCtx: context.Background(),
 		pool:    pool,
 		cache:   cache,
 		wp:      wp,
 		webhook: NewWebhookSender(),
 	}
+}
+
+// SetBaseContext sets the parent context for all automation executions,
+// enabling graceful cancellation on shutdown. Must be called before
+// the engine starts processing events.
+func (e *Engine) SetBaseContext(ctx context.Context) {
+	e.baseCtx = ctx
 }
 
 // Subscribe registers the engine on the event bus.
@@ -57,7 +66,9 @@ func (e *Engine) Subscribe(bus *events.Bus) {
 		for _, a := range automations {
 			a := a
 			e.wp.Submit(func() {
-				autoCtx := context.WithValue(context.Background(), depthKey, 1)
+				autoCtx, cancel := context.WithTimeout(e.baseCtx, 2*time.Minute)
+				defer cancel()
+				autoCtx = context.WithValue(autoCtx, depthKey, 1)
 				e.execute(autoCtx, a, ev)
 			})
 		}
