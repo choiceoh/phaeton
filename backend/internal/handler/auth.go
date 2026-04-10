@@ -140,6 +140,22 @@ func Login(pool *pgxpool.Pool, limiter *middleware.RateLimiter) http.HandlerFunc
 	}
 }
 
+// Logout handles POST /api/auth/logout.
+// Clears the httpOnly cookie server-side so the client doesn't have to.
+func Logout() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "token",
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   -1,
+		})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
+	}
+}
+
 // Me handles GET /api/auth/me.
 func Me() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -288,13 +304,13 @@ func SeedDirector(ctx context.Context, pool *pgxpool.Pool) error {
 		return nil
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte("135792ch"), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 	_, err = pool.Exec(ctx,
 		`INSERT INTO auth.users (email, name, password, role) VALUES ($1, $2, $3, $4)`,
-		"admin@phaeton.local", "관리자", string(hash), RoleDirector,
+		"choiceoh@topsolar.kr", "관리자", string(hash), RoleDirector,
 	)
 	return err
 }

@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -125,5 +124,5 @@ func truncHash(h string) string {
 	if len(h) > 12 {
 		return h[:12]
 	}
-	return fmt.Sprintf("%s", h)
+	return h
 }

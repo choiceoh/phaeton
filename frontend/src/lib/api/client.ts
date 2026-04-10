@@ -79,6 +79,37 @@ async function request<T>(
   return json as T
 }
 
+export interface UploadResult {
+  url: string
+  name: string
+  size: number
+}
+
+async function uploadFile(file: File): Promise<UploadResult> {
+  const form = new FormData()
+  form.append('file', file)
+
+  const res = await fetch(`${BASE}/upload`, {
+    method: 'POST',
+    body: form,
+    credentials: 'include',
+  })
+
+  if (!res.ok) {
+    let message = res.statusText || `HTTP ${res.status}`
+    try {
+      const parsed = await res.json()
+      message = parsed.message ?? parsed.error ?? message
+    } catch {
+      // body wasn't JSON
+    }
+    throw new ApiError(res.status, `HTTP_${res.status}`, message)
+  }
+
+  const json = (await res.json()) as Envelope<UploadResult>
+  return json.data as UploadResult
+}
+
 export const api = {
   get: <T>(path: string, opts?: RequestOptions) => request<T>('GET', path, undefined, opts),
   getList: <T>(path: string, opts?: RequestOptions) =>
@@ -90,4 +121,5 @@ export const api = {
   put: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>('PUT', path, body, opts),
   del: <T>(path: string, opts?: RequestOptions) => request<T>('DELETE', path, undefined, opts),
+  upload: uploadFile,
 }

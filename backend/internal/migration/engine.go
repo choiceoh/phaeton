@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -104,7 +104,7 @@ func (e *Engine) CreateCollection(ctx context.Context, req *schema.CreateCollect
 
 	// Partial cache update: add just the new collection.
 	if err := e.cache.ReloadCollection(ctx, col.ID); err != nil {
-		log.Printf("cache reload after CreateCollection: %v", err)
+		slog.Warn("cache reload after CreateCollection", "error", err)
 	}
 	return col, nil
 }
@@ -129,7 +129,7 @@ func (e *Engine) applyRelationDDL(ctx context.Context, tx pgx.Tx, ownerSlug stri
 		if err := execStmts(ctx, tx, []string{jUp}); err != nil {
 			return nil, fmt.Errorf("exec junction table %s: %w", junc, err)
 		}
-		log.Printf("relation %s ↔ %s junction %q created", ownerSlug, tSlug, junc)
+		slog.Info("junction table created", "owner", ownerSlug, "target", tSlug, "junction", junc)
 		return []string{jUp}, nil
 	}
 
@@ -137,7 +137,7 @@ func (e *Engine) applyRelationDDL(ctx context.Context, tx pgx.Tx, ownerSlug stri
 	if err := execStmts(ctx, tx, []string{fkUp}); err != nil {
 		return nil, fmt.Errorf("exec FK %s.%s → %s: %w", ownerSlug, f.Slug, tSlug, err)
 	}
-	log.Printf("relation %s.%s → %s.id created", ownerSlug, f.Slug, tSlug)
+	slog.Info("FK created", "owner", ownerSlug, "field", f.Slug, "target", tSlug)
 	return []string{fkUp}, nil
 }
 
@@ -176,7 +176,7 @@ func (e *Engine) UpdateCollection(ctx context.Context, id string, req *schema.Up
 	}
 
 	if err := e.cache.ReloadCollection(ctx, id); err != nil {
-		log.Printf("cache reload after UpdateCollection: %v", err)
+		slog.Warn("cache reload after UpdateCollection", "error", err)
 	}
 	return e.store.GetCollection(ctx, id)
 }
@@ -337,18 +337,23 @@ func (e *Engine) AddField(ctx context.Context, collectionID string, req *schema.
 		return schema.Field{}, nil, err
 	}
 
-	ddlUp, ddlDown := GenerateAddColumn(col.Slug, f)
-	if err := execStmts(ctx, tx, ddlUp); err != nil {
-		return schema.Field{}, nil, fmt.Errorf("exec add column: %w", err)
-	}
+	var ddlUp, ddlDown []string
 
-	// FK / junction for relation.
-	if f.Relation != nil {
-		stmts, err := e.applyRelationDDL(ctx, tx, col.Slug, f)
-		if err != nil {
-			return schema.Field{}, nil, err
+	// Layout fields produce no DDL.
+	if !f.FieldType.IsLayout() {
+		ddlUp, ddlDown = GenerateAddColumn(col.Slug, f)
+		if err := execStmts(ctx, tx, ddlUp); err != nil {
+			return schema.Field{}, nil, fmt.Errorf("exec add column: %w", err)
 		}
-		ddlUp = append(ddlUp, stmts...)
+
+		// FK / junction for relation.
+		if f.Relation != nil {
+			stmts, err := e.applyRelationDDL(ctx, tx, col.Slug, f)
+			if err != nil {
+				return schema.Field{}, nil, err
+			}
+			ddlUp = append(ddlUp, stmts...)
+		}
 	}
 
 	payload, _ := json.Marshal(map[string]any{"field": f, "collection_slug": col.Slug})
@@ -360,7 +365,7 @@ func (e *Engine) AddField(ctx context.Context, collectionID string, req *schema.
 		return schema.Field{}, nil, fmt.Errorf("commit: %w", err)
 	}
 	if err := e.cache.ReloadCollection(ctx, collectionID); err != nil {
-		log.Printf("cache reload after AddField: %v", err)
+		slog.Warn("cache reload after AddField", "error", err)
 	}
 	return f, nil, nil
 }
@@ -386,6 +391,11 @@ func (e *Engine) AlterField(ctx context.Context, fieldID string, req *schema.Upd
 	var ddlDown []string
 
 	if req.FieldType != nil && *req.FieldType != old.FieldType {
+		// Block layout ↔ non-layout conversion.
+		if old.FieldType.IsLayout() != req.FieldType.IsLayout() {
+			return nil, fmt.Errorf("%w: cannot convert between layout and data field types",
+				schema.ErrInvalidInput)
+		}
 		allowed, conditional := CheckCompat(old.FieldType, *req.FieldType)
 		if !allowed {
 			return nil, fmt.Errorf("%w: conversion from %s to %s is not supported",
@@ -469,7 +479,7 @@ func (e *Engine) AlterField(ctx context.Context, fieldID string, req *schema.Upd
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 	if err := e.cache.ReloadCollection(ctx, old.CollectionID); err != nil {
-		log.Printf("cache reload after AlterField: %v", err)
+		slog.Warn("cache reload after AlterField", "error", err)
 	}
 	return nil, nil
 }
@@ -484,6 +494,14 @@ func (e *Engine) PreviewDropField(ctx context.Context, fieldID string) (Preview,
 	col, ok := e.cache.CollectionByID(f.CollectionID)
 	if !ok {
 		return Preview{}, fmt.Errorf("collection %s: %w", f.CollectionID, schema.ErrNotFound)
+	}
+
+	// Layout fields have no data — always safe to drop.
+	if f.FieldType.IsLayout() {
+		return Preview{
+			SafetyLevel: Safe,
+			Description: fmt.Sprintf("레이아웃 필드 %s.%s 삭제", col.Slug, f.Slug),
+		}, nil
 	}
 
 	qTable := quoteIdent("data", col.Slug)
@@ -522,9 +540,11 @@ func (e *Engine) DropField(ctx context.Context, fieldID string) error {
 
 	var ddlUp, ddlDown []string
 
-	// Many-to-many fields are backed by a junction table, not a column on the owner table.
-	// Drop the junction table instead of attempting a non-existent DROP COLUMN.
-	if f.Relation != nil && f.Relation.RelationType == schema.RelManyToMany {
+	// Layout fields have no DB column — just delete the meta row.
+	if f.FieldType.IsLayout() {
+		// no DDL needed
+	} else if f.Relation != nil && f.Relation.RelationType == schema.RelManyToMany {
+		// Many-to-many fields are backed by a junction table, not a column on the owner table.
 		junc := f.Relation.JunctionTable
 		if junc == "" {
 			target, ok := e.cache.CollectionByID(f.Relation.TargetCollectionID)
@@ -559,7 +579,7 @@ func (e *Engine) DropField(ctx context.Context, fieldID string) error {
 		return fmt.Errorf("commit: %w", err)
 	}
 	if err := e.cache.ReloadCollection(ctx, f.CollectionID); err != nil {
-		log.Printf("cache reload after DropField: %v", err)
+		slog.Warn("cache reload after DropField", "error", err)
 	}
 	return nil
 }
@@ -608,7 +628,7 @@ func (e *Engine) Rollback(ctx context.Context, migrationID string) error {
 	// Rollback may affect one or more collections and the specific impact depends
 	// on the operation; easiest to do a full reload here since rollbacks are rare.
 	if err := e.cache.Invalidate(ctx); err != nil {
-		log.Printf("cache reload after Rollback: %v", err)
+		slog.Warn("cache reload after Rollback", "error", err)
 	}
 	return nil
 }
@@ -661,12 +681,13 @@ func (e *Engine) restoreMeta(ctx context.Context, tx pgx.Tx, mig Migration) erro
 		}
 		if f.ID != "" {
 			_, err := tx.Exec(ctx, `
-				INSERT INTO _meta.fields (id, collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, sort_order)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				INSERT INTO _meta.fields (id, collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, width, height, sort_order)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 				ON CONFLICT DO NOTHING`,
 				pgUUID(f.ID), pgUUID(f.CollectionID), f.Slug, f.Label, string(f.FieldType),
 				f.IsRequired, f.IsUnique, f.IsIndexed,
-				jsonBytesOrNil(f.DefaultValue), jsonBytesOrNil(f.Options), f.SortOrder,
+				jsonBytesOrNil(f.DefaultValue), jsonBytesOrNil(f.Options),
+				f.Width, f.Height, f.SortOrder,
 			)
 			if err != nil {
 				return err
@@ -692,12 +713,13 @@ func (e *Engine) restoreMeta(ctx context.Context, tx pgx.Tx, mig Migration) erro
 			}
 			for _, f := range col.Fields {
 				_, err := tx.Exec(ctx, `
-					INSERT INTO _meta.fields (id, collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, sort_order)
-					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+					INSERT INTO _meta.fields (id, collection_id, slug, label, field_type, is_required, is_unique, is_indexed, default_value, options, width, height, sort_order)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 					ON CONFLICT DO NOTHING`,
 					pgUUID(f.ID), pgUUID(f.CollectionID), f.Slug, f.Label, string(f.FieldType),
 					f.IsRequired, f.IsUnique, f.IsIndexed,
-					jsonBytesOrNil(f.DefaultValue), jsonBytesOrNil(f.Options), f.SortOrder,
+					jsonBytesOrNil(f.DefaultValue), jsonBytesOrNil(f.Options),
+					f.Width, f.Height, f.SortOrder,
 				)
 				if err != nil {
 					return err

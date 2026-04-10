@@ -194,6 +194,9 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 	idx := 1
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		v, exists := body[f.Slug]
 		if !exists {
 			continue
@@ -209,7 +212,6 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		colNames = append(colNames, `"created_by"`)
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
 		args = append(args, cb)
-		idx++
 	}
 
 	// Process: inject initial status for new entries.
@@ -284,6 +286,9 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 	idx := 1
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		v, exists := body[f.Slug]
 		if !exists {
 			continue
@@ -358,10 +363,11 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Aggregate runs simple GROUP BY queries for dashboard widgets.
 // Query params:
-//   group=field_slug   — required, must be a non-relation column on this collection
-//   fn=count|sum|avg|min|max — default: count
-//   field=field_slug   — required for sum/avg/min/max; ignored for count
-//   filter passthrough — same WHERE syntax as List
+//
+//	group=field_slug   — required, must be a non-relation column on this collection
+//	fn=count|sum|avg|min|max — default: count
+//	field=field_slug   — required for sum/avg/min/max; ignored for count
+//	filter passthrough — same WHERE syntax as List
 //
 // Response: [{ "group": "<value>", "value": <number> }, ...]
 func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
@@ -383,7 +389,7 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	for _, f := range fields {
 		bySlug[f.Slug] = f
 	}
-	groupField, ok := bySlug[groupSlug]
+	_, ok = bySlug[groupSlug]
 	if !ok {
 		// Allow grouping by certain auto columns too.
 		if groupSlug != "created_at" && groupSlug != "deleted_at" {
@@ -391,9 +397,7 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if groupField.FieldType == schema.FieldRelation {
-		// Grouping by raw UUID is allowed but unusual; client should expand.
-	}
+	// Grouping by relation (raw UUID) is allowed but unusual; client should expand.
 
 	fn := strings.ToLower(params.Get("fn"))
 	if fn == "" {
@@ -611,6 +615,9 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 func buildInsertColumns(body map[string]any, fields []schema.Field) (cols []string, placeholders []string, args []any) {
 	idx := 1
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		v, exists := body[f.Slug]
 		if !exists {
 			continue
@@ -737,9 +744,12 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 	cols := []string{`"id"`}
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
 	}
-	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"deleted_at"`)
+	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`)
 	if len(hasStatus) > 0 && hasStatus[0] {
 		cols = append(cols, `"_status"`)
 	}
@@ -752,9 +762,12 @@ func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 func qualifySelectCols(fields []schema.Field, prefix string, hasStatus ...bool) string {
 	cols := []string{fmt.Sprintf(`%s.%q AS %q`, prefix, "id", "id")}
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
 	}
-	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "deleted_at"} {
+	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "updated_by", "deleted_at"} {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, sysCol, sysCol))
 	}
 	if len(hasStatus) > 0 && hasStatus[0] {
@@ -775,7 +788,7 @@ func collectRows(rows pgx.Rows) ([]map[string]any, error) {
 		}
 		row := make(map[string]any, len(vals))
 		for i, v := range vals {
-			name := string(descs[i].Name)
+			name := descs[i].Name
 			row[name] = normalizeValue(v)
 		}
 		result = append(result, row)

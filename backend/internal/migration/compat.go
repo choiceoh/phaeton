@@ -28,10 +28,12 @@ type compatEntry struct {
 // and, if conditional, which rows are incompatible.
 var compatMatrix = map[schema.FieldType]map[schema.FieldType]compatEntry{
 	schema.FieldText: {
-		schema.FieldNumber:  {convConditional, `%s IS NOT NULL AND %s::TEXT !~ '^-?[0-9]+(\\.[0-9]+)?$'`},
-		schema.FieldInteger: {convConditional, `%s IS NOT NULL AND %s::TEXT !~ '^-?[0-9]+$'`},
-		schema.FieldDate:    {convConditional, `%s IS NOT NULL AND %s::TEXT !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`},
-		schema.FieldBoolean: {convConditional, `%s IS NOT NULL AND LOWER(%s::TEXT) NOT IN ('true','false','t','f','1','0')`},
+		schema.FieldNumber:   {convConditional, `%s IS NOT NULL AND %s::TEXT !~ '^-?[0-9]+(\\.[0-9]+)?$'`},
+		schema.FieldInteger:  {convConditional, `%s IS NOT NULL AND %s::TEXT !~ '^-?[0-9]+$'`},
+		schema.FieldDate:     {convConditional, `%s IS NOT NULL AND %s::TEXT !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`},
+		schema.FieldBoolean:  {convConditional, `%s IS NOT NULL AND LOWER(%s::TEXT) NOT IN ('true','false','t','f','1','0')`},
+		schema.FieldTextarea: {convAlways, ""},
+		schema.FieldTime:     {convConditional, `%s IS NOT NULL AND %s::TEXT !~ '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$'`},
 	},
 	schema.FieldNumber: {
 		schema.FieldText:    {convAlways, ""},
@@ -59,6 +61,12 @@ var compatMatrix = map[schema.FieldType]map[schema.FieldType]compatEntry{
 	schema.FieldDatetime: {
 		schema.FieldText: {convAlways, ""},
 		schema.FieldDate: {convAlways, ""}, // truncates time portion
+	},
+	schema.FieldTextarea: {
+		schema.FieldText: {convAlways, ""},
+	},
+	schema.FieldTime: {
+		schema.FieldText: {convAlways, ""},
 	},
 }
 

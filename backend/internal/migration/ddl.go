@@ -33,6 +33,14 @@ func FieldTypeToPG(ft schema.FieldType) string {
 		return "UUID"
 	case schema.FieldJSON:
 		return "JSONB"
+	case schema.FieldTextarea:
+		return "TEXT"
+	case schema.FieldTime:
+		return "TIME"
+	case schema.FieldUser:
+		return "UUID"
+	case schema.FieldLabel, schema.FieldLine, schema.FieldSpacer:
+		return "" // layout types have no DB column
 	default:
 		return "TEXT"
 	}
@@ -51,12 +59,16 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 	var colDefs []string
 	colDefs = append(colDefs, "id UUID PRIMARY KEY DEFAULT gen_random_uuid()")
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		colDefs = append(colDefs, columnDef(f))
 	}
 	colDefs = append(colDefs,
 		"created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
 		"updated_at TIMESTAMPTZ NOT NULL DEFAULT now()",
 		"created_by UUID",
+		"updated_by UUID",
 		"deleted_at TIMESTAMPTZ",
 	)
 
@@ -84,7 +96,11 @@ func GenerateDropTable(slug string) (up, down []string) {
 }
 
 // GenerateAddColumn produces DDL to add a column, plus any unique/index statements.
+// Layout fields produce no DDL.
 func GenerateAddColumn(tableSlug string, f schema.Field) (up, down []string) {
+	if f.FieldType.IsLayout() {
+		return nil, nil
+	}
 	qTable := quoteIdent("data", tableSlug)
 	qCol := quoteIdentSingle(f.Slug)
 	pgType := FieldTypeToPG(f.FieldType)

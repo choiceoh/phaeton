@@ -28,6 +28,7 @@ func Presets() []Preset {
 		projectsPreset(),
 		milestonesPreset(),
 		staffPreset(),
+		documentsPreset(),
 	}
 }
 
@@ -133,8 +134,8 @@ func milestonesPreset() Preset {
 func staffPreset() Preset {
 	return Preset{
 		Slug:        "staff",
-		Label:       "인력",
-		Description: "프로젝트 투입 인력 관리",
+		Label:       "인력 배치",
+		Description: "프로젝트별 인력 투입 관리",
 		Icon:        "tool",
 		Fields: []schema.CreateFieldIn{
 			{
@@ -145,18 +146,69 @@ func staffPreset() Preset {
 			},
 			{
 				Slug:      "role",
-				Label:     "직무",
+				Label:     "역할",
 				FieldType: schema.FieldText,
 			},
 			{
-				Slug:      "email",
-				Label:     "이메일",
-				FieldType: schema.FieldText,
+				Slug:      "start_date",
+				Label:     "시작일",
+				FieldType: schema.FieldDate,
+			},
+			{
+				Slug:      "end_date",
+				Label:     "종료일",
+				FieldType: schema.FieldDate,
+			},
+			{
+				Slug:      "allocation_pct",
+				Label:     "배정률(%)",
+				FieldType: schema.FieldNumber,
 			},
 			{
 				Slug:      "is_active",
 				Label:     "활성",
 				FieldType: schema.FieldBoolean,
+			},
+		},
+	}
+}
+
+func documentsPreset() Preset {
+	return Preset{
+		Slug:        "documents",
+		Label:       "프로젝트 문서",
+		Description: "인허가, 계약, 설계 등 프로젝트 문서 관리",
+		Icon:        "file",
+		Fields: []schema.CreateFieldIn{
+			{
+				Slug:      "doc_type",
+				Label:     "유형",
+				FieldType: schema.FieldSelect,
+				IsIndexed: true,
+				Options: jsonRaw(map[string]any{
+					"choices": []string{"permit", "contract", "design", "report", "certificate", "other"},
+				}),
+			},
+			{
+				Slug:       "title",
+				Label:      "제목",
+				FieldType:  schema.FieldText,
+				IsRequired: true,
+			},
+			{
+				Slug:      "file",
+				Label:     "파일",
+				FieldType: schema.FieldFile,
+			},
+			{
+				Slug:      "issued_at",
+				Label:     "발급일",
+				FieldType: schema.FieldDate,
+			},
+			{
+				Slug:      "expires_at",
+				Label:     "만료일",
+				FieldType: schema.FieldDate,
 			},
 		},
 	}
@@ -191,51 +243,70 @@ func Run(ctx context.Context, engine *migration.Engine, cache *schema.Cache) err
 		slog.Info("seed: created collection", "slug", p.Slug, "id", col.ID)
 	}
 
-	// After all base collections exist, add the milestones.project relation.
-	if err := applyProjectRef(ctx, engine, cache); err != nil {
-		return fmt.Errorf("seed: apply project ref: %w", err)
+	// After all base collections exist, add project relations.
+	if err := applyProjectRefs(ctx, engine, cache); err != nil {
+		return fmt.Errorf("seed: apply project refs: %w", err)
 	}
 
 	return nil
 }
 
-// applyProjectRef adds a milestones.project relation pointing to projects,
-// but only if the relation does not already exist.
-func applyProjectRef(ctx context.Context, engine *migration.Engine, cache *schema.Cache) error {
-	milestones, ok := cache.CollectionBySlug("milestones")
-	if !ok {
-		return nil
-	}
+// applyProjectRefs adds project relation fields to milestones, staff, and documents
+// pointing to the projects collection. Skips any that already exist.
+func applyProjectRefs(ctx context.Context, engine *migration.Engine, cache *schema.Cache) error {
 	projects, ok := cache.CollectionBySlug("projects")
 	if !ok {
 		return nil
 	}
 
-	// Skip if relation field already present.
-	for _, f := range cache.Fields(milestones.ID) {
-		if f.Slug == "project" {
-			return nil
+	targets := []struct {
+		slug     string
+		field    string
+		required bool
+	}{
+		{"milestones", "project", true},
+		{"staff", "project", false},
+		{"documents", "project", false},
+	}
+
+	for _, t := range targets {
+		col, ok := cache.CollectionBySlug(t.slug)
+		if !ok {
+			continue
 		}
+
+		// Skip if relation field already present.
+		exists := false
+		for _, f := range cache.Fields(col.ID) {
+			if f.Slug == t.field {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			continue
+		}
+
+		req := &schema.CreateFieldIn{
+			Slug:       t.field,
+			Label:      "프로젝트",
+			FieldType:  schema.FieldRelation,
+			IsRequired: t.required,
+			IsIndexed:  true,
+			Relation: &schema.CreateRelIn{
+				TargetCollectionID: projects.ID,
+				RelationType:       schema.RelOneToMany,
+				OnDelete:           "CASCADE",
+			},
+		}
+
+		_, _, err := engine.AddField(ctx, col.ID, req, true)
+		if err != nil {
+			return fmt.Errorf("add %s.%s: %w", t.slug, t.field, err)
+		}
+		slog.Info("seed: added relation", "collection", t.slug, "field", t.field)
 	}
 
-	req := &schema.CreateFieldIn{
-		Slug:       "project",
-		Label:      "프로젝트",
-		FieldType:  schema.FieldRelation,
-		IsRequired: true,
-		IsIndexed:  true,
-		Relation: &schema.CreateRelIn{
-			TargetCollectionID: projects.ID,
-			RelationType:       schema.RelOneToMany,
-			OnDelete:           "CASCADE",
-		},
-	}
-
-	_, _, err := engine.AddField(ctx, milestones.ID, req, true)
-	if err != nil {
-		return fmt.Errorf("add milestones.project: %w", err)
-	}
-	slog.Info("seed: added milestones.project relation")
 	return nil
 }
 

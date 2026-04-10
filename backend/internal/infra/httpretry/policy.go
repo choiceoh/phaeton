@@ -6,7 +6,7 @@ package httpretry
 type Category int
 
 const (
-	CategoryNone      Category = iota
+	CategoryNone Category = iota
 	CategoryTransient
 	CategoryTimeout
 	CategoryRateLimit

@@ -8,6 +8,7 @@ import ProcessPage from '@/pages/ProcessPage'
 import AppViewPage from '@/pages/AppViewPage'
 import LoginPage from '@/pages/LoginPage'
 import MigrationHistoryPage from '@/pages/MigrationHistoryPage'
+import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/apps/:appId/settings" element={<AppSettingsPage />} />
         <Route path="/apps/:appId/process" element={<ProcessPage />} />
         <Route path="/history" element={<MigrationHistoryPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   )

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,6 +11,8 @@ import (
 	"github.com/choiceoh/phaeton/backend/internal/pgutil"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
+
+var timeRe = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$`)
 
 // validatePayload checks user-supplied data against field definitions before
 // it reaches the database. It catches problems that PG would otherwise raise
@@ -33,7 +36,11 @@ func validatePayload(
 
 	// Reject unknown user-supplied fields (the API surface should match the schema).
 	for k := range body {
-		if _, ok := bySlug[k]; ok {
+		f, ok := bySlug[k]
+		if ok {
+			if f.FieldType.IsLayout() {
+				return fmt.Errorf("%w: layout field %q cannot hold data", schema.ErrInvalidInput, k)
+			}
 			continue
 		}
 		// System columns the client may set.
@@ -44,6 +51,9 @@ func validatePayload(
 	}
 
 	for _, f := range fields {
+		if f.FieldType.IsLayout() {
+			continue
+		}
 		v, present := body[f.Slug]
 
 		if !present {
@@ -73,13 +83,24 @@ func validatePayload(
 				return fmt.Errorf("field %q: %w", f.Slug, err)
 			}
 		}
+
+		// User: confirm the referenced user exists.
+		if f.FieldType == schema.FieldUser {
+			id, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("%w: field %q must be a UUID string", schema.ErrInvalidInput, f.Slug)
+			}
+			if err := checkUserExists(ctx, pool, id); err != nil {
+				return fmt.Errorf("field %q: %w", f.Slug, err)
+			}
+		}
 	}
 	return nil
 }
 
 func validateFieldValue(f schema.Field, v any) error {
 	switch f.FieldType {
-	case schema.FieldText:
+	case schema.FieldText, schema.FieldTextarea:
 		if _, ok := v.(string); !ok {
 			return fmt.Errorf("%w: expected string", schema.ErrInvalidInput)
 		}
@@ -145,7 +166,15 @@ func validateFieldValue(f schema.Field, v any) error {
 				return fmt.Errorf("%w: %q is not in allowed choices %v", schema.ErrInvalidInput, s, choices)
 			}
 		}
-	case schema.FieldRelation, schema.FieldFile:
+	case schema.FieldTime:
+		s, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("%w: expected time string HH:MM or HH:MM:SS", schema.ErrInvalidInput)
+		}
+		if !timeRe.MatchString(s) {
+			return fmt.Errorf("%w: invalid time %q (expected HH:MM or HH:MM:SS)", schema.ErrInvalidInput, s)
+		}
+	case schema.FieldRelation, schema.FieldFile, schema.FieldUser:
 		s, ok := v.(string)
 		if !ok {
 			return fmt.Errorf("%w: expected UUID string", schema.ErrInvalidInput)
@@ -171,6 +200,21 @@ func contains(haystack []string, needle string) bool {
 	return false
 }
 
+// checkUserExists confirms the referenced user exists in auth.users.
+func checkUserExists(ctx context.Context, pool *pgxpool.Pool, id string) error {
+	var exists bool
+	err := pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = $1)`, id,
+	).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("verify user: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("%w: user %s does not exist", schema.ErrInvalidInput, id)
+	}
+	return nil
+}
+
 // checkRelationTarget confirms the referenced row exists and is not soft-deleted.
 func checkRelationTarget(ctx context.Context, pool *pgxpool.Pool, cache *schema.Cache, targetCollectionID, id string) error {
 	target, ok := cache.CollectionByID(targetCollectionID)
@@ -191,4 +235,3 @@ func checkRelationTarget(ctx context.Context, pool *pgxpool.Pool, cache *schema.
 	}
 	return nil
 }
-
