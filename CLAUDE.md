@@ -41,6 +41,11 @@ frontend/
     lib/                      api.ts, types.ts, constants.ts
 ```
 
+## 디자인 철학
+
+- 심플한 흑백 UI — 아이콘은 Lucide (스트로크 스타일), 유니코드 이모지/컬러 아이콘 사용 금지
+- shadcn/ui 컴포넌트 톤 유지, 과도한 색상·그림자·장식 지양
+
 ## 코드 스타일
 
 ### Go
