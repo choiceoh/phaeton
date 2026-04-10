@@ -768,12 +768,12 @@ export default function AppViewPage() {
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
     <>
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-2 flex-wrap w-full">
       {/* ── Group 1: 데이터 조회 (검색·필터·정렬) ── */}
-      <div className="relative">
+      <div className="relative w-full sm:w-auto order-first">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          className="h-8 w-[200px] pl-8 text-sm"
+          className="h-8 w-full sm:w-[200px] pl-8 text-sm"
           placeholder="검색..."
           value={searchInputValue}
           onChange={(e) => handleSearchInput(e.target.value)}
@@ -864,7 +864,7 @@ export default function AppViewPage() {
       </Popover>
 
       {/* ── Group 2: 데이터 입출력 + 프로세스 ── */}
-      <div className="flex items-center gap-2 border-l pl-3 ml-1">
+      <div className="flex items-center gap-2 shrink-0 sm:border-l sm:pl-3 sm:ml-1">
         {process?.is_enabled && (
           <Button
             variant={processVisible ? 'default' : 'outline'}
@@ -1073,7 +1073,7 @@ export default function AppViewPage() {
       {list && (
         <Tabs defaultValue="list">
           {(hasKanban || hasCalendar || hasGallery || hasGantt) && (
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 max-w-full overflow-x-auto">
               <TabsTrigger value="list">목록</TabsTrigger>
               {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
               {hasCalendar && (
