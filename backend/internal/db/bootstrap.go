@@ -348,6 +348,19 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_charts_collection ON _meta.charts(collection_id)`,
 	)
 
+	// --- webhook events ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.webhook_events (
+			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			topic       VARCHAR(255) NOT NULL,
+			source      VARCHAR(255) NOT NULL DEFAULT '',
+			payload     JSONB NOT NULL DEFAULT '{}',
+			processed   BOOLEAN NOT NULL DEFAULT FALSE,
+			received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_webhook_events_topic_time ON _meta.webhook_events(topic, received_at DESC)`,
+	)
+
 	// --- incremental schema evolution (safe for existing deployments) ---
 	alters := []string{
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS process_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
