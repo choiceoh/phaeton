@@ -257,12 +257,15 @@ export default function EntryForm({
             1: 'sm:col-span-1', 2: 'sm:col-span-2', 3: 'sm:col-span-3',
             4: 'sm:col-span-4', 5: 'sm:col-span-5', 6: 'sm:col-span-6',
           }
+          const fieldId = `field-${field.slug}`
+          const errorId = `field-${field.slug}-error`
+          const hasError = !!errors[field.slug]
           return (
             <div
               key={field.id}
               className={`col-span-full ${smSpan[span] ?? 'sm:col-span-6'}`}
             >
-              <Label>
+              <Label htmlFor={fieldId}>
                 {field.label}
                 {field.is_required && <span className="ml-1 text-destructive">*</span>}
               </Label>
@@ -273,9 +276,13 @@ export default function EntryForm({
                   onChange={(v) => setValue(field.slug, v)}
                   onBlur={() => handleBlur(field)}
                   autoFocus={field.slug === firstEditableSlug}
+                  id={fieldId}
+                  errorId={hasError ? errorId : undefined}
+                  hasError={hasError}
+                  isRequired={field.is_required}
                 />
-                {errors[field.slug] ? (
-                  <p key={shakeKey} className="mt-1 text-xs text-destructive animate-shake animate-fade-in">{errors[field.slug]}</p>
+                {hasError ? (
+                  <p key={shakeKey} id={errorId} role="alert" className="mt-1 text-xs text-destructive animate-shake animate-fade-in">{errors[field.slug]}</p>
                 ) : validated.has(field.slug) ? (
                   <p className="mt-1 flex items-center gap-1 text-xs text-emerald-600 animate-fade-in">
                     <Check className="h-3 w-3" />
@@ -368,19 +375,34 @@ function FieldInput({
   onChange,
   onBlur,
   autoFocus,
+  id,
+  errorId,
+  hasError,
+  isRequired,
 }: {
   field: Field
   value: unknown
   onChange: (v: unknown) => void
   onBlur?: () => void
   autoFocus?: boolean
+  id?: string
+  errorId?: string
+  hasError?: boolean
+  isRequired?: boolean
 }) {
   const h = field.height || 1
+  const ariaProps = {
+    id,
+    'aria-invalid': hasError || undefined,
+    'aria-describedby': errorId || undefined,
+    'aria-required': isRequired || undefined,
+  }
 
   switch (field.field_type) {
     case 'textarea':
       return (
         <Textarea
+          {...ariaProps}
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -392,6 +414,7 @@ function FieldInput({
     case 'time':
       return (
         <Input
+          {...ariaProps}
           type="time"
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
@@ -404,6 +427,7 @@ function FieldInput({
       if (h > 1) {
         return (
           <Textarea
+            {...ariaProps}
             value={(value as string) || ''}
             onChange={(e) => onChange(e.target.value)}
             onBlur={onBlur}
@@ -418,6 +442,7 @@ function FieldInput({
         : 'text'
       return (
         <Input
+          {...ariaProps}
           type={inputType}
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
@@ -453,6 +478,7 @@ function FieldInput({
         return (
           <div className="space-y-1">
             <Input
+              {...ariaProps}
               type="number"
               min={0}
               max={100}
@@ -482,6 +508,7 @@ function FieldInput({
             </span>
           )}
           <Input
+            {...ariaProps}
             type="number"
             value={value === null || value === undefined ? '' : (value as number)}
             onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
@@ -508,6 +535,7 @@ function FieldInput({
     case 'datetime':
       return (
         <Input
+          {...ariaProps}
           type="datetime-local"
           value={(value as string)?.slice(0, 16) || ''}
           onChange={(e) => onChange(e.target.value)}
@@ -518,7 +546,7 @@ function FieldInput({
     case 'boolean':
       return (
         <div className="flex items-center gap-2 pt-1">
-          <Checkbox checked={!!value} onCheckedChange={(c) => onChange(!!c)} />
+          <Checkbox id={id} aria-required={isRequired || undefined} checked={!!value} onCheckedChange={(c) => onChange(!!c)} />
         </div>
       )
     case 'select': {
@@ -544,7 +572,7 @@ function FieldInput({
       }
       return (
         <Select value={(value as string) || ''} onValueChange={onChange}>
-          <SelectTrigger onBlur={onBlur}>
+          <SelectTrigger {...ariaProps} onBlur={onBlur}>
             <SelectValue placeholder="항목 선택" />
           </SelectTrigger>
           <SelectContent>

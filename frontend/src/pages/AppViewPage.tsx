@@ -26,6 +26,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import HotkeyHelpDialog from '@/components/common/HotkeyHelpDialog'
 import {
   Dialog,
@@ -135,7 +136,7 @@ export default function AppViewPage() {
   const [processVisible, setProcessVisible] = useState(true)
 
   // Cell save state for visual feedback (key = "rowId:columnId")
-  const [cellSaveState, setCellSaveState] = useState<Map<string, 'saving' | 'saved'>>(new Map())
+  const [cellSaveState, setCellSaveState] = useState<Map<string, 'saving' | 'saved' | 'error'>>(new Map())
 
   // Saved views state
   const [activeView, setActiveView] = useState<SavedView | null>(null)
@@ -522,11 +523,14 @@ export default function AppViewPage() {
             }
           },
           onError: (err) => {
-            setCellSaveState((prev) => {
-              const next = new Map(prev)
-              next.delete(cellKey)
-              return next
-            })
+            setCellSaveState((prev) => new Map(prev).set(cellKey, 'error'))
+            setTimeout(() => {
+              setCellSaveState((prev) => {
+                const next = new Map(prev)
+                next.delete(cellKey)
+                return next
+              })
+            }, 3000)
             if (err instanceof ApiError && err.isConflict()) {
               toast.error('다른 사용자가 이미 수정했습니다. 최신 데이터를 불러옵니다.')
               refetch()
@@ -990,6 +994,7 @@ export default function AppViewPage() {
           <button
             type="button"
             className="absolute right-2 top-1/2 -translate-y-1/2"
+            aria-label="검색 초기화"
             onClick={() => {
               setSearchInputValue('')
               setSearchText('')
@@ -1154,6 +1159,7 @@ export default function AppViewPage() {
                     <button
                       type="button"
                       className="ml-0.5 hover:text-destructive"
+                      aria-label="보기 삭제"
                       onClick={(e) => {
                         e.stopPropagation()
                         deleteSavedView.mutate(v.id, {
@@ -1339,6 +1345,7 @@ export default function AppViewPage() {
           </TabsList>
 
           <TabsContent value="list" className="mt-0">
+            <ErrorBoundary key="list">
             {selectedRowIds.size > 0 && (
               <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
                 <span className="font-medium">{selectedRowIds.size}건 선택</span>
@@ -1449,10 +1456,12 @@ export default function AppViewPage() {
             {list.data.length === 0 && (
               <ViewGuide fields={collection.fields ?? []} />
             )}
+            </ErrorBoundary>
           </TabsContent>
 
           {hasProcessKanban && processGroupField && (
             <TabsContent value="status-kanban" className="mt-0">
+              <ErrorBoundary key="status-kanban">
               <KanbanView
                 slug={collection.slug}
                 groupField={processGroupField}
@@ -1462,11 +1471,13 @@ export default function AppViewPage() {
                 onCardMove={handleProcessCardMove}
                 onAddEntry={() => navigate(`/apps/${appId}/entries/new`)}
               />
+              </ErrorBoundary>
             </TabsContent>
           )}
 
           {hasKanban && selectField && (
             <TabsContent value="kanban" className="mt-0">
+              <ErrorBoundary key="kanban">
               <KanbanView
                 slug={collection.slug}
                 groupField={selectField}
@@ -1476,11 +1487,13 @@ export default function AppViewPage() {
                 onCardMove={handleCardMove}
                 onAddEntry={() => navigate(`/apps/${appId}/entries/new`)}
               />
+              </ErrorBoundary>
             </TabsContent>
           )}
 
           {hasCalendar && dateField && (
             <TabsContent value="calendar" className="mt-0">
+              <ErrorBoundary key="calendar">
               <CalendarView
                 slug={collection.slug}
                 dateField={dateField}
@@ -1489,32 +1502,38 @@ export default function AppViewPage() {
                 onEntryClick={handleEntryClick}
                 onEntryUpdate={handleGanttUpdate}
               />
+              </ErrorBoundary>
             </TabsContent>
           )}
 
           {hasGallery && fileField && (
             <TabsContent value="gallery" className="mt-0">
+              <ErrorBoundary key="gallery">
               <GalleryView
                 imageField={fileField}
                 fields={collection.fields ?? []}
                 entries={list.data}
                 onEntryClick={handleEntryClick}
               />
+              </ErrorBoundary>
             </TabsContent>
           )}
 
           {hasGantt && (
             <TabsContent value="gantt" className="mt-0">
+              <ErrorBoundary key="gantt">
               <GanttView
                 slug={collection.slug}
                 fields={collection.fields ?? []}
                 onEntryClick={handleEntryClickById}
                 onEntryUpdate={handleGanttUpdate}
               />
+              </ErrorBoundary>
             </TabsContent>
           )}
 
           <TabsContent value="form" className="mt-0">
+            <ErrorBoundary key="form">
             <FormView
               fields={collection.fields ?? []}
               entries={list.data}
@@ -1527,6 +1546,7 @@ export default function AppViewPage() {
               collectionId={collection.id}
               total={list.total}
             />
+            </ErrorBoundary>
           </TabsContent>
         </Tabs>
       )}
@@ -1544,6 +1564,7 @@ export default function AppViewPage() {
         open={bulkEditOpen}
         onOpenChange={setBulkEditOpen}
         fields={collection.fields ?? []}
+        collectionId={collection.id}
         selectedCount={selectedRowIds.size}
         onApply={handleBulkEdit}
         loading={batchUpdateEntry.isPending}

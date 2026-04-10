@@ -20,6 +20,7 @@ import {
   Settings2,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -78,7 +79,7 @@ interface Props<T> {
   /** Column IDs that are not editable (system columns, actions, etc.) */
   readonlyColumns?: string[]
   /** Per-cell save state for visual feedback (key = "rowId:columnId") */
-  cellSaveState?: Map<string, 'saving' | 'saved'>
+  cellSaveState?: Map<string, 'saving' | 'saved' | 'error'>
   emptyTitle?: string
   emptyDescription?: string
   emptyAction?: React.ReactNode
@@ -352,7 +353,7 @@ export function DataTable<T>({
             }
           }
         } catch {
-          // Clipboard access denied — ignore.
+          toast.error('클립보드 접근이 거부되었습니다. 브라우저 설정을 확인하세요.')
         }
       }
     },
@@ -642,6 +643,7 @@ export function DataTable<T>({
                             editable={editable}
                             saving={saveState === 'saving'}
                             saved={saveState === 'saved'}
+                            error={saveState === 'error'}
                             fieldType={meta?.fieldType}
                             fieldOptions={meta?.options}
                             onSave={(value) => {

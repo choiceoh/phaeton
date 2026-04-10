@@ -1,6 +1,10 @@
 import { Pencil } from 'lucide-react'
 import { useState } from 'react'
 
+import RelationCombobox from '@/components/common/RelationCombobox'
+import RelationMultiCombobox from '@/components/common/RelationMultiCombobox'
+import UserCombobox from '@/components/common/UserCombobox'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -29,6 +33,7 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   fields: Field[]
+  collectionId?: string
   selectedCount: number
   onApply: (fieldSlug: string, value: unknown) => void
   loading?: boolean
@@ -38,6 +43,7 @@ export default function BulkEditPanel({
   open,
   onOpenChange,
   fields,
+  collectionId,
   selectedCount,
   onApply,
   loading,
@@ -93,7 +99,7 @@ export default function BulkEditPanel({
           {activeField && (
             <div className="space-y-1.5">
               <Label>새 값</Label>
-              <BulkValueInput field={activeField} value={value} onChange={setValue} />
+              <BulkValueInput field={activeField} value={value} onChange={setValue} collectionId={collectionId} />
             </div>
           )}
         </div>
@@ -121,6 +127,7 @@ function BulkValueInput({
   field: Field
   value: unknown
   onChange: (v: unknown) => void
+  collectionId?: string
 }) {
   switch (field.field_type) {
     case 'text':
@@ -184,6 +191,67 @@ function BulkValueInput({
             ))}
           </SelectContent>
         </Select>
+      )
+    }
+    case 'multiselect': {
+      const choices = (field.options?.choices as string[]) || []
+      const selected = (value as string[]) || []
+      return (
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap gap-1">
+            {selected.map((v) => (
+              <Badge
+                key={v}
+                variant="secondary"
+                className="gap-0.5 cursor-pointer"
+                onClick={() => onChange(selected.filter((x) => x !== v))}
+              >
+                {v} ×
+              </Badge>
+            ))}
+          </div>
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+            {choices.map((c) => (
+              <label key={c} className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={selected.includes(c)}
+                  onCheckedChange={(checked) => {
+                    if (checked) onChange([...selected, c])
+                    else onChange(selected.filter((x) => x !== c))
+                  }}
+                />
+                {c}
+              </label>
+            ))}
+          </div>
+        </div>
+      )
+    }
+    case 'user':
+      return (
+        <UserCombobox
+          value={(value as string) || undefined}
+          onChange={onChange}
+        />
+      )
+    case 'relation': {
+      const targetId = field.relation?.target_collection_id
+      if (!targetId) return <Input disabled value="(관계 대상 미설정)" />
+      if (field.relation?.relation_type === 'many_to_many') {
+        return (
+          <RelationMultiCombobox
+            targetCollectionId={targetId}
+            value={(value as string[]) || []}
+            onChange={onChange}
+          />
+        )
+      }
+      return (
+        <RelationCombobox
+          targetCollectionId={targetId}
+          value={(value as string) || undefined}
+          onChange={onChange}
+        />
       )
     }
     default:

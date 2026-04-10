@@ -45,6 +45,11 @@ export default function SortPanel({ fields, sorts, onChange }: Props) {
       {sorts.map((sort, i) => {
         return (
           <div key={i} className="flex items-center gap-2">
+            {sorts.length > 1 && (
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+                {i + 1}
+              </span>
+            )}
             <Select
               value={sort.field}
               onValueChange={(v) => v && updateSort(i, { field: v })}
@@ -65,6 +70,7 @@ export default function SortPanel({ fields, sorts, onChange }: Props) {
               size="sm"
               className="h-8 gap-1"
               onClick={() => updateSort(i, { desc: !sort.desc })}
+              aria-label={sort.desc ? '오름차순으로 변경' : '내림차순으로 변경'}
             >
               {sort.desc ? (
                 <>
@@ -81,6 +87,7 @@ export default function SortPanel({ fields, sorts, onChange }: Props) {
               size="sm"
               className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
               onClick={() => removeSort(i)}
+              aria-label="정렬 삭제"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
