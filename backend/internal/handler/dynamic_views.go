@@ -961,7 +961,13 @@ func buildAllowedMoves(proc schema.Process, userRole string) map[string][]string
 }
 
 // parseCalendarFilters is like ParseFilters but excludes view-specific params.
+// Also supports the _filter JSON param for AND/OR group filtering.
 func parseCalendarFilters(params url.Values, fields []schema.Field) (string, []any, error) {
+	// If _filter is present, use JSON filter parsing directly.
+	if jsonFilter := params.Get("_filter"); jsonFilter != "" {
+		return ParseJSONFilter(jsonFilter, fields, "")
+	}
+
 	// Strip view-specific params before passing to ParseFilters.
 	cleaned := make(url.Values)
 	viewParams := map[string]bool{

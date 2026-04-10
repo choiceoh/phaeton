@@ -1,6 +1,7 @@
 import {
   type Column,
   type ColumnDef,
+  type ColumnOrderState,
   type ColumnPinningState,
   type SortingState,
   type VisibilityState,
@@ -10,11 +11,27 @@ import {
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   ArrowDownUp,
   ChevronDown,
   ChevronUp,
   ChevronsLeft,
   ChevronsRight,
+  GripVertical,
   PinIcon,
   PinOffIcon,
   Settings2,
@@ -147,6 +164,7 @@ export function DataTable<T>({
     right: [],
   })
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({})
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([])
 
   // Horizontal scroll indicator state.
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -218,7 +236,8 @@ export function DataTable<T>({
   const table = useReactTable({
     data,
     columns: augmentedColumns,
-    state: { sorting, columnVisibility, columnPinning, columnSizing },
+    state: { sorting, columnVisibility, columnPinning, columnSizing, columnOrder },
+    onColumnOrderChange: setColumnOrder,
     onSortingChange: (updater) => {
       const next = typeof updater === 'function' ? updater(sorting) : updater
       setSorting(next)
@@ -406,6 +425,36 @@ export function DataTable<T>({
     }
   }, [data])
 
+  // Column DnD reorder
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
+    useSensor(KeyboardSensor),
+  )
+
+  const headerIds = useMemo(
+    () => table.getVisibleFlatColumns().map((c) => c.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [table.getVisibleFlatColumns().length, columnOrder],
+  )
+
+  const handleColumnDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      const allIds = table.getVisibleFlatColumns().map((c) => c.id)
+      const oldIndex = allIds.indexOf(String(active.id))
+      const newIndex = allIds.indexOf(String(over.id))
+      if (oldIndex === -1 || newIndex === -1) return
+
+      const newOrder = [...allIds]
+      newOrder.splice(oldIndex, 1)
+      newOrder.splice(newIndex, 0, String(active.id))
+      setColumnOrder(newOrder)
+    },
+    [table],
+  )
+
   // Virtual scrolling — only activate when row count exceeds threshold.
   const ROW_HEIGHT = 41
   const VIRTUAL_THRESHOLD = 40
@@ -490,19 +539,27 @@ export function DataTable<T>({
       >
         <Table style={{ width: table.getCenterTotalSize() }} role="grid" aria-rowcount={total ?? data.length}>
           <TableHeader role="rowgroup" className="bg-stone-50/80">
+            <DndContext
+              sensors={dndSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleColumnDragEnd}
+            >
             {table.getHeaderGroups().map((group) => (
               <TableRow key={group.id} role="row" className="hover:bg-transparent">
+                <SortableContext items={headerIds} strategy={horizontalListSortingStrategy}>
                 {group.headers.map((header, headerIdx) => {
                   const canSort = header.column.getCanSort()
                   const sortDir = header.column.getIsSorted()
                   const isPinned = header.column.getIsPinned()
-                  // Check if this is the last pinned-left column to draw a separator.
                   const pinnedLeftCols = columnPinning.left ?? []
                   const isLastPinnedLeft = isPinned === 'left' && headerIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
+                  const isSystemCol = header.column.id === '_select' || header.column.id === '_actions'
 
                   return (
-                    <TableHead
+                    <SortableTableHead
                       key={header.id}
+                      id={header.column.id}
+                      disabled={!!isPinned || isSystemCol}
                       role="columnheader"
                       aria-sort={sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : canSort ? 'none' : undefined}
                       className={`relative group ${isPinned ? 'bg-stone-50' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-border' : ''}`}
@@ -544,11 +601,13 @@ export function DataTable<T>({
                       >
                         <div className="absolute right-0 top-1/4 h-1/2 w-px border-r border-dashed border-border group-hover/resize:border-foreground/50 transition-colors" />
                       </div>
-                    </TableHead>
+                    </SortableTableHead>
                   )
                 })}
+                </SortableContext>
               </TableRow>
             ))}
+            </DndContext>
           </TableHeader>
           <TableBody
             ref={tableBodyRef}
@@ -868,6 +927,58 @@ export function DataTable<T>({
         </div>
       )}
     </div>
+  )
+}
+
+// Sortable header cell for column DnD reorder.
+function SortableTableHead({
+  id,
+  disabled,
+  children,
+  className,
+  style,
+  ...props
+}: {
+  id: string
+  disabled?: boolean
+  children: React.ReactNode
+  className?: string
+  style?: React.CSSProperties
+} & React.HTMLAttributes<HTMLTableCellElement>) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled })
+
+  const mergedStyle: React.CSSProperties = {
+    ...style,
+    transform: CSS.Transform.toString(transform ? { ...transform, scaleX: 1, scaleY: 1 } : null),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  }
+
+  return (
+    <TableHead
+      ref={setNodeRef}
+      style={mergedStyle}
+      className={className}
+      {...props}
+    >
+      {!disabled && (
+        <span
+          {...attributes}
+          {...listeners}
+          className="absolute left-0 top-0 flex h-full w-4 cursor-grab items-center justify-center opacity-0 group-hover:opacity-60 transition-opacity active:cursor-grabbing"
+        >
+          <GripVertical className="h-3 w-3" />
+        </span>
+      )}
+      {children}
+    </TableHead>
   )
 }
 

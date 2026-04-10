@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -9,9 +10,139 @@ import (
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
+// --- JSON-based filter parsing (supports AND/OR groups) ---
+
+// FilterGroupJSON represents a nested AND/OR filter group.
+type FilterGroupJSON struct {
+	Logic      string            `json:"logic"` // "and" or "or"
+	Conditions []FilterCondJSON  `json:"conditions"`
+	Groups     []FilterGroupJSON `json:"groups"`
+}
+
+// FilterCondJSON represents a single filter condition within a group.
+type FilterCondJSON struct {
+	Field    string `json:"field"`
+	Operator string `json:"operator"`
+	Value    string `json:"value"`
+}
+
+const maxFilterDepth = 3
+
+// ParseJSONFilter parses a JSON filter group into a WHERE clause.
+// The returned clause does NOT include a leading "AND"; the caller wraps it.
+func ParseJSONFilter(raw string, fields []schema.Field, prefix string) (where string, args []any, err error) {
+	var group FilterGroupJSON
+	if err := json.Unmarshal([]byte(raw), &group); err != nil {
+		return "", nil, fmt.Errorf("invalid _filter JSON: %w", err)
+	}
+
+	valid := make(map[string]schema.FieldType, len(fields))
+	for _, f := range fields {
+		valid[f.Slug] = f.FieldType
+	}
+
+	clause, args, err := buildGroupClause(group, valid, prefix, 1, 0)
+	if err != nil {
+		return "", nil, err
+	}
+	if clause == "" {
+		return "", nil, nil
+	}
+	return "AND (" + clause + ")", args, nil
+}
+
+func buildGroupClause(g FilterGroupJSON, valid map[string]schema.FieldType, prefix string, argIdx int, depth int) (string, []any, error) {
+	if depth > maxFilterDepth {
+		return "", nil, fmt.Errorf("filter nesting exceeds maximum depth of %d", maxFilterDepth)
+	}
+
+	logic := strings.ToUpper(g.Logic)
+	if logic != "AND" && logic != "OR" {
+		logic = "AND"
+	}
+
+	var parts []string
+	var allArgs []any
+
+	for _, cond := range g.Conditions {
+		if _, ok := valid[cond.Field]; !ok {
+			continue
+		}
+		clause, condArgs, err := buildCondClause(cond, prefix, argIdx)
+		if err != nil {
+			return "", nil, err
+		}
+		if clause != "" {
+			parts = append(parts, clause)
+			allArgs = append(allArgs, condArgs...)
+			argIdx += len(condArgs)
+		}
+	}
+
+	for _, sub := range g.Groups {
+		clause, subArgs, err := buildGroupClause(sub, valid, prefix, argIdx, depth+1)
+		if err != nil {
+			return "", nil, err
+		}
+		if clause != "" {
+			parts = append(parts, "("+clause+")")
+			allArgs = append(allArgs, subArgs...)
+			argIdx += len(subArgs)
+		}
+	}
+
+	if len(parts) == 0 {
+		return "", nil, nil
+	}
+
+	return strings.Join(parts, " "+logic+" "), allArgs, nil
+}
+
+func buildCondClause(cond FilterCondJSON, prefix string, argIdx int) (string, []any, error) {
+	var qCol string
+	if prefix != "" {
+		qCol = fmt.Sprintf(`%s."%s"`, prefix, cond.Field)
+	} else {
+		qCol = fmt.Sprintf("%q", cond.Field)
+	}
+
+	switch cond.Operator {
+	case "eq":
+		return fmt.Sprintf("%s = $%d", qCol, argIdx), []any{cond.Value}, nil
+	case "neq":
+		return fmt.Sprintf("%s != $%d", qCol, argIdx), []any{cond.Value}, nil
+	case "gt":
+		return fmt.Sprintf("%s > $%d", qCol, argIdx), []any{cond.Value}, nil
+	case "gte":
+		return fmt.Sprintf("%s >= $%d", qCol, argIdx), []any{cond.Value}, nil
+	case "lt":
+		return fmt.Sprintf("%s < $%d", qCol, argIdx), []any{cond.Value}, nil
+	case "lte":
+		return fmt.Sprintf("%s <= $%d", qCol, argIdx), []any{cond.Value}, nil
+	case "like":
+		return fmt.Sprintf("%s ILIKE $%d", qCol, argIdx), []any{"%" + cond.Value + "%"}, nil
+	case "in":
+		vals := strings.Split(cond.Value, ",")
+		placeholders := make([]string, len(vals))
+		var args []any
+		for i, v := range vals {
+			placeholders[i] = fmt.Sprintf("$%d", argIdx+i)
+			args = append(args, v)
+		}
+		return fmt.Sprintf("%s IN (%s)", qCol, strings.Join(placeholders, ",")), args, nil
+	case "is_null":
+		if cond.Value == "true" {
+			return fmt.Sprintf("%s IS NULL", qCol), nil, nil
+		}
+		return fmt.Sprintf("%s IS NOT NULL", qCol), nil, nil
+	default:
+		return "", nil, fmt.Errorf("unknown filter operator %q for field %q", cond.Operator, cond.Field)
+	}
+}
+
 // reserved query params — not treated as field filters.
 var reservedParams = map[string]bool{
-	"sort": true, "page": true, "limit": true, "confirm": true, "expand": true, "q": true, "format": true,
+	"sort": true, "page": true, "limit": true, "confirm": true, "expand": true, "q": true, "format": true, "_filter": true,
 }
 
 // BuildSearchClause generates a full-text search condition using the _tsv

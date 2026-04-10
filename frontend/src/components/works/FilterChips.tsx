@@ -3,12 +3,14 @@ import { ArrowDown, ArrowUp, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { FILTER_OPERATORS } from '@/lib/constants'
-import type { Field, FilterCondition } from '@/lib/types'
+import type { Field, FilterCondition, FilterGroup } from '@/lib/types'
+import { flattenFilterGroup } from '@/lib/types'
 
 import type { SortItem } from './SortPanel'
 
 interface Props {
-  conditions: FilterCondition[]
+  conditions?: FilterCondition[]
+  filterGroup?: FilterGroup
   sortItems: SortItem[]
   fields: Field[]
   onRemoveFilter: (id: string) => void
@@ -24,18 +26,33 @@ function fieldLabel(fields: Field[], slug: string) {
 }
 
 export default function FilterChips({
-  conditions,
+  conditions: legacyConditions,
+  filterGroup,
   sortItems,
   fields,
   onRemoveFilter,
   onRemoveSort,
   onClearAll,
 }: Props) {
+  // Use filterGroup if available, otherwise fall back to legacy conditions
+  const conditions = filterGroup
+    ? flattenFilterGroup(filterGroup)
+    : legacyConditions ?? []
+
+  const groupLogic = filterGroup?.logic
+
   const total = conditions.length + sortItems.length
   if (total === 0) return null
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 pt-2">
+      {conditions.length > 0 && groupLogic && (
+        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+          groupLogic === 'and' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+        }`}>
+          {groupLogic === 'and' ? 'AND' : 'OR'}
+        </span>
+      )}
       {conditions.map((c) => (
         <Badge
           key={c.id}
