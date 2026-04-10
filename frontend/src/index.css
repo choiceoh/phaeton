@@ -277,6 +277,22 @@
   animation: row-enter 0.4s ease-out both;
 }
 
+/* Calendar month slide transitions */
+@keyframes cal-slide-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-40px); opacity: 0; }
+}
+@keyframes cal-slide-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(40px); opacity: 0; }
+}
+.animate-slide-left {
+  animation: cal-slide-left 0.2s ease-in forwards;
+}
+.animate-slide-right {
+  animation: cal-slide-right 0.2s ease-in forwards;
+}
+
 /* Drag ghost feedback */
 .dragging-source {
   opacity: 0.4;
@@ -305,6 +321,8 @@
   .animate-shake,
   .animate-scale-bounce,
   .animate-fade-out,
+  .animate-slide-left,
+  .animate-slide-right,
   .animate-row-enter,
   .animate-fade-in,
   .animate-fade-in-up,

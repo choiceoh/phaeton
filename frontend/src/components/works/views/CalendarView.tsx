@@ -1,5 +1,14 @@
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
 import EmptyState from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
@@ -10,42 +19,106 @@ interface Props {
   fields: Field[]
   entries: Record<string, unknown>[]
   onEntryClick: (entry: Record<string, unknown>) => void
+  onEntryUpdate?: (entryId: string, updates: Record<string, unknown>) => void
 }
 
-export default function CalendarView({ dateField, fields, entries, onEntryClick }: Props) {
+type Direction = 'left' | 'right' | null
+
+/** YYYY-MM-DD from any date-ish value */
+function toDateStr(v: unknown): string | null {
+  if (!v) return null
+  const s = String(v).slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  return s
+}
+
+function makeDateStr(year: number, month: number, day: number) {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + n)
+  return makeDateStr(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+function diffDays(a: string, b: string): number {
+  const da = new Date(a + 'T00:00:00')
+  const db = new Date(b + 'T00:00:00')
+  return Math.round((db.getTime() - da.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+/** Represents a multi-day spanning event placed on a specific week row */
+interface SpanEvent {
+  entry: Record<string, unknown>
+  label: string
+  startDate: string
+  endDate: string
+  /** Column index (0-6) where this span starts in its week */
+  startCol: number
+  /** Number of columns this span occupies */
+  colSpan: number
+  /** Track index for vertical stacking */
+  track: number
+}
+
+const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토']
+const MAX_VISIBLE_SPANS = 3
+
+export default function CalendarView({
+  dateField,
+  fields,
+  entries,
+  onEntryClick,
+  onEntryUpdate,
+}: Props) {
   const [viewDate, setViewDate] = useState(() => new Date())
+  const [direction, setDirection] = useState<Direction>(null)
+  const [animating, setAnimating] = useState(false)
+  const gridRef = useRef<HTMLDivElement>(null)
+
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth()
 
-  // Find a "title" field to display on each card (first text field).
+  // Drag state
+  const [dragEntry, setDragEntry] = useState<Record<string, unknown> | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  )
+
   const titleField = useMemo(
     () => fields.find((f) => f.field_type === 'text'),
     [fields],
   )
 
-  // Group entries by date string (YYYY-MM-DD).
-  const entriesByDate = useMemo(() => {
-    const map = new Map<string, Record<string, unknown>[]>()
-    for (const entry of entries) {
-      const raw = entry[dateField.slug]
-      if (!raw) continue
-      const dateStr = String(raw).slice(0, 10) // YYYY-MM-DD
-      const existing = map.get(dateStr) ?? []
-      existing.push(entry)
-      map.set(dateStr, existing)
-    }
-    return map
-  }, [entries, dateField.slug])
+  // Auto-detect end date field (second date/datetime field if present)
+  const endDateField = useMemo(() => {
+    const dateFields = fields.filter(
+      (f) => (f.field_type === 'date' || f.field_type === 'datetime') && f.id !== dateField.id,
+    )
+    return dateFields[0] ?? null
+  }, [fields, dateField.id])
 
-  // Generate calendar grid.
+  const getLabel = useCallback(
+    (entry: Record<string, unknown>) => {
+      if (titleField) {
+        const v = entry[titleField.slug]
+        return v ? String(v) : '(무제)'
+      }
+      return String(entry.id ?? '').slice(0, 8) || '(무제)'
+    },
+    [titleField],
+  )
+
+  // Calendar grid setup
   const firstDayOfMonth = new Date(year, month, 1)
-  const startDay = firstDayOfMonth.getDay() // 0=Sun
+  const startDay = firstDayOfMonth.getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
   const calendarDays: (number | null)[] = []
   for (let i = 0; i < startDay; i++) calendarDays.push(null)
   for (let d = 1; d <= daysInMonth; d++) calendarDays.push(d)
-  // Pad to complete last week.
   while (calendarDays.length % 7 !== 0) calendarDays.push(null)
 
   const weeks: (number | null)[][] = []
@@ -53,23 +126,179 @@ export default function CalendarView({ dateField, fields, entries, onEntryClick 
     weeks.push(calendarDays.slice(i, i + 7))
   }
 
+  // Compute the actual date for each cell position
+  const weekDateRanges = useMemo(() => {
+    return weeks.map((week) => {
+      const dates: (string | null)[] = week.map((day) => {
+        if (day === null) return null
+        return makeDateStr(year, month, day)
+      })
+      return dates
+    })
+  }, [weeks, year, month])
+
+  // Build spanning events per week
+  const { spansByWeek, singlesByDate, monthHasEvents } = useMemo(() => {
+    const spansByWeek: SpanEvent[][] = weeks.map(() => [])
+    const singlesByDate = new Map<string, Record<string, unknown>[]>()
+    let monthHasEvents = false
+
+    const monthStart = makeDateStr(year, month, 1)
+    const monthEnd = makeDateStr(year, month, daysInMonth)
+
+    for (const entry of entries) {
+      const rawStart = toDateStr(entry[dateField.slug])
+      if (!rawStart) continue
+
+      const rawEnd = endDateField ? toDateStr(entry[endDateField.slug]) : null
+      const entryEnd = rawEnd && rawEnd > rawStart ? rawEnd : rawStart
+      const isMultiDay = entryEnd !== rawStart
+
+      // Check if this entry overlaps with current month
+      if (entryEnd < monthStart || rawStart > monthEnd) continue
+      monthHasEvents = true
+
+      if (!isMultiDay) {
+        // Single-day event
+        const existing = singlesByDate.get(rawStart) ?? []
+        existing.push(entry)
+        singlesByDate.set(rawStart, existing)
+        continue
+      }
+
+      // Multi-day event: split across weeks
+      const label = getLabel(entry)
+
+      for (let wi = 0; wi < weeks.length; wi++) {
+        const weekDates = weekDateRanges[wi]
+        // Find the actual first and last dates of this week
+        let weekStart: string | null = null
+        let weekEnd: string | null = null
+        let weekStartCol = 0
+        let weekEndCol = 6
+
+        for (let di = 0; di < 7; di++) {
+          if (weekDates[di]) {
+            if (!weekStart) {
+              weekStart = weekDates[di]!
+              weekStartCol = di
+            }
+            weekEnd = weekDates[di]!
+            weekEndCol = di
+          }
+        }
+
+        if (!weekStart || !weekEnd) continue
+        if (rawStart > weekEnd || entryEnd < weekStart) continue
+
+        // Clamp to this week
+        const clampedStart = rawStart > weekStart ? rawStart : weekStart
+        const clampedEnd = entryEnd < weekEnd ? entryEnd : weekEnd
+
+        // Find column positions
+        let startCol = weekStartCol
+        let endCol = weekEndCol
+        for (let di = 0; di < 7; di++) {
+          if (weekDates[di] === clampedStart) startCol = di
+          if (weekDates[di] === clampedEnd) endCol = di
+        }
+
+        spansByWeek[wi].push({
+          entry,
+          label,
+          startDate: rawStart,
+          endDate: entryEnd,
+          startCol,
+          colSpan: endCol - startCol + 1,
+          track: 0, // assigned below
+        })
+      }
+    }
+
+    // Assign tracks (vertical stacking position) per week
+    for (const spans of spansByWeek) {
+      // Sort by startCol then by wider spans first
+      spans.sort((a, b) => a.startCol - b.startCol || b.colSpan - a.colSpan)
+      const trackEnds: number[] = [] // track index → last occupied column
+      for (const span of spans) {
+        let assigned = -1
+        for (let t = 0; t < trackEnds.length; t++) {
+          if (trackEnds[t] < span.startCol) {
+            assigned = t
+            break
+          }
+        }
+        if (assigned === -1) {
+          assigned = trackEnds.length
+          trackEnds.push(0)
+        }
+        span.track = assigned
+        trackEnds[assigned] = span.startCol + span.colSpan - 1
+      }
+    }
+
+    return { spansByWeek, singlesByDate, monthHasEvents }
+  }, [entries, dateField.slug, endDateField, weeks, weekDateRanges, year, month, daysInMonth, getLabel])
+
   const today = new Date()
   const isToday = (d: number) =>
     d === today.getDate() && month === today.getMonth() && year === today.getFullYear()
 
-  function prevMonth() {
-    setViewDate(new Date(year, month - 1, 1))
+  function navigate(dir: 'left' | 'right') {
+    if (animating) return
+    setDirection(dir)
+    setAnimating(true)
   }
 
-  function nextMonth() {
-    setViewDate(new Date(year, month + 1, 1))
+  function handleAnimationEnd() {
+    if (!direction) return
+    setViewDate((prev) => {
+      const y = prev.getFullYear()
+      const m = prev.getMonth()
+      return direction === 'left' ? new Date(y, m - 1, 1) : new Date(y, m + 1, 1)
+    })
+    setDirection(null)
+    setAnimating(false)
   }
 
   function goToday() {
+    if (animating) return
     setViewDate(new Date())
+    setDirection(null)
   }
 
-  const dayNames = ['일', '월', '화', '수', '목', '금', '토']
+  // Drag handlers
+  function handleDragStart(event: DragStartEvent) {
+    const id = String(event.active.id)
+    const entry = entries.find((e) => String(e.id) === id)
+    if (entry) setDragEntry(entry)
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setDragEntry(null)
+    if (!onEntryUpdate || !event.over) return
+
+    const entryId = String(event.active.id)
+    const targetDate = String(event.over.id)
+    const entry = entries.find((e) => String(e.id) === entryId)
+    if (!entry) return
+
+    const currentDate = toDateStr(entry[dateField.slug])
+    if (!currentDate || currentDate === targetDate) return
+
+    const dayDelta = diffDays(currentDate, targetDate)
+    const updates: Record<string, unknown> = { [dateField.slug]: targetDate }
+
+    // If multi-day event, also shift end date
+    if (endDateField) {
+      const currentEnd = toDateStr(entry[endDateField.slug])
+      if (currentEnd) {
+        updates[endDateField.slug] = addDays(currentEnd, dayDelta)
+      }
+    }
+
+    onEntryUpdate(entryId, updates)
+  }
 
   if (entries.length === 0) {
     return (
@@ -82,90 +311,238 @@ export default function CalendarView({ dateField, fields, entries, onEntryClick 
   }
 
   return (
-    <div className="space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={prevMonth}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <h3 className="text-lg font-semibold">
-            {year}년 {month + 1}월
-          </h3>
-          <Button variant="outline" size="sm" onClick={nextMonth}>
-            <ChevronRight className="h-4 w-4" />
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="space-y-3">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate('left')}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <h3 className="text-lg font-semibold min-w-[120px] text-center">
+              {year}년 {month + 1}월
+            </h3>
+            <Button variant="outline" size="sm" onClick={() => navigate('right')}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" onClick={goToday}>
+            오늘
           </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={goToday}>
-          오늘
-        </Button>
-      </div>
 
-      {/* Calendar grid */}
-      <div className="rounded-md border">
-        <div className="grid grid-cols-7">
-          {dayNames.map((name, i) => (
-            <div
-              key={name}
-              className={`border-b px-2 py-1.5 text-center text-xs font-medium ${
-                i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-muted-foreground'
-              }`}
-            >
-              {name}
-            </div>
-          ))}
-        </div>
-        {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7">
-            {week.map((day, di) => {
-              if (day === null) {
-                return <div key={di} className="min-h-[100px] border-b border-r bg-muted/20" />
-              }
-              const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-              const dayEntries = entriesByDate.get(dateStr) ?? []
+        {/* Calendar grid with transition */}
+        <div className="overflow-hidden rounded-md border">
+          {/* Day names header */}
+          <div className="grid grid-cols-7">
+            {DAY_NAMES.map((name, i) => (
+              <div
+                key={name}
+                className={`border-b px-2 py-1.5 text-center text-xs font-medium ${
+                  i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-muted-foreground'
+                }`}
+              >
+                {name}
+              </div>
+            ))}
+          </div>
+
+          {/* Animated grid */}
+          <div
+            ref={gridRef}
+            className={
+              direction === 'left'
+                ? 'animate-slide-right'
+                : direction === 'right'
+                  ? 'animate-slide-left'
+                  : ''
+            }
+            onAnimationEnd={handleAnimationEnd}
+          >
+            {weeks.map((week, wi) => {
+              const weekSpans = spansByWeek[wi]
+              const maxTrack = weekSpans.length > 0
+                ? Math.min(Math.max(...weekSpans.map((s) => s.track)) + 1, MAX_VISIBLE_SPANS)
+                : 0
+              const hiddenSpanCount = weekSpans.filter((s) => s.track >= MAX_VISIBLE_SPANS).length
+
               return (
-                <div
-                  key={di}
-                  className={`min-h-[100px] border-b border-r p-1 ${
-                    isToday(day) ? 'bg-primary/5' : ''
-                  }`}
-                >
-                  <div
-                    className={`mb-1 text-xs font-medium ${
-                      di === 0 ? 'text-red-500' : di === 6 ? 'text-blue-500' : ''
-                    } ${isToday(day) ? 'rounded-full bg-primary text-primary-foreground w-5 h-5 flex items-center justify-center' : ''}`}
-                  >
-                    {day}
-                  </div>
-                  <div className="space-y-0.5">
-                    {dayEntries.slice(0, 3).map((entry) => {
-                      const label =
-                        titleField
-                          ? String(entry[titleField.slug] ?? '')
-                          : String(entry.id ?? '').slice(0, 8)
+                <div key={wi} className="grid grid-cols-7 relative">
+                  {/* Spanning bars layer */}
+                  {weekSpans
+                    .filter((s) => s.track < MAX_VISIBLE_SPANS)
+                    .map((span) => {
+                      const leftPct = (span.startCol / 7) * 100
+                      const widthPct = (span.colSpan / 7) * 100
+                      const top = 24 + span.track * 22
+
+                      const isStart = span.startDate >= makeDateStr(year, month, week[span.startCol] ?? 1)
+                      const isEnd =
+                        span.endDate <=
+                        makeDateStr(year, month, week[span.startCol + span.colSpan - 1] ?? daysInMonth)
+
                       return (
                         <button
-                          key={String(entry.id)}
+                          key={`${String(span.entry.id)}-${wi}`}
                           type="button"
-                          className="block w-full truncate rounded bg-primary/10 px-1 py-0.5 text-left text-xs hover:bg-primary/20"
-                          onClick={() => onEntryClick(entry)}
+                          className={`absolute z-10 truncate bg-primary/15 text-xs px-1.5 py-0.5 hover:bg-primary/25 cursor-pointer border-l-2 border-primary ${
+                            isStart ? 'rounded-l' : ''
+                          } ${isEnd ? 'rounded-r' : ''}`}
+                          style={{
+                            left: `calc(${leftPct}% + 2px)`,
+                            width: `calc(${widthPct}% - 4px)`,
+                            top: `${top}px`,
+                            height: '20px',
+                            lineHeight: '18px',
+                          }}
+                          onClick={() => onEntryClick(span.entry)}
                         >
-                          {label || '(무제)'}
+                          {isStart ? span.label : `… ${span.label}`}
                         </button>
                       )
                     })}
-                    {dayEntries.length > 3 && (
-                      <span className="text-[10px] text-muted-foreground pl-1">
-                        +{dayEntries.length - 3}
-                      </span>
-                    )}
-                  </div>
+
+                  {/* Day cells */}
+                  {week.map((day, di) => {
+                    if (day === null) {
+                      return (
+                        <DroppableCell key={di} id={`empty-${wi}-${di}`} disabled>
+                          <div className="min-h-[100px] bg-muted/20" />
+                        </DroppableCell>
+                      )
+                    }
+
+                    const dateStr = makeDateStr(year, month, day)
+                    const dayEntries = singlesByDate.get(dateStr) ?? []
+                    // Reserve space for spanning bars
+                    const spanOffset = maxTrack * 22
+
+                    return (
+                      <DroppableCell key={di} id={dateStr}>
+                        <div
+                          className={`min-h-[100px] border-b border-r p-1 ${
+                            isToday(day) ? 'bg-primary/5' : ''
+                          }`}
+                        >
+                          <div
+                            className={`mb-1 text-xs font-medium ${
+                              di === 0 ? 'text-red-500' : di === 6 ? 'text-blue-500' : ''
+                            } ${
+                              isToday(day)
+                                ? 'rounded-full bg-primary text-primary-foreground w-5 h-5 flex items-center justify-center'
+                                : ''
+                            }`}
+                          >
+                            {day}
+                          </div>
+                          <div className="space-y-0.5" style={{ marginTop: `${spanOffset}px` }}>
+                            {dayEntries.slice(0, 3).map((entry) => (
+                              <DraggableEntry
+                                key={String(entry.id)}
+                                entry={entry}
+                                label={getLabel(entry)}
+                                onClick={() => onEntryClick(entry)}
+                                draggable={!!onEntryUpdate}
+                              />
+                            ))}
+                            {dayEntries.length > 3 && (
+                              <span className="text-[10px] text-muted-foreground pl-1">
+                                +{dayEntries.length - 3} 더
+                              </span>
+                            )}
+                            {di === 6 && hiddenSpanCount > 0 && (
+                              <span className="text-[10px] text-muted-foreground pl-1">
+                                +{hiddenSpanCount} 더
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </DroppableCell>
+                    )
+                  })}
                 </div>
               )
             })}
           </div>
-        ))}
+
+          {/* Empty month message */}
+          {!monthHasEvents && entries.length > 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground text-sm">
+              <Calendar className="h-8 w-8 mb-2 opacity-40" />
+              <p>이번 달에 해당하는 일정이 없습니다</p>
+              <Button variant="link" size="sm" className="mt-1" onClick={goToday}>
+                오늘로 이동
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Drag overlay */}
+      <DragOverlay>
+        {dragEntry && (
+          <div className="rounded bg-primary/20 px-2 py-1 text-xs shadow-md border max-w-[160px] truncate">
+            {getLabel(dragEntry)}
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
+  )
+}
+
+// --- Sub-components ---
+
+import { useDroppable } from '@dnd-kit/core'
+import { useDraggable } from '@dnd-kit/core'
+
+function DroppableCell({
+  id,
+  disabled,
+  children,
+}: {
+  id: string
+  disabled?: boolean
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={isOver ? 'ring-2 ring-primary/30 ring-inset' : ''}
+    >
+      {children}
     </div>
+  )
+}
+
+function DraggableEntry({
+  entry,
+  label,
+  onClick,
+  draggable,
+}: {
+  entry: Record<string, unknown>
+  label: string
+  onClick: () => void
+  draggable: boolean
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: String(entry.id),
+    disabled: !draggable,
+  })
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      className={`block w-full truncate rounded bg-primary/10 px-1 py-0.5 text-left text-xs hover:bg-primary/20 ${
+        isDragging ? 'opacity-30' : ''
+      } ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      onClick={onClick}
+      {...(draggable ? { ...listeners, ...attributes } : {})}
+    >
+      {label}
+    </button>
   )
 }
