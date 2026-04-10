@@ -52,7 +52,9 @@ func scanCollection(row pgx.Row) (Collection, error) {
 		c.Icon = *icon
 	}
 	if len(acRaw) > 0 {
-		_ = json.Unmarshal(acRaw, &c.AccessConfig)
+		if err := json.Unmarshal(acRaw, &c.AccessConfig); err != nil {
+			return Collection{}, fmt.Errorf("unmarshal access_config: %w", err)
+		}
 	}
 	return c, nil
 }
@@ -126,7 +128,11 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 	)
 	var acJSON []byte
 	if req.AccessConfig != nil {
-		acJSON, _ = json.Marshal(req.AccessConfig)
+		var err error
+		acJSON, err = json.Marshal(req.AccessConfig)
+		if err != nil {
+			return Collection{}, fmt.Errorf("marshal access_config: %w", err)
+		}
 	}
 	err := tx.QueryRow(ctx, `
 		INSERT INTO _meta.collections (slug, label, description, icon, access_config)
@@ -183,7 +189,10 @@ func (s *Store) UpdateCollection(ctx context.Context, id string, req *UpdateColl
 	}
 	if req.AccessConfig != nil {
 		sets = append(sets, fmt.Sprintf("access_config = $%d", argIdx))
-		acJSON, _ := json.Marshal(req.AccessConfig)
+		acJSON, err := json.Marshal(req.AccessConfig)
+		if err != nil {
+			return Collection{}, fmt.Errorf("marshal access_config: %w", err)
+		}
 		args = append(args, acJSON)
 		argIdx++
 	}

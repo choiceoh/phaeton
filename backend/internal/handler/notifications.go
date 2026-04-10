@@ -45,9 +45,12 @@ func (h *NotificationHandler) List(w http.ResponseWriter, r *http.Request) {
 	page, limit, offset := ParsePagination(r.URL.Query())
 
 	var total int64
-	_ = h.pool.QueryRow(r.Context(),
+	if err := h.pool.QueryRow(r.Context(),
 		`SELECT COUNT(*) FROM _meta.notifications WHERE user_id = $1`, user.UserID,
-	).Scan(&total)
+	).Scan(&total); err != nil {
+		writeError(w, http.StatusInternalServerError, "count notifications: "+err.Error())
+		return
+	}
 
 	rows, err := h.pool.Query(r.Context(), `
 		SELECT id, user_id, type, title, body, ref_collection_id, ref_record_id, is_read, created_at
