@@ -29,18 +29,18 @@ export default function GlobalAutomationsPage() {
           <p>아직 컬렉션이 없습니다</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {apps.map((app) => (
             <Link key={app.id} to={`/apps/${app.id}/automations`}>
               <Card className="flex items-center justify-between p-4 hover:bg-accent/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <Zap className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <span className="font-medium">{app.label}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">/{app.slug}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Zap className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <span className="block truncate font-medium">{app.label}</span>
+                    <span className="text-xs text-muted-foreground">/{app.slug}</span>
                   </div>
                 </div>
-                <Badge variant="secondary">자동화 관리</Badge>
+                <Badge variant="secondary" className="shrink-0 ml-2">자동화 관리</Badge>
               </Card>
             </Link>
           ))}
