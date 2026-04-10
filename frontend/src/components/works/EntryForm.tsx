@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import RelationCombobox from '@/components/common/RelationCombobox'
+import RelationMultiCombobox from '@/components/common/RelationMultiCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
 import { useCurrentUser } from '@/hooks/useAuth'
 import { useSimilarRecords } from '@/hooks/useEntries'
@@ -240,8 +241,17 @@ export default function EntryForm({
 // (with expand). The form always works with the UUID.
 function extractValue(value: unknown, field: Field): unknown {
   if (value == null) return value
-  if (field.field_type === 'relation' && typeof value === 'object') {
-    return (value as Record<string, unknown>).id
+  if (field.field_type === 'relation') {
+    // M:N: value is an array of UUIDs or expanded objects.
+    if (field.relation?.relation_type === 'many_to_many' && Array.isArray(value)) {
+      return value.map((v) =>
+        typeof v === 'object' && v !== null ? (v as Record<string, unknown>).id : v,
+      )
+    }
+    // 1:1/1:N: value is a UUID or expanded object.
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      return (value as Record<string, unknown>).id
+    }
   }
   if (field.field_type === 'user' && typeof value === 'object') {
     return (value as Record<string, unknown>).id
@@ -471,6 +481,15 @@ function FieldInput({
     case 'relation':
       if (!field.relation?.target_collection_id) {
         return <Input disabled value="(관계 대상 미설정)" />
+      }
+      if (field.relation?.relation_type === 'many_to_many') {
+        return (
+          <RelationMultiCombobox
+            targetCollectionId={field.relation.target_collection_id}
+            value={(value as string[]) || []}
+            onChange={onChange}
+          />
+        )
       }
       return (
         <RelationCombobox

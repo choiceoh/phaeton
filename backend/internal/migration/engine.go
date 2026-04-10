@@ -351,7 +351,16 @@ func (e *Engine) AddField(ctx context.Context, collectionID string, req *schema.
 	var ddlUp, ddlDown []string
 
 	// Layout / computed fields produce no DDL.
-	if !f.FieldType.NoColumn() {
+	// M:N relation fields have no column but need a junction table.
+	if f.IsManyToMany() {
+		if f.Relation != nil {
+			stmts, err := e.applyRelationDDL(ctx, tx, col.Slug, f)
+			if err != nil {
+				return schema.Field{}, nil, err
+			}
+			ddlUp = append(ddlUp, stmts...)
+		}
+	} else if !f.FieldType.NoColumn() {
 		ddlUp, ddlDown = GenerateAddColumn(col.Slug, f)
 		if err := execStmts(ctx, tx, ddlUp); err != nil {
 			return schema.Field{}, nil, fmt.Errorf("exec add column: %w", err)
