@@ -46,7 +46,7 @@ export default function ConfirmDialog({
           <AlertDialogAction
             onClick={onConfirm}
             disabled={loading}
-            className={variant === 'destructive' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+            className={variant === 'destructive' ? 'bg-neutral-900 text-white hover:bg-neutral-800' : ''}
           >
             {loading ? '처리 중...' : confirmLabel}
           </AlertDialogAction>
