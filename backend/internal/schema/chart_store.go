@@ -156,7 +156,6 @@ func (s *Store) UpdateChart(ctx context.Context, chartID string, req UpdateChart
 	if req.SortOrder != nil {
 		sets = append(sets, fmt.Sprintf("sort_order = $%d", idx))
 		args = append(args, *req.SortOrder)
-		idx++
 	}
 
 	sql := fmt.Sprintf("UPDATE _meta.charts SET %s WHERE id = $1 RETURNING %s",

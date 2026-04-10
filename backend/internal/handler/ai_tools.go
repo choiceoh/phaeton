@@ -80,7 +80,7 @@ func (h *AIHandler) resolveListCollections(ctx context.Context) (string, error) 
 		if c.Description != "" {
 			desc = " — " + c.Description
 		}
-		sb.WriteString(fmt.Sprintf("- %s (slug: %s)%s\n", c.Label, c.Slug, desc))
+		fmt.Fprintf(&sb, "- %s (slug: %s)%s\n", c.Label, c.Slug, desc)
 	}
 	return sb.String(), nil
 }
@@ -99,7 +99,7 @@ func (h *AIHandler) resolveListUsers(ctx context.Context) (string, error) {
 		if err := rows.Scan(&id, &name, &email); err != nil {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("- %s (id: %s, email: %s)\n", name, id, email))
+		fmt.Fprintf(&sb, "- %s (id: %s, email: %s)\n", name, id, email)
 	}
 	if sb.Len() == 0 {
 		return "사용자가 없습니다.", nil

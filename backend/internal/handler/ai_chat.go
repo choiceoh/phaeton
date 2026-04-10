@@ -262,7 +262,7 @@ func (h *AIHandler) queryAppData(ctx context.Context, slug string, limit int, fi
 			default:
 				valStr = fmt.Sprintf("%v", v)
 			}
-			sb.WriteString(fmt.Sprintf("- %s: %s\n", label, valStr))
+			fmt.Fprintf(&sb, "- %s: %s\n", label, valStr)
 		}
 		sb.WriteString("\n")
 	}
