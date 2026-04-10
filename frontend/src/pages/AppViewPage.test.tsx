@@ -8,11 +8,6 @@ import type { Collection, Field } from '@/lib/types'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-// Mock ChartPanel to avoid its own data fetch.
-vi.mock('@/components/works/views/ChartPanel', () => ({
-  default: () => <div data-testid="chart-panel" />,
-}))
-
 // Mock the heavy sub-views to simplify.
 vi.mock('@/components/works/views/CalendarView', () => ({
   default: () => <div data-testid="calendar-view" />,

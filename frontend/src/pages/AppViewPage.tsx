@@ -66,7 +66,6 @@ import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import CalendarView from '@/components/works/views/CalendarView'
-import ChartPanel from '@/components/works/views/ChartPanel'
 import GalleryView from '@/components/works/views/GalleryView'
 import FormView from '@/components/works/views/FormView'
 import GanttView from '@/components/works/views/GanttView'
@@ -1220,12 +1219,6 @@ export default function AppViewPage() {
             </Button>
           </>
         }
-      />
-
-      <ChartPanel
-        slug={collection.slug}
-        fields={collection.fields ?? []}
-        totalRecords={list?.total ?? 0}
       />
 
       {list && (list.total ?? 0) < 5 && (
