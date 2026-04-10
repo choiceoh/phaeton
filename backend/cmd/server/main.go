@@ -212,7 +212,7 @@ func run() int {
 		Addr:              addr,
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		WriteTimeout:      150 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 
@@ -464,17 +464,19 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 		r.Handle("/api/uploads/*", http.StripPrefix("/api/uploads/",
 			http.FileServer(http.Dir("uploads"))))
 
-		// AI endpoints.
-		r.Get("/api/ai/health", cfg.aiH.HealthCheck)
-		r.Post("/api/ai/build-collection", cfg.aiH.BuildCollection)
-		r.Post("/api/ai/chat", cfg.aiH.Chat)
-		r.Post("/api/ai/generate-slug", cfg.aiH.GenerateSlug)
-		r.Post("/api/ai/build-automation/{id}", cfg.aiH.BuildAutomation)
-		r.Post("/api/ai/build-formula/{slug}", cfg.aiH.BuildFormula)
-		r.Post("/api/ai/build-filter/{slug}", cfg.aiH.BuildFilter)
-		r.Post("/api/ai/prefill/{slug}", cfg.aiH.Prefill)
-		r.Post("/api/ai/map-csv-columns/{slug}", cfg.aiH.MapCSVColumns)
-		r.Post("/api/ai/build-chart/{id}", cfg.aiH.BuildChart)
+		// AI endpoints — longer write deadline for LLM inference.
+		r.Route("/api/ai", func(ai chi.Router) {
+			ai.Get("/health", cfg.aiH.HealthCheck)
+			ai.Post("/build-collection", cfg.aiH.BuildCollection)
+			ai.Post("/chat", cfg.aiH.Chat)
+			ai.Post("/generate-slug", cfg.aiH.GenerateSlug)
+			ai.Post("/build-automation/{id}", cfg.aiH.BuildAutomation)
+			ai.Post("/build-formula/{slug}", cfg.aiH.BuildFormula)
+			ai.Post("/build-filter/{slug}", cfg.aiH.BuildFilter)
+			ai.Post("/prefill/{slug}", cfg.aiH.Prefill)
+			ai.Post("/map-csv-columns/{slug}", cfg.aiH.MapCSVColumns)
+			ai.Post("/build-chart/{id}", cfg.aiH.BuildChart)
+		})
 
 		// Notifications
 		r.Get("/api/notifications", cfg.notifH.List)

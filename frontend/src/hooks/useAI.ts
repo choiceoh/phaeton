@@ -2,6 +2,8 @@ import { useMutation } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 
+const AI_TIMEOUT = 120_000
+
 export interface AIBuildField {
   slug: string
   label: string
@@ -44,42 +46,42 @@ interface AIBuildInput {
 export function useAIBuildCollection() {
   return useMutation({
     mutationFn: (input: AIBuildInput) =>
-      api.post<AIBuildEnvelope>('/ai/build-collection', input),
+      api.post<AIBuildEnvelope>('/ai/build-collection', input, { timeout: AI_TIMEOUT }),
   })
 }
 
 export function useAIGenerateSlug() {
   return useMutation({
     mutationFn: (label: string) =>
-      api.post<{ slug: string }>('/ai/generate-slug', { label }),
+      api.post<{ slug: string }>('/ai/generate-slug', { label }, { timeout: AI_TIMEOUT }),
   })
 }
 
 export function useAIBuildFormula(slug: string | undefined) {
   return useMutation({
     mutationFn: (description: string) =>
-      api.post<{ expression: string }>(`/ai/build-formula/${slug}`, { description }),
+      api.post<{ expression: string }>(`/ai/build-formula/${slug}`, { description }, { timeout: AI_TIMEOUT }),
   })
 }
 
 export function useAIBuildFilter(slug: string | undefined) {
   return useMutation({
     mutationFn: (query: string) =>
-      api.post<{ field: string, operator: string, value: string }[]>(`/ai/build-filter/${slug}`, { query }),
+      api.post<{ field: string, operator: string, value: string }[]>(`/ai/build-filter/${slug}`, { query }, { timeout: AI_TIMEOUT }),
   })
 }
 
 export function useAIPrefill(slug: string | undefined) {
   return useMutation({
     mutationFn: (description: string) =>
-      api.post<Record<string, unknown>>(`/ai/prefill/${slug}`, { description }),
+      api.post<Record<string, unknown>>(`/ai/prefill/${slug}`, { description }, { timeout: AI_TIMEOUT }),
   })
 }
 
 export function useAIMapCSVColumns(slug: string | undefined) {
   return useMutation({
     mutationFn: (headers: string[]) =>
-      api.post<Record<string, string>>(`/ai/map-csv-columns/${slug}`, { headers }),
+      api.post<Record<string, string>>(`/ai/map-csv-columns/${slug}`, { headers }, { timeout: AI_TIMEOUT }),
   })
 }
 
@@ -92,6 +94,6 @@ export interface AIChartResult {
 export function useAIBuildChart(collectionId: string | undefined) {
   return useMutation({
     mutationFn: (description: string) =>
-      api.post<AIChartResult>(`/ai/build-chart/${collectionId}`, { description }),
+      api.post<AIChartResult>(`/ai/build-chart/${collectionId}`, { description }, { timeout: AI_TIMEOUT }),
   })
 }
