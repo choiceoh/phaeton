@@ -113,7 +113,7 @@ function DeptBranch({
           <span className="w-3.5" />
         )}
         <Building2 className="h-3.5 w-3.5 shrink-0 text-stone-500" />
-        <span className="truncate">{node.dept.name}</span>
+        <span className="truncate" title={node.dept.name}>{node.dept.name}</span>
         {node.users.length > 0 && (
           <span className="ml-auto text-xs text-muted-foreground">{node.users.length}</span>
         )}
@@ -169,7 +169,7 @@ function UserLeaf({
     >
       <span className="w-3.5" />
       <UserIcon className="h-3.5 w-3.5 shrink-0 text-stone-400" />
-      <span className="truncate">{user.name}</span>
+      <span className="truncate" title={user.name}>{user.name}</span>
       {user.position && (
         <span className="ml-1 text-xs text-muted-foreground">{user.position}</span>
       )}

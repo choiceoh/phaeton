@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, Outlet, useNavigate } from 'react-router'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 
 import LoadingState from '@/components/common/LoadingState'
 import NotificationBell from '@/components/common/NotificationBell'
@@ -11,11 +11,17 @@ export default function RootLayout() {
   const { data: user, isLoading, isError } = useCurrentUser()
   const logout = useLogout()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
 
   // 401 from /me means session expired or never existed.
   useEffect(() => {
     if (isError) navigate('/login', { replace: true })
   }, [isError, navigate])
+
+  // Scroll to top on page navigation.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
 
   if (isLoading) return <LoadingState />
   if (!user) return null // useEffect will redirect

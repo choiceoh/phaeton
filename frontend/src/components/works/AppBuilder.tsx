@@ -103,7 +103,7 @@ export default function AppBuilder() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1">
           <Label>컬렉션 이름 (한글)</Label>
           <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="인허가 체크리스트" />
@@ -125,7 +125,7 @@ export default function AppBuilder() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <div className="grid grid-cols-[240px_1fr] gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
         <div className="max-h-[calc(100vh-280px)] overflow-y-auto rounded-lg border p-3">
           <FieldPalette key={selectedId ? 'collapsed' : 'expanded'} onAdd={handleAddField} collapsed={!!selectedId} />
           {selectedField && (
