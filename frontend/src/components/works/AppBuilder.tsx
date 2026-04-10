@@ -256,7 +256,7 @@ export default function AppBuilder() {
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pb-16">
         <Button
           onClick={handleSave}
           disabled={createCollection.isPending || !label.trim() || !slug.trim()}
