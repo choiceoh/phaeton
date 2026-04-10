@@ -49,6 +49,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
   const aiAvailable = useAIAvailable()
   const generateSlug = useAIGenerateSlug()
   const slugDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const [tab, setTab] = useState<'basic' | 'advanced'>('basic')
 
   const requestAutoSlug = useCallback((label: string, currentField: FieldDraft) => {
     if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current)
@@ -303,8 +304,6 @@ export default function FieldProperties({ field, collections, siblingFields, onC
       </div>
     )
   }
-
-  const [tab, setTab] = useState<'basic' | 'advanced'>('basic')
 
   return (
     <div className="overflow-y-auto">
