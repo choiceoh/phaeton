@@ -61,7 +61,7 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 	var colDefs []string
 	colDefs = append(colDefs, "id UUID PRIMARY KEY DEFAULT gen_random_uuid()")
 	for _, f := range fields {
-		if f.FieldType.NoColumn() {
+		if f.FieldType.NoColumn() || f.IsManyToMany() {
 			continue
 		}
 		colDefs = append(colDefs, columnDefWithTable(col.Slug, f))

@@ -155,6 +155,9 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Resolve computed fields (formula, lookup, rollup).
 	h.resolveComputedFields(r.Context(), records, fields)
 
+	// Load M:N links.
+	h.loadM2MFields(r.Context(), records, fields, col.Slug)
+
 	writeList(w, records, total, page, limit)
 }
 
@@ -214,6 +217,9 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Resolve computed fields (formula, lookup, rollup).
 	h.resolveComputedFields(r.Context(), records, fields)
 
+	// Load M:N links.
+	h.loadM2MFields(r.Context(), records, fields, col.Slug)
+
 	writeJSON(w, http.StatusOK, records[0])
 }
 
@@ -240,13 +246,27 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Separate M:N field values — they go to junction tables, not the main INSERT.
+	m2mValues := make(map[string][]string)
+	for _, f := range fields {
+		if !f.IsManyToMany() {
+			continue
+		}
+		v, exists := body[f.Slug]
+		if !exists {
+			continue
+		}
+		m2mValues[f.Slug] = toStringSlice(v)
+		delete(body, f.Slug)
+	}
+
 	// Build INSERT.
 	colNames := []string{}
 	placeholders := []string{}
 	args := []any{}
 	idx := 1
 	for _, f := range fields {
-		if f.FieldType.NoColumn() {
+		if f.FieldType.NoColumn() || f.IsManyToMany() {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -311,6 +331,24 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sync M:N junction tables.
+	if recID, ok := records[0]["id"].(string); ok {
+		for _, f := range fields {
+			if !f.IsManyToMany() {
+				continue
+			}
+			ids, exists := m2mValues[f.Slug]
+			if !exists {
+				continue
+			}
+			if err := h.syncM2MLinks(r.Context(), col.Slug, f, recID, ids); err != nil {
+				handleErr(w, r, err)
+				return
+			}
+			records[0][f.Slug] = ids
+		}
+	}
+
 	// Record change history.
 	if recID, ok := records[0]["id"].(string); ok {
 		diff := createDiff(records[0], fields)
@@ -319,6 +357,9 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve computed fields for the created record.
 	h.resolveComputedFields(r.Context(), records, fields)
+
+	// Load M:N links for response.
+	h.loadM2MFields(r.Context(), records, fields, col.Slug)
 
 	// Publish automation event.
 	if recID, ok := records[0]["id"].(string); ok {
@@ -357,6 +398,20 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := validatePayload(r.Context(), h.pool, h.cache, body, fields, false); err != nil {
 		handleErr(w, r, err)
 		return
+	}
+
+	// Separate M:N field values — they go to junction tables, not the main UPDATE.
+	m2mValues := make(map[string][]string)
+	for _, f := range fields {
+		if !f.IsManyToMany() {
+			continue
+		}
+		v, exists := body[f.Slug]
+		if !exists {
+			continue
+		}
+		m2mValues[f.Slug] = toStringSlice(v)
+		delete(body, f.Slug)
 	}
 
 	// Fetch current row for transition check and change history.
@@ -399,7 +454,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	idx++
 
 	for _, f := range fields {
-		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber {
+		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber || f.IsManyToMany() {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -494,6 +549,21 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sync M:N junction tables.
+	for _, f := range fields {
+		if !f.IsManyToMany() {
+			continue
+		}
+		ids, exists := m2mValues[f.Slug]
+		if !exists {
+			continue
+		}
+		if err := h.syncM2MLinks(r.Context(), col.Slug, f, id, ids); err != nil {
+			handleErr(w, r, err)
+			return
+		}
+	}
+
 	// Record change history.
 	diff := computeDiff(oldRow, records[0], fields)
 	if len(diff) > 0 {
@@ -502,6 +572,9 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve computed fields for the updated record.
 	h.resolveComputedFields(r.Context(), records, fields)
+
+	// Load M:N links for response.
+	h.loadM2MFields(r.Context(), records, fields, col.Slug)
 
 	// Publish automation event.
 	ev := events.Event{
@@ -1050,7 +1123,7 @@ func (h *DynHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 func buildInsertColumns(body map[string]any, fields []schema.Field, userID string) (cols []string, placeholders []string, args []any) {
 	idx := 1
 	for _, f := range fields {
-		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber {
+		if f.FieldType.NoColumn() || f.FieldType == schema.FieldAutonumber || f.IsManyToMany() {
 			continue
 		}
 		v, exists := body[f.Slug]
@@ -1576,6 +1649,9 @@ func buildSelectCols(fields []schema.Field, hasStatus bool, opts *selectColOpts)
 		if f.FieldType == schema.FieldLookup || f.FieldType == schema.FieldRollup {
 			continue
 		}
+		if f.IsManyToMany() {
+			continue
+		}
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
 	}
 	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`, `"_version"`)
@@ -1606,6 +1682,9 @@ func qualifySelectCols(fields []schema.Field, prefix string, hasStatus bool, opt
 			continue
 		}
 		if f.FieldType == schema.FieldLookup || f.FieldType == schema.FieldRollup {
+			continue
+		}
+		if f.IsManyToMany() {
 			continue
 		}
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
@@ -1769,14 +1848,20 @@ func (h *DynHandler) expandRelations(ctx context.Context, records []map[string]a
 		if f.FieldType != schema.FieldRelation {
 			return fmt.Errorf("expand: field %q is not a relation", name)
 		}
-		if f.Relation == nil || f.Relation.RelationType == schema.RelManyToMany {
-			// M:N would require a junction-table lookup; not supported yet.
-			return fmt.Errorf("expand: %s is not expandable (many-to-many not supported)", name)
+		if f.Relation == nil {
+			return fmt.Errorf("expand: field %q has no relation config", name)
 		}
 
 		targetCol, ok := h.cache.CollectionByID(f.Relation.TargetCollectionID)
 		if !ok {
 			return fmt.Errorf("expand: target collection for %q not found", name)
+		}
+
+		if f.IsManyToMany() {
+			if err := h.expandM2M(ctx, records, f, targetCol); err != nil {
+				return err
+			}
+			continue
 		}
 
 		// Collect distinct non-null UUIDs from the current result set.
@@ -1973,4 +2058,242 @@ func coerceValue(v any, ft schema.FieldType) any {
 		}
 	}
 	return v
+}
+
+// ---------- M:N helpers ----------
+
+// toStringSlice converts a JSON-decoded value ([]any or []string) to []string.
+func toStringSlice(v any) []string {
+	if v == nil {
+		return nil
+	}
+	switch arr := v.(type) {
+	case []any:
+		out := make([]string, 0, len(arr))
+		for _, el := range arr {
+			if s, ok := el.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []string:
+		return arr
+	}
+	return nil
+}
+
+// m2mJunctionInfo resolves junction table and column names for an M:N field.
+func m2mJunctionInfo(ownerSlug string, f schema.Field, cache *schema.Cache) (junctionTable, ownerCol, targetCol string, ok bool) {
+	if f.Relation == nil {
+		return "", "", "", false
+	}
+	target, found := cache.CollectionByID(f.Relation.TargetCollectionID)
+	if !found {
+		return "", "", "", false
+	}
+	junc := f.Relation.JunctionTable
+	if junc == "" {
+		junc = ownerSlug + "_" + target.Slug + "_rel"
+	}
+	return junc, ownerSlug + "_id", target.Slug + "_id", true
+}
+
+// syncM2MLinks replaces all links for a record in a junction table.
+// It deletes existing links and inserts the new set.
+func (h *DynHandler) syncM2MLinks(ctx context.Context, ownerSlug string, f schema.Field, recordID string, targetIDs []string) error {
+	junc, ownerCol, targetCol, ok := m2mJunctionInfo(ownerSlug, f, h.cache)
+	if !ok {
+		return fmt.Errorf("m2m: cannot resolve junction for field %q", f.Slug)
+	}
+
+	qTable := fmt.Sprintf("%q.%q", "data", junc)
+
+	// Delete existing links.
+	delSQL := fmt.Sprintf("DELETE FROM %s WHERE %q = $1", qTable, ownerCol)
+	if _, err := h.pool.Exec(ctx, delSQL, recordID); err != nil {
+		return fmt.Errorf("m2m delete: %w", err)
+	}
+
+	if len(targetIDs) == 0 {
+		return nil
+	}
+
+	// Batch insert new links.
+	var vals []string
+	args := []any{recordID}
+	for i, tid := range targetIDs {
+		args = append(args, tid)
+		vals = append(vals, fmt.Sprintf("($1, $%d)", i+2))
+	}
+	insSQL := fmt.Sprintf("INSERT INTO %s (%q, %q) VALUES %s ON CONFLICT DO NOTHING",
+		qTable, ownerCol, targetCol, strings.Join(vals, ", "))
+	if _, err := h.pool.Exec(ctx, insSQL, args...); err != nil {
+		return fmt.Errorf("m2m insert: %w", err)
+	}
+	return nil
+}
+
+// loadM2MFields populates M:N relation fields on records by querying junction tables.
+// Each M:N field gets an array of target UUIDs.
+func (h *DynHandler) loadM2MFields(ctx context.Context, records []map[string]any, fields []schema.Field, ownerSlug string) {
+	// Find M:N fields.
+	var m2mFields []schema.Field
+	for _, f := range fields {
+		if f.IsManyToMany() {
+			m2mFields = append(m2mFields, f)
+		}
+	}
+	if len(m2mFields) == 0 || len(records) == 0 {
+		return
+	}
+
+	// Collect all record IDs.
+	var recordIDs []string
+	for _, row := range records {
+		if id, ok := row["id"].(string); ok {
+			recordIDs = append(recordIDs, id)
+		}
+	}
+	if len(recordIDs) == 0 {
+		return
+	}
+
+	for _, f := range m2mFields {
+		junc, ownerCol, targetCol, ok := m2mJunctionInfo(ownerSlug, f, h.cache)
+		if !ok {
+			continue
+		}
+
+		// Build query to fetch all links for all records at once.
+		placeholders := make([]string, len(recordIDs))
+		args := make([]any, len(recordIDs))
+		for i, id := range recordIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = id
+		}
+
+		qTable := fmt.Sprintf("%q.%q", "data", junc)
+		sql := fmt.Sprintf("SELECT %q, %q FROM %s WHERE %q IN (%s)",
+			ownerCol, targetCol, qTable, ownerCol, strings.Join(placeholders, ","))
+
+		rows, err := h.pool.Query(ctx, sql, args...)
+		if err != nil {
+			// Non-fatal: set empty arrays.
+			for _, row := range records {
+				row[f.Slug] = []string{}
+			}
+			continue
+		}
+
+		// Group target IDs by owner ID.
+		linkMap := make(map[string][]string)
+		for rows.Next() {
+			vals, err := rows.Values()
+			if err != nil {
+				continue
+			}
+			if len(vals) < 2 {
+				continue
+			}
+			oID := fmt.Sprint(normalizeValue(vals[0]))
+			tID := fmt.Sprint(normalizeValue(vals[1]))
+			linkMap[oID] = append(linkMap[oID], tID)
+		}
+		rows.Close()
+
+		// Set values on records.
+		for _, row := range records {
+			id, _ := row["id"].(string)
+			if links, ok := linkMap[id]; ok {
+				row[f.Slug] = links
+			} else {
+				row[f.Slug] = []string{}
+			}
+		}
+	}
+}
+
+// expandM2M expands M:N relation fields by replacing UUID arrays with full target records.
+func (h *DynHandler) expandM2M(ctx context.Context, records []map[string]any, f schema.Field, targetCol schema.Collection) error {
+	// Collect all distinct target IDs across all records.
+	seen := make(map[string]struct{})
+	var allIDs []string
+	for _, row := range records {
+		ids := toStringSliceFromRow(row[f.Slug])
+		for _, id := range ids {
+			if _, dup := seen[id]; !dup {
+				seen[id] = struct{}{}
+				allIDs = append(allIDs, id)
+			}
+		}
+	}
+	if len(allIDs) == 0 {
+		return nil
+	}
+
+	// Batch fetch target records.
+	targetFields := h.cache.Fields(targetCol.ID)
+	targetSelectCols := buildSelectCols(targetFields, false, nil)
+
+	placeholders := make([]string, len(allIDs))
+	args := make([]any, len(allIDs))
+	for i, id := range allIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	qTargetTable := fmt.Sprintf("%q.%q", "data", targetCol.Slug)
+	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id IN (%s) AND deleted_at IS NULL",
+		targetSelectCols, qTargetTable, strings.Join(placeholders, ","))
+
+	targetRows, err := h.pool.Query(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("expand m2m %s: %w", f.Slug, err)
+	}
+	targetRecords, err := collectRows(targetRows)
+	targetRows.Close()
+	if err != nil {
+		return fmt.Errorf("expand m2m %s scan: %w", f.Slug, err)
+	}
+
+	byID := make(map[string]map[string]any, len(targetRecords))
+	for _, tr := range targetRecords {
+		if id, ok := tr["id"].(string); ok {
+			byID[id] = tr
+		}
+	}
+
+	// Replace UUID arrays with expanded objects.
+	for _, row := range records {
+		ids := toStringSliceFromRow(row[f.Slug])
+		expanded := make([]map[string]any, 0, len(ids))
+		for _, id := range ids {
+			if target, ok := byID[id]; ok {
+				expanded = append(expanded, target)
+			}
+		}
+		row[f.Slug] = expanded
+	}
+	return nil
+}
+
+// toStringSliceFromRow extracts a []string from a record value that may be
+// []string, []any, or []map[string]any (already expanded).
+func toStringSliceFromRow(v any) []string {
+	if v == nil {
+		return nil
+	}
+	switch arr := v.(type) {
+	case []string:
+		return arr
+	case []any:
+		out := make([]string, 0, len(arr))
+		for _, el := range arr {
+			if s, ok := el.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }

@@ -2,9 +2,23 @@ import type { Field } from '@/lib/types'
 
 export function formatCell(value: unknown, field: Field): string {
   if (value == null) return '-'
-  if (field.field_type === 'relation' && typeof value === 'object') {
-    const obj = value as Record<string, unknown>
-    return String(obj.name ?? obj.title ?? obj.label ?? obj.id ?? '?')
+  if (field.field_type === 'relation') {
+    // M:N: array of UUIDs or expanded objects.
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '-'
+      return value.map((v) => {
+        if (typeof v === 'object' && v !== null) {
+          const obj = v as Record<string, unknown>
+          return String(obj.name ?? obj.title ?? obj.label ?? obj.id ?? '?')
+        }
+        return String(v)
+      }).join(', ')
+    }
+    // 1:1/1:N: single expanded object.
+    if (typeof value === 'object' && value !== null) {
+      const obj = value as Record<string, unknown>
+      return String(obj.name ?? obj.title ?? obj.label ?? obj.id ?? '?')
+    }
   }
   if (field.field_type === 'user' && typeof value === 'object') {
     const obj = value as Record<string, unknown>
@@ -84,8 +98,11 @@ export function formatCell(value: unknown, field: Field): string {
     return String(value)
   }
 
-  // Lookup fields: pass through.
-  if (field.field_type === 'lookup') return String(value)
+  // Lookup fields: may be a single value or array (from M:N).
+  if (field.field_type === 'lookup') {
+    if (Array.isArray(value)) return value.map(String).join(', ')
+    return String(value)
+  }
 
   return String(value)
 }

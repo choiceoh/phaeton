@@ -69,6 +69,11 @@ func (ft FieldType) NoColumn() bool {
 	return ft.IsLayout() || ft.IsComputed()
 }
 
+// IsManyToMany returns true if this is a M:N relation field (no DB column).
+func (f Field) IsManyToMany() bool {
+	return f.FieldType == FieldRelation && f.Relation != nil && f.Relation.RelationType == RelManyToMany
+}
+
 // RelationType for inter-collection references.
 type RelationType string
 

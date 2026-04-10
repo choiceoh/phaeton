@@ -76,14 +76,31 @@ func validatePayload(
 			return fmt.Errorf("field %q: %w", f.Slug, err)
 		}
 
-		// Relation: confirm the target row exists (and isn't soft-deleted).
+		// Relation: confirm the target row(s) exist (and aren't soft-deleted).
 		if f.FieldType == schema.FieldRelation && f.Relation != nil {
-			id, ok := v.(string)
-			if !ok {
-				return fmt.Errorf("%w: field %q must be a UUID string", schema.ErrInvalidInput, f.Slug)
-			}
-			if err := checkRelationTarget(ctx, pool, cache, f.Relation.TargetCollectionID, id); err != nil {
-				return fmt.Errorf("field %q: %w", f.Slug, err)
+			if f.IsManyToMany() {
+				// M:N: value is an array of UUID strings.
+				arr, ok := v.([]any)
+				if !ok {
+					return fmt.Errorf("%w: field %q must be an array of UUID strings", schema.ErrInvalidInput, f.Slug)
+				}
+				for _, el := range arr {
+					id, ok := el.(string)
+					if !ok {
+						return fmt.Errorf("%w: field %q array elements must be UUID strings", schema.ErrInvalidInput, f.Slug)
+					}
+					if err := checkRelationTarget(ctx, pool, cache, f.Relation.TargetCollectionID, id); err != nil {
+						return fmt.Errorf("field %q: %w", f.Slug, err)
+					}
+				}
+			} else {
+				id, ok := v.(string)
+				if !ok {
+					return fmt.Errorf("%w: field %q must be a UUID string", schema.ErrInvalidInput, f.Slug)
+				}
+				if err := checkRelationTarget(ctx, pool, cache, f.Relation.TargetCollectionID, id); err != nil {
+					return fmt.Errorf("field %q: %w", f.Slug, err)
+				}
 			}
 		}
 
@@ -177,7 +194,28 @@ func validateFieldValue(f schema.Field, v any) error {
 		if !timeRe.MatchString(s) {
 			return fmt.Errorf("%w: invalid time %q (expected HH:MM or HH:MM:SS)", schema.ErrInvalidInput, s)
 		}
-	case schema.FieldRelation, schema.FieldFile, schema.FieldUser:
+	case schema.FieldRelation:
+		if f.IsManyToMany() {
+			arr, ok := v.([]any)
+			if !ok {
+				return fmt.Errorf("%w: expected array of UUID strings for M:N relation", schema.ErrInvalidInput)
+			}
+			for _, el := range arr {
+				s, ok := el.(string)
+				if !ok || !pgutil.ParseUUID(s).Valid {
+					return fmt.Errorf("%w: invalid UUID in M:N relation array", schema.ErrInvalidInput)
+				}
+			}
+		} else {
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("%w: expected UUID string", schema.ErrInvalidInput)
+			}
+			if !pgutil.ParseUUID(s).Valid {
+				return fmt.Errorf("%w: invalid UUID %q", schema.ErrInvalidInput, s)
+			}
+		}
+	case schema.FieldFile, schema.FieldUser:
 		s, ok := v.(string)
 		if !ok {
 			return fmt.Errorf("%w: expected UUID string", schema.ErrInvalidInput)

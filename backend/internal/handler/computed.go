@@ -240,7 +240,8 @@ func (p *parser) skipSpaces() {
 // --- Lookup ---
 
 // resolveLookup fetches a single field value from the related record.
-// Requires the relation field to be a 1:1 or 1:N relation on this collection.
+// For 1:1/1:N: returns a single value.
+// For M:N: returns an array of values from all linked records.
 func (h *DynHandler) resolveLookup(
 	ctx context.Context,
 	records []map[string]any,
@@ -259,6 +260,12 @@ func (h *DynHandler) resolveLookup(
 
 	targetCol, ok := h.cache.CollectionByID(relField.Relation.TargetCollectionID)
 	if !ok {
+		return
+	}
+
+	// M:N lookup: collect IDs from the array field populated by loadM2MFields.
+	if relField.IsManyToMany() {
+		h.resolveLookupM2M(ctx, records, f, opts, relField, targetCol)
 		return
 	}
 
@@ -302,6 +309,54 @@ func (h *DynHandler) resolveLookup(
 	}
 }
 
+// resolveLookupM2M handles lookup for M:N relations. Returns an array of values.
+func (h *DynHandler) resolveLookupM2M(
+	ctx context.Context,
+	records []map[string]any,
+	f schema.Field,
+	opts computedOpts,
+	relField schema.Field,
+	targetCol schema.Collection,
+) {
+	// Collect all distinct target IDs from M:N arrays.
+	seen := make(map[string]struct{})
+	var allIDs []string
+	for _, row := range records {
+		ids := toStringSliceFromRow(row[opts.RelationField])
+		for _, id := range ids {
+			if _, dup := seen[id]; !dup {
+				seen[id] = struct{}{}
+				allIDs = append(allIDs, id)
+			}
+		}
+	}
+	if len(allIDs) == 0 {
+		for _, row := range records {
+			row[f.Slug] = []any{}
+		}
+		return
+	}
+
+	values, err := batchFetchField(ctx, h.pool, targetCol.Slug, opts.TargetField, allIDs)
+	if err != nil {
+		for _, row := range records {
+			row[f.Slug] = nil
+		}
+		return
+	}
+
+	for _, row := range records {
+		ids := toStringSliceFromRow(row[opts.RelationField])
+		result := make([]any, 0, len(ids))
+		for _, id := range ids {
+			if v, ok := values[id]; ok {
+				result = append(result, v)
+			}
+		}
+		row[f.Slug] = result
+	}
+}
+
 // --- Rollup ---
 
 // resolveRollup aggregates values from a reverse relation.
@@ -342,6 +397,12 @@ func (h *DynHandler) resolveRollup(
 
 	fn := strings.ToUpper(opts.Function)
 	targetFieldSlug := opts.TargetField
+
+	// M:N rollup: aggregate values from linked target records via junction table.
+	if relField.IsManyToMany() {
+		h.resolveRollupM2M(ctx, records, f, opts, relField, targetCol)
+		return
+	}
 
 	// Two strategies:
 	// 1. Forward relation (this collection has FK to target): use lookup approach
@@ -583,6 +644,118 @@ func batchRollup(
 		}
 	}
 	return result, nil
+}
+
+// resolveRollupM2M aggregates values from M:N linked records via junction table.
+func (h *DynHandler) resolveRollupM2M(
+	ctx context.Context,
+	records []map[string]any,
+	f schema.Field,
+	opts computedOpts,
+	relField schema.Field,
+	targetCol schema.Collection,
+) {
+	fn := strings.ToUpper(opts.Function)
+
+	// Collect all distinct target IDs from the M:N arrays.
+	seen := make(map[string]struct{})
+	var allIDs []string
+	for _, row := range records {
+		ids := toStringSliceFromRow(row[opts.RelationField])
+		for _, id := range ids {
+			if _, dup := seen[id]; !dup {
+				seen[id] = struct{}{}
+				allIDs = append(allIDs, id)
+			}
+		}
+	}
+	if len(allIDs) == 0 {
+		for _, row := range records {
+			if fn == "COUNT" || fn == "COUNTA" {
+				row[f.Slug] = float64(0)
+			} else {
+				row[f.Slug] = nil
+			}
+		}
+		return
+	}
+
+	// Fetch target field values.
+	values, err := batchFetchField(ctx, h.pool, targetCol.Slug, opts.TargetField, allIDs)
+	if err != nil {
+		for _, row := range records {
+			row[f.Slug] = nil
+		}
+		return
+	}
+
+	// Aggregate per record.
+	for _, row := range records {
+		ids := toStringSliceFromRow(row[opts.RelationField])
+		var nums []float64
+		nonNullCount := 0
+		for _, id := range ids {
+			v, ok := values[id]
+			if !ok {
+				continue
+			}
+			if v != nil {
+				nonNullCount++
+			}
+			if n, ok := toFloat64(v); ok {
+				nums = append(nums, n)
+			}
+		}
+
+		switch fn {
+		case "COUNT":
+			row[f.Slug] = float64(len(ids))
+		case "COUNTA":
+			row[f.Slug] = float64(nonNullCount)
+		case "SUM":
+			sum := 0.0
+			for _, n := range nums {
+				sum += n
+			}
+			row[f.Slug] = sum
+		case "AVG":
+			if len(nums) == 0 {
+				row[f.Slug] = nil
+			} else {
+				sum := 0.0
+				for _, n := range nums {
+					sum += n
+				}
+				row[f.Slug] = sum / float64(len(nums))
+			}
+		case "MIN":
+			if len(nums) == 0 {
+				row[f.Slug] = nil
+			} else {
+				min := nums[0]
+				for _, n := range nums[1:] {
+					if n < min {
+						min = n
+					}
+				}
+				row[f.Slug] = min
+			}
+		case "MAX":
+			if len(nums) == 0 {
+				row[f.Slug] = nil
+			} else {
+				max := nums[0]
+				for _, n := range nums[1:] {
+					if n > max {
+						max = n
+					}
+				}
+				row[f.Slug] = max
+			}
+		default:
+			row[f.Slug] = float64(len(ids))
+		}
+	}
 }
 
 // toFloat64 attempts to convert any value to float64.
