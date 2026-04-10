@@ -1,12 +1,14 @@
 import { History, Loader2, MessageSquare } from 'lucide-react'
 import { useRef, useState } from 'react'
 
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 import EmptyState from '@/components/common/EmptyState'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { useAIPrefill } from '@/hooks/useAI'
@@ -50,6 +52,7 @@ export default function EntrySheet({
   const isEdit = !!recordId
   const [tab, setTab] = useState<string>('form')
   const [commentBody, setCommentBody] = useState('')
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [aiPrompt, setAiPrompt] = useState('')
   const [prefillData, setPrefillData] = useState<Record<string, unknown> | null>(null)
   const aiAvailable = useAIAvailable()
@@ -59,12 +62,12 @@ export default function EntrySheet({
 
   const { data: currentUser } = useCurrentUser()
 
-  const { data: historyData } = useRecordHistory(
+  const { data: historyData, isLoading: historyLoading } = useRecordHistory(
     isEdit ? slug : undefined,
     recordId,
   )
 
-  const { data: commentsData } = useComments(
+  const { data: commentsData, isLoading: commentsLoading } = useComments(
     isEdit ? slug : undefined,
     recordId,
   )
@@ -74,7 +77,7 @@ export default function EntrySheet({
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) { onClose(); setTab('form') } }}>
-      <SheetContent ref={contentRef} className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[480px] sm:max-w-lg">
+      <SheetContent ref={contentRef} className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[640px] sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>{title || '새 항목'}</SheetTitle>
         </SheetHeader>
@@ -102,7 +105,17 @@ export default function EntrySheet({
               </TabsContent>
               <TabsContent value="comments" className="mt-4">
                 <div className="space-y-3">
-                  {commentsData?.data?.length ? (
+                  {commentsLoading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="space-y-2 rounded-md border p-3">
+                        <div className="flex items-center justify-between">
+                          <Skeleton className="h-4 w-20" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                        <Skeleton className="h-4 w-full" />
+                      </div>
+                    ))
+                  ) : commentsData?.data?.length ? (
                     commentsData.data.map((c) => (
                       <div key={c.id} className="rounded-md border p-3 text-sm">
                         <div className="flex items-center justify-between">
@@ -116,7 +129,7 @@ export default function EntrySheet({
                                 variant="ghost"
                                 size="sm"
                                 className="h-6 px-2 text-xs"
-                                onClick={() => deleteComment.mutate(c.id)}
+                                onClick={() => setDeleteTargetId(c.id)}
                               >
                                 삭제
                               </Button>
@@ -154,9 +167,40 @@ export default function EntrySheet({
                     </Button>
                   </div>
                 </div>
+                <ConfirmDialog
+                  open={deleteTargetId !== null}
+                  onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}
+                  title="댓글을 삭제하시겠습니까?"
+                  description="삭제된 댓글은 복구할 수 없습니다."
+                  variant="destructive"
+                  confirmLabel="삭제"
+                  loading={deleteComment.isPending}
+                  onConfirm={() => {
+                    if (deleteTargetId !== null) {
+                      deleteComment.mutate(deleteTargetId, {
+                        onSuccess: () => setDeleteTargetId(null),
+                      })
+                    }
+                  }}
+                />
               </TabsContent>
               <TabsContent value="history" className="mt-4">
-                {historyData?.data?.length ? (
+                {historyLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="space-y-2 rounded-md border p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Skeleton className="h-5 w-12 rounded-full" />
+                            <Skeleton className="h-4 w-16" />
+                          </div>
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                        <Skeleton className="h-4 w-3/4" />
+                      </div>
+                    ))}
+                  </div>
+                ) : historyData?.data?.length ? (
                   <div className="space-y-3">
                     {historyData.data.map((change) => (
                       <div key={change.id} className="rounded-md border p-3 text-sm">
@@ -173,7 +217,7 @@ export default function EntrySheet({
                           <div className="mt-2 space-y-1">
                             {Object.entries(change.diff).map(([key, val]) => (
                               <div key={key} className="text-xs">
-                                <span className="font-medium">{key}</span>:{' '}
+                                <span className="font-medium">{fieldLabel(fields, key)}</span>:{' '}
                                 <span className="text-muted-foreground">{formatValue(val.old)}</span>
                                 {' → '}
                                 <span>{formatValue(val.new)}</span>
@@ -260,8 +304,29 @@ export default function EntrySheet({
   )
 }
 
+function fieldLabel(fields: Field[], key: string): string {
+  const field = fields.find((f) => f.slug === key)
+  return field?.label ?? key
+}
+
 function formatValue(v: unknown): string {
   if (v == null) return '-'
-  if (typeof v === 'object') return JSON.stringify(v)
+  if (Array.isArray(v)) {
+    if (v.length === 0) return '-'
+    return v.map((item) => formatSingleValue(item)).join(', ')
+  }
+  return formatSingleValue(v)
+}
+
+function formatSingleValue(v: unknown): string {
+  if (v == null) return '-'
+  if (typeof v === 'object') {
+    const obj = v as Record<string, unknown>
+    if ('display_value' in obj && obj.display_value != null) return String(obj.display_value)
+    if ('name' in obj && obj.name != null) return String(obj.name)
+    if ('label' in obj && obj.label != null) return String(obj.label)
+    if ('title' in obj && obj.title != null) return String(obj.title)
+    return JSON.stringify(v)
+  }
   return String(v)
 }
