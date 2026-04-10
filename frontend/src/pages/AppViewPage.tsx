@@ -1287,7 +1287,7 @@ export default function AppViewPage() {
         totalRecords={list?.total ?? 0}
       />
 
-      {entriesLoading && !list && <LoadingState />}
+      {entriesLoading && !list && <LoadingState variant="table" />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
       {list && (

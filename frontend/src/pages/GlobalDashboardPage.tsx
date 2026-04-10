@@ -10,7 +10,7 @@ import { useCollections } from '@/hooks/useCollections'
 export default function GlobalDashboardPage() {
   const { data: collections, isLoading, isError, error } = useCollections()
 
-  if (isLoading) return <LoadingState />
+  if (isLoading) return <LoadingState variant="summary" />
   if (isError) return <ErrorState error={error} />
 
   const apps = collections ?? []
