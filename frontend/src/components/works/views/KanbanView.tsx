@@ -12,6 +12,9 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { useState } from 'react'
 
+import { LayoutGrid } from 'lucide-react'
+
+import EmptyState from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import type { Field } from '@/lib/types'
@@ -178,6 +181,16 @@ export default function KanbanView({
 
     if (!toCol || fromCol === toCol) return
     onCardMove(activeId, toCol === '__none__' ? '' : toCol)
+  }
+
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        icon={<LayoutGrid className="h-10 w-10" />}
+        title="칸반 보드에 표시할 데이터가 없습니다"
+        description="데이터를 추가하면 칸반 보드에 카드가 표시됩니다."
+      />
+    )
   }
 
   return (

@@ -1,6 +1,7 @@
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import EmptyState from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import type { Field } from '@/lib/types'
 
@@ -72,11 +73,11 @@ export default function CalendarView({ dateField, fields, entries, onEntryClick 
 
   if (entries.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-        <Calendar className="mb-3 h-10 w-10" />
-        <p className="text-sm">표시할 항목이 없습니다</p>
-        <p className="mt-1 text-xs">날짜 필드가 있는 항목을 추가하면 캘린더에 표시됩니다.</p>
-      </div>
+      <EmptyState
+        icon={<Calendar className="h-10 w-10" />}
+        title="캘린더에 표시할 항목이 없습니다"
+        description="날짜 필드가 있는 항목을 추가하면 캘린더에 표시됩니다."
+      />
     )
   }
 

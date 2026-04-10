@@ -47,7 +47,7 @@ export default function AppListPage() {
         </div>
       )}
 
-      {isLoading && <LoadingState />}
+      {isLoading && <LoadingState variant="card-grid" />}
       {isError && <ErrorState error={error} onRetry={() => refetch()} />}
 
       {collections && collections.length === 0 && !showTemplates && (
@@ -55,7 +55,7 @@ export default function AppListPage() {
           <EmptyState
             title={TERM.noCollections}
             description={TERM.noCollectionsDesc}
-            icon="📋"
+            icon={<Layers className="h-10 w-10" />}
             action={
               <RoleGate roles={['director', 'pm']}>
                 <Link to="/apps/new">

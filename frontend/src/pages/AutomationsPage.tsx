@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { Plus, Trash2, Zap } from 'lucide-react'
@@ -6,6 +6,7 @@ import { Plus, Trash2, Zap } from 'lucide-react'
 import UserCombobox from '@/components/common/UserCombobox'
 import AIAutomationDialog from '@/components/works/AIAutomationDialog'
 import SchedulePicker, { isValidCron } from '@/components/works/SchedulePicker'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
@@ -30,6 +31,7 @@ import {
   useUpdateAutomation,
 } from '@/hooks/useAutomations'
 import { useProcess } from '@/hooks/useProcess'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { formatError } from '@/lib/api'
 import type {
   ActionType,
@@ -98,6 +100,12 @@ export default function AutomationsPage() {
 
   const fields = collection?.fields?.filter((f) => !f.is_layout) ?? []
   const statuses = process?.statuses ?? []
+
+  const isDirty = useMemo(
+    () => formOpen && (name.trim() !== '' || conditions.length > 0 || actions.length > 0),
+    [formOpen, name, conditions, actions],
+  )
+  const blocker = useUnsavedChanges(isDirty)
 
   function handleAIApply(result: CreateAutomationReq) {
     setEditingId(null)
@@ -683,6 +691,17 @@ export default function AutomationsPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(open) => { if (!open) blocker.reset?.() }}
+        title="저장하지 않고 나가시겠습니까?"
+        description="작성 중인 자동화가 저장되지 않습니다."
+        confirmLabel="나가기"
+        cancelLabel="계속 작성"
+        variant="destructive"
+        onConfirm={() => blocker.proceed?.()}
+      />
     </div>
   )
 }

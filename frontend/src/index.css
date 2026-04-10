@@ -145,7 +145,16 @@
   100% { background-color: transparent; }
 }
 .animate-cell-saved {
-  animation: cell-save-flash 0.8s ease-out;
+  animation: cell-save-flash 1.5s ease-out;
+}
+
+/* Check icon fade-out after cell save */
+@keyframes check-fade-out {
+  0%, 60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-check-fade {
+  animation: check-fade-out 1.5s ease-out forwards;
 }
 
 /* ─── Transition & animation utilities ─── */

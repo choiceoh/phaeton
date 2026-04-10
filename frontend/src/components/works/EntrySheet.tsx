@@ -1,5 +1,7 @@
+import { History, MessageSquare } from 'lucide-react'
 import { useRef, useState } from 'react'
 
+import EmptyState from '@/components/common/EmptyState'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -116,7 +118,12 @@ export default function EntrySheet({
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">댓글이 없습니다.</p>
+                    <EmptyState
+                      compact
+                      icon={<MessageSquare className="h-8 w-8" />}
+                      title="아직 댓글이 없습니다"
+                      description="댓글을 남겨 팀원들과 소통하세요."
+                    />
                   )}
                   <div className="space-y-2">
                     <Textarea
@@ -169,7 +176,12 @@ export default function EntrySheet({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">변경 이력이 없습니다.</p>
+                  <EmptyState
+                    compact
+                    icon={<History className="h-8 w-8" />}
+                    title="변경 이력이 없습니다"
+                    description="데이터가 수정되면 이력이 기록됩니다."
+                  />
                 )}
               </TabsContent>
             </Tabs>
