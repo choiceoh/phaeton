@@ -14,11 +14,11 @@ import { formatError } from '@/lib/api'
 import type { SafetyLevel } from '@/lib/types'
 
 const OP_LABELS: Record<string, string> = {
-  create_collection: '컬렉션 생성',
-  drop_collection: '컬렉션 삭제',
-  add_field: '필드 추가',
-  alter_field: '필드 변경',
-  drop_field: '필드 삭제',
+  create_collection: '업무 생성',
+  drop_collection: '업무 삭제',
+  add_field: '항목 추가',
+  alter_field: '항목 변경',
+  drop_field: '항목 삭제',
 }
 
 const SAFETY_VARIANT: Record<SafetyLevel, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -36,7 +36,7 @@ export default function MigrationHistoryPage() {
     if (!confirmId) return
     rollback.mutate(confirmId, {
       onSuccess: () => {
-        toast.success('롤백되었습니다')
+        toast.success('되돌리기가 완료되었습니다')
         setConfirmId(null)
       },
       onError: (err) => toast.error(formatError(err)),
@@ -45,7 +45,7 @@ export default function MigrationHistoryPage() {
 
   return (
     <div>
-      <PageHeader title="마이그레이션 이력" description="모든 스키마 변경 기록" />
+      <PageHeader title="변경 이력" description="모든 구조 변경 기록" />
 
       {isLoading && <LoadingState />}
       {isError && <ErrorState error={error} onRetry={() => refetch()} />}
@@ -65,7 +65,7 @@ export default function MigrationHistoryPage() {
                     <Badge variant={SAFETY_VARIANT[m.safety_level]}>{m.safety_level}</Badge>
                     {m.rolled_back_at && (
                       <Badge variant="outline" className="text-muted-foreground">
-                        롤백됨
+                        되돌림
                       </Badge>
                     )}
                   </div>
@@ -74,7 +74,7 @@ export default function MigrationHistoryPage() {
                   </p>
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs text-muted-foreground">
-                      DDL 보기
+                      실행 내역
                     </summary>
                     <pre className="mt-2 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
                       {m.ddl_up}
@@ -83,7 +83,7 @@ export default function MigrationHistoryPage() {
                 </div>
                 {!m.rolled_back_at && m.ddl_down && (
                   <Button variant="outline" size="sm" onClick={() => setConfirmId(m.id)}>
-                    롤백
+                    되돌리기
                   </Button>
                 )}
               </div>
@@ -95,10 +95,10 @@ export default function MigrationHistoryPage() {
       <ConfirmDialog
         open={!!confirmId}
         onOpenChange={(open) => !open && setConfirmId(null)}
-        title="이 마이그레이션을 롤백하시겠습니까?"
-        description="ddl_down을 실행해 이전 상태로 되돌립니다. 데이터 손실이 발생할 수 있습니다."
+        title="이 변경을 되돌리시겠습니까?"
+        description="이전 상태로 되돌립니다. 데이터 손실이 발생할 수 있습니다."
         variant="destructive"
-        confirmLabel="롤백"
+        confirmLabel="되돌리기"
         onConfirm={handleRollback}
         loading={rollback.isPending}
       />

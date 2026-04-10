@@ -144,9 +144,9 @@ export default function AIBuildDialog({ onApply }: Props) {
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>AI 컬렉션 빌더</DialogTitle>
+          <DialogTitle>AI 업무 빌더</DialogTitle>
           <DialogDescription>
-            어떤 업무를 관리하고 싶은지 설명해 주세요. AI가 적절한 컬렉션 구조를
+            어떤 업무를 관리하고 싶은지 설명해 주세요. AI가 적절한 업무 구조를
             제안합니다.
           </DialogDescription>
         </DialogHeader>
@@ -291,7 +291,7 @@ export default function AIBuildDialog({ onApply }: Props) {
 
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">
-                  필드 {result.fields.length}개
+                  항목 {result.fields.length}개
                 </p>
                 <div className="max-h-60 space-y-1 overflow-y-auto">
                   {result.fields.map((f, i) => (

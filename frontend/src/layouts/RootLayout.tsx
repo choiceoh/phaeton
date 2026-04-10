@@ -37,7 +37,7 @@ export default function RootLayout() {
               Phaeton
             </Link>
             <Link to="/apps" className="text-sm text-stone-600 hover:text-stone-900">
-              컬렉션
+              업무
             </Link>
             <Link to="/admin/org" className="text-sm text-stone-600 hover:text-stone-900">
               조직도

@@ -39,9 +39,9 @@ import type {
 } from '@/lib/types'
 
 const TRIGGER_LABELS: Record<TriggerType, string> = {
-  record_created: '레코드 생성',
-  record_updated: '레코드 수정',
-  record_deleted: '레코드 삭제',
+  record_created: '데이터 생성',
+  record_updated: '데이터 수정',
+  record_deleted: '데이터 삭제',
   status_change: '상태 변경',
   schedule: '정해진 시간에 반복',
   form_submit: '폼 제출',
@@ -49,7 +49,7 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
 
 const ACTION_LABELS: Record<ActionType, string> = {
   send_notification: '알림 보내기',
-  update_field: '필드 값 자동 변경',
+  update_field: '항목 값 자동 변경',
   call_webhook: '외부 서비스에 알리기',
 }
 
@@ -520,9 +520,9 @@ export default function AutomationsPage() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="record_creator">레코드 작성자</SelectItem>
+                                <SelectItem value="record_creator">데이터 작성자</SelectItem>
                                 <SelectItem value="specific_user">지정한 사용자</SelectItem>
-                                <SelectItem value="field_ref">담당자 필드에서 가져오기</SelectItem>
+                                <SelectItem value="field_ref">담당자 항목에서 가져오기</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -537,13 +537,13 @@ export default function AutomationsPage() {
                           )}
                           {a.action_config.recipient === 'field_ref' && (
                             <div>
-                              <Label className="text-xs font-semibold text-muted-foreground">어떤 필드의 사용자에게?</Label>
+                              <Label className="text-xs font-semibold text-muted-foreground">어떤 항목의 사용자에게?</Label>
                               <Select
                                 value={(a.action_config.field_slug as string) ?? ''}
                                 onValueChange={(v) => updateActionConfig(idx, 'field_slug', v)}
                               >
                                 <SelectTrigger>
-                                  <SelectValue placeholder="필드 선택" />
+                                  <SelectValue placeholder="항목 선택" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {fields.filter((f) => f.field_type === 'user').map((f) => (
@@ -575,13 +575,13 @@ export default function AutomationsPage() {
                       {a.action_type === 'update_field' && (
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <Label className="text-xs font-semibold text-muted-foreground">변경할 필드</Label>
+                            <Label className="text-xs font-semibold text-muted-foreground">변경할 항목</Label>
                             <Select
                               value={(a.action_config.field_slug as string) ?? ''}
                               onValueChange={(v) => updateActionConfig(idx, 'field_slug', v)}
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="필드 선택" />
+                                <SelectValue placeholder="항목 선택" />
                               </SelectTrigger>
                               <SelectContent>
                                 {fields.map((f) => (
@@ -632,7 +632,7 @@ export default function AutomationsPage() {
           <div className="py-12 text-center text-muted-foreground">
             <Zap className="mx-auto mb-2 h-8 w-8" />
             <p>아직 자동화가 없습니다</p>
-            <p className="text-sm">레코드 생성/수정/삭제 시 자동으로 알림을 보내거나 필드를 업데이트할 수 있습니다.</p>
+            <p className="text-sm">데이터 생성/수정/삭제 시 자동으로 알림을 보내거나 항목을 업데이트할 수 있습니다.</p>
           </div>
         )}
 

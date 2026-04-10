@@ -253,7 +253,7 @@ func (e *Engine) PreviewDropCollection(ctx context.Context, collectionID string)
 	ddlDown, _ := GenerateCreateTable(col, col.Fields)
 	return Preview{
 		SafetyLevel:  Dangerous,
-		Description:  fmt.Sprintf("컬렉션 %q (%s) 삭제", col.Label, col.Slug),
+		Description:  fmt.Sprintf("업무 %q (%s) 삭제", col.Label, col.Slug),
 		AffectedRows: count,
 		DDLUp:        ddlUp,
 		DDLDown:      ddlDown,

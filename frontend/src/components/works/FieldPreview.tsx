@@ -47,7 +47,7 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
   if (fields.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed text-sm text-muted-foreground">
-        왼쪽에서 필드를 추가하세요
+        왼쪽에서 항목을 추가하세요
       </div>
     )
   }
@@ -67,7 +67,7 @@ export default function FieldPreview({ fields, selectedId, onSelect, onReorder, 
 
   return (
     <div>
-      <h3 className="mb-2 text-sm font-medium text-muted-foreground">필드 목록</h3>
+      <h3 className="mb-2 text-sm font-medium text-muted-foreground">항목 목록</h3>
       <div className="grid grid-cols-6 gap-2">
         {fields.map((field, i) => (
           <div

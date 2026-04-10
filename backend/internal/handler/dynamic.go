@@ -401,7 +401,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	procEnabled := h.hasProcessEnabled(col.ID)
 	if newStatus, ok := body["_status"]; ok && newStatus != nil {
 		if !procEnabled {
-			writeError(w, http.StatusBadRequest, "이 컬렉션에는 프로세스가 활성화되지 않았습니다")
+			writeError(w, http.StatusBadRequest, "이 업무에는 프로세스가 활성화되지 않았습니다")
 			return
 		}
 		newStatusStr, ok := newStatus.(string)
@@ -1211,7 +1211,7 @@ func (h *DynHandler) initialStatusName(collectionID string) string {
 func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus, userRole string) error {
 	p, ok := h.cache.ProcessByCollectionID(collectionID)
 	if !ok || !p.IsEnabled {
-		return fmt.Errorf("%w: 이 컬렉션에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
+		return fmt.Errorf("%w: 이 업무에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
 	}
 
 	// Build status ID lookup.
@@ -1240,7 +1240,7 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 					return nil
 				}
 			}
-			return fmt.Errorf("%w: 역할 %q은(는) %q → %q 전이를 수행할 수 없습니다",
+			return fmt.Errorf("%w: 역할 %q은(는) %q → %q 상태 이동을 수행할 수 없습니다",
 				schema.ErrInvalidInput, userRole, fromStatus, toStatus)
 		}
 	}
@@ -1256,7 +1256,7 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 			}
 		}
 	}
-	return fmt.Errorf("%w: %q → %q 전이가 허용되지 않습니다. 허용: %v",
+	return fmt.Errorf("%w: %q → %q 상태 이동이 허용되지 않습니다. 허용: %v",
 		schema.ErrInvalidInput, fromStatus, toStatus, allowed)
 }
 
