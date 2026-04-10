@@ -1400,6 +1400,7 @@ export default function AppViewPage() {
                 fields={collection.fields ?? []}
                 entries={list.data}
                 onEntryClick={handleEntryClick}
+                onEntryUpdate={handleGanttUpdate}
               />
             </TabsContent>
           )}
