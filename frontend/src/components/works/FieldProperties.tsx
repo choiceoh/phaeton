@@ -819,7 +819,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="선택" />
+                  <SelectValue placeholder="컬렉션 선택" />
                 </SelectTrigger>
                 <SelectContent>
                   {collections.map((c) => (

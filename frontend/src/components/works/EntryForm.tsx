@@ -382,7 +382,7 @@ function FieldInput({
       return (
         <Select value={(value as string) || ''} onValueChange={onChange}>
           <SelectTrigger>
-            <SelectValue placeholder="선택" />
+            <SelectValue placeholder="항목 선택" />
           </SelectTrigger>
           <SelectContent>
             {choices.map((c) => (

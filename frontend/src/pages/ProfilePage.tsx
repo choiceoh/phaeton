@@ -83,7 +83,7 @@ export default function ProfilePage() {
 
       {/* Read-only info */}
       <div className="space-y-3 rounded-lg border border-stone-200 bg-white p-5">
-        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
           <div>
             <span className="text-muted-foreground">이메일</span>
             <p className="font-medium">{user.email}</p>
