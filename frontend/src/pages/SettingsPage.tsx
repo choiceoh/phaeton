@@ -28,7 +28,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
-import type { User, WebhookEvent } from '@/lib/types'
+import type { WebhookEvent } from '@/lib/types'
 import { useCurrentUser } from '@/hooks/useAuth'
 
 // ---------------------------------------------------------------------------
@@ -51,9 +51,9 @@ function ProfileSection() {
 
   const update = useMutation({
     mutationFn: (input: { name?: string, phone?: string }) =>
-      api.patch<User>('/auth/me', input),
-    onSuccess: (data) => {
-      qc.setQueryData(queryKeys.auth.me(), data)
+      api.patch<{ status: string }>('/auth/me', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.auth.me() })
       toast.success('프로필이 저장되었습니다')
     },
     onError: () => toast.error('프로필 저장에 실패했습니다'),
