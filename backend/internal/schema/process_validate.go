@@ -35,6 +35,8 @@ func ValidateProcessSave(req *SaveProcessReq) error {
 		return fmt.Errorf("%w: 정확히 하나의 초기 상태가 필요합니다 (현재 %d개)", ErrInvalidInput, initialCount)
 	}
 
+	validRoles := map[string]bool{"director": true, "pm": true, "engineer": true, "viewer": true}
+
 	for i, t := range req.Transitions {
 		if t.FromIndex < 0 || t.FromIndex >= len(req.Statuses) {
 			return fmt.Errorf("%w: transitions[%d].from_index %d 범위 초과", ErrInvalidInput, i, t.FromIndex)
@@ -44,6 +46,11 @@ func ValidateProcessSave(req *SaveProcessReq) error {
 		}
 		if strings.TrimSpace(t.Label) == "" {
 			return fmt.Errorf("%w: transitions[%d] 라벨이 비어있습니다", ErrInvalidInput, i)
+		}
+		for _, role := range t.AllowedRoles {
+			if !validRoles[role] {
+				return fmt.Errorf("%w: transitions[%d] 유효하지 않은 역할 %q", ErrInvalidInput, i, role)
+			}
 		}
 	}
 

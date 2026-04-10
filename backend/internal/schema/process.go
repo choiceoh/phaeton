@@ -32,6 +32,7 @@ type ProcessTransition struct {
 	FromStatusID string    `json:"from_status_id"`
 	ToStatusID   string    `json:"to_status_id"`
 	Label        string    `json:"label"`
+	AllowedRoles []string  `json:"allowed_roles"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -57,7 +58,8 @@ type SaveProcessStatusIn struct {
 // FromIndex/ToIndex reference positions in the Statuses array (resolved to UUIDs
 // by the backend after inserting statuses).
 type SaveProcessTransitionIn struct {
-	FromIndex int    `json:"from_index"`
-	ToIndex   int    `json:"to_index"`
-	Label     string `json:"label"`
+	FromIndex    int      `json:"from_index"`
+	ToIndex      int      `json:"to_index"`
+	Label        string   `json:"label"`
+	AllowedRoles []string `json:"allowed_roles"`
 }

@@ -15,6 +15,7 @@ export type FieldType =
   | 'file'
   | 'json'
   | 'autonumber'
+  | 'formula'
   | 'label'
   | 'line'
   | 'spacer'
@@ -159,6 +160,7 @@ export interface ProcessTransition {
   from_status_id: string
   to_status_id: string
   label: string
+  allowed_roles: string[]
 }
 
 export interface Process {
@@ -172,7 +174,7 @@ export interface Process {
 export interface SaveProcessReq {
   is_enabled: boolean
   statuses: { name: string; color: string; sort_order: number; is_initial: boolean }[]
-  transitions: { from_index: number; to_index: number; label: string }[]
+  transitions: { from_index: number; to_index: number; label: string; allowed_roles: string[] }[]
 }
 
 // --- Filter condition (frontend-only) ---
@@ -193,7 +195,7 @@ export interface AggregateResult {
 
 // --- Views ---
 
-export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery'
+export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery' | 'gantt'
 
 export interface View {
   id: string

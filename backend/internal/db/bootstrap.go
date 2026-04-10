@@ -148,6 +148,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			from_status_id  UUID NOT NULL REFERENCES _meta.process_statuses(id) ON DELETE CASCADE,
 			to_status_id    UUID NOT NULL REFERENCES _meta.process_statuses(id) ON DELETE CASCADE,
 			label           VARCHAR(255) NOT NULL,
+			allowed_roles   TEXT[] NOT NULL DEFAULT '{}',
 			created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 
@@ -261,6 +262,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 	// --- incremental schema evolution (safe for existing deployments) ---
 	alters := []string{
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS process_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+		`ALTER TABLE _meta.process_transitions ADD COLUMN IF NOT EXISTS allowed_roles TEXT[] NOT NULL DEFAULT '{}'`,
 	}
 
 	for _, stmt := range append(stmts, alters...) {

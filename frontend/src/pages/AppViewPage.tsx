@@ -1,9 +1,11 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
 import {
   ArrowDownUp,
+  BarChart3,
   Calendar,
   Download,
   Filter,
+  GanttChart,
   LayoutGrid,
   Power,
   PowerOff,
@@ -16,7 +18,7 @@ import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
-import { type CellEditEvent, DataTable } from '@/components/common/DataTable'
+import { type BatchCellEditEvent, type CellEditEvent, DataTable } from '@/components/common/DataTable'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
@@ -25,7 +27,9 @@ import EntrySheet from '@/components/works/EntrySheet'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import CalendarView from '@/components/works/views/CalendarView'
+import ChartPanel from '@/components/works/views/ChartPanel'
 import GalleryView from '@/components/works/views/GalleryView'
+import GanttView from '@/components/works/views/GanttView'
 import KanbanView from '@/components/works/views/KanbanView'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -45,6 +49,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
+  useBatchUpdateEntry,
   useCreateEntry,
   useDeleteEntry,
   useEntries,
@@ -150,6 +155,7 @@ export default function AppViewPage() {
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
+  const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
 
   // Detect views.
@@ -163,6 +169,12 @@ export default function AppViewPage() {
   )
   const fileField = useMemo(
     () => collection?.fields?.find((f) => f.field_type === 'file'),
+    [collection],
+  )
+
+  // Formula fields are read-only in the grid.
+  const formulaReadonlyCols = useMemo(
+    () => collection?.fields?.filter((f) => f.field_type === 'formula').map((f) => f.slug) ?? [],
     [collection],
   )
 
@@ -310,6 +322,25 @@ export default function AppViewPage() {
     [updateEntry],
   )
 
+  // Batch edit handler (for paste operations).
+  const handleBatchCellEdit = useCallback(
+    (event: BatchCellEditEvent) => {
+      // Group updates by rowId.
+      const byRow = new Map<string, Record<string, unknown>>()
+      for (const u of event.updates) {
+        const existing = byRow.get(u.rowId) ?? {}
+        existing[u.columnId] = u.value
+        byRow.set(u.rowId, existing)
+      }
+      const updates = Array.from(byRow.entries()).map(([id, fields]) => ({ id, fields }))
+      batchUpdateEntry.mutate(updates, {
+        onSuccess: () => toast.success(`${updates.length}건 수정되었습니다`),
+        onError: (err) => toast.error(formatError(err)),
+      })
+    },
+    [batchUpdateEntry],
+  )
+
   // Search with debounce.
   function handleSearchInput(value: string) {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
@@ -343,6 +374,16 @@ export default function AppViewPage() {
   function handleEntryClick(entry: Record<string, unknown>) {
     setEditEntry(entry)
     setSheetOpen(true)
+  }
+
+  function handleGanttUpdate(entryId: string, updates: Record<string, unknown>) {
+    updateEntry.mutate(
+      { id: entryId, body: updates },
+      {
+        onSuccess: () => toast.success('일정이 변경되었습니다'),
+        onError: (err) => toast.error(formatError(err)),
+      },
+    )
   }
 
   function handleCardMove(entryId: string, newValue: string) {
@@ -409,9 +450,14 @@ export default function AppViewPage() {
     }
   }, [collection, refetch])
 
+  const dateFields = useMemo(
+    () => collection.fields?.filter((f) => f.field_type === 'date' || f.field_type === 'datetime') ?? [],
+    [collection],
+  )
   const hasKanban = !!selectField
   const hasCalendar = !!dateField
   const hasGallery = !!fileField
+  const hasGantt = dateFields.length >= 1
 
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
@@ -571,6 +617,12 @@ export default function AppViewPage() {
         description={collection.description}
         actions={
           <>
+            <Link to={`/apps/${collection.id}/dashboard`}>
+              <Button variant="outline" className="gap-1">
+                <BarChart3 className="h-4 w-4" />
+                대시보드
+              </Button>
+            </Link>
             <RoleGate roles={['director', 'pm']}>
               <Link to={`/apps/${collection.id}/settings`}>
                 <Button variant="outline">설정</Button>
@@ -679,12 +731,18 @@ export default function AppViewPage() {
         </div>
       )}
 
+      <ChartPanel
+        slug={collection.slug}
+        fields={collection.fields ?? []}
+        totalRecords={list?.total ?? 0}
+      />
+
       {entriesLoading && !list && <LoadingState />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
       {list && (
         <Tabs defaultValue="list">
-          {(hasKanban || hasCalendar || hasGallery) && (
+          {(hasKanban || hasCalendar || hasGallery || hasGantt) && (
             <TabsList className="mb-4">
               <TabsTrigger value="list">목록</TabsTrigger>
               {hasKanban && <TabsTrigger value="kanban">칸반</TabsTrigger>}
@@ -698,6 +756,12 @@ export default function AppViewPage() {
                 <TabsTrigger value="gallery" className="gap-1">
                   <LayoutGrid className="h-3.5 w-3.5" />
                   갤러리
+                </TabsTrigger>
+              )}
+              {hasGantt && (
+                <TabsTrigger value="gantt" className="gap-1">
+                  <GanttChart className="h-3.5 w-3.5" />
+                  간트
                 </TabsTrigger>
               )}
             </TabsList>
@@ -715,6 +779,8 @@ export default function AppViewPage() {
               onSortChange={setSorting}
               onRowClick={handleEntryClick}
               onCellEdit={handleCellEdit}
+              onBatchCellEdit={handleBatchCellEdit}
+              readonlyColumns={formulaReadonlyCols}
               emptyTitle={TERM.noRecords}
               emptyDescription={TERM.noRecordsDesc}
               summaryRow={summaryRow}
@@ -752,6 +818,17 @@ export default function AppViewPage() {
                 fields={collection.fields ?? []}
                 entries={list.data}
                 onEntryClick={handleEntryClick}
+              />
+            </TabsContent>
+          )}
+
+          {hasGantt && (
+            <TabsContent value="gantt" className="mt-0">
+              <GanttView
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onEntryClick={handleEntryClick}
+                onEntryUpdate={handleGanttUpdate}
               />
             </TabsContent>
           )}

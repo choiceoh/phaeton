@@ -1,0 +1,98 @@
+import { useEffect, useRef, useState } from 'react'
+
+import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
+
+interface GridCellProps {
+  children: React.ReactNode
+  rawValue: unknown
+  columnId: string
+  rowId: string
+  isActive: boolean
+  isSelected: boolean
+  isEditing: boolean
+  editable: boolean
+  onSave: (value: unknown) => void
+  onEditStart: () => void
+  onEditCancel: () => void
+  onClick: (e: React.MouseEvent) => void
+  onDoubleClick: () => void
+}
+
+export default function GridCell({
+  children,
+  rawValue,
+  isActive,
+  isSelected,
+  isEditing,
+  editable,
+  onSave,
+  onEditCancel,
+  onClick,
+  onDoubleClick,
+}: GridCellProps) {
+  const [editValue, setEditValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isEditing) {
+      setEditValue(rawValue == null ? '' : String(rawValue))
+      // Focus in next tick so value is set.
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      })
+    }
+  }, [isEditing, rawValue])
+
+  function commitEdit() {
+    const newValue = editValue === '' ? null : editValue
+    if (String(rawValue ?? '') !== String(newValue ?? '')) {
+      onSave(newValue)
+    }
+    onEditCancel()
+  }
+
+  if (isEditing && editable) {
+    return (
+      <Input
+        ref={inputRef}
+        className="h-7 text-sm border-primary ring-1 ring-primary"
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={commitEdit}
+        onKeyDown={(e) => {
+          // Enter and Tab are handled by the grid navigation hook via container keydown.
+          // But blur-triggered commit handles the save.
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            onEditCancel()
+          }
+          // Stop propagation so the grid navigation doesn't also handle these keys.
+          e.stopPropagation()
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        'min-h-[28px] px-1 -mx-1 rounded-sm cursor-cell',
+        isActive && 'ring-2 ring-primary ring-inset',
+        isSelected && !isActive && 'bg-primary/10',
+      )}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick(e)
+      }}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        if (editable) onDoubleClick()
+      }}
+    >
+      {children}
+    </div>
+  )
+}
