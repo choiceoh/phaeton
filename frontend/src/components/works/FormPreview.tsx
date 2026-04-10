@@ -27,12 +27,59 @@ interface Props {
   onFieldChange: (updated: FieldDraft) => void
 }
 
+/** Group fields into logical rows based on their widths (6-col grid). */
+function computeRows(fields: FieldDraft[]): { fieldId: string, rowIndex: number }[] {
+  const result: { fieldId: string, rowIndex: number }[] = []
+  let row = 0
+  let used = 0
+  for (const f of fields) {
+    const w = isLayoutType(f.field_type) ? 6 : (f.width || 6)
+    if (used + w > 6) {
+      row++
+      used = 0
+    }
+    result.push({ fieldId: f.id, rowIndex: row })
+    used += w
+    if (used >= 6) {
+      row++
+      used = 0
+    }
+  }
+  return result
+}
+
 export default function FormPreview({ fields, selectedId, onSelect, onReorder, onRemove, onAdd, onFieldChange }: Props) {
   const gridRef = useRef<HTMLDivElement>(null)
   const resizeRef = useRef<{ fieldId: string, startX: number, startWidth: number } | null>(null)
   const [resizingId, setResizingId] = useState<string | null>(null)
   const [previewWidth, setPreviewWidth] = useState<number | null>(null)
   const [removeTargetId, setRemoveTargetId] = useState<string | null>(null)
+  const [shrinkRow, setShrinkRow] = useState<number | null>(null)
+  const [draggedWidth, setDraggedWidth] = useState<number>(3)
+
+  // Compute rows and shrink map for the currently hovered row
+  const rowMap = computeRows(fields)
+  const shrinkWidths = new Map<string, number>()
+  if (shrinkRow !== null) {
+    const rowFields = rowMap.filter((r) => r.rowIndex === shrinkRow)
+    const origFields = rowFields.map((r) => fields.find((f) => f.id === r.fieldId)!)
+    const totalOrigWidth = origFields.reduce((sum, f) => sum + (f.width || 6), 0)
+    if (totalOrigWidth >= 6) {
+      // Row is full — shrink to make room for the incoming field
+      const available = 6 - Math.min(draggedWidth, 3) // incoming takes at most 3 cols
+      for (const f of origFields) {
+        const ratio = (f.width || 6) / totalOrigWidth
+        const newW = Math.max(1, Math.round(available * ratio))
+        shrinkWidths.set(f.id, newW)
+      }
+      // Adjust rounding errors
+      const assigned = Array.from(shrinkWidths.values()).reduce((a, b) => a + b, 0)
+      if (assigned !== available && origFields.length > 0) {
+        const lastId = origFields[origFields.length - 1].id
+        shrinkWidths.set(lastId, shrinkWidths.get(lastId)! + (available - assigned))
+      }
+    }
+  }
 
   const handleResizeStart = useCallback((e: React.MouseEvent, field: FieldDraft) => {
     e.preventDefault()
@@ -79,11 +126,13 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     if (resizingId) { e.preventDefault(); return }
     e.dataTransfer.setData('text/plain', String(index))
     e.dataTransfer.setData('source/reorder', 'true')
+    setDraggedWidth(fields[index]?.width || 6)
   }
 
   function handleDrop(e: React.DragEvent, targetIndex: number) {
     e.preventDefault()
     e.currentTarget.classList.remove('bg-accent/40')
+    setShrinkRow(null)
 
     const paletteData = e.dataTransfer.getData('application/palette-field')
     if (paletteData) {
@@ -106,6 +155,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
   function handleDropEnd(e: React.DragEvent) {
     e.preventDefault()
     e.currentTarget.classList.remove('bg-accent/40')
+    setShrinkRow(null)
 
     const paletteData = e.dataTransfer.getData('application/palette-field')
     if (paletteData) {
@@ -114,21 +164,32 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     }
   }
 
-  function handleDragOver(e: React.DragEvent) {
+  function handleFieldDragOver(e: React.DragEvent, fieldId: string) {
     e.preventDefault()
     e.currentTarget.classList.add('bg-accent/40')
+    const entry = rowMap.find((r) => r.fieldId === fieldId)
+    if (entry) {
+      setShrinkRow(entry.rowIndex)
+    }
   }
 
-  function handleDragLeave(e: React.DragEvent) {
+  function handleFieldDragLeave(e: React.DragEvent) {
     e.currentTarget.classList.remove('bg-accent/40')
+  }
+
+  function handleGridDragLeave(e: React.DragEvent) {
+    // Clear shrink when leaving the grid entirely
+    if (gridRef.current && !gridRef.current.contains(e.relatedTarget as Node)) {
+      setShrinkRow(null)
+    }
   }
 
   if (fields.length === 0) {
     return (
       <div
         className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed text-sm text-muted-foreground transition-colors"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
+        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-accent/40') }}
+        onDragLeave={(e) => { e.currentTarget.classList.remove('bg-accent/40') }}
         onDrop={handleDropEnd}
       >
         왼쪽에서 필드를 드래그하세요
@@ -145,7 +206,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     <div>
       <h3 className="mb-2 text-sm font-medium text-foreground/70">입력화면 미리보기</h3>
       <div className="rounded-lg border bg-muted/50 p-4">
-        <div ref={gridRef} className="grid grid-cols-1 gap-4 sm:grid-cols-6">
+        <div ref={gridRef} className="grid grid-cols-1 gap-4 sm:grid-cols-6" onDragLeave={handleGridDragLeave}>
           {fields.map((field, i) => {
             if (isLayoutType(field.field_type)) {
               return (
@@ -158,8 +219,8 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
                   onClick={() => onSelect(field.id)}
                   draggable
                   onDragStart={(e) => handleDragStart(e, i)}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
+                  onDragOver={(e) => handleFieldDragOver(e, field.id)}
+                  onDragLeave={handleFieldDragLeave}
                   onDrop={(e) => handleDrop(e, i)}
                 >
                   <LayoutPreview field={field} />
@@ -167,19 +228,22 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
               )
             }
 
-            const span = resizingId === field.id && previewWidth !== null ? previewWidth : (field.width || 6)
+            const shrunk = shrinkWidths.get(field.id)
+            const span = resizingId === field.id && previewWidth !== null
+              ? previewWidth
+              : shrunk !== undefined ? shrunk : (field.width || 6)
             return (
               <div
                 key={field.id}
-                className={`relative col-span-full ${smSpan[span] ?? 'sm:col-span-6'} cursor-pointer rounded-md p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                className={`relative col-span-full ${smSpan[span] ?? 'sm:col-span-6'} cursor-pointer rounded-md p-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   selectedId === field.id ? 'ring-2 ring-primary ring-offset-2' : 'hover:bg-accent/30'
                 } ${resizingId === field.id ? 'ring-2 ring-primary/50' : ''}`}
                 tabIndex={0}
                 onClick={() => onSelect(field.id)}
                 draggable={!resizingId}
                 onDragStart={(e) => handleDragStart(e, i)}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
+                onDragOver={(e) => handleFieldDragOver(e, field.id)}
+                onDragLeave={handleFieldDragLeave}
                 onDrop={(e) => handleDrop(e, i)}
               >
                 <div className="flex items-center justify-between">
@@ -218,6 +282,7 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
             className="col-span-full flex h-10 items-center justify-center rounded-md border-2 border-dashed border-transparent text-xs text-muted-foreground transition-colors"
             onDragOver={(e) => {
               e.preventDefault()
+              setShrinkRow(null)
               e.currentTarget.classList.add('border-muted-foreground/30', 'bg-accent/40')
             }}
             onDragLeave={(e) => {
