@@ -1,6 +1,8 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
 import {
   ArrowDownUp,
+  Bookmark,
+  BookmarkPlus,
   BarChart3,
   Calendar,
   Download,
@@ -39,13 +41,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
@@ -459,6 +454,70 @@ export default function AppViewPage() {
   const hasGallery = !!fileField
   const hasGantt = dateFields.length >= 1
 
+  function applyView(view: SavedView) {
+    setActiveView(view)
+    if (view.filter_config && Object.keys(view.filter_config).length > 0) {
+      const restored: FilterCondition[] = Object.entries(view.filter_config).map(
+        ([key, value], i) => {
+          const parts = key.split(':')
+          const field = parts[0]
+          const operator = parts.slice(1).join(':') || 'eq'
+          return { id: `sv-${i}`, field, operator, value }
+        },
+      )
+      setFilterConditions(restored)
+    } else {
+      setFilterConditions([])
+    }
+    if (view.sort_config) {
+      const items: SortItem[] = view.sort_config.split(',').filter(Boolean).map((s) => ({
+        field: s.startsWith('-') ? s.slice(1) : s,
+        desc: s.startsWith('-'),
+      }))
+      setSortItems(items)
+    } else {
+      setSortItems([])
+    }
+    setPage(1)
+  }
+
+  function clearView() {
+    setActiveView(null)
+    setFilterConditions([])
+    setSortItems([])
+    setPage(1)
+  }
+
+  function handleSaveView() {
+    if (!newViewName.trim()) return
+    const filterConfig: Record<string, string> = {}
+    for (const c of filterConditions) {
+      if (c.field && c.operator) {
+        filterConfig[`${c.field}:${c.operator}`] = c.value
+      }
+    }
+    const sortConfig = sortItems.length > 0
+      ? sortItems.map((s) => `${s.desc ? '-' : ''}${s.field}`).join(',')
+      : ''
+
+    createSavedView.mutate(
+      {
+        name: newViewName.trim(),
+        filter_config: filterConfig,
+        sort_config: sortConfig,
+        is_public: true,
+      },
+      {
+        onSuccess: () => {
+          toast.success('뷰가 저장되었습니다')
+          setNewViewName('')
+          setSavingView(false)
+        },
+        onError: (err) => toast.error(formatError(err)),
+      },
+    )
+  }
+
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
     <div className="flex items-center gap-2 flex-wrap">
@@ -607,6 +666,79 @@ export default function AppViewPage() {
           프로세스
         </Button>
       )}
+
+      {/* Saved views chips */}
+      {savedViews && savedViews.length > 0 && (
+        <div className="flex items-center gap-1 border-l pl-2 ml-1">
+          <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
+          {savedViews.map((v) => (
+            <Badge
+              key={v.id}
+              variant={activeView?.id === v.id ? 'default' : 'outline'}
+              className="cursor-pointer gap-1 text-xs"
+              onClick={() => {
+                if (activeView?.id === v.id) {
+                  clearView()
+                } else {
+                  applyView(v)
+                }
+              }}
+            >
+              {v.name}
+              {activeView?.id === v.id && (
+                <button
+                  type="button"
+                  className="ml-0.5 hover:text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    deleteSavedView.mutate(v.id, {
+                      onSuccess: () => {
+                        toast.success('뷰가 삭제되었습니다')
+                        clearView()
+                      },
+                      onError: (err) => toast.error(formatError(err)),
+                    })
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* Save current filter/sort as view */}
+      {(filterConditions.length > 0 || sortItems.length > 0) && !savingView && (
+        <Popover>
+          <PopoverTrigger
+            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
+          >
+            <BookmarkPlus className="h-3.5 w-3.5" />
+            뷰 저장
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64 p-3">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">현재 필터/정렬을 뷰로 저장</div>
+              <Input
+                className="h-8"
+                placeholder="뷰 이름"
+                value={newViewName}
+                onChange={(e) => setNewViewName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveView()}
+              />
+              <Button
+                size="sm"
+                className="w-full"
+                disabled={!newViewName.trim() || createSavedView.isPending}
+                onClick={handleSaveView}
+              >
+                {createSavedView.isPending ? '저장 중...' : '저장'}
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   )
 
@@ -639,137 +771,6 @@ export default function AppViewPage() {
           </>
         }
       />
-
-      {/* Saved views bar */}
-      {savedViews && savedViews.length > 0 && (
-        <div className="mb-4 flex items-center gap-2">
-          <Select
-            value={activeView?.id ?? '__none__'}
-            onValueChange={(v) => {
-              if (v === '__none__') {
-                setActiveView(null)
-                setFilterConditions([])
-                setSortItems([])
-                setPage(1)
-              } else {
-                const view = savedViews.find((sv) => sv.id === v)
-                if (view) {
-                  setActiveView(view)
-                  // Restore filters from saved view.
-                  if (view.filter_config) {
-                    const restored: FilterCondition[] = Object.entries(view.filter_config).map(
-                      ([key, value], i) => {
-                        const [field, operator] = key.split(':')
-                        return { id: `sv-${i}`, field, operator: operator || 'eq', value }
-                      },
-                    )
-                    setFilterConditions(restored)
-                  } else {
-                    setFilterConditions([])
-                  }
-                  // Restore sort from saved view.
-                  if (view.sort_config) {
-                    const items: SortItem[] = view.sort_config.split(',').filter(Boolean).map((s) => ({
-                      field: s.startsWith('-') ? s.slice(1) : s,
-                      desc: s.startsWith('-'),
-                    }))
-                    setSortItems(items)
-                  } else {
-                    setSortItems([])
-                  }
-                  setPage(1)
-                }
-              }
-            }}
-          >
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="뷰 선택" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">전체 (기본)</SelectItem>
-              {savedViews.map((v) => (
-                <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {activeView && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                deleteSavedView.mutate(activeView.id, {
-                  onSuccess: () => {
-                    toast.success('뷰가 삭제되었습니다')
-                    setActiveView(null)
-                    setFilterConditions([])
-                    setSortItems([])
-                  },
-                  onError: (err) => toast.error(formatError(err)),
-                })
-              }}
-            >
-              삭제
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Save current view */}
-      {!savingView ? (
-        <div className="mb-4">
-          <Button variant="outline" size="sm" onClick={() => setSavingView(true)}>
-            현재 뷰 저장
-          </Button>
-        </div>
-      ) : (
-        <div className="mb-4 flex items-center gap-2">
-          <Input
-            className="w-48"
-            placeholder="뷰 이름"
-            value={newViewName}
-            onChange={(e) => setNewViewName(e.target.value)}
-          />
-          <Button
-            size="sm"
-            disabled={!newViewName.trim() || createSavedView.isPending}
-            onClick={() => {
-              // Serialize current filter conditions to filter_config.
-              const filterConfig: Record<string, string> = {}
-              for (const c of filterConditions) {
-                if (c.field && c.operator) {
-                  filterConfig[`${c.field}:${c.operator}`] = c.value
-                }
-              }
-              // Serialize current sort to sort_config.
-              const sortConfig = sortItems.length > 0
-                ? sortItems.map((s) => `${s.desc ? '-' : ''}${s.field}`).join(',')
-                : ''
-
-              createSavedView.mutate(
-                {
-                  name: newViewName.trim(),
-                  filter_config: filterConfig,
-                  sort_config: sortConfig,
-                  is_public: true,
-                },
-                {
-                  onSuccess: () => {
-                    toast.success('뷰가 저장되었습니다')
-                    setNewViewName('')
-                    setSavingView(false)
-                  },
-                  onError: (err) => toast.error(formatError(err)),
-                },
-              )
-            }}
-          >
-            저장
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => { setSavingView(false); setNewViewName('') }}>
-            취소
-          </Button>
-        </div>
-      )}
 
       <ChartPanel
         slug={collection.slug}

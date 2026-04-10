@@ -41,6 +41,8 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
   record_updated: '레코드 수정',
   record_deleted: '레코드 삭제',
   status_change: '상태 변경',
+  schedule: '스케줄 (크론)',
+  form_submit: '폼 제출',
 }
 
 const ACTION_LABELS: Record<ActionType, string> = {
@@ -86,6 +88,9 @@ export default function AutomationsPage() {
   const [triggerType, setTriggerType] = useState<TriggerType>('record_created')
   const [fromStatus, setFromStatus] = useState('')
   const [toStatus, setToStatus] = useState('')
+  const [cronExpr, setCronExpr] = useState('')
+  const [cronTimezone, setCronTimezone] = useState('Asia/Seoul')
+  const [formSlug, setFormSlug] = useState('')
   const [conditions, setConditions] = useState<ConditionDraft[]>([])
   const [actions, setActions] = useState<ActionDraft[]>([])
 
@@ -128,6 +133,9 @@ export default function AutomationsPage() {
     setTriggerType('record_created')
     setFromStatus('')
     setToStatus('')
+    setCronExpr('')
+    setCronTimezone('Asia/Seoul')
+    setFormSlug('')
     setConditions([])
     setActions([])
   }
@@ -144,6 +152,9 @@ export default function AutomationsPage() {
     const tc = a.trigger_config ?? {}
     setFromStatus((tc.from_status as string) ?? '')
     setToStatus((tc.to_status as string) ?? '')
+    setCronExpr((tc.cron as string) ?? '')
+    setCronTimezone((tc.timezone as string) ?? 'Asia/Seoul')
+    setFormSlug((tc.form_slug as string) ?? '')
     setConditions(
       a.conditions?.map((c) => ({
         field_slug: c.field_slug,
@@ -174,6 +185,13 @@ export default function AutomationsPage() {
     if (triggerType === 'status_change') {
       if (fromStatus) triggerConfig.from_status = fromStatus
       if (toStatus) triggerConfig.to_status = toStatus
+    }
+    if (triggerType === 'schedule') {
+      triggerConfig.cron = cronExpr
+      triggerConfig.timezone = cronTimezone
+    }
+    if (triggerType === 'form_submit') {
+      if (formSlug) triggerConfig.form_slug = formSlug
     }
 
     const payload: CreateAutomationReq = {
@@ -353,6 +371,53 @@ export default function AutomationsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            )}
+
+            {/* Schedule config */}
+            {triggerType === 'schedule' && (
+              <div className="space-y-3">
+                <div>
+                  <Label>크론 표현식</Label>
+                  <Input
+                    value={cronExpr}
+                    onChange={(e) => setCronExpr(e.target.value)}
+                    placeholder="0 9 * * *  (매일 오전 9시)"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    형식: 분 시 일 월 요일 (예: 0 9 * * 1-5 = 평일 9시)
+                  </p>
+                </div>
+                <div>
+                  <Label>타임존</Label>
+                  <Select value={cronTimezone} onValueChange={(v) => v && setCronTimezone(v)}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Asia/Seoul">Asia/Seoul (KST)</SelectItem>
+                      <SelectItem value="UTC">UTC</SelectItem>
+                      <SelectItem value="America/New_York">America/New_York (EST)</SelectItem>
+                      <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
+                      <SelectItem value="Asia/Tokyo">Asia/Tokyo (JST)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {/* Form submit config */}
+            {triggerType === 'form_submit' && (
+              <div>
+                <Label>폼 슬러그 (선택)</Label>
+                <Input
+                  value={formSlug}
+                  onChange={(e) => setFormSlug(e.target.value)}
+                  placeholder="비워두면 모든 폼 제출 시 실행"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  특정 외부 폼에서 제출된 경우만 실행하려면 폼 슬러그를 입력하세요.
+                </p>
               </div>
             )}
 

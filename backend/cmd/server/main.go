@@ -104,6 +104,9 @@ func run() int {
 	autoEngine.Subscribe(bus)
 	autoHandler := handler.NewAutomationHandler(pool)
 
+	// Automation scheduler (for cron-based triggers, checks every minute).
+	autoScheduler := automation.NewScheduler(autoEngine, 1*time.Minute)
+
 	// Login rate limiter: 5 failures / 15 minutes → 30 minute lockout.
 	loginLimiter := middleware.NewRateLimiter(5, 15*60*1000, 30*60*1000)
 	defer loginLimiter.Close()
@@ -147,8 +150,9 @@ func run() int {
 			return fmt.Errorf("listen: %w", err)
 		}
 
-		// Start sync runner in background.
+		// Start sync runner and automation scheduler in background.
 		go syncRunner.Start(ctx)
+		autoScheduler.Start()
 
 		logging.PrintBanner(os.Stderr, logging.BannerInfo{
 			Version: version,
@@ -159,6 +163,7 @@ func run() int {
 		go func() {
 			<-ctx.Done()
 			logging.PrintShutdown(os.Stderr, time.Since(startedAt), color)
+			autoScheduler.Stop()
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			if err := srv.Shutdown(shutdownCtx); err != nil {
