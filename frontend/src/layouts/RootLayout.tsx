@@ -45,14 +45,14 @@ export default function RootLayout() {
 
   return (
     <AIAvailabilityProvider>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen overflow-x-hidden bg-background">
         <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-border/60 bg-white/80 px-6 py-2.5 backdrop-blur-md backdrop-saturate-150">
           <div className="flex items-center gap-1.5">
             <Link to="/" className="mr-5 flex items-center gap-2.5 text-lg font-bold tracking-tight text-foreground" viewTransition>
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-white shadow-sm">T</span>
               <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Topworks</span>
             </Link>
-            <div className="flex items-center gap-0.5 overflow-x-auto">
+            <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto">
               <NavLink to="/apps" className={({ isActive }) => `nav-link whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 업무
               </NavLink>
