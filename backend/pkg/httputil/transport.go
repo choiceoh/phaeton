@@ -32,7 +32,7 @@ type uaTransport struct{ base http.RoundTripper }
 
 func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Header.Get("User-Agent") == "" {
-		ua := "Phaeton"
+		ua := "Topworks"
 		if version != "" {
 			ua += "/" + version
 		}

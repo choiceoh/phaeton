@@ -13,7 +13,7 @@ type aiCSVMapRequest struct {
 	Headers []string `json:"headers"`
 }
 
-const csvMapSystemPrompt = `You are a CSV column mapper for Phaeton, a no-code business app platform.
+const csvMapSystemPrompt = `You are a CSV column mapper for Topworks, a no-code business app platform.
 Given CSV column headers and a collection's field definitions, map each CSV header to the best matching field slug.
 
 ## Tools

@@ -40,7 +40,7 @@ describe('LoginPage', () => {
   it('renders login form with title and inputs', () => {
     renderWithProviders(<LoginPage />)
 
-    expect(screen.getByText('Phaeton')).toBeInTheDocument()
+    expect(screen.getByText('Topworks')).toBeInTheDocument()
     expect(screen.getByText('이메일')).toBeInTheDocument()
     expect(screen.getByText('비밀번호')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '로그인' })).toBeInTheDocument()

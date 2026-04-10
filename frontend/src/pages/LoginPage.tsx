@@ -38,8 +38,8 @@ export default function LoginPage() {
         >
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-900 text-sm font-bold text-white">P</span>
-              <h1 className="text-xl font-bold tracking-tight text-stone-900">Phaeton</h1>
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-900 text-sm font-bold text-white">T</span>
+              <h1 className="text-xl font-bold tracking-tight text-stone-900">Topworks</h1>
             </div>
             <p className="text-sm text-stone-500">업무 플랫폼에 로그인하세요</p>
           </div>
