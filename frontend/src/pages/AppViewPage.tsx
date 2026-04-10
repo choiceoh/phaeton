@@ -12,8 +12,10 @@ import {
   Power,
   PowerOff,
   Search,
+  Trash2,
   Upload,
   X,
+  Ellipsis,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
@@ -37,6 +39,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -45,6 +53,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCollection } from '@/hooks/useCollections'
 import {
   useBatchUpdateEntry,
+  useBulkDeleteEntries,
   useCreateEntry,
   useDeleteEntry,
   useEntries,
@@ -52,6 +61,7 @@ import {
 } from '@/hooks/useEntries'
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
+import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
 import { formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
@@ -68,6 +78,7 @@ export default function AppViewPage() {
   const [editEntry, setEditEntry] = useState<Record<string, unknown> | undefined>()
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importedCount, setImportedCount] = useState(0)
 
   // Filter state
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
@@ -96,6 +107,9 @@ export default function AppViewPage() {
     useCollection(appId)
   const { data: process } = useProcess(appId)
 
+  // Show toast when automation runs are detected.
+  useAutomationRunToasts(collection?.id)
+
   // Build expand string from all relation fields.
   const expand = useMemo(() => {
     if (!collection?.fields) return undefined
@@ -107,15 +121,27 @@ export default function AppViewPage() {
   const createSavedView = useCreateSavedView(collection?.id ?? '')
   const deleteSavedView = useDeleteSavedView(collection?.id ?? '')
 
-  // Build sort param from either column header sorting or sort panel.
+  // Build sort param — only one source is active at a time.
   const sortParam = useMemo(() => {
-    // Sort panel takes precedence if set.
     if (sortItems.length > 0) {
       return sortItems.map((s) => `${s.desc ? '-' : ''}${s.field}`).join(',')
     }
     if (sorting.length === 0) return undefined
     return sorting.map((s) => `${s.desc ? '-' : ''}${s.id}`).join(',')
   }, [sorting, sortItems])
+
+  // When column header sort changes, clear sort panel.
+  const handleHeaderSortChange = useCallback((next: SortingState) => {
+    setSorting(next)
+    if (next.length > 0) setSortItems([])
+  }, [])
+
+  // When sort panel changes, clear column header sort.
+  const handleSortPanelChange = useCallback((items: SortItem[]) => {
+    setSortItems(items)
+    if (items.length > 0) setSorting([])
+    setPage(1)
+  }, [])
 
   // Build filters from conditions + search text.
   const filters = useMemo(() => {
@@ -152,6 +178,11 @@ export default function AppViewPage() {
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const deleteEntry = useDeleteEntry(collection?.slug ?? '')
+  const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
+
+  // Multi-select state for bulk operations.
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
   // Detect views.
   const selectField = useMemo(
@@ -193,8 +224,10 @@ export default function AppViewPage() {
       if (values.length === 0) continue
       const sum = values.reduce((a, b) => a + b, 0)
       const avg = sum / values.length
+      const isAllOnePage = list?.total != null && list.data.length >= list.total
+      const scopeLabel = isAllOnePage ? '' : ' (현재 페이지)'
       summary[f.slug] = {
-        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })}`,
+        label: `합계 ${sum.toLocaleString('ko')} / 평균 ${avg.toLocaleString('ko', { maximumFractionDigits: 1 })}${scopeLabel}`,
         value: sum,
       }
     }
@@ -233,7 +266,6 @@ export default function AppViewPage() {
     cols.push(
       ...collection.fields
         .filter((f) => !isLayoutType(f.field_type))
-        .slice(0, 8)
         .map((f) => ({
           id: f.slug,
           header: f.label,
@@ -302,6 +334,17 @@ export default function AppViewPage() {
     })
     return cols
   }, [collection, process, processVisible])
+
+  // Default: hide columns beyond the first 8 data fields.
+  const initialColumnVisibility = useMemo<Record<string, boolean>>(() => {
+    if (!collection?.fields) return {}
+    const dataFields = collection.fields.filter((f) => !isLayoutType(f.field_type))
+    const vis: Record<string, boolean> = {}
+    dataFields.forEach((f, i) => {
+      if (i >= 8) vis[f.slug] = false
+    })
+    return vis
+  }, [collection])
 
   // Inline edit handler.
   const handleCellEdit = useCallback(
@@ -378,8 +421,12 @@ export default function AppViewPage() {
         throw new Error(body.error || body.message || res.statusText)
       }
       const result = await res.json()
-      toast.success(`${result.data?.imported ?? 0}건 가져왔습니다`)
-      refetch()
+      const count = result.data?.imported ?? 0
+      toast.success(`${count}건 가져왔습니다`)
+      setImportedCount(count)
+      await refetch()
+      // Clear highlight after animation
+      setTimeout(() => setImportedCount(0), 2000)
     } catch (err) {
       toast.error(formatError(err))
     } finally {
@@ -455,6 +502,19 @@ export default function AppViewPage() {
     })
   }
 
+  function handleBulkDelete() {
+    const ids = Array.from(selectedRowIds)
+    if (ids.length === 0) return
+    bulkDelete.mutate(ids, {
+      onSuccess: () => {
+        toast.success(`${ids.length}건 삭제되었습니다`)
+        setSelectedRowIds(new Set())
+        setBulkDeleteOpen(false)
+      },
+      onError: (err) => toast.error(formatError(err)),
+    })
+  }
+
   function applyView(view: SavedView) {
     setActiveView(view)
     if (view.filter_config && Object.keys(view.filter_config).length > 0) {
@@ -522,7 +582,7 @@ export default function AppViewPage() {
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Search bar */}
+      {/* ── Group 1: 데이터 조회 (검색·필터·정렬) ── */}
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -545,7 +605,6 @@ export default function AppViewPage() {
         )}
       </div>
 
-      {/* Filter popover */}
       <Popover>
         <PopoverTrigger
           className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
@@ -584,7 +643,6 @@ export default function AppViewPage() {
         </PopoverContent>
       </Popover>
 
-      {/* Sort popover */}
       <Popover>
         <PopoverTrigger
           className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
@@ -602,10 +660,7 @@ export default function AppViewPage() {
           <SortPanel
             fields={collection.fields ?? []}
             sorts={sortItems}
-            onChange={(items) => {
-              setSortItems(items)
-              setPage(1)
-            }}
+            onChange={handleSortPanelChange}
           />
           {sortItems.length > 0 && (
             <Button
@@ -620,28 +675,44 @@ export default function AppViewPage() {
         </PopoverContent>
       </Popover>
 
-      {/* CSV Export */}
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 gap-1"
-        onClick={handleCsvExport}
-      >
-        <Download className="h-3.5 w-3.5" />
-        내보내기
-      </Button>
+      {/* ── Group 2: 데이터 입출력 + 프로세스 ── */}
+      <div className="flex items-center gap-2 border-l pl-3 ml-1">
+        {process?.is_enabled && (
+          <Button
+            variant={processVisible ? 'default' : 'outline'}
+            size="sm"
+            className="h-8 gap-1"
+            onClick={() => setProcessVisible(!processVisible)}
+          >
+            {processVisible ? (
+              <Power className="h-3.5 w-3.5" />
+            ) : (
+              <PowerOff className="h-3.5 w-3.5" />
+            )}
+            프로세스
+          </Button>
+        )}
 
-      {/* CSV Import */}
-      <RoleGate roles={['director', 'pm', 'engineer']}>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Upload className="h-3.5 w-3.5" />
-          가져오기
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
+          >
+            <Ellipsis className="h-3.5 w-3.5" />
+            더보기
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={handleCsvExport}>
+              <Download className="h-3.5 w-3.5 mr-2" />
+              내보내기
+            </DropdownMenuItem>
+            <RoleGate roles={['director', 'pm', 'engineer']}>
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-3.5 w-3.5 mr-2" />
+                가져오기
+              </DropdownMenuItem>
+            </RoleGate>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <input
           ref={fileInputRef}
           type="file"
@@ -649,96 +720,94 @@ export default function AppViewPage() {
           className="hidden"
           onChange={handleImportCSV}
         />
-      </RoleGate>
+      </div>
 
-      {/* Process ON/OFF toggle */}
-      {process?.is_enabled && (
-        <Button
-          variant={processVisible ? 'default' : 'outline'}
-          size="sm"
-          className="h-8 gap-1"
-          onClick={() => setProcessVisible(!processVisible)}
-        >
-          {processVisible ? (
-            <Power className="h-3.5 w-3.5" />
-          ) : (
-            <PowerOff className="h-3.5 w-3.5" />
-          )}
-          프로세스
-        </Button>
-      )}
-
-      {/* Saved views chips */}
-      {savedViews && savedViews.length > 0 && (
-        <div className="flex items-center gap-1 border-l pl-2 ml-1">
-          <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
-          {savedViews.map((v) => (
-            <Badge
-              key={v.id}
-              variant={activeView?.id === v.id ? 'default' : 'outline'}
-              className="cursor-pointer gap-1 text-xs"
-              onClick={() => {
-                if (activeView?.id === v.id) {
-                  clearView()
-                } else {
-                  applyView(v)
-                }
-              }}
-            >
-              {v.name}
-              {activeView?.id === v.id && (
-                <button
-                  type="button"
-                  className="ml-0.5 hover:text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    deleteSavedView.mutate(v.id, {
-                      onSuccess: () => {
-                        toast.success('뷰가 삭제되었습니다')
-                        clearView()
-                      },
-                      onError: (err) => toast.error(formatError(err)),
-                    })
+      {/* ── Group 3: 뷰 관리 ── */}
+      {((savedViews && savedViews.length > 0) || filterConditions.length > 0 || sortItems.length > 0) && (
+        <div className="flex items-center gap-1.5 border-l pl-3 ml-1">
+          {savedViews && savedViews.length > 0 && (
+            <>
+              <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
+              {savedViews.map((v) => (
+                <Badge
+                  key={v.id}
+                  variant={activeView?.id === v.id ? 'default' : 'outline'}
+                  className="cursor-pointer gap-1 text-xs"
+                  onClick={() => {
+                    if (activeView?.id === v.id) {
+                      clearView()
+                    } else {
+                      applyView(v)
+                    }
                   }}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </Badge>
-          ))}
-        </div>
-      )}
+                  {v.name}
+                  {activeView?.id === v.id && (
+                    <button
+                      type="button"
+                      className="ml-0.5 hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteSavedView.mutate(v.id, {
+                          onSuccess: () => {
+                            toast.success('뷰가 삭제되었습니다')
+                            clearView()
+                          },
+                          onError: (err) => toast.error(formatError(err)),
+                        })
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </Badge>
+              ))}
+            </>
+          )}
 
-      {/* Save current filter/sort as view */}
-      {(filterConditions.length > 0 || sortItems.length > 0) && !savingView && (
-        <Popover>
-          <PopoverTrigger
-            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
-          >
-            <BookmarkPlus className="h-3.5 w-3.5" />
-            뷰 저장
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-64 p-3">
-            <div className="space-y-2">
-              <div className="text-sm font-medium">현재 필터/정렬을 뷰로 저장</div>
-              <Input
-                className="h-8"
-                placeholder="뷰 이름"
-                value={newViewName}
-                onChange={(e) => setNewViewName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveView()}
-              />
-              <Button
-                size="sm"
-                className="w-full"
-                disabled={!newViewName.trim() || createSavedView.isPending}
-                onClick={handleSaveView}
-              >
-                {createSavedView.isPending ? '저장 중...' : '저장'}
-              </Button>
+          {/* Active filter/sort indicator */}
+          {(filterConditions.length > 0 || sortItems.length > 0) && (
+            <div className="flex items-center gap-2 border-l pl-2 ml-1 text-xs text-muted-foreground">
+              {filterConditions.length > 0 && (
+                <span>{filterConditions.length}개 조건 적용됨</span>
+              )}
+              {sortItems.length > 0 && (
+                <span>{sortItems.length}개 정렬 적용됨</span>
+              )}
             </div>
-          </PopoverContent>
-        </Popover>
+          )}
+
+          {(filterConditions.length > 0 || sortItems.length > 0) && !savingView && (
+            <Popover>
+              <PopoverTrigger
+                className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
+              >
+                <BookmarkPlus className="h-3.5 w-3.5" />
+                뷰 저장
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-64 p-3">
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">현재 필터/정렬을 뷰로 저장</div>
+                  <Input
+                    className="h-8"
+                    placeholder="뷰 이름"
+                    value={newViewName}
+                    onChange={(e) => setNewViewName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveView()}
+                  />
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={!newViewName.trim() || createSavedView.isPending}
+                    onClick={handleSaveView}
+                  >
+                    {createSavedView.isPending ? '저장 중...' : '저장'}
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
       )}
     </div>
   )
@@ -746,6 +815,10 @@ export default function AppViewPage() {
   return (
     <div>
       <PageHeader
+        breadcrumb={[
+          { label: '업무 목록', href: '/apps' },
+          { label: collection.label },
+        ]}
         title={collection.label}
         description={collection.description}
         actions={
@@ -810,6 +883,30 @@ export default function AppViewPage() {
           )}
 
           <TabsContent value="list" className="mt-0">
+            {selectedRowIds.size > 0 && (
+              <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+                <span className="font-medium">{selectedRowIds.size}건 선택</span>
+                <RoleGate roles={['director', 'pm']}>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-7 gap-1"
+                    onClick={() => setBulkDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    일괄 삭제
+                  </Button>
+                </RoleGate>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => setSelectedRowIds(new Set())}
+                >
+                  선택 해제
+                </Button>
+              </div>
+            )}
             <DataTable
               columns={columns}
               data={list.data}
@@ -818,7 +915,7 @@ export default function AppViewPage() {
               limit={limit}
               onPageChange={setPage}
               onLimitChange={setLimit}
-              onSortChange={setSorting}
+              onSortChange={handleHeaderSortChange}
               onRowClick={handleEntryClick}
               onCellEdit={handleCellEdit}
               onBatchCellEdit={handleBatchCellEdit}
@@ -827,6 +924,11 @@ export default function AppViewPage() {
               emptyDescription={TERM.noRecordsDesc}
               summaryRow={summaryRow}
               toolbar={tableToolbar}
+              initialColumnVisibility={initialColumnVisibility}
+              highlightRows={importedCount}
+              selectable
+              selectedRowIds={selectedRowIds}
+              onSelectionChange={setSelectedRowIds}
             />
           </TabsContent>
 
@@ -898,6 +1000,17 @@ export default function AppViewPage() {
         confirmLabel="삭제"
         onConfirm={handleDelete}
         loading={deleteEntry.isPending}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => !open && setBulkDeleteOpen(false)}
+        title={`${selectedRowIds.size}건의 ${TERM.record}를 삭제하시겠습니까?`}
+        description="삭제된 데이터는 휴지통에서 복구할 수 있습니다."
+        variant="destructive"
+        confirmLabel={`${selectedRowIds.size}건 삭제`}
+        onConfirm={handleBulkDelete}
+        loading={bulkDelete.isPending}
       />
     </div>
   )

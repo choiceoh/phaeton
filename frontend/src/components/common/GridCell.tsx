@@ -99,7 +99,7 @@ export default function GridCell({
       }}
     >
       {children}
-      {editable && (
+      {editable && !isActive && (
         <Pencil className="absolute right-0.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/50 opacity-0 group-hover/cell:opacity-100 pointer-events-none" />
       )}
     </div>

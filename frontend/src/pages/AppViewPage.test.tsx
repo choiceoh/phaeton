@@ -110,7 +110,7 @@ describe('AppViewPage', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('업무 관리')).toBeInTheDocument()
+        expect(screen.getAllByText('업무 관리').length).toBeGreaterThanOrEqual(1)
       })
 
       await waitFor(() => {
@@ -152,16 +152,18 @@ describe('AppViewPage', () => {
   })
 
   describe('toolbar features', () => {
-    it('renders filter, sort, export, import buttons', async () => {
+    it('renders filter, sort, and more menu buttons', async () => {
       setupDefaultMocks()
       renderPage()
 
+      // Wait for entries to load (toolbar is rendered inside the data table).
       await waitFor(() => {
-        expect(screen.getByText('필터')).toBeInTheDocument()
-        expect(screen.getByText('정렬')).toBeInTheDocument()
-        expect(screen.getByText('내보내기')).toBeInTheDocument()
-        expect(screen.getByText('가져오기')).toBeInTheDocument()
+        expect(screen.getByText('보고서 작성')).toBeInTheDocument()
       })
+
+      expect(screen.getByText('필터')).toBeInTheDocument()
+      expect(screen.getByText('정렬')).toBeInTheDocument()
+      expect(screen.getByText('더보기')).toBeInTheDocument()
     })
 
     it('has search input', async () => {
@@ -169,8 +171,10 @@ describe('AppViewPage', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('검색...')).toBeInTheDocument()
+        expect(screen.getByText('보고서 작성')).toBeInTheDocument()
       })
+
+      expect(screen.getByPlaceholderText('검색...')).toBeInTheDocument()
     })
   })
 
