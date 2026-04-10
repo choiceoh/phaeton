@@ -10,6 +10,12 @@ export const queryKeys = {
     users: () => [...queryKeys.auth.all, 'users'] as const,
   },
 
+  departments: {
+    all: ['departments'] as const,
+    list: () => [...queryKeys.departments.all, 'list'] as const,
+    detail: (id: string) => [...queryKeys.departments.all, 'detail', id] as const,
+  },
+
   collections: {
     all: ['collections'] as const,
     list: () => [...queryKeys.collections.all, 'list'] as const,

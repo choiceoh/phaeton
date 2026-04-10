@@ -28,6 +28,8 @@ export default function ViewTabs({ fields, entries, onEntryClick, process }: Pro
         is_unique: false,
         is_indexed: false,
         sort_order: 0,
+        width: 6,
+        height: 1,
         created_at: '',
         updated_at: '',
         options: {

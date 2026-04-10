@@ -69,6 +69,23 @@ export interface User {
   name: string
   role: 'director' | 'pm' | 'engineer' | 'viewer'
   is_active: boolean
+  department_id?: string | null
+  position: string
+  title: string
+  phone: string
+  avatar: string
+  joined_at?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface Department {
+  id: string
+  name: string
+  parent_id: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
 // --- Request payloads ---
