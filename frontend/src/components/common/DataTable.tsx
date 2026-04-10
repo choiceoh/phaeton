@@ -131,6 +131,26 @@ export function DataTable<T>({
   })
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({})
 
+  // Horizontal scroll indicator state.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const check = () => {
+      setCanScrollRight(
+        el.scrollWidth > el.clientWidth &&
+        el.scrollLeft + el.clientWidth < el.scrollWidth - 2,
+      )
+    }
+    check()
+    el.addEventListener('scroll', check)
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => { el.removeEventListener('scroll', check); ro.disconnect() }
+  }, [data, columnVisibility])
+
   // Prepend checkbox column when selectable.
   const augmentedColumns = useMemo(() => {
     if (!selectable) return columns
@@ -421,8 +441,12 @@ export function DataTable<T>({
         </DropdownMenu>
       </div>
 
+      <div className="relative">
       <div
-        ref={grid.containerRef}
+        ref={(el) => {
+          scrollRef.current = el
+          ;(grid.containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
+        }}
         className="rounded-md border overflow-auto focus:outline-none"
         tabIndex={0}
         onKeyDown={handleKeyDown}
@@ -464,7 +488,7 @@ export function DataTable<T>({
                           {sortDir === 'asc' && <ChevronUp className="h-3 w-3" />}
                           {sortDir === 'desc' && <ChevronDown className="h-3 w-3" />}
                           {canSort && !sortDir && (
-                            <ArrowDownUp className="h-3 w-3 opacity-0 group-hover:opacity-30" />
+                            <ArrowDownUp className="h-3 w-3 opacity-30 group-hover:opacity-70 transition-opacity" />
                           )}
                         </button>
                       )}
@@ -472,13 +496,15 @@ export function DataTable<T>({
                       <div
                         onMouseDown={header.getResizeHandler()}
                         onTouchStart={header.getResizeHandler()}
-                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none touch-none hover:bg-primary/50 group-hover:bg-border"
+                        className="absolute right-0 top-0 h-full w-3 cursor-col-resize select-none touch-none group/resize"
                         style={{
                           transform: header.column.getIsResizing()
                             ? `translateX(${table.getState().columnSizingInfo.deltaOffset}px)`
                             : '',
                         }}
-                      />
+                      >
+                        <div className="absolute right-0 top-1/4 h-1/2 w-px border-r border-dashed border-border group-hover/resize:border-foreground/50 transition-colors" />
+                      </div>
                     </TableHead>
                   )
                 })}
@@ -568,32 +594,35 @@ export function DataTable<T>({
           {/* Summary row */}
           {summaryRow && Object.keys(summaryRow).length > 0 && (
             <TableFooter>
-              <TableRow className="bg-muted/50 font-medium">
+              <TableRow className="border-t-2 bg-muted/30 font-medium">
                 {table.getVisibleFlatColumns().map((col, i) => {
                   const summary = summaryRow[col.id]
                   const currentFn = summaryFn?.[col.id] || 'sum'
                   return (
-                    <TableCell key={col.id} className="text-xs">
+                    <TableCell key={col.id} className="text-xs py-1.5">
                       {i === 0 && !summary ? (
-                        <span className="text-muted-foreground">집계</span>
+                        <span className="text-muted-foreground font-normal">집계</span>
                       ) : null}
                       {summary ? (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           {onSummaryFnChange && (
-                            <select
+                            <Select
                               value={currentFn}
-                              onChange={(e) => onSummaryFnChange(col.id, e.target.value)}
-                              className="h-5 rounded border border-input bg-transparent px-1 text-[10px] cursor-pointer"
-                              onClick={(e) => e.stopPropagation()}
+                              onValueChange={(v) => { if (v) onSummaryFnChange!(col.id, v) }}
                             >
-                              <option value="sum">합계</option>
-                              <option value="avg">평균</option>
-                              <option value="count">개수</option>
-                              <option value="min">최소</option>
-                              <option value="max">최대</option>
-                            </select>
+                              <SelectTrigger className="h-6 w-[52px] text-[10px] px-1.5 border-dashed">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="sum">합계</SelectItem>
+                                <SelectItem value="avg">평균</SelectItem>
+                                <SelectItem value="count">개수</SelectItem>
+                                <SelectItem value="min">최소</SelectItem>
+                                <SelectItem value="max">최대</SelectItem>
+                              </SelectContent>
+                            </Select>
                           )}
-                          <span title={String(summary.value)}>
+                          <span className="font-semibold tabular-nums" title={String(summary.value)}>
                             {summary.label}
                           </span>
                         </div>
@@ -605,6 +634,10 @@ export function DataTable<T>({
             </TableFooter>
           )}
         </Table>
+      </div>
+      {canScrollRight && (
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent rounded-r-md" />
+      )}
       </div>
 
       {/* Selection indicator */}
@@ -686,7 +719,7 @@ export function DataTable<T>({
 
       {/* Pagination footer */}
       {total !== undefined && total > 0 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <span>
               {showingFrom}-{showingTo} / {total}건
@@ -717,6 +750,7 @@ export function DataTable<T>({
               <Button
                 variant="outline"
                 size="sm"
+                className="hidden sm:inline-flex"
                 onClick={() => onPageChange?.(1)}
                 disabled={page === 1}
               >
@@ -730,8 +764,11 @@ export function DataTable<T>({
               >
                 이전
               </Button>
-              {/* Page number buttons */}
-              <PageNumbers page={page} totalPages={totalPages} onPageChange={onPageChange} />
+              {/* Page numbers: full on desktop, compact on mobile */}
+              <span className="sm:hidden text-xs px-2">{page} / {totalPages}</span>
+              <span className="hidden sm:contents">
+                <PageNumbers page={page} totalPages={totalPages} onPageChange={onPageChange} />
+              </span>
               <Button
                 variant="outline"
                 size="sm"
@@ -743,6 +780,7 @@ export function DataTable<T>({
               <Button
                 variant="outline"
                 size="sm"
+                className="hidden sm:inline-flex"
                 onClick={() => onPageChange?.(totalPages)}
                 disabled={page >= totalPages}
               >
