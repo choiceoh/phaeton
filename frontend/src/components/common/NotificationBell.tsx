@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
@@ -17,7 +18,7 @@ export default function NotificationBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger className="relative inline-flex items-center justify-center rounded-md px-2 py-1 text-sm hover:bg-stone-100">
-        <span className="text-base">&#128276;</span>
+        <Bell className="h-4 w-4" />
         {count > 0 && (
           <Badge
             variant="destructive"
