@@ -1,12 +1,22 @@
 import { useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { LogOut, Settings, User } from 'lucide-react'
 
 import AIChatPanel from '@/components/common/AIChatPanel'
 import CommandPalette from '@/components/common/CommandPalette'
 import { AIAvailabilityProvider } from '@/contexts/AIAvailabilityContext'
 import LoadingState from '@/components/common/LoadingState'
 import NotificationBell from '@/components/common/NotificationBell'
-import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useCurrentUser, useLogout } from '@/hooks/useAuth'
 import { ROLE_LABELS } from '@/lib/constants'
 
@@ -49,6 +59,9 @@ export default function RootLayout() {
               <NavLink to="/dashboard" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 대시보드
               </NavLink>
+              <NavLink to="/calendar" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
+                캘린더
+              </NavLink>
               <NavLink to="/automations" className={({ isActive }) => `nav-link rounded-md px-3 py-1.5 text-sm font-medium ${isActive ? 'active text-foreground' : 'text-muted-foreground hover:text-foreground'}`} viewTransition>
                 자동화
               </NavLink>
@@ -72,13 +85,40 @@ export default function RootLayout() {
           </div>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <NotificationBell />
-            <Link to="/profile" className="rounded-md px-2.5 py-1 transition-colors hover:bg-accent hover:text-foreground">
-              <span className="font-medium text-foreground">{user.name}</span>
-              <span className="ml-1.5 text-xs text-muted-foreground/70">{ROLE_LABELS[user.role] || user.role}</span>
-            </Link>
-            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => logout.mutate()}>
-              로그아웃
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent focus-visible:outline-none">
+                <Avatar className="h-7 w-7">
+                  <AvatarFallback className="bg-foreground text-[11px] font-medium text-white">
+                    {user.name.slice(0, 1)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium text-foreground">{user.name}</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="font-normal">
+                  <p className="text-sm font-medium">{user.name}</p>
+                  <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role] ?? user.role}</p>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => navigate('/profile')}>
+                    <User className="mr-2 h-4 w-4" />
+                    내 정보
+                  </DropdownMenuItem>
+                  {(user.role === 'director' || user.role === 'pm') && (
+                    <DropdownMenuItem onClick={() => navigate('/settings')}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      설정
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => logout.mutate()}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  로그아웃
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </nav>
         <main className="mx-auto max-w-7xl px-6 py-10">
