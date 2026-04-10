@@ -1,6 +1,7 @@
 package formula
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -118,5 +119,82 @@ func TestParseRefs(t *testing.T) {
 	}
 	if len(refs) != 3 {
 		t.Errorf("expected 3 refs, got %d: %v", len(refs), refs)
+	}
+}
+
+func TestParseCrossCollection(t *testing.T) {
+	slugs := map[string]bool{"customer": true, "price": true}
+
+	resolver := func(relSlug string) (*RelationInfo, error) {
+		switch relSlug {
+		case "customer":
+			return &RelationInfo{
+				TargetTable:   `"data"."customers"`,
+				OwnerColumn:   "customer",
+				ReverseColumn: "order_id",
+			}, nil
+		default:
+			return nil, fmt.Errorf("unknown relation %q", relSlug)
+		}
+	}
+
+	tests := []struct {
+		name    string
+		input   string
+		wantSQL string
+		wantErr bool
+	}{
+		{
+			name:    "LOOKUP",
+			input:   "LOOKUP(customer, name)",
+			wantSQL: `(SELECT "name" FROM "data"."customers" WHERE id = "customer")`,
+		},
+		{
+			name:    "SUMREL",
+			input:   "SUMREL(customer, amount)",
+			wantSQL: `(SELECT COALESCE(SUM("amount"), 0) FROM "data"."customers" WHERE "order_id" = id)`,
+		},
+		{
+			name:    "COUNTREL",
+			input:   "COUNTREL(customer, id)",
+			wantSQL: `(SELECT COUNT(*) FROM "data"."customers" WHERE "order_id" = id)`,
+		},
+		{
+			name:    "LOOKUP in arithmetic",
+			input:   "price * LOOKUP(customer, discount_rate)",
+			wantSQL: `("price" * (SELECT "discount_rate" FROM "data"."customers" WHERE id = "customer"))`,
+		},
+		{
+			name:    "unknown relation",
+			input:   "LOOKUP(unknown_rel, name)",
+			wantErr: true,
+		},
+		{
+			name:    "no resolver",
+			input:   "LOOKUP(customer, name)",
+			wantErr: true, // tested without resolver below
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var res RelationResolver
+			if tt.name != "no resolver" {
+				res = resolver
+			}
+			result, err := ParseWithResolver(tt.input, slugs, res)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got sql=%q", result.SQL)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.SQL != tt.wantSQL {
+				t.Errorf("sql mismatch:\n  got:  %s\n  want: %s", result.SQL, tt.wantSQL)
+			}
+		})
 	}
 }

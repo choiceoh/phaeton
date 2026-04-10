@@ -18,6 +18,7 @@ const (
 	tokComma
 	tokLParen
 	tokRParen
+	tokDot
 	tokEOF
 )
 
@@ -33,6 +34,31 @@ var allowedFunctions = map[string]bool{
 	"COALESCE": true, "NULLIF": true,
 	"IF": true,
 }
+
+// Cross-collection functions.
+var crossCollectionFunctions = map[string]bool{
+	"LOOKUP":   true,
+	"SUMREL":   true,
+	"AVGREL":   true,
+	"MINREL":   true,
+	"MAXREL":   true,
+	"COUNTREL": true,
+}
+
+// RelationInfo describes a resolved relation for cross-collection formulas.
+type RelationInfo struct {
+	// TargetTable is the fully qualified target table (e.g. "data"."customers").
+	TargetTable string
+	// OwnerColumn is the local FK column name (for LOOKUP).
+	OwnerColumn string
+	// ReverseColumn is the column on the target table pointing back (for *REL aggregates).
+	ReverseColumn string
+}
+
+// RelationResolver is called by the parser when it encounters a cross-collection
+// function. It receives the relation field slug and should return the resolved
+// relation metadata, or an error if the field is not a valid relation.
+type RelationResolver func(relationSlug string) (*RelationInfo, error)
 
 // lex tokenizes a formula expression string.
 func lex(input string) ([]token, error) {
@@ -109,6 +135,9 @@ func lex(input string) ([]token, error) {
 		case ')':
 			tokens = append(tokens, token{tokRParen, ")"})
 			i++
+		case '.':
+			tokens = append(tokens, token{tokDot, "."})
+			i++
 		default:
 			return nil, fmt.Errorf("unexpected character %q at position %d", ch, i)
 		}
@@ -119,10 +148,12 @@ func lex(input string) ([]token, error) {
 
 // Parser converts a token stream into a safe PostgreSQL expression.
 type Parser struct {
-	tokens  []token
-	pos     int
-	slugs   map[string]bool // valid field slugs for this collection
-	refSlugs []string       // referenced field slugs (output)
+	tokens   []token
+	pos      int
+	slugs    map[string]bool // valid field slugs for this collection
+	refSlugs []string        // referenced field slugs (output)
+	crossRefs []string       // cross-collection relation slugs referenced
+	resolver RelationResolver
 }
 
 func (p *Parser) peek() token {
@@ -148,12 +179,29 @@ func (p *Parser) expect(typ tokenType) (token, error) {
 	return t, nil
 }
 
+// ParseResult contains the output of a successful parse.
+type ParseResult struct {
+	SQL       string   // Safe PostgreSQL expression.
+	Refs      []string // Local field slugs referenced.
+	CrossRefs []string // Relation field slugs used in cross-collection functions.
+}
+
 // Parse parses the full expression and returns a safe SQL expression string
 // along with the list of referenced field slugs.
 func Parse(expression string, validSlugs map[string]bool) (sql string, refs []string, err error) {
+	result, err := ParseWithResolver(expression, validSlugs, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	return result.SQL, result.Refs, nil
+}
+
+// ParseWithResolver parses a formula expression with support for cross-collection
+// functions (LOOKUP, SUMREL, etc.) via the provided resolver callback.
+func ParseWithResolver(expression string, validSlugs map[string]bool, resolver RelationResolver) (*ParseResult, error) {
 	expression = strings.TrimSpace(expression)
 	if expression == "" {
-		return "", nil, fmt.Errorf("empty expression")
+		return nil, fmt.Errorf("empty expression")
 	}
 	// Strip leading '=' if present (Excel convention).
 	if expression[0] == '=' {
@@ -162,21 +210,25 @@ func Parse(expression string, validSlugs map[string]bool) (sql string, refs []st
 
 	tokens, err := lex(expression)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	p := &Parser{tokens: tokens, slugs: validSlugs}
+	p := &Parser{tokens: tokens, slugs: validSlugs, resolver: resolver}
 	result, err := p.parseExpr()
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
 	// Ensure we consumed all tokens.
 	if p.peek().typ != tokEOF {
-		return "", nil, fmt.Errorf("unexpected token %q after expression", p.peek().val)
+		return nil, fmt.Errorf("unexpected token %q after expression", p.peek().val)
 	}
 
-	return result, p.refSlugs, nil
+	return &ParseResult{
+		SQL:       result,
+		Refs:      p.refSlugs,
+		CrossRefs: p.crossRefs,
+	}, nil
 }
 
 // parseExpr handles the lowest-precedence operators: comparison.
@@ -300,6 +352,11 @@ func (p *Parser) parsePrimary() (string, error) {
 			return p.parseIF()
 		}
 
+		// Cross-collection functions.
+		if crossCollectionFunctions[upper] {
+			return p.parseCrossCollectionFunc(upper)
+		}
+
 		// Known function call.
 		if allowedFunctions[upper] {
 			return p.parseFunctionCall(upper)
@@ -391,4 +448,103 @@ func (p *Parser) parseIF() (string, error) {
 	}
 
 	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", cond, thenExpr, elseExpr), nil
+}
+
+// parseCrossCollectionFunc handles LOOKUP, SUMREL, AVGREL, MINREL, MAXREL, COUNTREL.
+//
+// Syntax:
+//   LOOKUP(relation_field, target_field)
+//     → (SELECT "target_field" FROM target_table WHERE id = "relation_field")
+//
+//   SUMREL(relation_field, target_field)
+//     → (SELECT COALESCE(SUM("target_field"), 0) FROM target_table WHERE "reverse_col" = "id")
+//
+func (p *Parser) parseCrossCollectionFunc(name string) (string, error) {
+	if p.resolver == nil {
+		return "", fmt.Errorf("%s requires cross-collection support (resolver not available)", name)
+	}
+
+	if _, err := p.expect(tokLParen); err != nil {
+		return "", fmt.Errorf("expected '(' after %s", name)
+	}
+
+	// First argument: relation field slug.
+	relTok := p.advance()
+	if relTok.typ != tokIdent {
+		return "", fmt.Errorf("%s: first argument must be a relation field slug", name)
+	}
+	relSlug := relTok.val
+
+	if p.peek().typ != tokComma {
+		return "", fmt.Errorf("expected ',' after relation field in %s", name)
+	}
+	p.advance()
+
+	// Second argument: target field slug.
+	targetTok := p.advance()
+	if targetTok.typ != tokIdent {
+		return "", fmt.Errorf("%s: second argument must be a target field slug", name)
+	}
+	targetField := targetTok.val
+
+	if _, err := p.expect(tokRParen); err != nil {
+		return "", fmt.Errorf("expected ')' after %s arguments", name)
+	}
+
+	// Resolve the relation.
+	info, err := p.resolver(relSlug)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", name, err)
+	}
+
+	p.crossRefs = append(p.crossRefs, relSlug)
+
+	// Validate target_field is a safe identifier.
+	if !isValidIdent(targetField) {
+		return "", fmt.Errorf("%s: invalid target field %q", name, targetField)
+	}
+	qTargetField := fmt.Sprintf("%q", targetField)
+
+	switch name {
+	case "LOOKUP":
+		// Scalar subquery: follow FK to get a single value.
+		return fmt.Sprintf(
+			`(SELECT %s FROM %s WHERE id = %q)`,
+			qTargetField, info.TargetTable, relSlug,
+		), nil
+
+	case "SUMREL", "AVGREL", "MINREL", "MAXREL", "COUNTREL":
+		aggFn := strings.TrimSuffix(name, "REL")
+		if info.ReverseColumn == "" {
+			return "", fmt.Errorf("%s: no reverse relation found for %q", name, relSlug)
+		}
+		if aggFn == "COUNT" {
+			return fmt.Sprintf(
+				`(SELECT COUNT(*) FROM %s WHERE %q = id)`,
+				info.TargetTable, info.ReverseColumn,
+			), nil
+		}
+		return fmt.Sprintf(
+			`(SELECT COALESCE(%s(%s), 0) FROM %s WHERE %q = id)`,
+			aggFn, qTargetField, info.TargetTable, info.ReverseColumn,
+		), nil
+
+	default:
+		return "", fmt.Errorf("unknown cross-collection function %q", name)
+	}
+}
+
+func isValidIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, ch := range s {
+		if i == 0 && !unicode.IsLetter(ch) && ch != '_' {
+			return false
+		}
+		if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != '_' {
+			return false
+		}
+	}
+	return true
 }

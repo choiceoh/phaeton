@@ -123,9 +123,9 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	procEnabled := h.hasProcessEnabled(col.ID)
 	var selectCols string
 	if joinClause != "" {
-		selectCols = qualifySelectCols(fields, qTable, procEnabled)
+		selectCols = qualifySelectCols(fields, qTable, procEnabled, &selectColOpts{cache: h.cache})
 	} else {
-		selectCols = buildSelectCols(fields, procEnabled)
+		selectCols = buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 	}
 	dataSQL := fmt.Sprintf("SELECT %s FROM %s%s WHERE %s %s%s %s LIMIT %d OFFSET %d",
 		selectCols, qTable, joinClause, deletedClause, where, rlsClause, orderBy, limit, offset)
@@ -171,7 +171,7 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	procEnabled := h.hasProcessEnabled(col.ID)
-	selectCols := buildSelectCols(fields, procEnabled)
+	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 
 	// RLS: viewer can only see own rows.
 	getArgs := []any{id}
@@ -275,7 +275,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields, procEnabled)
+	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 
 	var sql string
 	if len(colNames) == 0 {
@@ -412,7 +412,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	args = append(args, id)
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields, procEnabled)
+	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 
 	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND deleted_at IS NULL RETURNING %s",
 		qTable, strings.Join(sets, ", "), idx, selectCols)
@@ -694,7 +694,7 @@ func (h *DynHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	bulkProcEnabled := h.hasProcessEnabled(col.ID)
-	selectCols := buildSelectCols(fields, bulkProcEnabled)
+	selectCols := buildSelectCols(fields, bulkProcEnabled, &selectColOpts{cache: h.cache})
 
 	// Inject initial status for bulk create if process is enabled.
 	if bulkProcEnabled {
@@ -847,17 +847,22 @@ func (h *DynHandler) FormulaPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slugMap := buildSlugMap(fields)
-	sqlExpr, refs, err := formula.Parse(body.Expression, slugMap)
+	resolver := buildRelationResolver(fields, h.cache)
+	result, err := formula.ParseWithResolver(body.Expression, slugMap, resolver)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"valid":   false,
-			"error":   err.Error(),
-			"sql":     "",
-			"refs":    []string{},
-			"samples": []any{},
+			"valid":      false,
+			"error":      err.Error(),
+			"sql":        "",
+			"refs":       []string{},
+			"cross_refs": []string{},
+			"samples":    []any{},
 		})
 		return
 	}
+	sqlExpr := result.SQL
+	refs := result.Refs
+	crossRefs := result.CrossRefs
 
 	// Fetch up to 5 sample rows to show computed values.
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
@@ -879,11 +884,12 @@ func (h *DynHandler) FormulaPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"valid":   true,
-		"error":   "",
-		"sql":     sqlExpr,
-		"refs":    refs,
-		"samples": samples,
+		"valid":      true,
+		"error":      "",
+		"sql":        sqlExpr,
+		"refs":       refs,
+		"cross_refs": crossRefs,
+		"samples":    samples,
 	})
 }
 
@@ -941,7 +947,7 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 	procEnabled := h.hasProcessEnabled(col.ID)
-	selectCols := buildSelectCols(fields, procEnabled)
+	selectCols := buildSelectCols(fields, procEnabled, &selectColOpts{cache: h.cache})
 	user, _ := middleware.GetUser(r.Context())
 
 	type changeMeta struct {
@@ -1138,15 +1144,25 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 		schema.ErrInvalidInput, fromStatus, toStatus, allowed)
 }
 
-func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
+// selectColOpts holds optional parameters for column generation.
+type selectColOpts struct {
+	cache  *schema.Cache
+	fields []schema.Field // all fields (needed for resolver)
+}
+
+func buildSelectCols(fields []schema.Field, hasStatus bool, opts *selectColOpts) string {
 	cols := []string{`"id"`}
 	slugMap := buildSlugMap(fields)
+	var cache *schema.Cache
+	if opts != nil {
+		cache = opts.cache
+	}
 	for _, f := range fields {
 		if f.FieldType.IsLayout() {
 			continue
 		}
 		if f.FieldType.IsVirtual() {
-			if expr := formulaExpr(f, slugMap); expr != "" {
+			if expr := formulaExpr(f, slugMap, cache, fields); expr != "" {
 				cols = append(cols, fmt.Sprintf(`(%s) AS %q`, expr, f.Slug))
 			}
 			continue
@@ -1154,7 +1170,7 @@ func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 		cols = append(cols, fmt.Sprintf("%q", f.Slug))
 	}
 	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`)
-	if len(hasStatus) > 0 && hasStatus[0] {
+	if hasStatus {
 		cols = append(cols, `"_status"`)
 	}
 	return strings.Join(cols, ", ")
@@ -1163,15 +1179,19 @@ func buildSelectCols(fields []schema.Field, hasStatus ...bool) string {
 // qualifySelectCols returns the same column list but each column qualified
 // with the given table prefix and aliased back to its bare name so the
 // row scanner sees the same field names.
-func qualifySelectCols(fields []schema.Field, prefix string, hasStatus ...bool) string {
+func qualifySelectCols(fields []schema.Field, prefix string, hasStatus bool, opts *selectColOpts) string {
 	cols := []string{fmt.Sprintf(`%s.%q AS %q`, prefix, "id", "id")}
 	slugMap := buildSlugMap(fields)
+	var cache *schema.Cache
+	if opts != nil {
+		cache = opts.cache
+	}
 	for _, f := range fields {
 		if f.FieldType.IsLayout() {
 			continue
 		}
 		if f.FieldType.IsVirtual() {
-			if expr := formulaExpr(f, slugMap); expr != "" {
+			if expr := formulaExpr(f, slugMap, cache, fields); expr != "" {
 				cols = append(cols, fmt.Sprintf(`(%s) AS %q`, expr, f.Slug))
 			}
 			continue
@@ -1181,7 +1201,7 @@ func qualifySelectCols(fields []schema.Field, prefix string, hasStatus ...bool) 
 	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "updated_by", "deleted_at"} {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, sysCol, sysCol))
 	}
-	if len(hasStatus) > 0 && hasStatus[0] {
+	if hasStatus {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, "_status", "_status"))
 	}
 	return strings.Join(cols, ", ")
@@ -1200,16 +1220,67 @@ func buildSlugMap(fields []schema.Field) map[string]bool {
 
 // formulaExpr parses a formula field's expression and returns a safe SQL fragment.
 // Returns empty string on parse error (field is silently omitted from SELECT).
-func formulaExpr(f schema.Field, slugMap map[string]bool) string {
+func formulaExpr(f schema.Field, slugMap map[string]bool, cache *schema.Cache, fields []schema.Field) string {
 	opts, err := schema.ExtractFormulaOptions(f.Options)
 	if err != nil || opts == nil || opts.Expression == "" {
 		return ""
 	}
-	sql, _, err := formula.Parse(opts.Expression, slugMap)
+
+	// Build a relation resolver from the cache.
+	var resolver formula.RelationResolver
+	if cache != nil {
+		resolver = buildRelationResolver(fields, cache)
+	}
+
+	result, err := formula.ParseWithResolver(opts.Expression, slugMap, resolver)
 	if err != nil {
 		return ""
 	}
-	return sql
+	return result.SQL
+}
+
+// buildRelationResolver creates a RelationResolver callback that uses the schema
+// cache to resolve relation fields to their target tables.
+func buildRelationResolver(fields []schema.Field, cache *schema.Cache) formula.RelationResolver {
+	// Index relation fields by slug.
+	relBySlug := make(map[string]schema.Field)
+	for _, f := range fields {
+		if f.FieldType == schema.FieldRelation && f.Relation != nil {
+			relBySlug[f.Slug] = f
+		}
+	}
+
+	return func(relSlug string) (*formula.RelationInfo, error) {
+		f, ok := relBySlug[relSlug]
+		if !ok || f.Relation == nil {
+			return nil, fmt.Errorf("%q is not a relation field", relSlug)
+		}
+
+		targetCol, ok := cache.CollectionByID(f.Relation.TargetCollectionID)
+		if !ok {
+			return nil, fmt.Errorf("target collection not found for relation %q", relSlug)
+		}
+
+		targetTable := fmt.Sprintf("%q.%q", "data", targetCol.Slug)
+
+		// For reverse relations (SUMREL etc.), find the FK column on the target
+		// table that points back to this collection.
+		reverseCol := ""
+		targetFields := cache.Fields(targetCol.ID)
+		for _, tf := range targetFields {
+			if tf.FieldType == schema.FieldRelation && tf.Relation != nil &&
+				tf.Relation.TargetCollectionID == f.CollectionID {
+				reverseCol = tf.Slug
+				break
+			}
+		}
+
+		return &formula.RelationInfo{
+			TargetTable:   targetTable,
+			OwnerColumn:   f.Slug,
+			ReverseColumn: reverseCol,
+		}, nil
+	}
 }
 
 // collectRows uses pgx.RowToMap and normalizes types.
@@ -1317,7 +1388,7 @@ func (h *DynHandler) expandRelations(ctx context.Context, records []map[string]a
 
 		// Batch fetch targets in a single query.
 		targetFields := h.cache.Fields(targetCol.ID)
-		targetSelectCols := buildSelectCols(targetFields)
+		targetSelectCols := buildSelectCols(targetFields, false, nil)
 
 		placeholders := make([]string, len(ids))
 		args := make([]any, len(ids))
@@ -1447,7 +1518,7 @@ func (h *DynHandler) expandUserFields(ctx context.Context, records []map[string]
 // fetchRow loads a single record by ID. Used for pre-update comparisons.
 func (h *DynHandler) fetchRow(ctx context.Context, col schema.Collection, fields []schema.Field, id string) (map[string]any, error) {
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields)
+	selectCols := buildSelectCols(fields, false, &selectColOpts{cache: h.cache})
 	sql := fmt.Sprintf("SELECT %s FROM %s WHERE id = $1 AND deleted_at IS NULL", selectCols, qTable)
 	rows, err := h.pool.Query(ctx, sql, id)
 	if err != nil {
