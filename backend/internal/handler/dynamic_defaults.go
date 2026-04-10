@@ -52,6 +52,7 @@ func (h *DynHandler) GetDefaults(w http.ResponseWriter, r *http.Request) {
 	// and the most recent value for other field types.
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 
+
 	var selectParts []string
 	for _, f := range targets {
 		qCol := fmt.Sprintf("%q", f.Slug)
