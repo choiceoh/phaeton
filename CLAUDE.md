@@ -38,7 +38,12 @@ backend/
     db/                        pgx 풀 + goose 마이그레이션
     events/                    SSE 이벤트 브로커
     formula/                   수식 필드 파서/평가
-    handler/                   HTTP 핸들러 (auth, apps, fields, entries, views, ai, automation, charts, webhook 등)
+    handler/                   HTTP 핸들러 (auth, schema, dynamic, views, filter, ai, ai_chat,
+                               ai_automation, ai_chart, ai_csv, ai_filter, ai_formula, ai_prefill,
+                               ai_chat_guide, ai_tools, automation, charts, comments, computed, csv,
+                               department, dynamic_defaults, dynamic_similar, history, members,
+                               notifications, pdf, report, saved_views, sse, subsidiary, template,
+                               upload, webhook, api_validate, middleware, json)
     infra/                     로깅, API 에러, 메트릭스, httpretry, 워커풀, shortid, cfgwatch, lifecycle
     middleware/                JWT, CORS, 로깅, 레이트리미터, origin, secpath, RBAC, collection_access, apilimit
     migration/                 DDL 마이그레이션 엔진
@@ -47,7 +52,7 @@ backend/
     samlsp/                    SAML SSO
     schema/                    Schema Engine — 앱 스토어, 뷰 스토어, 프로세스, 캐시, 유효성 검증
     seed/                      시드 데이터
-    sync/                      동기화 유틸
+    sync/                      동기화 유틸 (amaranth 서브패키지 포함)
     testutil/                  테스트 헬퍼
   pkg/                         atomicfile, httputil, jsonutil
 frontend/
@@ -56,22 +61,29 @@ frontend/
                                AutomationsPage, DashboardPage, GlobalAutomationsPage,
                                GlobalDashboardPage, InterfaceDesignerPage, LoginPage,
                                MigrationHistoryPage, OrgChartPage, ProcessPage, ProfilePage,
-                               SettingsPage, UsersPage, NotFoundPage
+                               RelationshipPage, SettingsPage, UsersPage, NotFoundPage
     components/works/          AppCard, AppBuilder, FieldPalette, FieldPreview, FieldProperties,
                                EntryForm, EntrySheet, FilterBuilder, FilterChips, FormPreview,
                                FormulaEditor, SortPanel, TemplateGallery, PreviewDialog,
-                               SchedulePicker, AIBuildDialog, AIAutomationDialog
+                               SchedulePicker, AIBuildDialog, AIAutomationDialog,
+                               BulkEditPanel, CSVImportPreview, IconPicker, ProcessFlowDiagram,
+                               RelationshipGraph, SetupChecklist, SpreadsheetInput
     components/works/views/    ListView, KanbanView, CalendarView, GalleryView, GanttView,
-                               ChartPanel, ViewTabs
-    components/common/         AIChatPanel, ConfirmDialog, DataTable, EmptyState, ErrorBoundary,
-                               ErrorState, Form, GridCell, LoadingState, NotificationBell,
-                               OfflineBanner, PageHeader, RelationCombobox, RoleGate, UserCombobox
+                               FormView, ChartPanel, ViewTabs, ViewGuide
+    components/common/         AIChatPanel, CoachMark, CommandPalette, ConfirmDialog, DataTable,
+                               EmptyState, ErrorBoundary, ErrorState, Form, GridCell,
+                               HotkeyHelpDialog, LoadingState, NotificationBell, OfflineBanner,
+                               PageHeader, RelationCombobox, RelationMultiCombobox, RoleGate,
+                               UserCombobox
     components/ui/             shadcn 컴포넌트
-    hooks/                     useAuth, useEntries, useViews, useAI, useAIChat, useAutomations,
-                               useCollections, useComments, useHistory, useMembers, useNotifications,
-                               useProcess, useSavedViews, useUnsavedChanges 등
-    lib/                       types.ts, constants.ts, formatCell.ts, queryKeys.ts, queryClient.ts,
-                               clipboard.ts, utils.ts, templates.ts
+    hooks/                     useAuth, useEntries, useViews, useAI, useAIChat, useAIAutomation,
+                               useAIHealth, useAutomations, useAutomationRunToasts, useCharts,
+                               useCollections, useComments, useDepartments, useGridNavigation,
+                               useHistory, useHotkeys, useMembers, useMigrations, useNotifications,
+                               useProcess, useRelationshipGraph, useRetryToast, useSavedViews,
+                               useSSE, useSubsidiaries, useUndoToast, useUnsavedChanges, useUsers
+    lib/                       types.ts, constants.ts, fieldHints.ts, formatCell.ts, queryKeys.ts,
+                               queryClient.ts, clipboard.ts, utils.ts, templates.ts
     lib/api/                   client.ts, errors.ts, index.ts
 ```
 

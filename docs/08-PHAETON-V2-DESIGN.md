@@ -111,22 +111,42 @@ phaeton/
       formula/                      수식 필드 파서/평가
       handler/                      HTTP 핸들러
         auth.go                     로그인/회원가입/토큰갱신
+        schema.go                   스키마 관리
         dynamic.go                  앱 + 필드 + 항목 CRUD
+        dynamic_defaults.go         항목 기본값 처리
+        dynamic_similar.go          유사 항목 검색
         views.go                    뷰 설정 CRUD
-        ai.go, ai_chat.go          AI 앱 생성, 챗 어시스턴트
+        saved_views.go              저장된 뷰 관리
+        filter.go                   필터 빌더
+        ai.go                       AI 앱 생성
+        ai_chat.go                  AI 챗 어시스턴트
+        ai_chat_guide.go            AI 챗 가이드
         ai_automation.go            AI 자동화
+        ai_chart.go                 AI 차트 생성
+        ai_csv.go                   AI CSV 처리
+        ai_filter.go                AI 필터 생성
+        ai_formula.go               AI 수식 생성
+        ai_prefill.go               AI 사전입력
+        ai_tools.go                 AI 도구 정의
         automation.go               자동화 규칙
         charts.go                   차트/리포트
         comments.go                 댓글
+        computed.go                 계산 필드
         csv.go                      CSV 가져오기/내보내기
-        filter.go                   필터 빌더
+        department.go               부서 관리
         history.go                  변경 이력
+        members.go                  멤버 관리
         notifications.go            알림
-        schema.go                   스키마 관리
+        pdf.go                      PDF 내보내기
+        report.go                   리포트
         sse.go                      SSE 스트리밍
+        subsidiary.go               자회사/계열사 관리
         template.go                 앱 템플릿
         upload.go                   파일 업로드
         webhook.go                  웹훅
+        api_validate.go             API 유효성 검증
+        middleware.go               핸들러 미들웨어
+        json.go                     JSON 유틸
       infra/                        로깅(slog), API에러(apierr), 메트릭스, httpretry,
                                     워커풀, shortid, cfgwatch, lifecycle
       middleware/                   JWT, CORS, 로깅, 레이트리미터, origin, secpath,
@@ -138,6 +158,7 @@ phaeton/
       schema/                       앱 스토어, 뷰 스토어, 프로세스, 캐시, 유효성 검증
       seed/                         시드 데이터
       sync/                         동기화 유틸
+        amaranth/                   외부 데이터 소스 연동
       testutil/                     테스트 헬퍼
     pkg/                            atomicfile, httputil, jsonutil
     go.mod
@@ -161,6 +182,7 @@ phaeton/
         ProcessPage.tsx             프로세스 관리
         InterfaceDesignerPage.tsx   인터페이스 디자이너
         OrgChartPage.tsx            조직도
+        RelationshipPage.tsx        앱 간 관계 시각화
         MigrationHistoryPage.tsx    마이그레이션 이력
         UsersPage.tsx               사용자 관리
         SettingsPage.tsx            설정
@@ -185,16 +207,27 @@ phaeton/
           SchedulePicker.tsx        스케줄 선택
           AIBuildDialog.tsx         AI 앱 생성 다이얼로그
           AIAutomationDialog.tsx    AI 자동화 다이얼로그
+          BulkEditPanel.tsx         일괄 편집 패널
+          CSVImportPreview.tsx      CSV 가져오기 미리보기
+          IconPicker.tsx            아이콘 선택기
+          ProcessFlowDiagram.tsx    프로세스 흐름도
+          RelationshipGraph.tsx     앱 관계 그래프
+          SetupChecklist.tsx        설정 체크리스트
+          SpreadsheetInput.tsx      스프레드시트 입력
           views/
             ListView.tsx            @tanstack/react-table
             KanbanView.tsx          @dnd-kit 칸반
             CalendarView.tsx        월간 캘린더
             GalleryView.tsx         카드 그리드
             GanttView.tsx           간트 차트
+            FormView.tsx            폼 뷰
             ChartPanel.tsx          차트/리포트 패널
             ViewTabs.tsx            뷰 전환 탭
+            ViewGuide.tsx           뷰 사용 가이드
         common/
           AIChatPanel.tsx           AI 채팅 패널
+          CoachMark.tsx             코치마크 (온보딩 가이드)
+          CommandPalette.tsx        커맨드 팔레트
           ConfirmDialog.tsx         확인 다이얼로그
           DataTable.tsx             범용 데이터 테이블
           EmptyState.tsx            빈 상태 표시
@@ -202,11 +235,13 @@ phaeton/
           ErrorState.tsx            에러 상태 표시
           Form.tsx                  범용 폼
           GridCell.tsx              그리드 셀
+          HotkeyHelpDialog.tsx      단축키 도움말 다이얼로그
           LoadingState.tsx          로딩 상태
           NotificationBell.tsx      알림 벨
           OfflineBanner.tsx         오프라인 배너
           PageHeader.tsx            페이지 헤더
           RelationCombobox.tsx      관계 필드 콤보박스
+          RelationMultiCombobox.tsx 관계 필드 다중 콤보박스
           RoleGate.tsx              역할 기반 접근 제어
           UserCombobox.tsx          사용자 콤보박스
         ui/                         shadcn 컴포넌트
@@ -214,20 +249,36 @@ phaeton/
         useAuth.ts                  인증 상태
         useEntries.ts               항목 CRUD
         useViews.ts                 뷰 관리
-        useAI.ts, useAIChat.ts      AI 연동
+        useAI.ts                    AI 연동
+        useAIChat.ts                AI 챗
+        useAIAutomation.ts          AI 자동화
+        useAIHealth.ts              AI 헬스체크
         useAutomations.ts           자동화
+        useAutomationRunToasts.ts   자동화 실행 토스트
+        useCharts.ts                차트
         useCollections.ts           컬렉션
         useComments.ts              댓글
+        useDepartments.ts           부서
+        useGridNavigation.ts        그리드 키보드 네비게이션
         useHistory.ts               변경 이력
+        useHotkeys.ts               단축키
         useMembers.ts               멤버
+        useMigrations.ts            마이그레이션
         useNotifications.ts         알림
         useProcess.ts               프로세스
+        useRelationshipGraph.ts     관계 그래프
+        useRetryToast.ts            재시도 토스트
         useSavedViews.ts            저장된 뷰
+        useSSE.ts                   SSE 실시간 이벤트
+        useSubsidiaries.ts          자회사/계열사
+        useUndoToast.ts             실행 취소 토스트
         useUnsavedChanges.ts        미저장 변경 감지
+        useUsers.ts                 사용자
       lib/
         api/                        API 클라이언트 (client.ts, errors.ts)
         types.ts                    API 응답 타입
         constants.ts                카테고리/필드타입/색상 라벨
+        fieldHints.ts               필드 타입별 힌트/도움말
         formatCell.ts               셀 포맷터
         queryKeys.ts                React Query 키 관리
         queryClient.ts              React Query 클라이언트
@@ -602,17 +653,26 @@ works_fields → shadcn 컴포넌트 매핑:
 - AI: 자연어 앱 생성 (AIBuildDialog)
 - AI: 챗 어시스턴트 (AIChatPanel)
 - AI: 자동화 생성 (AIAutomationDialog)
-- 프로세스 관리 (상태 머신 + 트랜지션)
+- AI: 차트/필터/수식/CSV/사전입력 자동 생성
+- 프로세스 관리 (상태 머신 + 트랜지션 + ProcessFlowDiagram)
 - 조직도 (OrgChartPage)
 - 인터페이스 디자이너 (InterfaceDesignerPage)
+- 앱 간 관계 시각화 (RelationshipPage + RelationshipGraph)
 - RBAC + 컬렉션 접근 제어
 - 오프라인 감지 (OfflineBanner)
+- 폼 뷰 (FormView)
+- 일괄 편집 (BulkEditPanel)
+- 스프레드시트 입력 (SpreadsheetInput)
+- PDF 내보내기
+- 부서/자회사 관리
+- 커맨드 팔레트 + 단축키 (CommandPalette, HotkeyHelpDialog)
+- 코치마크 온보딩 (CoachMark, SetupChecklist, ViewGuide)
+- 계산 필드 (computed)
 
 ### 향후 과제
 
 - CI/CD 파이프라인
 - 앱 헬스체크 엔드포인트
-- 앱 간 관계 시각화
 - 이메일/웹 푸시 알림
 
 
