@@ -47,6 +47,12 @@ func run() int {
 	logger := slog.New(logging.NewConsoleHandler(os.Stderr, slog.LevelInfo, color))
 	slog.SetDefault(logger)
 
+	// In production, refuse to start without an explicit JWT secret.
+	if os.Getenv("GO_ENV") == "production" && os.Getenv("JWT_SECRET") == "" {
+		logger.Error("JWT_SECRET environment variable is required in production")
+		return 1
+	}
+
 	// Database pool.
 	pool, err := db.NewPool(context.Background())
 	if err != nil {
