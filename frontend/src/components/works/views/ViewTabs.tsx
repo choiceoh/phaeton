@@ -44,7 +44,7 @@ export default function ViewTabs({ fields, entries, onEntryClick, onCardMove, pr
       <TabsList>
         <TabsTrigger value="list">목록</TabsTrigger>
         {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}
-        {hasKanban && <TabsTrigger value="kanban">칸반</TabsTrigger>}
+        {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
       </TabsList>
       <TabsContent value="list" className="mt-4">
         <ListView fields={fields} entries={entries} onRowClick={onEntryClick} />

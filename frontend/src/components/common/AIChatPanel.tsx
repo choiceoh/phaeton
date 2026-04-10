@@ -116,7 +116,7 @@ export default function AIChatPanel() {
                   {[
                     '앱을 만들려면 어떻게 하나요?',
                     '현재 어떤 앱들이 있나요?',
-                    '필드 유형에는 어떤 것들이 있나요?',
+                    '항목 유형에는 어떤 것들이 있나요?',
                   ].map((hint) => (
                     <button
                       key={hint}

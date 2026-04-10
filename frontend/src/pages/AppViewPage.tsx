@@ -701,7 +701,7 @@ export default function AppViewPage() {
       },
       {
         onSuccess: () => {
-          toast.success('뷰가 저장되었습니다')
+          toast.success('보기가 저장되었습니다')
           setNewViewName('')
           setSavingView(false)
         },
@@ -885,7 +885,7 @@ export default function AppViewPage() {
                         e.stopPropagation()
                         deleteSavedView.mutate(v.id, {
                           onSuccess: () => {
-                            toast.success('뷰가 삭제되었습니다')
+                            toast.success('보기가 삭제되었습니다')
                             clearView()
                           },
                           onError: (err) => toast.error(formatError(err)),
@@ -918,14 +918,14 @@ export default function AppViewPage() {
                 className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
               >
                 <BookmarkPlus className="h-3.5 w-3.5" />
-                뷰 저장
+                보기 저장
               </PopoverTrigger>
               <PopoverContent align="start" className="w-64 p-3">
                 <div className="space-y-2">
-                  <div className="text-sm font-medium">현재 필터/정렬을 뷰로 저장</div>
+                  <div className="text-sm font-medium">현재 필터/정렬을 보기로 저장</div>
                   <Input
                     className="h-8"
-                    placeholder="뷰 이름"
+                    placeholder="보기 이름"
                     value={newViewName}
                     onChange={(e) => setNewViewName(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSaveView()}
@@ -1001,7 +1001,7 @@ export default function AppViewPage() {
           {(hasKanban || hasCalendar || hasGallery || hasGantt) && (
             <TabsList className="mb-4">
               <TabsTrigger value="list">목록</TabsTrigger>
-              {hasKanban && <TabsTrigger value="kanban">칸반</TabsTrigger>}
+              {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
               {hasCalendar && (
                 <TabsTrigger value="calendar" className="gap-1">
                   <Calendar className="h-3.5 w-3.5" />

@@ -18,27 +18,27 @@ export const TERM = {
 
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: '텍스트',
-  textarea: '멀티 텍스트',
+  textarea: '긴 글',
   number: '숫자',
   integer: '정수',
-  boolean: '불리언',
+  boolean: '체크박스',
   date: '날짜',
   datetime: '일시',
   time: '시간',
   select: '선택',
   multiselect: '다중 선택',
-  relation: '관계',
+  relation: '연결',
   user: '사용자',
   file: '파일',
-  json: 'JSON',
+  json: 'json',
   autonumber: '자동 번호',
   formula: '수식',
-  lookup: '조회',
-  rollup: '집계',
+  lookup: '참조값',
+  rollup: '요약 계산',
   table: '테이블',
-  label: '라벨',
-  line: '라인',
-  spacer: '공백',
+  label: '제목 표시',
+  line: '구분선',
+  spacer: '여백',
 }
 
 
@@ -58,14 +58,14 @@ export const ROLLUP_FUNCTIONS = [
 ]
 
 export const ROLE_LABELS: Record<string, string> = {
-  director: '디렉터',
-  pm: 'PM',
-  engineer: '엔지니어',
+  director: '관리자',
+  pm: '운영자',
+  engineer: '담당자',
   viewer: '열람자',
 }
 
 export const ON_DELETE_OPTIONS = [
-  { value: 'SET NULL', label: '참조 제거 (NULL)' },
+  { value: 'SET NULL', label: '연결 해제' },
   { value: 'CASCADE', label: '함께 삭제' },
   { value: 'RESTRICT', label: '삭제 차단' },
   { value: 'NO ACTION', label: '동작 없음' },

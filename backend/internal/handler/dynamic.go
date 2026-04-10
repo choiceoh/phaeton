@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -401,7 +402,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	procEnabled := h.hasProcessEnabled(col.ID)
 	if newStatus, ok := body["_status"]; ok && newStatus != nil {
 		if !procEnabled {
-			writeError(w, http.StatusBadRequest, "이 컬렉션에는 프로세스가 활성화되지 않았습니다")
+			writeError(w, http.StatusBadRequest, "이 업무에는 프로세스가 활성화되지 않았습니다")
 			return
 		}
 		newStatusStr, ok := newStatus.(string)
@@ -530,6 +531,87 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	result, err := runAggregate(r.Context(), h.pool, col, fields, aggregateParams{
+		Groups:   groupSlugs,
+		Fns:      params["fn"],
+		Fields:   params["field"],
+		Interval: params.Get("interval"),
+		Filters:  params,
+	})
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// BatchAggregate runs multiple aggregate queries in a single request.
+func (h *DynHandler) BatchAggregate(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	col, fields, ok := h.resolveCollection(w, slug)
+	if !ok {
+		return
+	}
+	if !h.checkAccess(w, r, col, "entry_view") {
+		return
+	}
+
+	var req struct {
+		Queries []batchAggQuery `json:"queries"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(req.Queries) == 0 {
+		writeError(w, http.StatusBadRequest, "queries array is required")
+		return
+	}
+	if len(req.Queries) > 10 {
+		writeError(w, http.StatusBadRequest, "maximum 10 queries per batch")
+		return
+	}
+
+	results := make([]any, 0, len(req.Queries))
+	for _, q := range req.Queries {
+		if len(q.Groups) == 0 {
+			writeError(w, http.StatusBadRequest, "each query requires at least one group")
+			return
+		}
+		result, err := runAggregate(r.Context(), h.pool, col, fields, aggregateParams{
+			Groups:   q.Groups,
+			Fns:      q.Fns,
+			Fields:   q.Fields,
+			Interval: q.Interval,
+			Filters:  r.URL.Query(), // shared filters from query string
+		})
+		if err != nil {
+			handleErr(w, r, err)
+			return
+		}
+		results = append(results, result)
+	}
+	writeJSON(w, http.StatusOK, results)
+}
+
+type batchAggQuery struct {
+	Groups   []string `json:"group"`
+	Fns      []string `json:"fn"`
+	Fields   []string `json:"field"`
+	Interval string   `json:"interval"`
+}
+
+// aggregateParams holds the parameters for a single aggregate query.
+type aggregateParams struct {
+	Groups   []string
+	Fns      []string
+	Fields   []string
+	Interval string
+	Filters  url.Values
+}
+
+// runAggregate executes a single aggregate query and returns the result.
+func runAggregate(ctx context.Context, pool *pgxpool.Pool, col schema.Collection, fields []schema.Field, p aggregateParams) (any, error) {
 	bySlug := make(map[string]schema.Field, len(fields))
 	for _, f := range fields {
 		bySlug[f.Slug] = f
@@ -539,10 +621,9 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	validIntervals := map[string]bool{
 		"year": true, "quarter": true, "month": true, "week": true, "day": true, "hour": true,
 	}
-	interval := strings.ToLower(params.Get("interval"))
+	interval := strings.ToLower(p.Interval)
 	if interval != "" && !validIntervals[interval] {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid interval %q; must be year/quarter/month/week/day/hour", interval))
-		return
+		return nil, fmt.Errorf("%w: invalid interval %q; must be year/quarter/month/week/day/hour", schema.ErrInvalidInput, interval)
 	}
 
 	// Auto columns allowed for grouping.
@@ -551,15 +632,13 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	// Build GROUP BY expressions.
 	var groupExprs []string
 	var groupAliases []string
-	for i, gs := range groupSlugs {
+	for i, gs := range p.Groups {
 		_, isField := bySlug[gs]
 		if !isField && !autoColumns[gs] {
-			handleErr(w, r, fmt.Errorf("%w: group field %q not found", schema.ErrInvalidInput, gs))
-			return
+			return nil, fmt.Errorf("%w: group field %q not found", schema.ErrInvalidInput, gs)
 		}
 		alias := fmt.Sprintf("g%d", i)
 		qCol := fmt.Sprintf("%q", gs)
-		// Apply DATE_TRUNC for timestamp columns with interval.
 		if interval != "" && (gs == "created_at" || gs == "updated_at" || gs == "deleted_at" ||
 			(isField && (bySlug[gs].FieldType == schema.FieldDate || bySlug[gs].FieldType == schema.FieldDatetime))) {
 			groupExprs = append(groupExprs, fmt.Sprintf("DATE_TRUNC('%s', %s) AS %s", interval, qCol, alias))
@@ -569,9 +648,9 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 		groupAliases = append(groupAliases, alias)
 	}
 
-	// Build aggregation expressions (support multiple fn + field pairs).
-	fns := params["fn"]
-	aggFields := params["field"]
+	// Build aggregation expressions.
+	fns := p.Fns
+	aggFields := p.Fields
 	if len(fns) == 0 {
 		fns = []string{"count"}
 	}
@@ -594,38 +673,32 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 				fieldSlug = aggFields[0]
 			}
 			if fieldSlug == "" {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("%s requires field parameter", fn))
-				return
+				return nil, fmt.Errorf("%w: %s requires field parameter", schema.ErrInvalidInput, fn)
 			}
 			f, exists := bySlug[fieldSlug]
 			if !exists {
-				handleErr(w, r, fmt.Errorf("%w: field %q not found", schema.ErrInvalidInput, fieldSlug))
-				return
+				return nil, fmt.Errorf("%w: field %q not found", schema.ErrInvalidInput, fieldSlug)
 			}
 			if f.FieldType != schema.FieldNumber && f.FieldType != schema.FieldInteger && f.FieldType != schema.FieldAutonumber {
-				handleErr(w, r, fmt.Errorf("%w: %s requires numeric field, %s is %s",
-					schema.ErrInvalidInput, fn, fieldSlug, f.FieldType))
-				return
+				return nil, fmt.Errorf("%w: %s requires numeric field, %s is %s",
+					schema.ErrInvalidInput, fn, fieldSlug, f.FieldType)
 			}
 			aggs = append(aggs, aggDef{
 				expr: fmt.Sprintf("%s(%q)", strings.ToUpper(fn), fieldSlug),
 				key:  fmt.Sprintf("%s_%s", fn, fieldSlug),
 			})
 		default:
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown aggregation function %q", fn))
-			return
+			return nil, fmt.Errorf("%w: unknown aggregation function %q", schema.ErrInvalidInput, fn)
 		}
 	}
 
-	where, args, err := ParseFilters(params, fields)
+	where, args, err := ParseFilters(p.Filters, fields)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+		return nil, err
 	}
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
 
-	// Build SELECT and GROUP BY clauses.
 	var selectParts []string
 	selectParts = append(selectParts, groupExprs...)
 	for _, a := range aggs {
@@ -638,15 +711,14 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 		strings.Join(selectParts, ", "), qTable, where, groupByStr, groupByStr,
 	)
 
-	rows, err := h.pool.Query(r.Context(), query, args...)
+	rows, err := pool.Query(ctx, query, args...)
 	if err != nil {
-		handleErr(w, r, err)
-		return
+		return nil, err
 	}
 	defer rows.Close()
 
 	// Single group + single agg: legacy format { group, value }.
-	isLegacy := len(groupSlugs) == 1 && len(aggs) == 1
+	isLegacy := len(p.Groups) == 1 && len(aggs) == 1
 
 	if isLegacy {
 		type bucket struct {
@@ -657,8 +729,7 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			vals, err := rows.Values()
 			if err != nil {
-				handleErr(w, r, err)
-				return
+				return nil, err
 			}
 			result = append(result, bucket{
 				Group: normalizeValue(vals[0]),
@@ -666,11 +737,9 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		if err := rows.Err(); err != nil {
-			handleErr(w, r, err)
-			return
+			return nil, err
 		}
-		writeJSON(w, http.StatusOK, result)
-		return
+		return result, nil
 	}
 
 	// Multi-group or multi-series: { groups: [...], values: { key: val } }.
@@ -682,24 +751,22 @@ func (h *DynHandler) Aggregate(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		vals, err := rows.Values()
 		if err != nil {
-			handleErr(w, r, err)
-			return
+			return nil, err
 		}
-		groups := make([]any, len(groupSlugs))
-		for i := range groupSlugs {
+		groups := make([]any, len(p.Groups))
+		for i := range p.Groups {
 			groups[i] = normalizeValue(vals[i])
 		}
 		values := make(map[string]any, len(aggs))
 		for i, a := range aggs {
-			values[a.key] = normalizeValue(vals[len(groupSlugs)+i])
+			values[a.key] = normalizeValue(vals[len(p.Groups)+i])
 		}
 		result = append(result, multiBucket{Groups: groups, Values: values})
 	}
 	if err := rows.Err(); err != nil {
-		handleErr(w, r, err)
-		return
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, result)
+	return result, nil
 }
 
 // --- Bulk Create ---
@@ -1211,7 +1278,7 @@ func (h *DynHandler) initialStatusName(collectionID string) string {
 func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus, userRole string) error {
 	p, ok := h.cache.ProcessByCollectionID(collectionID)
 	if !ok || !p.IsEnabled {
-		return fmt.Errorf("%w: 이 컬렉션에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
+		return fmt.Errorf("%w: 이 업무에는 프로세스가 활성화되지 않았습니다", schema.ErrInvalidInput)
 	}
 
 	// Build status ID lookup.
@@ -1240,7 +1307,7 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 					return nil
 				}
 			}
-			return fmt.Errorf("%w: 역할 %q은(는) %q → %q 전이를 수행할 수 없습니다",
+			return fmt.Errorf("%w: 역할 %q은(는) %q → %q 상태 이동을 수행할 수 없습니다",
 				schema.ErrInvalidInput, userRole, fromStatus, toStatus)
 		}
 	}
@@ -1256,7 +1323,7 @@ func (h *DynHandler) validateStatusTransition(collectionID, fromStatus, toStatus
 			}
 		}
 	}
-	return fmt.Errorf("%w: %q → %q 전이가 허용되지 않습니다. 허용: %v",
+	return fmt.Errorf("%w: %q → %q 상태 이동이 허용되지 않습니다. 허용: %v",
 		schema.ErrInvalidInput, fromStatus, toStatus, allowed)
 }
 

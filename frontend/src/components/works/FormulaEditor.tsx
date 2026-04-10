@@ -36,7 +36,7 @@ const RESULT_TYPES = [
   { value: 'number', label: '숫자' },
   { value: 'integer', label: '정수' },
   { value: 'text', label: '텍스트' },
-  { value: 'boolean', label: '불리언' },
+  { value: 'boolean', label: '체크박스' },
   { value: 'date', label: '날짜' },
 ]
 
@@ -44,8 +44,8 @@ const FORMULA_HELP = [
   { label: '산술', examples: '+ - * / %' },
   { label: '함수', examples: 'SUM, AVG, MIN, MAX, COUNT, ROUND, ABS, COALESCE' },
   { label: '조건', examples: 'IF(조건, 참, 거짓)' },
-  { label: '참조', examples: 'LOOKUP(관계필드, 대상필드)' },
-  { label: '집계', examples: 'SUMREL(관계필드, 대상필드), AVGREL, COUNTREL' },
+  { label: '참조', examples: 'LOOKUP(연결항목, 대상항목)' },
+  { label: '요약', examples: 'SUMREL(연결항목, 대상항목), AVGREL, COUNTREL' },
 ]
 
 export default function FormulaEditor({
@@ -145,7 +145,7 @@ export default function FormulaEditor({
 
       {/* Available fields */}
       <div className="space-y-1">
-        <Label className="text-xs font-semibold text-muted-foreground">사용 가능한 필드</Label>
+        <Label className="text-xs font-semibold text-muted-foreground">사용 가능한 항목</Label>
         <div className="flex flex-wrap gap-1">
           {dataFields.map((f) => (
             <button
@@ -167,7 +167,7 @@ export default function FormulaEditor({
       {/* Relation fields for cross-collection formulas */}
       {relationFields.length > 0 && (
         <div className="space-y-1">
-          <Label className="text-xs font-semibold text-muted-foreground">관계 필드 (시트 간 참조)</Label>
+          <Label className="text-xs font-semibold text-muted-foreground">연결 항목 (업무 간 참조)</Label>
           <div className="flex flex-wrap gap-1">
             {relationFields.map((f) => (
               <button
@@ -178,7 +178,7 @@ export default function FormulaEditor({
                   const before = expression.length > 0 && expression[expression.length - 1] !== '(' ? '' : ''
                   onChange(expression + before + `LOOKUP(${f.slug}, )`)
                 }}
-                title={`LOOKUP(${f.slug}, 대상필드) 또는 SUMREL(${f.slug}, 대상필드)`}
+                title={`LOOKUP(${f.slug}, 대상항목) 또는 SUMREL(${f.slug}, 대상항목)`}
               >
                 {f.slug}
               </button>

@@ -102,6 +102,9 @@ func run() int {
 	// Charts handler.
 	chartHandler := handler.NewChartHandler(store)
 
+	// Template export/import handler.
+	templateHandler := handler.NewTemplateHandler(store, cache, migEngine, pool)
+
 	// SSE real-time events.
 	sseBroker := events.NewBroker()
 	sseHandler := handler.NewSSEHandler(sseBroker)
@@ -158,7 +161,7 @@ func run() int {
 	}
 
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, savedViewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, autoHandler, chartHandler, sseHandler, logger, loginLimiter, apiLimiter, samlMiddleware)
+	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, savedViewHandler, historyHandler, memberHandler, commentHandler, notifHandler, aiHandler, autoHandler, chartHandler, templateHandler, sseHandler, logger, loginLimiter, apiLimiter, samlMiddleware)
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -218,6 +221,7 @@ func buildRouter(
 	aiH *handler.AIHandler,
 	autoH *handler.AutomationHandler,
 	chartH *handler.ChartHandler,
+	templateH *handler.TemplateHandler,
 	sseH *handler.SSEHandler,
 	logger *slog.Logger,
 	loginLimiter *middleware.RateLimiter,
@@ -300,6 +304,10 @@ func buildRouter(
 				r.Delete("/fields/{fieldId}", schemaH.DeleteField)
 
 				r.Post("/migrations/rollback/{migrationId}", schemaH.RollbackMigration)
+
+				// Template export/import.
+				r.Get("/collections/{id}/export", templateH.ExportCollection)
+				r.Post("/templates/import", templateH.ImportTemplate)
 			})
 
 			// Collection members
@@ -343,6 +351,7 @@ func buildRouter(
 			r.Use(middleware.CollectionAccess(pool))
 			r.Get("/{slug}", dynH.List)
 			r.Get("/{slug}/aggregate", dynH.Aggregate)
+			r.Post("/{slug}/aggregate/batch", dynH.BatchAggregate)
 			r.Get("/{slug}/export.csv", dynH.ExportCSV)
 			r.Get("/{slug}/{id}", dynH.Get)
 

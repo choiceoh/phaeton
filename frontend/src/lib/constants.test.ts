@@ -105,9 +105,9 @@ describe('TERM', () => {
 
 describe('ROLE_LABELS', () => {
   it('has labels for all roles', () => {
-    expect(ROLE_LABELS.director).toBe('디렉터')
-    expect(ROLE_LABELS.pm).toBe('PM')
-    expect(ROLE_LABELS.engineer).toBe('엔지니어')
+    expect(ROLE_LABELS.director).toBe('관리자')
+    expect(ROLE_LABELS.pm).toBe('운영자')
+    expect(ROLE_LABELS.engineer).toBe('담당자')
     expect(ROLE_LABELS.viewer).toBe('열람자')
   })
 })

@@ -57,7 +57,7 @@ const automations: Automation[] = [
     trigger_type: 'record_created',
     trigger_config: {},
     conditions: [],
-    actions: [{ id: 'act1', automation_id: 'a1', action_type: 'send_notification', action_config: { recipient: 'record_creator', title: '새 레코드', body: '생성됨' }, sort_order: 0, created_at: '', updated_at: '' }],
+    actions: [{ id: 'act1', action_type: 'send_notification', action_config: { recipient: 'record_creator', title: '새 레코드', body: '생성됨' }, sort_order: 0 }],
     action_count: 1,
     created_at: '2024-01-01',
     updated_at: '2024-01-01',
@@ -315,10 +315,6 @@ describe('AutomationsPage', () => {
         expect(screen.getByText('생성 시 알림')).toBeInTheDocument()
       })
 
-      // Click the first trash button (delete buttons)
-      const deleteButtons = screen.getAllByRole('button').filter((b) =>
-        b.querySelector('svg'),
-      )
       // Find the trash button in the first automation card
       const trashBtns = screen.getAllByRole('button').filter(
         (btn) => btn.innerHTML.includes('h-4 w-4') && btn.closest('[class*="card"]'),

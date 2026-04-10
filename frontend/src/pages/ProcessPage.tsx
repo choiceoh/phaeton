@@ -47,10 +47,10 @@ interface TransitionDraft {
 }
 
 const ALL_ROLES = [
-  { value: 'director', label: '디렉터' },
-  { value: 'pm', label: 'PM' },
-  { value: 'engineer', label: '엔지니어' },
-  { value: 'viewer', label: '뷰어' },
+  { value: 'director', label: '관리자' },
+  { value: 'pm', label: '운영자' },
+  { value: 'engineer', label: '담당자' },
+  { value: 'viewer', label: '열람자' },
 ] as const
 
 export default function ProcessPage() {
@@ -272,9 +272,9 @@ export default function ProcessPage() {
             {statuses.length >= 2 && (
               <section>
                 <div className="mb-2 flex items-center justify-between">
-                  <h2 className="text-sm font-semibold">전이 ({transitions.length})</h2>
+                  <h2 className="text-sm font-semibold">상태 이동 ({transitions.length})</h2>
                   <Button size="sm" onClick={addTransition}>
-                    + 전이 추가
+                    + 상태 이동 추가
                   </Button>
                 </div>
                 <div className="space-y-2">
@@ -315,7 +315,7 @@ export default function ProcessPage() {
                         <div className="flex-1">
                           <Label className="sr-only">라벨</Label>
                           <Input
-                            placeholder="전이 라벨 (예: 진행하기)"
+                            placeholder="이동 이름 (예: 진행하기)"
                             value={t.label}
                             onChange={(e) => updateTransition(idx, { label: e.target.value })}
                           />
@@ -383,10 +383,10 @@ export default function ProcessPage() {
 // --- SVG Flow Diagram Component ---
 
 const ROLE_LABELS: Record<string, string> = {
-  director: '디렉터',
-  pm: 'PM',
-  engineer: '엔지니어',
-  viewer: '뷰어',
+  director: '관리자',
+  pm: '운영자',
+  engineer: '담당자',
+  viewer: '열람자',
 }
 
 const NODE_W = 100

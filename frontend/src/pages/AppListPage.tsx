@@ -85,8 +85,8 @@ export default function AppListPage() {
               <OnboardingStep
                 icon={<Settings className="h-5 w-5" />}
                 step="3"
-                title="뷰 구성"
-                description="목록, 칸반, 캘린더, 갤러리 등 원하는 형태로 데이터를 확인하세요."
+                title="보기 구성"
+                description="목록, 보드, 캘린더, 갤러리 등 원하는 형태로 데이터를 확인하세요."
               />
             </div>
           </div>

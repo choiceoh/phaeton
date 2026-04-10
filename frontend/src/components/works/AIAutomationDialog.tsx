@@ -18,15 +18,15 @@ import { useAIBuildAutomation } from '@/hooks/useAIAutomation'
 import type { CreateAutomationReq } from '@/lib/types'
 
 const TRIGGER_LABELS: Record<string, string> = {
-  record_created: '레코드 생성',
-  record_updated: '레코드 수정',
-  record_deleted: '레코드 삭제',
+  record_created: '데이터 생성',
+  record_updated: '데이터 수정',
+  record_deleted: '데이터 삭제',
   status_change: '상태 변경',
 }
 
 const ACTION_LABELS: Record<string, string> = {
   send_notification: '알림 발송',
-  update_field: '필드 값 업데이트',
+  update_field: '항목 값 업데이트',
   call_webhook: 'Webhook 호출',
 }
 
@@ -220,7 +220,7 @@ function summarizeAction(
 ): string {
   switch (type) {
     case 'send_notification':
-      return `${(config.title as string) || '알림'} → ${(config.recipient as string) === 'record_creator' ? '작성자' : (config.recipient as string) === 'field_ref' ? `${config.field_slug} 필드` : '지정 사용자'}`
+      return `${(config.title as string) || '알림'} → ${(config.recipient as string) === 'record_creator' ? '작성자' : (config.recipient as string) === 'field_ref' ? `${config.field_slug} 항목` : '지정 사용자'}`
     case 'update_field':
       return `${config.field_slug} = "${config.value}"`
     case 'call_webhook':

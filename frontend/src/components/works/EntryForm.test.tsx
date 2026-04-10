@@ -287,13 +287,13 @@ describe('EntryForm', () => {
       collection_id: 'c1',
       is_enabled: true,
       statuses: [
-        { id: 's1', name: '접수', color: '#3b82f6', sort_order: 0, is_initial: true, is_final: false },
-        { id: 's2', name: '처리중', color: '#f59e0b', sort_order: 1, is_initial: false, is_final: false },
-        { id: 's3', name: '완료', color: '#10b981', sort_order: 2, is_initial: false, is_final: true },
+        { id: 's1', process_id: 'p1', name: '접수', color: '#3b82f6', sort_order: 0, is_initial: true },
+        { id: 's2', process_id: 'p1', name: '처리중', color: '#f59e0b', sort_order: 1, is_initial: false },
+        { id: 's3', process_id: 'p1', name: '완료', color: '#10b981', sort_order: 2, is_initial: false },
       ],
       transitions: [
-        { id: 't1', from_status_id: 's1', to_status_id: 's2', label: '처리 시작', allowed_roles: [] },
-        { id: 't2', from_status_id: 's2', to_status_id: 's3', label: '완료 처리', allowed_roles: ['director'] },
+        { id: 't1', process_id: 'p1', from_status_id: 's1', to_status_id: 's2', label: '처리 시작', allowed_roles: [] },
+        { id: 't2', process_id: 'p1', from_status_id: 's2', to_status_id: 's3', label: '완료 처리', allowed_roles: ['director'] },
       ],
     }
 
@@ -332,7 +332,7 @@ describe('EntryForm', () => {
         process: {
           ...process,
           transitions: [
-            { id: 't2', from_status_id: 's2', to_status_id: 's3', label: '완료 처리', allowed_roles: ['pm'] },
+            { id: 't2', process_id: 'p1', from_status_id: 's2', to_status_id: 's3', label: '완료 처리', allowed_roles: ['pm'] },
           ],
         },
       })

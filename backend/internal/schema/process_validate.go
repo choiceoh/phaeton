@@ -45,7 +45,7 @@ func ValidateProcessSave(req *SaveProcessReq) error {
 			return fmt.Errorf("%w: transitions[%d].to_index %d 범위 초과", ErrInvalidInput, i, t.ToIndex)
 		}
 		if strings.TrimSpace(t.Label) == "" {
-			return fmt.Errorf("%w: transitions[%d] 라벨이 비어있습니다", ErrInvalidInput, i)
+			return fmt.Errorf("%w: transitions[%d] 이름이 비어있습니다", ErrInvalidInput, i)
 		}
 		for _, role := range t.AllowedRoles {
 			if !validRoles[role] {
