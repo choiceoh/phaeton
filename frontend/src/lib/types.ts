@@ -195,7 +195,7 @@ export interface AggregateResult {
 
 // --- Views ---
 
-export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery'
+export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery' | 'gantt'
 
 export interface View {
   id: string

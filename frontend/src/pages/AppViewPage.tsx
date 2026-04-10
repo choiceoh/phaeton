@@ -5,6 +5,7 @@ import {
   Calendar,
   Download,
   Filter,
+  GanttChart,
   Power,
   PowerOff,
   Search,
@@ -24,9 +25,10 @@ import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
-import ChartPanel from '@/components/works/views/ChartPanel'
-import KanbanView from '@/components/works/views/KanbanView'
 import CalendarView from '@/components/works/views/CalendarView'
+import ChartPanel from '@/components/works/views/ChartPanel'
+import GanttView from '@/components/works/views/GanttView'
+import KanbanView from '@/components/works/views/KanbanView'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -368,6 +370,16 @@ export default function AppViewPage() {
     setSheetOpen(true)
   }
 
+  function handleGanttUpdate(entryId: string, updates: Record<string, unknown>) {
+    updateEntry.mutate(
+      { id: entryId, body: updates },
+      {
+        onSuccess: () => toast.success('일정이 변경되었습니다'),
+        onError: (err) => toast.error(formatError(err)),
+      },
+    )
+  }
+
   function handleCardMove(entryId: string, newValue: string) {
     if (!selectField) return
     updateEntry.mutate(
@@ -432,8 +444,13 @@ export default function AppViewPage() {
     }
   }, [collection, refetch])
 
+  const dateFields = useMemo(
+    () => collection.fields?.filter((f) => f.field_type === 'date' || f.field_type === 'datetime') ?? [],
+    [collection],
+  )
   const hasKanban = !!selectField
   const hasCalendar = !!dateField
+  const hasGantt = dateFields.length >= 1
 
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
@@ -718,7 +735,7 @@ export default function AppViewPage() {
 
       {list && (
         <Tabs defaultValue="list">
-          {(hasKanban || hasCalendar) && (
+          {(hasKanban || hasCalendar || hasGantt) && (
             <TabsList className="mb-4">
               <TabsTrigger value="list">목록</TabsTrigger>
               {hasKanban && <TabsTrigger value="kanban">칸반</TabsTrigger>}
@@ -726,6 +743,12 @@ export default function AppViewPage() {
                 <TabsTrigger value="calendar" className="gap-1">
                   <Calendar className="h-3.5 w-3.5" />
                   캘린더
+                </TabsTrigger>
+              )}
+              {hasGantt && (
+                <TabsTrigger value="gantt" className="gap-1">
+                  <GanttChart className="h-3.5 w-3.5" />
+                  간트
                 </TabsTrigger>
               )}
             </TabsList>
@@ -771,6 +794,17 @@ export default function AppViewPage() {
                 fields={collection.fields ?? []}
                 entries={list.data}
                 onEntryClick={handleEntryClick}
+              />
+            </TabsContent>
+          )}
+
+          {hasGantt && (
+            <TabsContent value="gantt" className="mt-0">
+              <GanttView
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onEntryClick={handleEntryClick}
+                onEntryUpdate={handleGanttUpdate}
               />
             </TabsContent>
           )}
