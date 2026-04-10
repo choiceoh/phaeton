@@ -22,6 +22,7 @@ import (
 	"github.com/choiceoh/phaeton/backend/internal/infra/logging"
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/migration"
+	"github.com/choiceoh/phaeton/backend/internal/samlsp"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
@@ -80,8 +81,19 @@ func run() int {
 	loginLimiter := middleware.NewRateLimiter(5, 15*60*1000, 30*60*1000)
 	defer loginLimiter.Close()
 
+	// SAML SP (optional — enabled when SAML_IDP_METADATA_URL is set).
+	var samlMiddleware *samlsp.Middleware
+	if cfg := samlsp.ConfigFromEnv(); cfg != nil {
+		sp, err := samlsp.New(cfg)
+		if err != nil {
+			logger.Error("SAML SP init failed", "error", err)
+			return 1
+		}
+		samlMiddleware = sp
+	}
+
 	// Router.
-	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, logger, loginLimiter)
+	r := buildRouter(pool, schemaHandler, dynHandler, viewHandler, logger, loginLimiter, samlMiddleware)
 
 	addr := envOr("ADDR", ":8080")
 	srv := &http.Server{
@@ -130,6 +142,7 @@ func buildRouter(
 	viewH *handler.ViewHandler,
 	logger *slog.Logger,
 	loginLimiter *middleware.RateLimiter,
+	samlMW *samlsp.Middleware,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -150,6 +163,15 @@ func buildRouter(
 	r.Post("/api/auth/login", handler.Login(pool, loginLimiter))
 	r.Post("/api/auth/logout", handler.Logout())
 
+	// Webhooks (public — HMAC-verified via WEBHOOK_SECRET).
+	webhookH := handler.NewWebhookHandler()
+	r.Post("/api/hooks/{topic}", webhookH.Receive)
+
+	// SAML SP endpoints (metadata + ACS).
+	if samlMW != nil {
+		r.Handle("/saml/*", samlMW.Handler())
+	}
+
 	// Protected routes.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth())
@@ -161,6 +183,7 @@ func buildRouter(
 
 		// Users (list: all, write: director only).
 		r.Get("/api/users", handler.ListUsers(pool))
+		r.Get("/api/users/{id}", handler.GetUser(pool))
 		r.Post("/api/users", handler.CreateUser(pool))
 		r.Patch("/api/users/{id}", handler.UpdateUser(pool))
 
