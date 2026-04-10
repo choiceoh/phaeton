@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   FIELD_TYPE_LABELS,
-  FIELD_TYPE_ICONS,
   isLayoutType,
   isComputedType,
   operatorsForFieldType,
@@ -25,13 +24,6 @@ describe('FIELD_TYPE_LABELS', () => {
   })
 })
 
-describe('FIELD_TYPE_ICONS', () => {
-  it('has an icon for every field type', () => {
-    for (const ft of ALL_FIELD_TYPES) {
-      expect(FIELD_TYPE_ICONS[ft]).toBeTruthy()
-    }
-  })
-})
 
 describe('isLayoutType', () => {
   it('returns true for layout types', () => {

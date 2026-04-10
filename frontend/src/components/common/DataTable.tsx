@@ -69,10 +69,15 @@ interface Props<T> {
   onBatchCellEdit?: (event: BatchCellEditEvent) => void
   /** Column IDs that are not editable (system columns, actions, etc.) */
   readonlyColumns?: string[]
+  /** Per-cell save state for visual feedback (key = "rowId:columnId") */
+  cellSaveState?: Map<string, 'saving' | 'saved'>
   emptyTitle?: string
   emptyDescription?: string
   summaryRow?: Record<string, { label: string; value: string | number }>
   toolbar?: React.ReactNode
+  initialColumnVisibility?: VisibilityState
+  /** Called when column visibility changes */
+  onColumnVisibilityChange?: (visibility: VisibilityState) => void
   /** Number of top rows to highlight (e.g. after CSV import). */
   highlightRows?: number
   /** Enable row selection with checkboxes */
@@ -99,17 +104,20 @@ export function DataTable<T>({
   onCellEdit,
   onBatchCellEdit,
   readonlyColumns,
+  cellSaveState,
   emptyTitle = '데이터가 없습니다',
   emptyDescription,
   summaryRow,
   toolbar,
+  initialColumnVisibility,
+  onColumnVisibilityChange: onColumnVisibilityChangeProp,
   highlightRows = 0,
   selectable,
   selectedRowIds,
   onSelectionChange,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
   const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
     left: [],
     right: [],
@@ -172,7 +180,11 @@ export function DataTable<T>({
       setSorting(next)
       onSortChange?.(next)
     },
-    onColumnVisibilityChange: setColumnVisibility,
+    onColumnVisibilityChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(columnVisibility) : updater
+      setColumnVisibility(next)
+      onColumnVisibilityChangeProp?.(next)
+    },
     onColumnPinningChange: setColumnPinning,
     onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
@@ -474,18 +486,24 @@ export function DataTable<T>({
                           backgroundColor: isPinned ? 'var(--background, #fff)' : undefined,
                         }}
                       >
-                        {onCellEdit ? (
+                        {onCellEdit ? (() => {
+                          const cellRowId = String((row.original as Record<string, unknown>).id ?? row.id)
+                          const cellKey = `${cellRowId}:${colId}`
+                          const saveState = cellSaveState?.get(cellKey)
+                          return (
                           <GridCell
                             rawValue={(row.original as Record<string, unknown>)[colId]}
                             columnId={colId}
-                            rowId={String((row.original as Record<string, unknown>).id ?? row.id)}
+                            rowId={cellRowId}
                             isActive={isActive}
                             isSelected={isSelected}
                             isEditing={isCellEditing}
                             editable={editable}
+                            saving={saveState === 'saving'}
+                            saved={saveState === 'saved'}
                             onSave={(value) => {
                               onCellEdit({
-                                rowId: String((row.original as Record<string, unknown>).id ?? row.id),
+                                rowId: cellRowId,
                                 columnId: colId,
                                 value,
                               })
@@ -497,7 +515,7 @@ export function DataTable<T>({
                           >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </GridCell>
-                        ) : (
+                          )})() : (
                           flexRender(cell.column.columnDef.cell, cell.getContext())
                         )}
                       </TableCell>

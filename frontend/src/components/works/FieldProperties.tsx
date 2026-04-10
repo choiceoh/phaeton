@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -259,300 +261,474 @@ export default function FieldProperties({ field, collections, siblingFields, onC
     )
   }
 
+  const [tab, setTab] = useState<'basic' | 'advanced'>('basic')
+
   return (
-    <div className="space-y-4 overflow-y-auto">
-      <div className="flex items-center gap-2">
+    <div className="overflow-y-auto">
+      {/* ── 헤더: 타입 뱃지 + 탭 전환 ── */}
+      <div className="mb-3 flex items-center gap-2">
         <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
           {FIELD_TYPE_LABELS[field.field_type]}
         </span>
-        <h3 className="text-sm font-medium">속성</h3>
+        <div className="flex items-center gap-1 rounded-lg border p-1">
+          <button
+            type="button"
+            className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+              tab === 'basic'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted'
+            }`}
+            onClick={() => setTab('basic')}
+          >
+            속성
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+              tab === 'advanced'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted'
+            }`}
+            onClick={() => setTab('advanced')}
+          >
+            고급
+          </button>
+        </div>
       </div>
 
-      {/* ── 유형 전환 + 폭/높이 ── */}
-      <section className="space-y-2">
-        {variantGroup && (
-          <>
-            <Label className="text-xs font-semibold text-muted-foreground">유형</Label>
-            <Select
-              value={field.field_type}
-              onValueChange={(v) => update({ field_type: v as FieldType })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {variantGroup.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-muted-foreground">폭</Label>
-            <Select
-              value={String(field.width)}
-              onValueChange={(v) => update({ width: Number(v) })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {WIDTH_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={String(o.value)}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-muted-foreground">높이</Label>
-            <Select
-              value={String(field.height)}
-              onValueChange={(v) => update({ height: Number(v) })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {HEIGHT_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={String(o.value)}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </section>
-      <Separator />
-
-      {/* ── 이름 (Label) ── */}
-      <section className="space-y-2">
-        <Label className="text-xs font-semibold text-muted-foreground">이름</Label>
-        <Input
-          value={field.label}
-          onChange={(e) => update({ label: e.target.value })}
-          placeholder="항목 이름"
-        />
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="hide_label"
-            checked={!!opts.hide_label}
-            onCheckedChange={(c) => updateOption('hide_label', !!c)}
-          />
-          <Label htmlFor="hide_label" className="text-xs">이름숨기기</Label>
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* ── 설명 (Description) ── */}
-      <section className="space-y-2">
-        <Label className="text-xs font-semibold text-muted-foreground">설명</Label>
-        <Input
-          value={field.description || ''}
-          onChange={(e) => update({ description: e.target.value })}
-          placeholder="설명을 입력해주세요."
-        />
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="show_tooltip"
-            checked={!!opts.show_tooltip}
-            onCheckedChange={(c) => updateOption('show_tooltip', !!c)}
-          />
-          <Label htmlFor="show_tooltip" className="text-xs">툴팁으로 표현</Label>
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* ── 컴포넌트 옵션 (computed fields don't have DB constraints) ── */}
-      {!isComputed && (
-        <>
+      {/* ══════════════ 속성 탭 ══════════════ */}
+      {tab === 'basic' && (
+        <div className="space-y-3">
+          {/* 이름 */}
           <section className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">컴포넌트</Label>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="required"
-                checked={field.is_required}
-                onCheckedChange={(c) => update({ is_required: !!c })}
-              />
-              <Label htmlFor="required" className="text-xs">필수 입력 컴포넌트</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="unique"
-                checked={field.is_unique}
-                onCheckedChange={(c) => update({ is_unique: !!c })}
-              />
-              <Label htmlFor="unique" className="text-xs">중복 입력값 등록 불가</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="indexed"
-                checked={field.is_indexed}
-                onCheckedChange={(c) => update({ is_indexed: !!c })}
-              />
-              <Label htmlFor="indexed" className="text-xs">인덱스 (검색 최적화)</Label>
-            </div>
+            <Label className="text-xs font-semibold text-muted-foreground">이름</Label>
+            <Input
+              value={field.label}
+              onChange={(e) => update({ label: e.target.value })}
+              placeholder="항목 이름"
+            />
           </section>
 
-          <Separator />
-        </>
-      )}
-
-      {/* ── 기본값 (Default Value) ── */}
-      {!isRelation && !isComputed && (
-        <>
-          <section className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">기본값</Label>
-            {isBoolean ? (
+          {/* 유형 전환 */}
+          {variantGroup && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">유형</Label>
               <Select
-                value={field.default_value ?? ''}
-                onValueChange={(v) => update({ default_value: v || undefined })}
+                value={field.field_type}
+                onValueChange={(v) => update({ field_type: v as FieldType })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="없음" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="true">참 (true)</SelectItem>
-                  <SelectItem value="false">거짓 (false)</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : isSelect ? (
-              <Select
-                value={field.default_value ?? ''}
-                onValueChange={(v) => update({ default_value: v || undefined })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="없음" />
-                </SelectTrigger>
-                <SelectContent>
-                  {selectChoices.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  {variantGroup.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            ) : (
-              <Input
-                value={field.default_value ?? ''}
-                onChange={(e) => update({ default_value: e.target.value || undefined })}
-                placeholder="기본값 없음"
-                type={isNumeric ? 'number' : isDate ? 'date' : 'text'}
-              />
-            )}
-          </section>
-          <Separator />
-        </>
-      )}
+            </section>
+          )}
 
-      {/* ── 최소/최대 입력수 (for text) ── */}
-      {isText && (
-        <>
+          {/* 필수 */}
+          {!isComputed && (
+            <section className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="required"
+                  checked={field.is_required}
+                  onCheckedChange={(c) => update({ is_required: !!c })}
+                />
+                <Label htmlFor="required" className="text-xs">필수 입력 컴포넌트</Label>
+              </div>
+            </section>
+          )}
+
+          {/* 폭/높이 */}
           <section className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-muted-foreground">최소 입력수</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={(opts.min_length as number) ?? 0}
-                  onChange={(e) => updateOption('min_length', Number(e.target.value))}
-                />
+                <Label className="text-xs font-semibold text-muted-foreground">폭</Label>
+                <Select
+                  value={String(field.width)}
+                  onValueChange={(v) => update({ width: Number(v) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WIDTH_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={String(o.value)}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-muted-foreground">최대 입력수</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={(opts.max_length as number) ?? 100}
-                  onChange={(e) => updateOption('max_length', Number(e.target.value))}
-                />
+                <Label className="text-xs font-semibold text-muted-foreground">높이</Label>
+                <Select
+                  value={String(field.height)}
+                  onValueChange={(v) => update({ height: Number(v) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HEIGHT_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={String(o.value)}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </section>
-          <Separator />
-        </>
-      )}
 
-      {/* ── 표시 형식 (for number/integer) ── */}
-      {isNumeric && (
-        <>
-          <section className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">표시 형식</Label>
-            <Select
-              value={(opts.display_type as string) || 'plain'}
-              onValueChange={(v) => updateOption('display_type', v === 'plain' ? undefined : v)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {NUMBER_DISPLAY_TYPES.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {opts.display_type === 'currency' && (
-              <Input
-                value={(opts.currency_code as string) || 'KRW'}
-                onChange={(e) => updateOption('currency_code', e.target.value.toUpperCase())}
-                placeholder="KRW"
-                maxLength={3}
+          {/* 선택 옵션 — select/multiselect */}
+          {isSelect && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">선택 옵션 (줄바꿈)</Label>
+              <Textarea
+                rows={4}
+                value={selectChoices.join('\n')}
+                onChange={(e) => {
+                  const choices = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)
+                  updateOption('choices', choices)
+                }}
+                placeholder="옵션1&#10;옵션2&#10;옵션3"
               />
-            )}
-          </section>
-          <Separator />
-        </>
+            </section>
+          )}
+
+          {/* 연결 설정 */}
+          {isRelation && (
+            <section className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <Label className="text-xs font-semibold text-muted-foreground">연결 설정</Label>
+              <div className="space-y-1">
+                <Label className="text-xs">대상 업무</Label>
+                <Select
+                  value={field.relation?.target_collection_id || ''}
+                  onValueChange={(v) =>
+                    v &&
+                    update({
+                      relation: {
+                        target_collection_id: v,
+                        relation_type: field.relation?.relation_type || 'one_to_many',
+                        on_delete: field.relation?.on_delete || 'SET NULL',
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {collections.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">연결 유형</Label>
+                <Select
+                  value={field.relation?.relation_type || 'one_to_many'}
+                  onValueChange={(v) =>
+                    v &&
+                    field.relation &&
+                    update({
+                      relation: { ...field.relation, relation_type: v as 'one_to_one' | 'one_to_many' | 'many_to_many' },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(RELATION_TYPE_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </section>
+          )}
+
+          {/* 참조값 설정 */}
+          {isLookup && (
+            <section className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <Label className="text-xs font-semibold text-muted-foreground">참조값 설정</Label>
+              <div className="space-y-1">
+                <Label className="text-xs">연결 항목</Label>
+                <Select
+                  value={(opts.relation_field as string) || ''}
+                  onValueChange={(v) => updateOption('relation_field', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="연결 항목 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {relationFields.map((f) => (
+                      <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">참조할 항목</Label>
+                <Select
+                  value={(opts.target_field as string) || ''}
+                  onValueChange={(v) => updateOption('target_field', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="항목 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {targetFields.map((f: Field) => (
+                      <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </section>
+          )}
+
+          {/* 요약 계산 설정 */}
+          {isRollup && (
+            <section className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <Label className="text-xs font-semibold text-muted-foreground">요약 계산 설정</Label>
+              <div className="space-y-1">
+                <Label className="text-xs">연결 항목</Label>
+                <Select
+                  value={(opts.relation_field as string) || ''}
+                  onValueChange={(v) => updateOption('relation_field', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="연결 항목 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {relationFields.map((f) => (
+                      <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">계산할 항목</Label>
+                <Select
+                  value={(opts.target_field as string) || ''}
+                  onValueChange={(v) => updateOption('target_field', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="항목 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {targetFields.map((f: Field) => (
+                      <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">계산 방식</Label>
+                <Select
+                  value={(opts.function as string) || 'SUM'}
+                  onValueChange={(v) => updateOption('function', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLLUP_FUNCTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </section>
+          )}
+        </div>
       )}
 
-      {/* ── 최소/최대 값 (for number/integer) ── */}
-      {isNumeric && (
-        <>
+      {/* ══════════════ 고급 탭 ══════════════ */}
+      {tab === 'advanced' && (
+        <div className="space-y-3">
+          {/* 이름숨기기 */}
           <section className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-muted-foreground">최소값</Label>
-                <Input
-                  type="number"
-                  value={(opts.min_value as number) ?? ''}
-                  onChange={(e) => updateOption('min_value', e.target.value ? Number(e.target.value) : undefined)}
-                  placeholder="제한 없음"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-muted-foreground">최대값</Label>
-                <Input
-                  type="number"
-                  value={(opts.max_value as number) ?? ''}
-                  onChange={(e) => updateOption('max_value', e.target.value ? Number(e.target.value) : undefined)}
-                  placeholder="제한 없음"
-                />
-              </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="hide_label"
+                checked={!!opts.hide_label}
+                onCheckedChange={(c) => updateOption('hide_label', !!c)}
+              />
+              <Label htmlFor="hide_label" className="text-xs">이름숨기기</Label>
             </div>
           </section>
-          <Separator />
-        </>
-      )}
 
-      {/* ── 선택 옵션 (for select/multiselect) ── */}
-      {isSelect && (
-        <>
+          {/* 설명 */}
           <section className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">선택 옵션 (줄바꿈)</Label>
-            <Textarea
-              rows={4}
-              value={selectChoices.join('\n')}
-              onChange={(e) => {
-                const choices = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)
-                updateOption('choices', choices)
-              }}
-              placeholder="옵션1&#10;옵션2&#10;옵션3"
+            <Label className="text-xs font-semibold text-muted-foreground">설명</Label>
+            <Input
+              value={field.description || ''}
+              onChange={(e) => update({ description: e.target.value })}
+              placeholder="설명을 입력해주세요."
             />
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show_tooltip"
+                checked={!!opts.show_tooltip}
+                onCheckedChange={(c) => updateOption('show_tooltip', !!c)}
+              />
+              <Label htmlFor="show_tooltip" className="text-xs">툴팁으로 표현</Label>
+            </div>
           </section>
+
+          {/* 유니크/인덱스 */}
+          {!isComputed && (
+            <section className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="unique"
+                  checked={field.is_unique}
+                  onCheckedChange={(c) => update({ is_unique: !!c })}
+                />
+                <Label htmlFor="unique" className="text-xs">중복 입력값 등록 불가</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="indexed"
+                  checked={field.is_indexed}
+                  onCheckedChange={(c) => update({ is_indexed: !!c })}
+                />
+                <Label htmlFor="indexed" className="text-xs">인덱스 (검색 최적화)</Label>
+              </div>
+            </section>
+          )}
+
+          {/* 기본값 */}
+          {!isRelation && !isComputed && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">기본값</Label>
+              {isBoolean ? (
+                <Select
+                  value={field.default_value ?? ''}
+                  onValueChange={(v) => update({ default_value: v || undefined })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="없음" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">참 (true)</SelectItem>
+                    <SelectItem value="false">거짓 (false)</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : isSelect ? (
+                <Select
+                  value={field.default_value ?? ''}
+                  onValueChange={(v) => update({ default_value: v || undefined })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="없음" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectChoices.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={field.default_value ?? ''}
+                  onChange={(e) => update({ default_value: e.target.value || undefined })}
+                  placeholder="기본값 없음"
+                  type={isNumeric ? 'number' : isDate ? 'date' : 'text'}
+                />
+              )}
+            </section>
+          )}
+
+          {/* 최소/최대 입력수 (text) */}
+          {isText && (
+            <section className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-muted-foreground">최소 입력수</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={(opts.min_length as number) ?? 0}
+                    onChange={(e) => updateOption('min_length', Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-muted-foreground">최대 입력수</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={(opts.max_length as number) ?? 100}
+                    onChange={(e) => updateOption('max_length', Number(e.target.value))}
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* 표시 형식 (number) */}
+          {isNumeric && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">표시 형식</Label>
+              <Select
+                value={(opts.display_type as string) || 'plain'}
+                onValueChange={(v) => updateOption('display_type', v === 'plain' ? undefined : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {NUMBER_DISPLAY_TYPES.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {opts.display_type === 'currency' && (
+                <Input
+                  value={(opts.currency_code as string) || 'KRW'}
+                  onChange={(e) => updateOption('currency_code', e.target.value.toUpperCase())}
+                  placeholder="KRW"
+                  maxLength={3}
+                />
+              )}
+            </section>
+          )}
+
+          {/* 최소/최대값 (number) */}
+          {isNumeric && (
+            <section className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-muted-foreground">최소값</Label>
+                  <Input
+                    type="number"
+                    value={(opts.min_value as number) ?? ''}
+                    onChange={(e) => updateOption('min_value', e.target.value ? Number(e.target.value) : undefined)}
+                    placeholder="제한 없음"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-muted-foreground">최대값</Label>
+                  <Input
+                    type="number"
+                    value={(opts.max_value as number) ?? ''}
+                    onChange={(e) => updateOption('max_value', e.target.value ? Number(e.target.value) : undefined)}
+                    placeholder="제한 없음"
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* 표시 방식 (select) */}
           {field.field_type === 'select' && (
             <section className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground">표시 방식</Label>
@@ -570,292 +746,105 @@ export default function FieldProperties({ field, collections, siblingFields, onC
               </Select>
             </section>
           )}
-          <Separator />
-        </>
-      )}
 
-
-      {/* ── 입력 너비 조절 (입력 박스 크기) ── */}
-      <section className="space-y-2">
-        <Label className="text-xs font-semibold text-muted-foreground">입력 너비 조절</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            min={0}
-            className="w-20"
-            value={(opts.input_width as number) ?? 100}
-            onChange={(e) => updateOption('input_width', Number(e.target.value))}
-          />
-          <div className="flex items-center gap-1 rounded-md border p-0.5">
-            <button
-              type="button"
-              className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                (opts.input_width_unit || '%') === 'px'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-              onClick={() => updateOption('input_width_unit', 'px')}
-            >
-              PX
-            </button>
-            <button
-              type="button"
-              className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                (opts.input_width_unit || '%') === '%'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-              onClick={() => updateOption('input_width_unit', '%')}
-            >
-              %
-            </button>
-          </div>
-        </div>
-        {(opts.input_width_unit || '%') === '%' && (
-          <p className="text-xs text-muted-foreground">* 퍼센트(%) 입력시 비율로 지정</p>
-        )}
-      </section>
-
-      <Separator />
-
-      {/* ── 표시 형식 (for text) ── */}
-      {field.field_type === 'text' && (
-        <>
+          {/* 입력 너비 조절 */}
           <section className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">표시 형식</Label>
-            <Select
-              value={(opts.display_type as string) || 'plain'}
-              onValueChange={(v) => {
-                const dt = v === 'plain' ? undefined : v
-                const validation = dt && dt !== 'plain' ? dt : opts.validation
-                onChange({ ...field!, options: { ...opts, display_type: dt, validation } })
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TEXT_DISPLAY_TYPES.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </section>
-          <Separator />
-        </>
-      )}
-
-      {/* ── 입력값 유효성 체크 (text only) ── */}
-      {isText && (
-        <>
-          <section className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">입력값 유효성 체크</Label>
-            <Select
-              value={(opts.validation as string) || 'none'}
-              onValueChange={(v) => updateOption('validation', v === 'none' ? undefined : v)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {VALIDATION_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {opts.validation === 'regex' && (
+            <Label className="text-xs font-semibold text-muted-foreground">입력 너비 조절</Label>
+            <div className="flex items-center gap-2">
               <Input
-                value={(opts.validation_regex as string) || ''}
-                onChange={(e) => updateOption('validation_regex', e.target.value)}
-                placeholder="정규식 패턴"
+                type="number"
+                min={0}
+                className="w-20"
+                value={(opts.input_width as number) ?? 100}
+                onChange={(e) => updateOption('input_width', Number(e.target.value))}
               />
+              <div className="flex items-center gap-1 rounded-md border p-0.5">
+                <button
+                  type="button"
+                  className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                    (opts.input_width_unit || '%') === 'px'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted'
+                  }`}
+                  onClick={() => updateOption('input_width_unit', 'px')}
+                >
+                  PX
+                </button>
+                <button
+                  type="button"
+                  className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                    (opts.input_width_unit || '%') === '%'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted'
+                  }`}
+                  onClick={() => updateOption('input_width_unit', '%')}
+                >
+                  %
+                </button>
+              </div>
+            </div>
+            {(opts.input_width_unit || '%') === '%' && (
+              <p className="text-xs text-muted-foreground">* 퍼센트(%) 입력시 비율로 지정</p>
             )}
           </section>
-          <Separator />
-        </>
-      )}
 
-      {/* ── 수식 설정 (formula only) ── */}
-      {isFormula && (
-        <>
-          <section className="space-y-3 rounded-md border bg-muted/30 p-3">
-            <Label className="text-xs font-semibold text-muted-foreground">수식 설정</Label>
-            <div className="space-y-1">
-              <Label className="text-xs">수식 표현식</Label>
-              <Textarea
-                rows={3}
-                value={(opts.expression as string) || ''}
-                onChange={(e) => updateOption('expression', e.target.value)}
-                placeholder="{unit_price} * {quantity}"
-              />
-              <p className="text-xs text-muted-foreground">
-                항목명을 {'{'}중괄호{'}'}로 감싸서 참조합니다. +, -, *, / 연산자와 괄호를 사용할 수 있습니다.
-              </p>
-            </div>
-          </section>
-          <Separator />
-        </>
-      )}
-
-      {/* ── 참조값 설정 (lookup only) ── */}
-      {isLookup && (
-        <>
-          <section className="space-y-3 rounded-md border bg-muted/30 p-3">
-            <Label className="text-xs font-semibold text-muted-foreground">참조값 설정</Label>
-            <div className="space-y-1">
-              <Label className="text-xs">연결 항목</Label>
+          {/* 표시 형식 (text) */}
+          {field.field_type === 'text' && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">표시 형식</Label>
               <Select
-                value={(opts.relation_field as string) || ''}
-                onValueChange={(v) => updateOption('relation_field', v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="연결 항목 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {relationFields.map((f) => (
-                    <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">참조할 항목</Label>
-              <Select
-                value={(opts.target_field as string) || ''}
-                onValueChange={(v) => updateOption('target_field', v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="항목 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {targetFields.map((f: Field) => (
-                    <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </section>
-          <Separator />
-        </>
-      )}
-
-      {/* ── 요약 계산 설정 (rollup only) ── */}
-      {isRollup && (
-        <>
-          <section className="space-y-3 rounded-md border bg-muted/30 p-3">
-            <Label className="text-xs font-semibold text-muted-foreground">요약 계산 설정</Label>
-            <div className="space-y-1">
-              <Label className="text-xs">연결 항목</Label>
-              <Select
-                value={(opts.relation_field as string) || ''}
-                onValueChange={(v) => updateOption('relation_field', v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="연결 항목 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {relationFields.map((f) => (
-                    <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">계산할 항목</Label>
-              <Select
-                value={(opts.target_field as string) || ''}
-                onValueChange={(v) => updateOption('target_field', v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="항목 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {targetFields.map((f: Field) => (
-                    <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">계산 방식</Label>
-              <Select
-                value={(opts.function as string) || 'SUM'}
-                onValueChange={(v) => updateOption('function', v)}
+                value={(opts.display_type as string) || 'plain'}
+                onValueChange={(v) => {
+                  const dt = v === 'plain' ? undefined : v
+                  const validation = dt && dt !== 'plain' ? dt : opts.validation
+                  onChange({ ...field!, options: { ...opts, display_type: dt, validation } })
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLLUP_FUNCTIONS.map((o) => (
+                  {TEXT_DISPLAY_TYPES.map((o) => (
                     <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          </section>
-          <Separator />
-        </>
-      )}
+            </section>
+          )}
 
-      {/* ── 연결 설정 (relation only) ── */}
-      {isRelation && (
-        <>
-          <section className="space-y-3 rounded-md border bg-muted/30 p-3">
-            <Label className="text-xs font-semibold text-muted-foreground">연결 설정</Label>
-
-            <div className="space-y-1">
-              <Label className="text-xs">대상 업무</Label>
+          {/* 입력값 유효성 체크 (text) */}
+          {isText && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">입력값 유효성 체크</Label>
               <Select
-                value={field.relation?.target_collection_id || ''}
-                onValueChange={(v) =>
-                  v &&
-                  update({
-                    relation: {
-                      target_collection_id: v,
-                      relation_type: field.relation?.relation_type || 'one_to_many',
-                      on_delete: field.relation?.on_delete || 'SET NULL',
-                    },
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="업무 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {collections.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">연결 유형</Label>
-              <Select
-                value={field.relation?.relation_type || 'one_to_many'}
-                onValueChange={(v) =>
-                  v &&
-                  field.relation &&
-                  update({
-                    relation: { ...field.relation, relation_type: v as 'one_to_one' | 'one_to_many' | 'many_to_many' },
-                  })
-                }
+                value={(opts.validation as string) || 'none'}
+                onValueChange={(v) => updateOption('validation', v === 'none' ? undefined : v)}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(RELATION_TYPE_LABELS).map(([v, l]) => (
-                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                  {VALIDATION_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+              {opts.validation === 'regex' && (
+                <Input
+                  value={(opts.validation_regex as string) || ''}
+                  onChange={(e) => updateOption('validation_regex', e.target.value)}
+                  placeholder="정규식 패턴"
+                />
+              )}
+            </section>
+          )}
 
-            <div className="space-y-1">
-              <Label className="text-xs">삭제 시 동작</Label>
+          {/* 연결 삭제 동작 */}
+          {isRelation && field.relation && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">삭제 시 동작</Label>
               <Select
-                value={field.relation?.on_delete || 'SET NULL'}
+                value={field.relation.on_delete || 'SET NULL'}
                 onValueChange={(v) =>
                   v &&
                   field.relation &&
@@ -871,24 +860,42 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          </section>
-          <Separator />
-        </>
-      )}
+            </section>
+          )}
 
-      {/* ── 코드 (Slug) ── */}
-      <section className="space-y-2">
-        <Label className="text-xs font-semibold text-muted-foreground">코드</Label>
-        <Input
-          value={field.slug}
-          onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-          placeholder="snake_case"
-        />
-        <p className="text-xs text-muted-foreground">
-          * 자동 계산 컴포넌트와 REST API 에서 사용됩니다. 영문, 숫자, 밑줄(_)만 입력 가능
-        </p>
-      </section>
+          {/* 수식 설정 (formula) */}
+          {isFormula && (
+            <section className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <Label className="text-xs font-semibold text-muted-foreground">수식 설정</Label>
+              <div className="space-y-1">
+                <Label className="text-xs">수식 표현식</Label>
+                <Textarea
+                  rows={3}
+                  value={(opts.expression as string) || ''}
+                  onChange={(e) => updateOption('expression', e.target.value)}
+                  placeholder="{unit_price} * {quantity}"
+                />
+                <p className="text-xs text-muted-foreground">
+                  항목명을 {'{'}중괄호{'}'}로 감싸서 참조합니다. +, -, *, / 연산자와 괄호를 사용할 수 있습니다.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {/* 코드 (Slug) */}
+          <section className="space-y-2">
+            <Label className="text-xs font-semibold text-muted-foreground">코드</Label>
+            <Input
+              value={field.slug}
+              onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+              placeholder="snake_case"
+            />
+            <p className="text-xs text-muted-foreground">
+              * 자동 계산 컴포넌트와 REST API 에서 사용됩니다. 영문, 숫자, 밑줄(_)만 입력 가능
+            </p>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

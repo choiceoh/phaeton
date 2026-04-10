@@ -329,6 +329,8 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 	alters := []string{
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS process_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
 		`ALTER TABLE _meta.process_transitions ADD COLUMN IF NOT EXISTS allowed_roles TEXT[] NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE _meta.fields ADD COLUMN IF NOT EXISTS width SMALLINT NOT NULL DEFAULT 6`,
+		`ALTER TABLE _meta.fields ADD COLUMN IF NOT EXISTS height SMALLINT NOT NULL DEFAULT 1`,
 	}
 
 	for _, stmt := range append(stmts, alters...) {

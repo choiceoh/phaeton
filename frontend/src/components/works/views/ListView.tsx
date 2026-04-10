@@ -1,7 +1,9 @@
+import { List } from 'lucide-react'
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { DataTable } from '@/components/common/DataTable'
+import EmptyState from '@/components/common/EmptyState'
 import { isLayoutType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { Field } from '@/lib/types'
@@ -66,9 +68,11 @@ export default function ListView({ fields, entries, onRowClick }: Props) {
 
   if (entries.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-        아직 항목이 없습니다
-      </div>
+      <EmptyState
+        icon={<List className="h-10 w-10" />}
+        title="아직 항목이 없습니다"
+        description="새 데이터를 추가하여 목록을 채워 보세요."
+      />
     )
   }
 

@@ -172,8 +172,8 @@ export default function AppBuilder() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
-        <div className="max-h-[calc(100vh-280px)] overflow-y-auto rounded-lg border p-3">
-          <FieldPalette key={selectedId ? 'collapsed' : 'expanded'} onAdd={handleAddField} collapsed={!!selectedId} />
+        <div className="max-h-[calc(100vh-160px)] overflow-y-auto rounded-lg border p-3">
+          <FieldPalette onAdd={handleAddField} />
           {selectedField && (
             <>
               <div className="my-3 border-t" />

@@ -39,8 +39,14 @@ export default function RootLayout() {
             <Link to="/apps" className="text-sm text-stone-600 hover:text-stone-900">
               업무
             </Link>
+            <Link to="/dashboard" className="text-sm text-stone-600 hover:text-stone-900">
+              대시보드
+            </Link>
             <Link to="/admin/org" className="text-sm text-stone-600 hover:text-stone-900">
               조직도
+            </Link>
+            <Link to="/automations" className="text-sm text-stone-600 hover:text-stone-900">
+              자동화
             </Link>
             {(user.role === 'director' || user.role === 'pm') && (
               <>
@@ -49,6 +55,9 @@ export default function RootLayout() {
                 </Link>
                 <Link to="/admin/users" className="text-sm text-stone-600 hover:text-stone-900">
                   사용자 관리
+                </Link>
+                <Link to="/settings" className="text-sm text-stone-600 hover:text-stone-900">
+                  설정
                 </Link>
               </>
             )}

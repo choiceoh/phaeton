@@ -5,7 +5,7 @@ import { Plus, Trash2, Zap } from 'lucide-react'
 
 import UserCombobox from '@/components/common/UserCombobox'
 import AIAutomationDialog from '@/components/works/AIAutomationDialog'
-import SchedulePicker from '@/components/works/SchedulePicker'
+import SchedulePicker, { isValidCron } from '@/components/works/SchedulePicker'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
@@ -180,6 +180,11 @@ export default function AutomationsPage() {
     }
     if (actions.length === 0) {
       toast.error('최소 하나의 액션을 추가해주세요')
+      return
+    }
+
+    if (triggerType === 'schedule' && !isValidCron(cronExpr)) {
+      toast.error('유효하지 않은 크론 표현식입니다')
       return
     }
 
@@ -633,6 +638,10 @@ export default function AutomationsPage() {
             <Zap className="mx-auto mb-2 h-8 w-8" />
             <p>아직 자동화가 없습니다</p>
             <p className="text-sm">데이터 생성/수정/삭제 시 자동으로 알림을 보내거나 항목을 업데이트할 수 있습니다.</p>
+            <Button size="sm" className="mt-4" onClick={() => setFormOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" />
+              새 자동화
+            </Button>
           </div>
         )}
 

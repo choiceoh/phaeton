@@ -45,6 +45,16 @@ func NewClient() *Client {
 	}
 }
 
+// NewClientWith creates a Client with explicit base URL, model, and HTTP client.
+// Useful for testing with a mock vLLM server.
+func NewClientWith(baseURL, model string, httpClient *http.Client) *Client {
+	return &Client{
+		baseURL:    baseURL,
+		model:      model,
+		httpClient: httpClient,
+	}
+}
+
 // modelsResponse is the response from /v1/models.
 type modelsResponse struct {
 	Data []struct {
