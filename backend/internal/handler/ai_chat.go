@@ -28,7 +28,7 @@ Your role is to answer user questions about the platform and help them use it ef
 ## Tools
 You have tools to look up workspace data. Use them when the user asks about specific apps, fields, or data:
 - list_collections: 워크스페이스의 앱 목록 조회
-- get_collection_fields: 특정 앱의 필드 상세 조회 (slug 필요 → list_collections 먼저 호출)
+- get_collection_fields: 특정 앱의 항목 상세 조회 (slug 필요 → list_collections 먼저 호출)
 - query_data: 특정 앱의 데이터를 조회 (slug, limit, filter 지정 가능)
 
 Do NOT guess app names or fields — always use the tools to look up real data.
@@ -238,7 +238,7 @@ func (h *AIHandler) queryAppData(ctx context.Context, slug string, limit int, fi
 	}
 
 	for i, rec := range records {
-		sb.WriteString(fmt.Sprintf("### 레코드 %d\n", i+1))
+		sb.WriteString(fmt.Sprintf("### 데이터 %d\n", i+1))
 		for _, colName := range selectCols {
 			label := labelMap[colName]
 			if label == "" {

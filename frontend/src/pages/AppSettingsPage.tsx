@@ -91,7 +91,7 @@ export default function AppSettingsPage() {
               { input, confirm: true },
               {
                 onSuccess: () => {
-                  toast.success('필드가 추가되었습니다')
+                  toast.success('항목이 추가되었습니다')
                   setNewFieldOpen(false)
                   setNewField({ field_type: 'text', is_required: false, is_unique: false, is_indexed: false })
                 },
@@ -99,7 +99,7 @@ export default function AppSettingsPage() {
               },
             )
           } else {
-            toast.success('필드가 추가되었습니다')
+            toast.success('항목이 추가되었습니다')
             setNewFieldOpen(false)
             setNewField({ field_type: 'text', is_required: false, is_unique: false, is_indexed: false })
           }
@@ -115,7 +115,7 @@ export default function AppSettingsPage() {
       { fieldId: confirmDeleteField, confirm: true },
       {
         onSuccess: () => {
-          toast.success('필드가 삭제되었습니다')
+          toast.success('항목이 삭제되었습니다')
           setConfirmDeleteField(null)
         },
         onError: (err) => toast.error(formatError(err)),
@@ -128,7 +128,7 @@ export default function AppSettingsPage() {
       { id: collection!.id, confirm: true },
       {
         onSuccess: () => {
-          toast.success('컬렉션이 삭제되었습니다')
+          toast.success('업무가 삭제되었습니다')
           navigate('/apps')
         },
         onError: (err) => toast.error(formatError(err)),
@@ -145,16 +145,16 @@ export default function AppSettingsPage() {
           { label: '설정' },
         ]}
         title="설정"
-        description={`/${collection.slug} 컬렉션의 필드 및 메타데이터`}
+        description={`/${collection.slug} 업무의 항목 및 설정`}
       />
 
       <div className="space-y-6">
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">필드 ({collection.fields?.length ?? 0})</h2>
+            <h2 className="text-lg font-semibold">항목 ({collection.fields?.length ?? 0})</h2>
             <RoleGate roles={['director', 'pm']}>
               <Button size="sm" onClick={() => setNewFieldOpen(!newFieldOpen)}>
-                {newFieldOpen ? '취소' : '+ 필드 추가'}
+                {newFieldOpen ? '취소' : '+ 항목 추가'}
               </Button>
             </RoleGate>
           </div>
@@ -231,7 +231,7 @@ export default function AppSettingsPage() {
               </div>
               <div className="mt-3 flex justify-end">
                 <Button onClick={handleAddField} disabled={addField.isPending}>
-                  {addField.isPending ? '추가 중...' : '필드 추가'}
+                  {addField.isPending ? '추가 중...' : '항목 추가'}
                 </Button>
               </div>
             </Card>
@@ -280,7 +280,7 @@ export default function AppSettingsPage() {
           <section>
             <h2 className="text-lg font-semibold">자동화</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              레코드 생성/수정/삭제 시 자동으로 알림 발송, 필드 업데이트, Webhook 호출을 실행합니다.
+              데이터 생성/수정/삭제 시 자동으로 알림 발송, 항목 업데이트, 외부 연결을 실행합니다.
             </p>
             <Link to={`/apps/${collection.id}/automations`}>
               <Button variant="outline" size="sm" className="mt-2">
@@ -363,7 +363,7 @@ export default function AppSettingsPage() {
 
         <RoleGate roles={['director']}>
           <section>
-            <h2 className="mb-1 text-lg font-semibold">행 수준 보안 (RLS)</h2>
+            <h2 className="mb-1 text-lg font-semibold">데이터 열람 범위</h2>
             <p className="mb-3 text-sm text-muted-foreground">
               열람자(viewer) 역할의 멤버가 볼 수 있는 데이터 범위를 제한합니다.
             </p>
@@ -379,7 +379,7 @@ export default function AppSettingsPage() {
                     },
                   },
                   {
-                    onSuccess: () => toast.success('RLS 설정이 저장되었습니다'),
+                    onSuccess: () => toast.success('열람 범위 설정이 저장되었습니다'),
                     onError: (err) => toast.error(formatError(err)),
                   },
                 )
@@ -401,7 +401,7 @@ export default function AppSettingsPage() {
           <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
             <h2 className="text-base font-semibold text-destructive">위험 영역</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              컬렉션을 삭제하면 모든 항목과 마이그레이션 이력이 제거됩니다. 롤백 전에는
+              업무를 삭제하면 모든 항목과 변경 이력이 제거됩니다. 되돌리기 전에는
               데이터가 영구히 사라집니다.
             </p>
             <Button
@@ -410,7 +410,7 @@ export default function AppSettingsPage() {
               className="mt-3"
               onClick={() => setConfirmDeleteCollection(true)}
             >
-              컬렉션 삭제
+              업무 삭제
             </Button>
           </section>
         </RoleGate>
@@ -419,7 +419,7 @@ export default function AppSettingsPage() {
       <ConfirmDialog
         open={!!confirmDeleteField}
         onOpenChange={(open) => !open && setConfirmDeleteField(null)}
-        title="필드를 삭제하시겠습니까?"
+        title="항목을 삭제하시겠습니까?"
         description="기존 데이터의 해당 컬럼이 영구히 사라집니다."
         variant="destructive"
         confirmLabel="삭제"
@@ -430,8 +430,8 @@ export default function AppSettingsPage() {
       <ConfirmDialog
         open={confirmDeleteCollection}
         onOpenChange={setConfirmDeleteCollection}
-        title="컬렉션을 삭제하시겠습니까?"
-        description={`"${collection.label}" 컬렉션과 모든 데이터가 영구 삭제됩니다.`}
+        title="업무를 삭제하시겠습니까?"
+        description={`"${collection.label}" 업무와 모든 데이터가 영구 삭제됩니다.`}
         variant="destructive"
         confirmLabel="삭제"
         onConfirm={handleDeleteCollection}

@@ -45,7 +45,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
   if (!field) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        필드를 선택하세요
+        항목을 선택하세요
       </div>
     )
   }
@@ -91,7 +91,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
   type VariantOption = { value: FieldType; label: string }
   const TEXT_VARIANTS: VariantOption[] = [
     { value: 'text', label: '텍스트' },
-    { value: 'textarea', label: '멀티 텍스트' },
+    { value: 'textarea', label: '긴 글' },
   ]
   const NUMBER_VARIANTS: VariantOption[] = [
     { value: 'number', label: '숫자' },
@@ -305,7 +305,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             <Input
               value={field.label}
               onChange={(e) => update({ label: e.target.value })}
-              placeholder="필드 이름"
+              placeholder="항목 이름"
             />
           </section>
 
@@ -401,12 +401,12 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             </section>
           )}
 
-          {/* 관계 설정 */}
+          {/* 연결 설정 */}
           {isRelation && (
             <section className="space-y-3 rounded-md border bg-muted/30 p-3">
-              <Label className="text-xs font-semibold text-muted-foreground">관계 설정</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">연결 설정</Label>
               <div className="space-y-1">
-                <Label className="text-xs">대상 컬렉션</Label>
+                <Label className="text-xs">대상 업무</Label>
                 <Select
                   value={field.relation?.target_collection_id || ''}
                   onValueChange={(v) =>
@@ -431,7 +431,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">관계 유형</Label>
+                <Label className="text-xs">연결 유형</Label>
                 <Select
                   value={field.relation?.relation_type || 'one_to_many'}
                   onValueChange={(v) =>
@@ -455,18 +455,18 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             </section>
           )}
 
-          {/* 조회 설정 */}
+          {/* 참조값 설정 */}
           {isLookup && (
             <section className="space-y-3 rounded-md border bg-muted/30 p-3">
-              <Label className="text-xs font-semibold text-muted-foreground">조회 설정</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">참조값 설정</Label>
               <div className="space-y-1">
-                <Label className="text-xs">관계 필드</Label>
+                <Label className="text-xs">연결 항목</Label>
                 <Select
                   value={(opts.relation_field as string) || ''}
                   onValueChange={(v) => updateOption('relation_field', v)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="관계 필드 선택" />
+                    <SelectValue placeholder="연결 항목 선택" />
                   </SelectTrigger>
                   <SelectContent>
                     {relationFields.map((f) => (
@@ -476,13 +476,13 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">참조할 필드</Label>
+                <Label className="text-xs">참조할 항목</Label>
                 <Select
                   value={(opts.target_field as string) || ''}
                   onValueChange={(v) => updateOption('target_field', v)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="필드 선택" />
+                    <SelectValue placeholder="항목 선택" />
                   </SelectTrigger>
                   <SelectContent>
                     {targetFields.map((f: Field) => (
@@ -494,18 +494,18 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             </section>
           )}
 
-          {/* 집계 설정 */}
+          {/* 요약 계산 설정 */}
           {isRollup && (
             <section className="space-y-3 rounded-md border bg-muted/30 p-3">
-              <Label className="text-xs font-semibold text-muted-foreground">집계 설정</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">요약 계산 설정</Label>
               <div className="space-y-1">
-                <Label className="text-xs">관계 필드</Label>
+                <Label className="text-xs">연결 항목</Label>
                 <Select
                   value={(opts.relation_field as string) || ''}
                   onValueChange={(v) => updateOption('relation_field', v)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="관계 필드 선택" />
+                    <SelectValue placeholder="연결 항목 선택" />
                   </SelectTrigger>
                   <SelectContent>
                     {relationFields.map((f) => (
@@ -515,13 +515,13 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">집계할 필드</Label>
+                <Label className="text-xs">계산할 항목</Label>
                 <Select
                   value={(opts.target_field as string) || ''}
                   onValueChange={(v) => updateOption('target_field', v)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="필드 선택" />
+                    <SelectValue placeholder="항목 선택" />
                   </SelectTrigger>
                   <SelectContent>
                     {targetFields.map((f: Field) => (
@@ -531,7 +531,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">집계 함수</Label>
+                <Label className="text-xs">계산 방식</Label>
                 <Select
                   value={(opts.function as string) || 'SUM'}
                   onValueChange={(v) => updateOption('function', v)}
@@ -839,7 +839,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             </section>
           )}
 
-          {/* 관계 삭제 동작 */}
+          {/* 연결 삭제 동작 */}
           {isRelation && field.relation && (
             <section className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground">삭제 시 동작</Label>
@@ -876,7 +876,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                   placeholder="{unit_price} * {quantity}"
                 />
                 <p className="text-xs text-muted-foreground">
-                  필드명을 {'{'}중괄호{'}'}로 감싸서 참조합니다. +, -, *, / 연산자와 괄호를 사용할 수 있습니다.
+                  항목명을 {'{'}중괄호{'}'}로 감싸서 참조합니다. +, -, *, / 연산자와 괄호를 사용할 수 있습니다.
                 </p>
               </div>
             </section>
