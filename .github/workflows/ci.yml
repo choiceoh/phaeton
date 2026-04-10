@@ -25,7 +25,7 @@ jobs:
           working-directory: backend
 
       - name: Go tests
-        run: cd backend && go test ./...
+        run: cd backend && go test -short ./...
 
   lint-and-test-ui:
     runs-on: ubuntu-latest

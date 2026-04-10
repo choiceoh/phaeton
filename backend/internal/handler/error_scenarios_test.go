@@ -43,10 +43,12 @@ func TestWriteError_Status(t *testing.T) {
 			if !strings.Contains(ct, "application/json") {
 				t.Errorf("content-type = %q, want JSON", ct)
 			}
-			var body envelope
+			var body struct {
+				Message string `json:"message"`
+			}
 			json.NewDecoder(w.Body).Decode(&body)
-			if body.Error != tc.msg {
-				t.Errorf("error = %q, want %q", body.Error, tc.msg)
+			if body.Message != tc.msg {
+				t.Errorf("error = %q, want %q", body.Message, tc.msg)
 			}
 		})
 	}
