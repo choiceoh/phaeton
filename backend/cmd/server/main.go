@@ -83,7 +83,7 @@ func run() int {
 
 	// AI client (local vLLM).
 	aiClient := ai.NewClient()
-	aiHandler := handler.NewAIHandler(aiClient)
+	aiHandler := handler.NewAIHandler(aiClient, store)
 
 	// Event bus + notification subscriber.
 	bus := events.NewBus()
