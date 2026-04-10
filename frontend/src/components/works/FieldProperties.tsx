@@ -56,11 +56,18 @@ export default function FieldProperties({ field, collections, siblingFields, onC
     slugDebounceRef.current = setTimeout(() => {
       generateSlug.mutate(label.trim(), {
         onSuccess: (res) => {
-          onChange({ ...currentField, label, slug: res.slug })
+          let slug = res.slug
+          const taken = new Set((siblingFields ?? []).filter((f) => f.id !== currentField.id).map((f) => f.slug))
+          if (taken.has(slug)) {
+            let n = 2
+            while (taken.has(`${slug}_${n}`)) n++
+            slug = `${slug}_${n}`
+          }
+          onChange({ ...currentField, label, slug })
         },
       })
     }, 500)
-  }, [aiAvailable, generateSlug, onChange])
+  }, [aiAvailable, generateSlug, onChange, siblingFields])
 
   if (!field) {
     return (
