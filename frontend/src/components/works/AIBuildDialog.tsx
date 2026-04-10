@@ -33,7 +33,8 @@ export default function AIBuildDialog({ onApply }: Props) {
   const [description, setDescription] = useState('')
   const [result, setResult] = useState<AIBuildResult | null>(null)
   const [questions, setQuestions] = useState<AIBuildQuestion[] | null>(null)
-  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [answers, setAnswers] = useState<Record<string, string[]>>({})
+  const [customTexts, setCustomTexts] = useState<Record<string, string>>({})
 
   const buildMutation = useAIBuildCollection()
 
@@ -42,17 +43,21 @@ export default function AIBuildDialog({ onApply }: Props) {
     setResult(null)
     setQuestions(null)
     setAnswers({})
+    setCustomTexts({})
     buildMutation.mutate(
       { description },
       {
         onSuccess: (data) => {
           if (data.mode === 'questions' && data.questions?.length) {
             setQuestions(data.questions)
-            const initial: Record<string, string> = {}
+            const initial: Record<string, string[]> = {}
+            const initialTexts: Record<string, string> = {}
             for (const q of data.questions) {
-              initial[q.id] = ''
+              initial[q.id] = []
+              initialTexts[q.id] = ''
             }
             setAnswers(initial)
+            setCustomTexts(initialTexts)
           } else if (data.schema) {
             setResult(data.schema)
           }
@@ -61,10 +66,21 @@ export default function AIBuildDialog({ onApply }: Props) {
     )
   }
 
+  function buildFlatAnswers(): Record<string, string> {
+    const flat: Record<string, string> = {}
+    for (const [id, selected] of Object.entries(answers)) {
+      const custom = customTexts[id]?.trim()
+      const parts = [...selected]
+      if (custom) parts.push(custom)
+      flat[id] = parts.join(', ')
+    }
+    return flat
+  }
+
   function handleSubmitAnswers() {
     setQuestions(null)
     buildMutation.mutate(
-      { description, answers },
+      { description, answers: buildFlatAnswers() },
       {
         onSuccess: (data) => {
           if (data.schema) {
@@ -92,15 +108,30 @@ export default function AIBuildDialog({ onApply }: Props) {
     setResult(null)
     setQuestions(null)
     setAnswers({})
+    setCustomTexts({})
     buildMutation.reset()
   }
 
-  function setAnswer(id: string, value: string) {
-    setAnswers((prev) => ({ ...prev, [id]: value }))
+  function toggleChoice(id: string, choice: string) {
+    setAnswers((prev) => {
+      const current = prev[id] ?? []
+      const next = current.includes(choice)
+        ? current.filter((c) => c !== choice)
+        : [...current, choice]
+      return { ...prev, [id]: next }
+    })
+  }
+
+  function setCustomText(id: string, value: string) {
+    setCustomTexts((prev) => ({ ...prev, [id]: value }))
   }
 
   const allAnswered = questions
-    ? questions.every((q) => answers[q.id]?.trim())
+    ? questions.every((q) => {
+        const selected = answers[q.id] ?? []
+        const custom = customTexts[q.id]?.trim() ?? ''
+        return selected.length > 0 || custom.length > 0
+      })
     : false
 
   if (!aiAvailable) return null
@@ -171,34 +202,37 @@ export default function AIBuildDialog({ onApply }: Props) {
                 <div key={q.id} className="space-y-1.5">
                   <label className="text-sm font-medium">{q.question}</label>
                   {q.choices?.length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {q.choices.map((choice) => (
-                        <Badge
-                          key={choice}
-                          variant={
-                            answers[q.id] === choice ? 'default' : 'outline'
-                          }
-                          className="cursor-pointer px-3 py-1 text-sm"
-                          onClick={() => setAnswer(q.id, choice)}
-                        >
-                          {choice}
-                        </Badge>
-                      ))}
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        복수 선택 가능
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {q.choices.map((choice) => (
+                          <Badge
+                            key={choice}
+                            variant={
+                              (answers[q.id] ?? []).includes(choice)
+                                ? 'default'
+                                : 'outline'
+                            }
+                            className="cursor-pointer px-3 py-1 text-sm"
+                            onClick={() => toggleChoice(q.id, choice)}
+                          >
+                            {choice}
+                          </Badge>
+                        ))}
+                      </div>
                       <Input
-                        value={
-                          q.choices.includes(answers[q.id] ?? '')
-                            ? ''
-                            : answers[q.id] ?? ''
-                        }
-                        onChange={(e) => setAnswer(q.id, e.target.value)}
+                        value={customTexts[q.id] ?? ''}
+                        onChange={(e) => setCustomText(q.id, e.target.value)}
                         placeholder={q.placeholder || '직접 입력'}
-                        className="mt-1 h-8 text-sm"
+                        className="h-8 text-sm"
                       />
                     </div>
                   ) : (
                     <Input
-                      value={answers[q.id] ?? ''}
-                      onChange={(e) => setAnswer(q.id, e.target.value)}
+                      value={customTexts[q.id] ?? ''}
+                      onChange={(e) => setCustomText(q.id, e.target.value)}
                       placeholder={q.placeholder || '답변을 입력하세요'}
                       className="h-8 text-sm"
                     />

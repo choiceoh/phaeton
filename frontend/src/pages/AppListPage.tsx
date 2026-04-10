@@ -69,7 +69,7 @@ export default function AppListPage() {
             <h3 className="text-center text-sm font-medium text-muted-foreground">
               시작하기
             </h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <OnboardingStep
                 icon={<Layers className="h-5 w-5" />}
                 step="1"

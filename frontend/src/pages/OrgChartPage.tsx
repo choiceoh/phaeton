@@ -29,7 +29,7 @@ export default function OrgChartPage() {
         <div className="rounded-lg border border-stone-200 bg-white p-6">
           {selected ? (
             <div className="space-y-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-stone-100 text-lg font-bold text-stone-600">
                   {selected.name.charAt(0)}
                 </div>
@@ -41,7 +41,7 @@ export default function OrgChartPage() {
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                 <Info label="이메일" value={selected.email} />
                 <Info label="전화번호" value={selected.phone} />
                 <Info label="직책" value={selected.title} />
