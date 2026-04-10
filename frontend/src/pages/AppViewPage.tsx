@@ -9,6 +9,7 @@ import {
   Filter,
   GanttChart,
   LayoutGrid,
+  Loader2,
   Power,
   PowerOff,
   Search,
@@ -97,6 +98,9 @@ export default function AppViewPage() {
 
   // Process toggle (frontend-only)
   const [processVisible, setProcessVisible] = useState(true)
+
+  // Cell save state for visual feedback (key = "rowId:columnId")
+  const [cellSaveState, setCellSaveState] = useState<Map<string, 'saving' | 'saved'>>(new Map())
 
   // Saved views state
   const [activeView, setActiveView] = useState<SavedView | null>(null)
@@ -346,14 +350,32 @@ export default function AppViewPage() {
     return vis
   }, [collection])
 
-  // Inline edit handler.
+  // Inline edit handler with cell-level visual feedback.
   const handleCellEdit = useCallback(
     (event: CellEditEvent) => {
+      const cellKey = `${event.rowId}:${event.columnId}`
+      setCellSaveState((prev) => new Map(prev).set(cellKey, 'saving'))
       updateEntry.mutate(
         { id: event.rowId, body: { [event.columnId]: event.value } },
         {
-          onSuccess: () => toast.success('수정되었습니다'),
-          onError: (err) => toast.error(formatError(err)),
+          onSuccess: () => {
+            setCellSaveState((prev) => new Map(prev).set(cellKey, 'saved'))
+            setTimeout(() => {
+              setCellSaveState((prev) => {
+                const next = new Map(prev)
+                next.delete(cellKey)
+                return next
+              })
+            }, 1200)
+          },
+          onError: (err) => {
+            setCellSaveState((prev) => {
+              const next = new Map(prev)
+              next.delete(cellKey)
+              return next
+            })
+            toast.error(formatError(err))
+          },
         },
       )
     },
@@ -371,9 +393,14 @@ export default function AppViewPage() {
         byRow.set(u.rowId, existing)
       }
       const updates = Array.from(byRow.entries()).map(([id, fields]) => ({ id, fields }))
+      const toastId = toast.loading(`${updates.length}건 저장 중...`)
       batchUpdateEntry.mutate(updates, {
-        onSuccess: () => toast.success(`${updates.length}건 수정되었습니다`),
-        onError: (err) => toast.error(formatError(err)),
+        onSuccess: () => {
+          toast.success(`${updates.length}건 수정되었습니다`, { id: toastId })
+        },
+        onError: (err) => {
+          toast.error(formatError(err), { id: toastId })
+        },
       })
     },
     [batchUpdateEntry],
@@ -405,11 +432,14 @@ export default function AppViewPage() {
     window.open(`/api/data/${collection.slug}/export.csv${qs ? `?${qs}` : ''}`, '_blank')
   }
 
+  const [importingCSV, setImportingCSV] = useState(false)
   const handleImportCSV = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !collection) return
     const formData = new FormData()
     formData.append('file', file)
+    setImportingCSV(true)
+    const toastId = toast.loading('CSV 가져오는 중...')
     try {
       const res = await fetch(`/api/data/${collection.slug}/import`, {
         method: 'POST',
@@ -422,14 +452,14 @@ export default function AppViewPage() {
       }
       const result = await res.json()
       const count = result.data?.imported ?? 0
-      toast.success(`${count}건 가져왔습니다`)
+      toast.success(`${count}건 가져왔습니다`, { id: toastId })
       setImportedCount(count)
       await refetch()
-      // Clear highlight after animation
       setTimeout(() => setImportedCount(0), 2000)
     } catch (err) {
-      toast.error(formatError(err))
+      toast.error(formatError(err), { id: toastId })
     } finally {
+      setImportingCSV(false)
       e.target.value = ''
     }
   }, [collection, refetch])
@@ -696,8 +726,11 @@ export default function AppViewPage() {
         <DropdownMenu>
           <DropdownMenuTrigger
             className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
+            disabled={importingCSV}
           >
-            <Ellipsis className="h-3.5 w-3.5" />
+            {importingCSV
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Ellipsis className="h-3.5 w-3.5" />}
             더보기
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -920,6 +953,7 @@ export default function AppViewPage() {
               onCellEdit={handleCellEdit}
               onBatchCellEdit={handleBatchCellEdit}
               readonlyColumns={formulaReadonlyCols}
+              cellSaveState={cellSaveState}
               emptyTitle={TERM.noRecords}
               emptyDescription={TERM.noRecordsDesc}
               summaryRow={summaryRow}

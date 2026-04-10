@@ -69,6 +69,8 @@ interface Props<T> {
   onBatchCellEdit?: (event: BatchCellEditEvent) => void
   /** Column IDs that are not editable (system columns, actions, etc.) */
   readonlyColumns?: string[]
+  /** Per-cell save state for visual feedback (key = "rowId:columnId") */
+  cellSaveState?: Map<string, 'saving' | 'saved'>
   emptyTitle?: string
   emptyDescription?: string
   summaryRow?: Record<string, { label: string; value: string | number }>
@@ -100,6 +102,7 @@ export function DataTable<T>({
   onCellEdit,
   onBatchCellEdit,
   readonlyColumns,
+  cellSaveState,
   emptyTitle = '데이터가 없습니다',
   emptyDescription,
   summaryRow,
@@ -476,18 +479,24 @@ export function DataTable<T>({
                           backgroundColor: isPinned ? 'var(--background, #fff)' : undefined,
                         }}
                       >
-                        {onCellEdit ? (
+                        {onCellEdit ? (() => {
+                          const cellRowId = String((row.original as Record<string, unknown>).id ?? row.id)
+                          const cellKey = `${cellRowId}:${colId}`
+                          const saveState = cellSaveState?.get(cellKey)
+                          return (
                           <GridCell
                             rawValue={(row.original as Record<string, unknown>)[colId]}
                             columnId={colId}
-                            rowId={String((row.original as Record<string, unknown>).id ?? row.id)}
+                            rowId={cellRowId}
                             isActive={isActive}
                             isSelected={isSelected}
                             isEditing={isCellEditing}
                             editable={editable}
+                            saving={saveState === 'saving'}
+                            saved={saveState === 'saved'}
                             onSave={(value) => {
                               onCellEdit({
-                                rowId: String((row.original as Record<string, unknown>).id ?? row.id),
+                                rowId: cellRowId,
                                 columnId: colId,
                                 value,
                               })
@@ -499,7 +508,7 @@ export function DataTable<T>({
                           >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </GridCell>
-                        ) : (
+                          )})() : (
                           flexRender(cell.column.columnDef.cell, cell.getContext())
                         )}
                       </TableCell>
