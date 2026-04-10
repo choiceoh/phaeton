@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { useNotifications, useUnreadCount, useMarkRead, useMarkAllRead } from '@/hooks/useNotifications'
+import { useSSE } from '@/hooks/useSSE'
 
 export default function NotificationBell() {
+  useSSE()
   const [open, setOpen] = useState(false)
   const { data: unread } = useUnreadCount()
   const { data: notifData } = useNotifications()
