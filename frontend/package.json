@@ -42,7 +42,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@chenglou/pretext": "^0.0.5",
     "@eslint/js": "^9.39.4",
+    "@fontsource/noto-sans-kr": "^5.2.9",
+    "@napi-rs/canvas": "^0.1.97",
     "@tailwindcss/vite": "^4.1.8",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -57,6 +60,7 @@
     "globals": "^17.4.0",
     "jsdom": "^29.0.2",
     "tailwindcss": "^4.1.8",
+    "tsx": "^4.21.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.58.1",
     "vite": "^6.3.5",
