@@ -45,22 +45,28 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 
 		// --- auth.departments ---
 		`CREATE TABLE IF NOT EXISTS auth.departments (
-			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			name        VARCHAR(255) NOT NULL,
-			parent_id   UUID REFERENCES auth.departments(id) ON DELETE SET NULL,
-			sort_order  INTEGER NOT NULL DEFAULT 0,
-			created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-			updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+			id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			external_code VARCHAR(63),
+			name          VARCHAR(255) NOT NULL,
+			parent_id     UUID REFERENCES auth.departments(id) ON DELETE SET NULL,
+			sort_order    INTEGER NOT NULL DEFAULT 0,
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_departments_external_code
+		     ON auth.departments(external_code) WHERE external_code IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_departments_parent ON auth.departments(parent_id)`,
 
-		// Upgrade: extend auth.users with org fields.
-		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS department_id UUID REFERENCES auth.departments(id) ON DELETE SET NULL`,
-		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS position VARCHAR(63) NOT NULL DEFAULT ''`,
-		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS title VARCHAR(63) NOT NULL DEFAULT ''`,
-		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS phone VARCHAR(31) NOT NULL DEFAULT ''`,
-		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS avatar TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS joined_at DATE`,
+		// Upgrade: extend auth.users with profile columns.
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS external_id    VARCHAR(255)`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS department_id  UUID REFERENCES auth.departments(id)`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS position       VARCHAR(127)`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS title          VARCHAR(127)`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS phone          VARCHAR(31)`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS avatar         TEXT`,
+		`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS joined_at      DATE`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_users_external_id
+		     ON auth.users(external_id) WHERE external_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_users_department ON auth.users(department_id)`,
 
 		// --- _meta.collections ---

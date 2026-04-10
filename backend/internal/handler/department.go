@@ -19,19 +19,22 @@ import (
 
 // Department represents an auth.departments row.
 type Department struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	ParentID  *string    `json:"parent_id"`
-	SortOrder int        `json:"sort_order"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID           string        `json:"id"`
+	ExternalCode *string       `json:"external_code,omitempty"`
+	Name         string        `json:"name"`
+	ParentID     *string       `json:"parent_id,omitempty"`
+	SortOrder    int           `json:"sort_order"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
+	Children     []*Department `json:"children,omitempty"`
 }
 
 // ListDepartments handles GET /api/departments.
+// Returns a flat list by default; ?tree=true returns a nested tree.
 func ListDepartments(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rows, err := pool.Query(r.Context(),
-			`SELECT id, name, parent_id, sort_order, created_at, updated_at
+			`SELECT id, external_code, name, parent_id, sort_order, created_at, updated_at
 			 FROM auth.departments ORDER BY sort_order, name`)
 		if err != nil {
 			slog.Error("list departments: query failed", "error", err)
@@ -43,8 +46,8 @@ func ListDepartments(pool *pgxpool.Pool) http.HandlerFunc {
 		depts := make([]Department, 0)
 		for rows.Next() {
 			var d Department
-			if err := rows.Scan(&d.ID, &d.Name, &d.ParentID, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt); err != nil {
-				slog.Warn("list departments: scan row failed", "error", err)
+			if err := rows.Scan(&d.ID, &d.ExternalCode, &d.Name, &d.ParentID, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt); err != nil {
+				slog.Warn("list departments: scan failed", "error", err)
 				continue
 			}
 			depts = append(depts, d)
@@ -52,20 +55,46 @@ func ListDepartments(pool *pgxpool.Pool) http.HandlerFunc {
 		if err := rows.Err(); err != nil {
 			slog.Error("list departments: rows iteration failed", "error", err)
 		}
+
+		if r.URL.Query().Get("tree") == "true" {
+			writeJSON(w, http.StatusOK, buildTree(depts))
+			return
+		}
 		writeJSON(w, http.StatusOK, depts)
 	}
+}
+
+// buildTree converts a flat list to a nested tree rooted at parent_id IS NULL.
+func buildTree(depts []Department) []*Department {
+	byID := make(map[string]*Department, len(depts))
+	for i := range depts {
+		d := &depts[i]
+		d.Children = []*Department{}
+		byID[d.ID] = d
+	}
+
+	var roots []*Department
+	for _, d := range byID {
+		if d.ParentID == nil {
+			roots = append(roots, d)
+		} else if parent, ok := byID[*d.ParentID]; ok {
+			parent.Children = append(parent.Children, d)
+		} else {
+			roots = append(roots, d)
+		}
+	}
+	return roots
 }
 
 // GetDepartment handles GET /api/departments/{id}.
 func GetDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-
 		var d Department
 		err := pool.QueryRow(r.Context(),
-			`SELECT id, name, parent_id, sort_order, created_at, updated_at
+			`SELECT id, external_code, name, parent_id, sort_order, created_at, updated_at
 			 FROM auth.departments WHERE id = $1`, id,
-		).Scan(&d.ID, &d.Name, &d.ParentID, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt)
+		).Scan(&d.ID, &d.ExternalCode, &d.Name, &d.ParentID, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				apierr.NotFound("department not found").Write(w)
@@ -83,51 +112,44 @@ func GetDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 func CreateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
-			Name      string  `json:"name"`
-			ParentID  *string `json:"parent_id"`
-			SortOrder int     `json:"sort_order"`
+			ExternalCode *string `json:"external_code"`
+			Name         string  `json:"name"`
+			ParentID     *string `json:"parent_id"`
+			SortOrder    int     `json:"sort_order"`
 		}
 		if err := readJSON(r, &input); err != nil {
 			apierr.BadRequest("invalid request body").Write(w)
 			return
 		}
+
 		if input.Name == "" {
 			apierr.BadRequest("name is required").Write(w)
 			return
 		}
 
-		// Validate parent exists if provided.
-		if input.ParentID != nil && *input.ParentID != "" {
-			var exists bool
-			err := pool.QueryRow(r.Context(),
-				`SELECT EXISTS(SELECT 1 FROM auth.departments WHERE id = $1)`,
-				*input.ParentID).Scan(&exists)
-			if err != nil {
-				slog.Error("create department: parent check failed", "error", err)
-				apierr.WrapInternal("check parent", err).Write(w)
-				return
-			}
-			if !exists {
-				apierr.BadRequest("parent department not found").Write(w)
-				return
-			}
-		} else {
-			input.ParentID = nil
-		}
-
-		var id string
+		var d Department
 		err := pool.QueryRow(r.Context(),
-			`INSERT INTO auth.departments (name, parent_id, sort_order)
-			 VALUES ($1, $2, $3) RETURNING id`,
-			input.Name, input.ParentID, input.SortOrder,
-		).Scan(&id)
+			`INSERT INTO auth.departments (external_code, name, parent_id, sort_order)
+			 VALUES ($1, $2, $3, $4)
+			 RETURNING id, external_code, name, parent_id, sort_order, created_at, updated_at`,
+			input.ExternalCode, input.Name, input.ParentID, input.SortOrder,
+		).Scan(&d.ID, &d.ExternalCode, &d.Name, &d.ParentID, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt)
 		if err != nil {
-			slog.Error("create department: insert failed", "error", err)
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				switch pgErr.Code {
+				case pgerrcode.UniqueViolation:
+					apierr.Conflict("external_code already exists").Write(w)
+					return
+				case pgerrcode.ForeignKeyViolation:
+					apierr.BadRequest("invalid parent_id").Write(w)
+					return
+				}
+			}
 			apierr.WrapInternal("create department", err).Write(w)
 			return
 		}
-
-		writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+		writeJSON(w, http.StatusCreated, d)
 	}
 }
 
@@ -137,9 +159,10 @@ func UpdateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 
 		var input struct {
-			Name      *string `json:"name"`
-			ParentID  *string `json:"parent_id"`
-			SortOrder *int    `json:"sort_order"`
+			ExternalCode *string `json:"external_code"`
+			Name         *string `json:"name"`
+			ParentID     *string `json:"parent_id"`
+			SortOrder    *int    `json:"sort_order"`
 		}
 		if err := readJSON(r, &input); err != nil {
 			apierr.BadRequest("invalid request body").Write(w)
@@ -157,6 +180,11 @@ func UpdateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 		args := []any{}
 		argN := 1
 
+		if input.ExternalCode != nil {
+			sets = append(sets, fmt.Sprintf("external_code = $%d", argN))
+			args = append(args, *input.ExternalCode)
+			argN++
+		}
 		if input.Name != nil {
 			if *input.Name == "" {
 				apierr.BadRequest("name cannot be empty").Write(w)
@@ -187,7 +215,7 @@ func UpdateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		sets = append(sets, fmt.Sprintf("updated_at = now()"))
+		sets = append(sets, "updated_at = now()")
 		query := fmt.Sprintf("UPDATE auth.departments SET %s WHERE id = $%d",
 			strings.Join(sets, ", "), argN)
 		args = append(args, id)
@@ -195,9 +223,15 @@ func UpdateDepartment(pool *pgxpool.Pool) http.HandlerFunc {
 		tag, err := pool.Exec(r.Context(), query, args...)
 		if err != nil {
 			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
-				apierr.BadRequest("invalid parent department").Write(w)
-				return
+			if errors.As(err, &pgErr) {
+				switch pgErr.Code {
+				case pgerrcode.ForeignKeyViolation:
+					apierr.BadRequest("invalid parent department").Write(w)
+					return
+				case pgerrcode.UniqueViolation:
+					apierr.Conflict("external_code already exists").Write(w)
+					return
+				}
 			}
 			slog.Error("update department: exec failed", "error", err)
 			apierr.WrapInternal("update department", err).Write(w)
