@@ -302,9 +302,11 @@ export default function ProcessPage() {
                   transitions={transitions}
                   users={allUsers?.map((u) => ({ id: u.id, name: u.name })) ?? []}
                   onAddTransition={(from, to) => {
+                    const fromName = statuses[from]?.name ?? ''
+                    const toName = statuses[to]?.name ?? ''
                     setTransitions([
                       ...transitions,
-                      { from_index: from, to_index: to, label: '', allowed_roles: [], allowed_user_ids: [] },
+                      { from_index: from, to_index: to, label: `${fromName} → ${toName}`, allowed_roles: [], allowed_user_ids: [] },
                     ])
                   }}
                   onRemoveTransition={removeTransition}
