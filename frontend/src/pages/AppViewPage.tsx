@@ -4,6 +4,7 @@ import {
   Calendar,
   Download,
   Filter,
+  LayoutGrid,
   Power,
   PowerOff,
   Search,
@@ -23,8 +24,9 @@ import RoleGate from '@/components/common/RoleGate'
 import EntrySheet from '@/components/works/EntrySheet'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
-import KanbanView from '@/components/works/views/KanbanView'
 import CalendarView from '@/components/works/views/CalendarView'
+import GalleryView from '@/components/works/views/GalleryView'
+import KanbanView from '@/components/works/views/KanbanView'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -157,6 +159,10 @@ export default function AppViewPage() {
   )
   const dateField = useMemo(
     () => collection?.fields?.find((f) => f.field_type === 'date' || f.field_type === 'datetime'),
+    [collection],
+  )
+  const fileField = useMemo(
+    () => collection?.fields?.find((f) => f.field_type === 'file'),
     [collection],
   )
 
@@ -405,6 +411,7 @@ export default function AppViewPage() {
 
   const hasKanban = !!selectField
   const hasCalendar = !!dateField
+  const hasGallery = !!fileField
 
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
@@ -677,7 +684,7 @@ export default function AppViewPage() {
 
       {list && (
         <Tabs defaultValue="list">
-          {(hasKanban || hasCalendar) && (
+          {(hasKanban || hasCalendar || hasGallery) && (
             <TabsList className="mb-4">
               <TabsTrigger value="list">목록</TabsTrigger>
               {hasKanban && <TabsTrigger value="kanban">칸반</TabsTrigger>}
@@ -685,6 +692,12 @@ export default function AppViewPage() {
                 <TabsTrigger value="calendar" className="gap-1">
                   <Calendar className="h-3.5 w-3.5" />
                   캘린더
+                </TabsTrigger>
+              )}
+              {hasGallery && (
+                <TabsTrigger value="gallery" className="gap-1">
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  갤러리
                 </TabsTrigger>
               )}
             </TabsList>
@@ -725,6 +738,17 @@ export default function AppViewPage() {
             <TabsContent value="calendar" className="mt-0">
               <CalendarView
                 dateField={dateField}
+                fields={collection.fields ?? []}
+                entries={list.data}
+                onEntryClick={handleEntryClick}
+              />
+            </TabsContent>
+          )}
+
+          {hasGallery && fileField && (
+            <TabsContent value="gallery" className="mt-0">
+              <GalleryView
+                imageField={fileField}
                 fields={collection.fields ?? []}
                 entries={list.data}
                 onEntryClick={handleEntryClick}
