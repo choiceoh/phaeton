@@ -31,7 +31,7 @@ func main() {
 	if err := handler.SeedDirector(ctx, pool); err != nil {
 		log.Fatal("seed director:", err)
 	}
-	fmt.Fprintln(os.Stderr, "✓ admin user (admin@phaeton.local / admin)")
+	fmt.Fprintln(os.Stderr, "✓ admin user (choiceoh@topsolar.kr)")
 
 	store := schema.NewStore(pool)
 	cache := schema.NewCache(store)

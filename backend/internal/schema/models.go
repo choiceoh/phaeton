@@ -147,13 +147,13 @@ type UpdateCollectionReq struct {
 }
 
 type UpdateFieldReq struct {
-	Label        *string          `json:"label,omitempty"`
-	FieldType    *FieldType       `json:"field_type,omitempty"`
-	IsRequired   *bool            `json:"is_required,omitempty"`
-	IsUnique     *bool            `json:"is_unique,omitempty"`
-	IsIndexed    *bool            `json:"is_indexed,omitempty"`
-	DefaultValue json.RawMessage  `json:"default_value,omitempty"`
-	Options      json.RawMessage  `json:"options,omitempty"`
-	Width        *int16           `json:"width,omitempty"`
-	Height       *int16           `json:"height,omitempty"`
+	Label        *string         `json:"label,omitempty"`
+	FieldType    *FieldType      `json:"field_type,omitempty"`
+	IsRequired   *bool           `json:"is_required,omitempty"`
+	IsUnique     *bool           `json:"is_unique,omitempty"`
+	IsIndexed    *bool           `json:"is_indexed,omitempty"`
+	DefaultValue json.RawMessage `json:"default_value,omitempty"`
+	Options      json.RawMessage `json:"options,omitempty"`
+	Width        *int16          `json:"width,omitempty"`
+	Height       *int16          `json:"height,omitempty"`
 }

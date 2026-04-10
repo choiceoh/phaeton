@@ -22,7 +22,7 @@ const QueryTimeout = 15 * time.Second
 
 // withTimeout wraps every request context with a deadline so that no DB query
 // can outlive the request itself.
-func withTimeout(next http.Handler) http.Handler {
+func WithTimeout(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), QueryTimeout)
 		defer cancel()
@@ -32,7 +32,7 @@ func withTimeout(next http.Handler) http.Handler {
 
 // withRequestID assigns a short hex token to every request and stores it
 // in the context + a "X-Request-ID" response header.
-func withRequestID(next http.Handler) http.Handler {
+func WithRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := newRequestID()
 		w.Header().Set("X-Request-ID", id)
@@ -43,7 +43,7 @@ func withRequestID(next http.Handler) http.Handler {
 
 // withLogger attaches a per-request slog.Logger pre-tagged with request_id,
 // method, and path. Handlers retrieve it via api.Log(r).
-func withLogger(base *slog.Logger) func(http.Handler) http.Handler {
+func WithLogger(base *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rid, _ := r.Context().Value(ctxKeyRequestID).(string)
