@@ -33,7 +33,7 @@ export default function DashboardPage() {
   const { appId } = useParams()
   const { data: collection, isLoading, isError, error } = useCollection(appId)
 
-  if (isLoading) return <LoadingState />
+  if (isLoading) return <LoadingState variant="summary" />
   if (isError) return <ErrorState error={error} />
   if (!collection) return null
 
