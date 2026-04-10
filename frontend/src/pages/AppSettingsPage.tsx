@@ -7,6 +7,7 @@ import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
+import IconPicker from '@/components/works/IconPicker'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -149,6 +150,28 @@ export default function AppSettingsPage() {
       />
 
       <div className="space-y-6">
+        <RoleGate roles={['director', 'pm']}>
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">기본 정보</h2>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div>
+                  <Label>아이콘</Label>
+                  <IconPicker
+                    value={collection.icon}
+                    onChange={(icon) =>
+                      updateCollection.mutate(
+                        { icon },
+                        { onError: (err) => toast.error(formatError(err)) },
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            </Card>
+          </section>
+        </RoleGate>
+
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold">항목 ({collection.fields?.length ?? 0})</h2>

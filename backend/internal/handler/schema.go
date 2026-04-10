@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/choiceoh/phaeton/backend/internal/migration"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
@@ -11,13 +13,14 @@ import (
 
 // SchemaHandler serves the Schema API (/api/schema/...).
 type SchemaHandler struct {
+	pool   *pgxpool.Pool
 	store  *schema.Store
 	cache  *schema.Cache
 	engine *migration.Engine
 }
 
-func NewSchemaHandler(store *schema.Store, cache *schema.Cache, engine *migration.Engine) *SchemaHandler {
-	return &SchemaHandler{store: store, cache: cache, engine: engine}
+func NewSchemaHandler(pool *pgxpool.Pool, store *schema.Store, cache *schema.Cache, engine *migration.Engine) *SchemaHandler {
+	return &SchemaHandler{pool: pool, store: store, cache: cache, engine: engine}
 }
 
 // --- Collections ---
@@ -25,6 +28,45 @@ func NewSchemaHandler(store *schema.Store, cache *schema.Cache, engine *migratio
 func (h *SchemaHandler) ListCollections(w http.ResponseWriter, r *http.Request) {
 	cols := h.cache.Collections()
 	writeJSON(w, http.StatusOK, cols)
+}
+
+// CollectionCounts returns a map of collection slug → row count for all
+// collections in a single query, avoiding the N+1 per-card fetches.
+func (h *SchemaHandler) CollectionCounts(w http.ResponseWriter, r *http.Request) {
+	cols := h.cache.Collections()
+	if len(cols) == 0 {
+		writeJSON(w, http.StatusOK, map[string]int64{})
+		return
+	}
+
+	// Build a UNION ALL query: SELECT 'slug' AS slug, COUNT(*) FROM "data"."slug" UNION ALL ...
+	var sql string
+	for i, col := range cols {
+		if i > 0 {
+			sql += " UNION ALL "
+		}
+		quoted := fmt.Sprintf(`SELECT '%s' AS slug, COUNT(*) AS cnt FROM "data".%q`, col.Slug, col.Slug)
+		sql += quoted
+	}
+
+	rows, err := h.pool.Query(r.Context(), sql)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rows.Close()
+
+	result := make(map[string]int64, len(cols))
+	for rows.Next() {
+		var slug string
+		var cnt int64
+		if err := rows.Scan(&slug, &cnt); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		result[slug] = cnt
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *SchemaHandler) GetCollection(w http.ResponseWriter, r *http.Request) {

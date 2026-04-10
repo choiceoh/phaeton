@@ -1,5 +1,5 @@
-import { GitBranch, Layers, MousePointerClick, Settings } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronDown, ChevronUp, GitBranch, Layers, MousePointerClick, Search, Settings } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
 import AppCard from '@/components/works/AppCard'
@@ -10,12 +10,28 @@ import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import TemplateGallery from '@/components/works/TemplateGallery'
 import { Button } from '@/components/ui/button'
-import { useCollections } from '@/hooks/useCollections'
+import { Input } from '@/components/ui/input'
+import { useCollections, useCollectionCounts } from '@/hooks/useCollections'
 import { TERM } from '@/lib/constants'
 
 export default function AppListPage() {
   const { data: collections, isLoading, isError, error, refetch } = useCollections()
+  const { data: counts } = useCollectionCounts()
   const [showTemplates, setShowTemplates] = useState(false)
+  const [search, setSearch] = useState('')
+
+  const filtered = useMemo(() => {
+    if (!collections) return []
+    if (!search.trim()) return collections
+    const q = search.trim().toLowerCase()
+    return collections.filter(
+      (c) =>
+        c.label.toLowerCase().includes(q) ||
+        (c.description?.toLowerCase().includes(q)),
+    )
+  }, [collections, search])
+
+  const hasCollections = collections && collections.length > 0
 
   return (
     <div>
@@ -32,10 +48,14 @@ export default function AppListPage() {
             </Link>
             <RoleGate roles={['director', 'pm']}>
               <Button
-                variant="outline"
+                variant={showTemplates ? 'secondary' : 'outline'}
                 onClick={() => setShowTemplates(!showTemplates)}
+                className="gap-1"
               >
                 템플릿
+                {showTemplates
+                  ? <ChevronUp className="h-3.5 w-3.5" />
+                  : <ChevronDown className="h-3.5 w-3.5" />}
               </Button>
               <Link to="/apps/new">
                 <Button>{TERM.newCollection}</Button>
@@ -101,14 +121,33 @@ export default function AppListPage() {
         </div>
       )}
 
-      {collections && collections.length > 0 && (
-        <div className="grid justify-center gap-4 grid-cols-[repeat(auto-fill,minmax(280px,340px))]">
-          {collections.map((c, i) => (
-            <div key={c.id} className={`animate-scale-in stagger-${Math.min(i + 1, 12)}`}>
-              <AppCard collection={c} />
+      {hasCollections && (
+        <>
+          {/* Search bar */}
+          <div className="relative mb-4 max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="업무 검색…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+
+          {filtered.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              '{search}'에 해당하는 업무가 없습니다
+            </p>
+          ) : (
+            <div className="grid justify-center gap-4 grid-cols-[repeat(auto-fill,minmax(280px,340px))]">
+              {filtered.map((c, i) => (
+                <div key={c.id} className={`animate-scale-in stagger-${Math.min(i + 1, 12)}`}>
+                  <AppCard collection={c} count={counts?.[c.slug]} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   )

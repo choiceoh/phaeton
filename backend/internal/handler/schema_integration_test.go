@@ -25,7 +25,7 @@ func setupSchemaRouter(t *testing.T) (*chi.Mux, *migration.Engine, *schema.Cache
 		t.Fatal(err)
 	}
 	engine := migration.NewEngine(pool, store, cache)
-	h := handler.NewSchemaHandler(store, cache, engine)
+	h := handler.NewSchemaHandler(pool, store, cache, engine)
 
 	r := chi.NewRouter()
 	r.Use(handler.WithRequestID)

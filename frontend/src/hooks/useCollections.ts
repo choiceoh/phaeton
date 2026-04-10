@@ -13,6 +13,15 @@ export function useCollections() {
   })
 }
 
+/** Fetch all collection counts in a single request (slug → row count). */
+export function useCollectionCounts() {
+  return useQuery({
+    queryKey: [...queryKeys.collections.all, 'counts'],
+    queryFn: () => api.get<Record<string, number>>('/schema/collections/counts'),
+    staleTime: 60_000,
+  })
+}
+
 export function useCollection(id: string | undefined) {
   return useQuery({
     queryKey: queryKeys.collections.detail(id ?? ''),

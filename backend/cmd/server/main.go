@@ -97,7 +97,7 @@ func run() int {
 	bus := events.NewBus()
 
 	// Schema & dynamic handlers (PR #53 — built-in dynamic handler).
-	schemaHandler := handler.NewSchemaHandler(store, cache, migEngine)
+	schemaHandler := handler.NewSchemaHandler(pool, store, cache, migEngine)
 	dynHandler := handler.NewDynHandler(pool, cache, bus)
 	viewHandler := handler.NewViewHandler(store)
 	savedViewHandler := handler.NewSavedViewHandler(store)
@@ -360,6 +360,7 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 		r.Route("/api/schema", func(r chi.Router) {
 			// Read-only: all authenticated users.
 			r.Get("/collections", cfg.schemaH.ListCollections)
+			r.Get("/collections/counts", cfg.schemaH.CollectionCounts)
 			r.Get("/collections/{id}", cfg.schemaH.GetCollection)
 			r.Get("/migrations/history", cfg.schemaH.MigrationHistory)
 
