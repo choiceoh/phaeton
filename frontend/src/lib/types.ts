@@ -227,7 +227,7 @@ export interface TotalsResult {
 
 // --- Views ---
 
-export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery' | 'gantt'
+export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery' | 'gantt' | 'form'
 
 export interface View {
   id: string

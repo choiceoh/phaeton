@@ -1,4 +1,4 @@
-import { Layers, MousePointerClick, Settings } from 'lucide-react'
+import { GitBranch, Layers, MousePointerClick, Settings } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
@@ -23,17 +23,25 @@ export default function AppListPage() {
         title={TERM.collections}
         description="업무 앱을 만들고 데이터를 관리하세요"
         actions={
-          <RoleGate roles={['director', 'pm']}>
-            <Button
-              variant="outline"
-              onClick={() => setShowTemplates(!showTemplates)}
-            >
-              템플릿
-            </Button>
-            <Link to="/apps/new">
-              <Button>{TERM.newCollection}</Button>
+          <>
+            <Link to="/apps/relationships">
+              <Button variant="outline" className="gap-1">
+                <GitBranch className="h-4 w-4" />
+                관계도
+              </Button>
             </Link>
-          </RoleGate>
+            <RoleGate roles={['director', 'pm']}>
+              <Button
+                variant="outline"
+                onClick={() => setShowTemplates(!showTemplates)}
+              >
+                템플릿
+              </Button>
+              <Link to="/apps/new">
+                <Button>{TERM.newCollection}</Button>
+              </Link>
+            </RoleGate>
+          </>
         }
       />
 
