@@ -1,3 +1,13 @@
+// Package migration executes and records DDL changes to dynamic data tables.
+//
+// Every schema mutation (create/alter/drop collection or field) is wrapped in
+// a single PostgreSQL transaction that:
+//  1. Updates _meta tables (collections, fields, relations)
+//  2. Executes the generated DDL (CREATE TABLE, ALTER TABLE, etc.)
+//  3. Records a migration entry with both up and down DDL for rollback
+//
+// This ensures atomicity: either the full schema change succeeds, or nothing changes.
+// The engine also manages cache invalidation after successful mutations.
 package migration
 
 import (
@@ -30,7 +40,21 @@ func NewEngine(pool *pgxpool.Pool, store *schema.Store, cache *schema.Cache) *En
 
 // ---------- Create Collection ----------
 
-// CreateCollection creates the meta records and the data table in a single transaction.
+// CreateCollection creates a new collection (app) with its backing PostgreSQL table
+// in a single atomic transaction. The full flow is:
+//
+//  1. Validate the request payload (label, slug, field definitions)
+//  2. Pre-flight checks: slug uniqueness in cache, relation targets exist
+//  3. Begin transaction
+//  4. Insert collection meta row into _meta.collections
+//  5. Insert field meta rows into _meta.fields for each requested field
+//  6. Generate and execute CREATE TABLE DDL (includes indexes and tsvector trigger)
+//  7. Generate and execute relation DDL (FK constraints for 1:1/1:N, junction tables for M:N)
+//  8. Record the migration entry in _history.schema_migrations with up/down DDL
+//  9. Commit the transaction
+//  10. Reload the collection into the in-memory cache
+//
+// If any step fails, the transaction rolls back and no changes are persisted.
 func (e *Engine) CreateCollection(ctx context.Context, req *schema.CreateCollectionReq) (schema.Collection, error) {
 	if err := schema.ValidateCollectionCreate(req); err != nil {
 		return schema.Collection{}, err
@@ -234,7 +258,11 @@ func updateCollectionTx(ctx context.Context, tx pgx.Tx, id string, req *schema.U
 
 // ---------- Drop Collection ----------
 
-// PreviewDropCollection returns the impact analysis without modifying anything.
+// PreviewDropCollection returns an impact analysis for dropping a collection without
+// making any modifications. The preview includes the number of active rows that would
+// be lost, the DDL statements that would execute (DROP TABLE), and the reconstruction
+// DDL (CREATE TABLE) that could be used for rollback. Callers use this to present a
+// confirmation dialog before committing to the destructive operation.
 func (e *Engine) PreviewDropCollection(ctx context.Context, collectionID string) (Preview, error) {
 	col, ok := e.cache.CollectionByID(collectionID)
 	if !ok {
@@ -261,7 +289,18 @@ func (e *Engine) PreviewDropCollection(ctx context.Context, collectionID string)
 	}, nil
 }
 
-// DropCollection executes the collection deletion.
+// DropCollection permanently removes a collection and its data table. The teardown
+// order within a single transaction is:
+//
+//  1. Generate DROP TABLE DDL and the inverse CREATE TABLE DDL (for rollback)
+//  2. Execute DROP TABLE CASCADE (removes the table and any dependent objects)
+//  3. Delete the collection and its fields from _meta tables via the store
+//  4. Record the migration with both up and down DDL
+//  5. Commit the transaction
+//  6. Remove the collection from the in-memory cache
+//
+// System collections cannot be deleted. Junction tables for M:N relations are
+// automatically dropped via CASCADE.
 func (e *Engine) DropCollection(ctx context.Context, collectionID string) error {
 	col, ok := e.cache.CollectionByID(collectionID)
 	if !ok {
@@ -304,8 +343,20 @@ func (e *Engine) DropCollection(ctx context.Context, collectionID string) error 
 
 // ---------- Add Field ----------
 
-// AddField adds a field to an existing collection.
-// Returns (field, preview, error). If preview is non-nil, confirmation is needed.
+// AddField adds a field (column) to an existing collection. It operates in two modes:
+//
+//   - Preview mode (confirmed=false): when the field addition is classified as unsafe
+//     (e.g., adding a NOT NULL column without a default to a table with existing rows),
+//     returns a *Preview describing the impact without making changes. The caller
+//     should present this to the user for confirmation.
+//   - Execute mode (confirmed=true): performs the full operation in a transaction:
+//     validate field definition, insert meta row, generate and execute ALTER TABLE
+//     ADD COLUMN DDL, create FK or junction table for relation fields, record the
+//     migration, commit, and reload the cache.
+//
+// Layout and computed field types (formula, lookup, rollup) produce no DDL since they
+// have no backing database column. M:N relation fields create a junction table instead
+// of adding a column to the owner table.
 func (e *Engine) AddField(ctx context.Context, collectionID string, req *schema.CreateFieldIn, confirmed bool) (schema.Field, *Preview, error) {
 	if err := schema.ValidateFieldCreate(req); err != nil {
 		return schema.Field{}, nil, err
@@ -395,8 +446,19 @@ func (e *Engine) AddField(ctx context.Context, collectionID string, req *schema.
 
 // ---------- Alter Field ----------
 
-// AlterField modifies field properties.
-// Returns (preview, error). If preview is non-nil, confirmation is needed.
+// AlterField modifies one or more properties of an existing field. It handles:
+//
+//   - Type changes: generates ALTER COLUMN TYPE with appropriate USING cast. Checks
+//     type compatibility and may require confirmation when data loss is possible.
+//     Conversions between layout/computed and data types are blocked entirely.
+//   - Constraint changes: adds or removes NOT NULL via SET/DROP NOT NULL DDL.
+//   - Slug rename and label changes: applied to the _meta.fields row.
+//
+// Like AddField, it operates in preview mode when the change is classified as unsafe
+// and confirmed=false, returning a *Preview with impact analysis (affected rows,
+// incompatible data samples, DDL). When confirmed=true or the change is safe, it
+// executes the full mutation in a single transaction: update meta, execute DDL,
+// record migration, commit, and reload cache.
 func (e *Engine) AlterField(ctx context.Context, fieldID string, req *schema.UpdateFieldReq, confirmed bool) (*Preview, error) {
 	old, err := e.store.GetField(ctx, fieldID)
 	if err != nil {
@@ -550,6 +612,14 @@ func (e *Engine) PreviewDropField(ctx context.Context, fieldID string) (Preview,
 	}, nil
 }
 
+// DropField permanently removes a field from its collection. Layout and computed
+// fields (which have no database column) are removed from _meta only. M:N relation
+// fields drop the associated junction table. Regular fields generate ALTER TABLE
+// DROP COLUMN DDL. The inverse DDL is recorded for rollback support.
+//
+// Callers should first invoke PreviewDropField to present the user with an impact
+// analysis (number of non-null values that will be lost) and require explicit
+// confirmation before proceeding.
 func (e *Engine) DropField(ctx context.Context, fieldID string) error {
 	f, err := e.store.GetField(ctx, fieldID)
 	if err != nil {
@@ -617,6 +687,18 @@ func (e *Engine) DropField(ctx context.Context, fieldID string) error {
 
 // ---------- Rollback ----------
 
+// Rollback reverses a previously applied migration by executing its stored down DDL
+// statements. It verifies the migration exists, has been applied, and has not already
+// been rolled back. Within a single transaction it:
+//
+//  1. Executes all down DDL statements (e.g., DROP COLUMN to undo ADD COLUMN)
+//  2. Restores _meta rows as needed (re-inserts deleted collections/fields, reverts
+//     altered field properties)
+//  3. Sets the rolled_back_at timestamp on the migration record
+//  4. Commits and performs a full cache invalidation
+//
+// Rollbacks are rare operations; the full cache reload (rather than targeted
+// invalidation) keeps the logic simple with acceptable cost.
 func (e *Engine) Rollback(ctx context.Context, migrationID string) error {
 	mig, err := e.getMigration(ctx, migrationID)
 	if err != nil {

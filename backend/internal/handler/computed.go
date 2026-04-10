@@ -29,6 +29,21 @@ func parseComputedOpts(raw json.RawMessage) computedOpts {
 
 // resolveComputedFields fills in computed field values for each record.
 // Must be called after records are fetched and relations are expanded.
+// It handles three computation types:
+//
+//   - Formula: evaluated at the SQL level via a computed expression in the SELECT
+//     clause (see formulaExpr in dynamic.go). The formula parser translates user
+//     expressions (e.g., "price * quantity") into safe SQL fragments. This method
+//     skips formula fields because their values are already populated by the query.
+//
+//   - Lookup: fetches a single field value from a related record. For 1:1/1:N
+//     relations, returns the target field value. For M:N relations, returns an
+//     array of values from all linked records. Uses batch IN queries to avoid N+1.
+//
+//   - Rollup: aggregates a field across related records using functions like SUM,
+//     AVG, MIN, MAX, COUNT, COUNTA. Supports both forward relations (this table
+//     has FK to target) and reverse relations (target table has FK back to this
+//     table), as well as M:N relations via junction tables.
 func (h *DynHandler) resolveComputedFields(
 	ctx context.Context,
 	records []map[string]any,
@@ -361,7 +376,11 @@ func extractRelID(row map[string]any, fieldSlug string) string {
 	return ""
 }
 
-// batchFetchField fetches a single column value for multiple records by ID.
+// batchFetchField fetches a single column value for multiple records by their IDs
+// in a single SELECT ... WHERE id IN (...) query. Returns a map from record ID to
+// the field value. This is the core N+1 prevention mechanism for lookup and rollup
+// computations: instead of querying once per parent record, all target IDs are
+// collected up front and fetched in one batch.
 func batchFetchField(ctx context.Context, pool *pgxpool.Pool, tableSlug, fieldSlug string, ids []string) (map[string]any, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -407,7 +426,10 @@ func batchFetchField(ctx context.Context, pool *pgxpool.Pool, tableSlug, fieldSl
 	return result, nil
 }
 
-// batchRollup runs an aggregate query on the target table grouped by a relation FK.
+// batchRollup runs an aggregate query (SUM, AVG, MIN, MAX, COUNT, COUNTA) on the
+// target table, grouped by a relation FK column. It collects results for all source
+// record IDs in a single query. Returns a map from source record ID to the
+// aggregated float64 value.
 func batchRollup(
 	ctx context.Context,
 	pool *pgxpool.Pool,

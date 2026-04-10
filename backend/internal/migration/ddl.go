@@ -9,6 +9,23 @@ import (
 )
 
 // FieldTypeToPG maps a schema field type to its PostgreSQL column type.
+// Computed types (formula, lookup, rollup) and layout types (label, line, spacer)
+// return an empty string because they have no backing database column. The mapping
+// covers the full set of Topworks field types:
+//
+//   - text, textarea     -> TEXT
+//   - number             -> NUMERIC
+//   - integer            -> INTEGER
+//   - boolean            -> BOOLEAN
+//   - date               -> DATE
+//   - datetime           -> TIMESTAMPTZ
+//   - time               -> TIME
+//   - select             -> VARCHAR(255)
+//   - multiselect        -> TEXT[]
+//   - relation, user, file -> UUID
+//   - json, table, spreadsheet -> JSONB
+//   - autonumber         -> BIGINT
+//   - (unknown)          -> TEXT (safe fallback)
 func FieldTypeToPG(ft schema.FieldType) string {
 	switch ft {
 	case schema.FieldText, schema.FieldTextarea:
@@ -53,8 +70,19 @@ func FieldTypeToPG(ft schema.FieldType) string {
 // This avoids any `;\n` splitting that breaks on statements with embedded
 // semicolons (function bodies, DO blocks, triggers).
 
-// GenerateCreateTable produces the DDL statements for a new data table,
-// including any requested indexes for indexed fields.
+// GenerateCreateTable produces the DDL statements for a new data table in the
+// "data" schema. The up DDL includes:
+//
+//   - CREATE TABLE with an auto-generated UUID primary key (id)
+//   - User-defined columns derived from the field list (computed/M:N fields are skipped)
+//   - System columns: created_at, updated_at, created_by, updated_by, deleted_at, _version
+//   - Sequences for any autonumber fields (created before the table)
+//   - A partial index on id WHERE deleted_at IS NULL (accelerates all active-row queries)
+//   - Individual indexes for fields marked as indexed
+//   - Full-text search infrastructure: _tsv TSVECTOR column, GIN index, and an
+//     auto-update trigger that concatenates all text/textarea fields
+//
+// The down DDL is a single DROP TABLE IF EXISTS statement for rollback.
 func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down []string) {
 	qTable := quoteIdent("data", col.Slug)
 
@@ -147,8 +175,15 @@ func GenerateDropTable(slug string) (up, down []string) {
 	return up, nil
 }
 
-// GenerateAddColumn produces DDL to add a column, plus any unique/index statements.
-// Layout fields produce no DDL.
+// GenerateAddColumn produces DDL to add a column to an existing data table.
+// The field type is mapped to a PostgreSQL type via FieldTypeToPG. The up DDL
+// includes ALTER TABLE ADD COLUMN with optional NOT NULL and DEFAULT clauses,
+// plus separate statements for UNIQUE constraints and indexes if requested.
+// Autonumber fields additionally create a sequence with a DEFAULT nextval().
+//
+// Layout and computed fields (NoColumn=true) produce no DDL and return nil.
+//
+// The down DDL contains the matching ALTER TABLE DROP COLUMN for rollback.
 func GenerateAddColumn(tableSlug string, f schema.Field) (up, down []string) {
 	if f.FieldType.NoColumn() {
 		return nil, nil
@@ -192,7 +227,11 @@ func GenerateAddColumn(tableSlug string, f schema.Field) (up, down []string) {
 	return up, down
 }
 
-// GenerateDropColumn produces DDL to drop a column.
+// GenerateDropColumn produces DDL to drop a column from a data table.
+// The up DDL is ALTER TABLE DROP COLUMN IF EXISTS. For autonumber fields, the
+// associated sequence is also dropped. The down DDL is the inverse ALTER TABLE
+// ADD COLUMN with the original type, enabling rollback to restore the column
+// structure (though data in the column is not recoverable).
 func GenerateDropColumn(tableSlug string, f schema.Field) (up, down []string) {
 	qTable := quoteIdent("data", tableSlug)
 	qCol := quoteIdentSingle(f.Slug)
@@ -252,6 +291,9 @@ func SanitizeOnDelete(s string) string {
 }
 
 // GenerateAddFK produces a foreign-key constraint for a relation field.
+// The FK is named fk_{tableSlug}_{colSlug} and references data."{targetSlug}"(id).
+// The ON DELETE action is sanitized via SanitizeOnDelete (defaults to SET NULL
+// if the provided action is invalid). The down DDL drops the constraint by name.
 func GenerateAddFK(tableSlug, colSlug, targetSlug, onDelete string) (up, down string) {
 	constraintName := fmt.Sprintf("fk_%s_%s", tableSlug, colSlug)
 	action := SanitizeOnDelete(onDelete)
@@ -268,7 +310,17 @@ func GenerateAddFK(tableSlug, colSlug, targetSlug, onDelete string) (up, down st
 	return up, down
 }
 
-// GenerateJunctionTable produces DDL for a many-to-many junction table.
+// GenerateJunctionTable produces DDL for a many-to-many (M:N) junction table.
+// The junction table is created in the "data" schema with the structure:
+//
+//   - id: UUID primary key
+//   - {slugA}_id: UUID NOT NULL REFERENCES data."{slugA}"(id) ON DELETE CASCADE
+//   - {slugB}_id: UUID NOT NULL REFERENCES data."{slugB}"(id) ON DELETE CASCADE
+//   - created_at: TIMESTAMPTZ
+//   - UNIQUE({slugA}_id, {slugB}_id): prevents duplicate links
+//
+// Both FK columns cascade on delete so removing either side automatically cleans
+// up the junction rows. The down DDL is DROP TABLE IF EXISTS.
 func GenerateJunctionTable(slugA, slugB, junctionName string) (up, down string) {
 	qTable := quoteIdent("data", junctionName)
 	colA := slugA + "_id"

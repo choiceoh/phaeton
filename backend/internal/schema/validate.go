@@ -15,7 +15,8 @@ var (
 	ErrInvalidInput = errors.New("invalid input")
 )
 
-// slugRe: lowercase letters, digits, underscore. Must start with a letter.
+// slugRe enforces the slug format: lowercase letters, digits, underscore; must start with a letter; max 63 chars.
+// This constraint ensures slugs are safe for use as PostgreSQL identifiers (table/column names).
 var slugRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
 
 // PostgreSQL reserved words that cannot be used as table/column names.
@@ -41,7 +42,8 @@ var pgReserved = map[string]bool{
 	"where": true, "window": true, "with": true,
 }
 
-// autoColumns are injected by the engine into every data table.
+// autoColumns are system columns automatically added to every dynamic data table by the engine.
+// User-defined field slugs must not collide with these names.
 var autoColumns = map[string]bool{
 	"id": true, "created_at": true, "updated_at": true,
 	"created_by": true, "updated_by": true, "deleted_at": true, "_status": true,
@@ -67,6 +69,11 @@ func ValidateFieldType(ft FieldType) error {
 	return nil
 }
 
+// ValidateCollectionCreate checks the full collection creation request:
+//   - Slug format (lowercase identifier, not a reserved word or auto-column)
+//   - Label is non-empty
+//   - Each inline field passes validateFieldIn (type-specific rules)
+//   - No duplicate field slugs within the same collection
 func ValidateCollectionCreate(req *CreateCollectionReq) error {
 	if err := ValidateSlug(req.Slug); err != nil {
 		return err
@@ -87,6 +94,8 @@ func ValidateCollectionCreate(req *CreateCollectionReq) error {
 	return nil
 }
 
+// ValidateFieldCreate validates a single field creation request.
+// Delegates to validateFieldIn for the actual per-type validation logic.
 func ValidateFieldCreate(req *CreateFieldIn) error {
 	return validateFieldIn(req)
 }
@@ -95,6 +104,14 @@ func ValidateFieldCreate(req *CreateFieldIn) error {
 var validWidths = map[int16]bool{1: true, 2: true, 3: true, 6: true}
 var validHeights = map[int16]bool{1: true, 2: true, 3: true}
 
+// validateFieldIn performs per-type validation on a field creation input:
+//   - Validates slug format and label presence
+//   - Layout fields: strips data constraints (is_required, is_unique, etc.) since they have no column
+//   - Computed fields: strips constraints and validates type-specific options (formula expression, lookup/rollup config)
+//   - Autonumber: normalizes to is_unique=true, no default
+//   - Select/multiselect: requires non-empty, unique choices in Options; validates transitions if present
+//   - Relation: requires target_collection_id, valid relation_type, and valid on_delete action
+//   - Grid layout: validates width (1/2/3/6) and height (1/2/3) values
 func validateFieldIn(f *CreateFieldIn) error {
 	if err := ValidateSlug(f.Slug); err != nil {
 		return err
@@ -176,8 +193,9 @@ type NumberRange struct {
 	Max *float64 `json:"max,omitempty"`
 }
 
-// ExtractNumberRange returns min/max constraints from a number/integer field's
-// options, or nil if none are set.
+// ExtractNumberRange parses min/max constraints from a number or integer field's
+// Options JSON (e.g. {"min": 0, "max": 100}). Returns nil if the options are
+// empty, null, or contain neither min nor max.
 func ExtractNumberRange(raw json.RawMessage) *NumberRange {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
@@ -192,8 +210,8 @@ func ExtractNumberRange(raw json.RawMessage) *NumberRange {
 	return &opts
 }
 
-// ExtractMaxLength returns the max_length constraint from a text/textarea
-// field's options, or 0 if not set.
+// ExtractMaxLength parses the max_length constraint from a text or textarea
+// field's Options JSON (e.g. {"max_length": 255}). Returns 0 if not set or unparseable.
 func ExtractMaxLength(raw json.RawMessage) int {
 	if len(raw) == 0 || string(raw) == "null" {
 		return 0
@@ -207,8 +225,9 @@ func ExtractMaxLength(raw json.RawMessage) int {
 	return opts.MaxLength
 }
 
-// ExtractChoices returns the allowed choices from a raw JSON options payload,
-// or nil if none are set. Used by both validation and the Dynamic API.
+// ExtractChoices parses the "choices" array from a select/multiselect field's
+// Options JSON (e.g. {"choices": ["A", "B", "C"]}). Returns nil if the options
+// are empty or null. Used by both validation and the Dynamic API for value checking.
 func ExtractChoices(raw json.RawMessage) ([]string, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, nil
@@ -232,7 +251,10 @@ func ExtractTransitions(raw json.RawMessage) ([]Transition, error) {
 	return opts.Transitions, nil
 }
 
-// ValidateTransitions checks that transitions reference valid choices and roles.
+// ValidateTransitions checks that all transitions in a process-enabled select field are valid:
+//   - Both From and To must reference existing choices (상태값이 유효한 선택지여야 함)
+//   - From and To must differ (self-transitions are not allowed)
+//   - AllowedRoles must be non-empty and contain only known roles (director, pm, engineer, viewer)
 func ValidateTransitions(transitions []Transition, choices []string) error {
 	choiceSet := make(map[string]bool, len(choices))
 	for _, c := range choices {
@@ -264,9 +286,9 @@ func ValidateTransitions(transitions []Transition, choices []string) error {
 
 // FormulaOptions is the expected shape of `options` for formula fields.
 type FormulaOptions struct {
-	Expression string `json:"expression"`
-	ResultType string `json:"result_type"` // number, integer, text, boolean, date
-	Precision  *int   `json:"precision,omitempty"`
+	Expression string `json:"expression"`          // The formula expression (e.g. "{price} * {quantity}"); parsed by the formula engine.
+	ResultType string `json:"result_type"`          // Output type: "number", "integer", "text", "boolean", or "date". Defaults to "number" if empty.
+	Precision  *int   `json:"precision,omitempty"`  // Decimal places for number results; nil means no rounding.
 }
 
 func validateFormulaOptions(raw json.RawMessage) error {
@@ -302,7 +324,10 @@ func ExtractFormulaOptions(raw json.RawMessage) (*FormulaOptions, error) {
 	return &opts, nil
 }
 
-// validateComputedOptions checks that computed field options are well-formed.
+// validateComputedOptions checks that computed field options are well-formed:
+//   - Formula: requires non-empty expression and valid result_type
+//   - Lookup: requires relation_field and target_field in Options
+//   - Rollup: requires relation_field, target_field, and a valid aggregation function (SUM/COUNT/AVG/MIN/MAX/COUNTA)
 func validateComputedOptions(f *CreateFieldIn) error {
 	switch f.FieldType {
 	case FieldFormula:

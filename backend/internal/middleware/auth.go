@@ -140,6 +140,9 @@ func GetUser(ctx context.Context) (UserClaims, bool) {
 	return u, ok
 }
 
+// extractToken retrieves the JWT from the request. It checks the Authorization
+// header first ("Bearer <token>"), then falls back to the "token" httpOnly cookie.
+// Returns "" if no token is found in either location.
 func extractToken(r *http.Request) string {
 	// Authorization: Bearer <token>
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
@@ -167,6 +170,10 @@ func GetCollectionRole(ctx context.Context) string {
 	return r
 }
 
+// jwtSecret returns the JWT signing secret from the JWT_SECRET env var.
+// Falls back to a hard-coded dev secret if unset. In production, run() in main.go
+// refuses to start without an explicit JWT_SECRET, so the fallback only applies
+// during local development.
 func jwtSecret() string {
 	if s := os.Getenv("JWT_SECRET"); s != "" {
 		return s

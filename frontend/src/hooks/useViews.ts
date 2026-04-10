@@ -1,9 +1,18 @@
+/**
+ * CRUD hooks for collection views (list, kanban, calendar, gallery, gantt, etc.).
+ *
+ * Views define how entries are displayed — each view has a type, field
+ * visibility/ordering, default sort, and filter configuration. All mutations
+ * invalidate the view list cache for the parent collection.
+ */
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
 import type { CreateViewReq, UpdateViewReq, View } from '@/lib/types'
 
+/** Fetch all views for a collection. Disabled when collectionId is undefined. */
 export function useViews(collectionId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.views.list(collectionId ?? ''),
@@ -12,6 +21,7 @@ export function useViews(collectionId: string | undefined) {
   })
 }
 
+/** Create a new view (e.g., adding a Kanban board to a collection). */
 export function useCreateView(collectionId: string) {
   const qc = useQueryClient()
   const key = queryKeys.views.list(collectionId)
@@ -36,6 +46,7 @@ export function useCreateView(collectionId: string) {
   })
 }
 
+/** Update view config (field visibility, sort order, filters, etc.). */
 export function useUpdateView(collectionId: string) {
   const qc = useQueryClient()
   const key = queryKeys.views.list(collectionId)
@@ -59,6 +70,7 @@ export function useUpdateView(collectionId: string) {
   })
 }
 
+/** Delete a view. The UI should prevent deleting the last remaining view. */
 export function useDeleteView(collectionId: string) {
   const qc = useQueryClient()
   const key = queryKeys.views.list(collectionId)

@@ -1,3 +1,15 @@
+// Package automation implements the trigger->condition->action pipeline.
+//
+// When a record is created, updated, deleted, or transitions status, the event bus
+// notifies the automation engine. The engine:
+//  1. Loads enabled automations for the collection and trigger type
+//  2. Evaluates conditions against the record (all conditions are AND-joined)
+//  3. Executes actions (send_notification, update_field, call_webhook)
+//  4. Logs the run result (success/error/skipped)
+//
+// Execution is asynchronous via a worker pool to avoid blocking API responses.
+// An automation_depth context value prevents infinite loops: if an action updates
+// a record, the resulting event is ignored (depth > 0).
 package automation
 
 import (
@@ -75,6 +87,9 @@ func (e *Engine) Subscribe(bus *events.Bus) {
 	})
 }
 
+// mapEventType converts an event bus EventType to the corresponding automation
+// trigger type string. Returns "" for event types that have no automation trigger,
+// causing the caller to skip processing.
 func mapEventType(t events.EventType) string {
 	switch t {
 	case events.EventRecordCreate:
@@ -92,6 +107,14 @@ func mapEventType(t events.EventType) string {
 	}
 }
 
+// execute runs the full evaluation pipeline for a single automation against an event:
+//  1. Checks trigger-specific config (e.g. from/to status must match for status_change)
+//  2. Evaluates all AND-joined conditions against the record data
+//  3. Executes actions sequentially in sort_order
+//  4. Logs the run result to _meta.automation_runs (success, error, or skipped)
+//
+// If the trigger config doesn't match or conditions aren't met, the run is logged
+// as "skipped" with the reason. Errors during action execution are logged as "error".
 func (e *Engine) execute(ctx context.Context, a Automation, ev events.Event) {
 	start := time.Now()
 
@@ -121,8 +144,10 @@ func (e *Engine) execute(ctx context.Context, a Automation, ev events.Event) {
 	logRun(ctx, e.pool, a.ID, a.CollectionID, ev.RecordID, a.TriggerType, "success", "", time.Since(start))
 }
 
-// loadAutomations fetches enabled automations for a collection and trigger type,
-// including their conditions and actions.
+// loadAutomations fetches enabled automations for a collection and trigger type
+// from _meta.automations, then eagerly loads their conditions (from
+// _meta.automation_conditions) and actions (from _meta.automation_actions).
+// Results are ordered by created_at so older automations fire first.
 func (e *Engine) loadAutomations(ctx context.Context, collectionID, triggerType string) ([]Automation, error) {
 	rows, err := e.pool.Query(ctx, `
 		SELECT id, collection_id, name, is_enabled, trigger_type, trigger_config, created_by, created_at, updated_at

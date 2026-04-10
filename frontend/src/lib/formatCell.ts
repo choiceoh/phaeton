@@ -1,6 +1,39 @@
+/**
+ * Cell value formatter for the data grid and export.
+ *
+ * Converts raw PostgreSQL values into human-readable display strings.
+ * Handles every {@link FieldType} including computed fields (formula, lookup,
+ * rollup) and display sub-variants (currency, percent, progress, rating).
+ * Dates are localized to Korean format via `toLocaleDateString('ko')`.
+ */
+
 import type { Field } from '@/lib/types'
 import { isExpandedRecord, getDisplayLabel, getFieldOptions, getDisplayType } from '@/lib/fieldGuards'
 
+/**
+ * Format a single cell value for display.
+ *
+ * @param value - Raw value from the entry row (may be null, string, number,
+ *   array, or expanded record object).
+ * @param field - Field metadata that determines formatting rules.
+ * @returns Display string. Returns `'-'` for null/empty values.
+ *
+ * Per-field-type rules:
+ * - `relation`    — expands to display label(s); M:N returns comma-separated list.
+ * - `user`        — shows name, falling back to email, then ID.
+ * - `boolean`     — check mark or dash.
+ * - `date/datetime` — Korean locale date string.
+ * - `number/integer` — applies display_type sub-variant:
+ *     - `currency`  — Intl.NumberFormat with currency code (default KRW).
+ *     - `percent`   — appends `%`.
+ *     - `rating`    — star characters up to max_rating.
+ *     - `progress`  — appends `%`.
+ * - `formula`     — formats based on `result_type` in options.
+ * - `rollup`      — Korean locale number formatting.
+ * - `lookup`      — comma-separated if array (from M:N).
+ * - `table/spreadsheet` — shows row count (e.g. "3행").
+ * - `textarea`    — truncated to 100 chars with ellipsis.
+ */
 export function formatCell(value: unknown, field: Field): string {
   if (value == null) return '-'
   if (field.field_type === 'relation') {

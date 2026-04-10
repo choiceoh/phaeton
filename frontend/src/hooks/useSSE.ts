@@ -1,3 +1,15 @@
+/**
+ * Server-Sent Events hook for real-time collaboration.
+ *
+ * Connects to GET /api/events (EventSource) and listens for record changes.
+ * Key behavior:
+ * - Self-event filtering: skips invalidation when actor_user_id === me.id
+ *   (optimistic updates already applied, refetching would cause flicker)
+ * - Targeted invalidation: only invalidates queries for the affected collection
+ * - Exponential backoff reconnection (up to 30s) on connection loss
+ * - Toast notifications for other users' changes
+ */
+
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -22,12 +34,18 @@ const EVENT_LABELS: Record<string, string> = {
 }
 
 /**
- * Connects to the SSE endpoint and invalidates relevant queries
- * when real-time events arrive. Automatically reconnects on disconnect.
+ * Subscribe to real-time events and keep React Query caches in sync.
  *
- * - Targeted invalidation: uses collection_slug to scope refetch
- * - Self-event filtering: skips refetch when the current user is the actor
- * - Toast: notifies when another user modifies data
+ * Event types handled:
+ * - `record_created` / `record_updated` / `record_deleted` — invalidate
+ *   the affected collection's entry queries (skipped for self-events)
+ * - `comment` — additionally invalidate the specific record's comment cache
+ *
+ * Notifications are always invalidated (even for self-events) because
+ * server-side automations may generate notifications as side effects.
+ *
+ * Reconnection uses exponential backoff: 1s -> 2s -> 4s -> ... -> 30s max.
+ * The delay resets to 1s on successful connection.
  */
 export function useSSE() {
   const qc = useQueryClient()

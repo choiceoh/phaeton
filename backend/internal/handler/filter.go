@@ -28,8 +28,17 @@ type FilterCondJSON struct {
 
 const maxFilterDepth = 3
 
-// ParseJSONFilter parses a JSON filter group into a WHERE clause.
-// The returned clause does NOT include a leading "AND"; the caller wraps it.
+// ParseJSONFilter parses a JSON-encoded nested AND/OR filter structure into a
+// parameterized WHERE clause. The input is a FilterGroupJSON with recursive groups
+// and leaf conditions. Each condition maps a field slug + operator to a value.
+//
+// Supported operators: eq, neq, gt, gte, lt, lte, like (ILIKE), in (comma-separated),
+// is_null (true/false). Unknown fields are silently skipped; unknown operators return
+// an error. Nesting depth is capped at maxFilterDepth (3) to prevent abuse.
+//
+// All values are passed as $N parameters to prevent SQL injection. The returned
+// clause includes a leading "AND (" wrapper so it can be appended directly to an
+// existing WHERE. Returns ("", nil, nil) if the filter produces no conditions.
 func ParseJSONFilter(raw string, fields []schema.Field, prefix string) (where string, args []any, err error) {
 	var group FilterGroupJSON
 	if err := json.Unmarshal([]byte(raw), &group); err != nil {
@@ -145,9 +154,14 @@ var reservedParams = map[string]bool{
 	"sort": true, "page": true, "limit": true, "confirm": true, "expand": true, "q": true, "format": true, "_filter": true,
 }
 
-// BuildSearchClause generates a full-text search condition using the _tsv
-// tsvector column (GIN-indexed). Returns empty string and nil args if q is
-// empty or the collection has no text/textarea fields.
+// BuildSearchClause generates a full-text search condition using the _tsv TSVECTOR
+// column that is maintained by a per-table trigger (see GenerateCreateTable in ddl.go).
+// The clause uses plainto_tsquery with the 'simple' configuration to match across
+// all text and textarea fields that were concatenated into _tsv at insert/update time.
+//
+// Returns an empty string and nil args if q is empty or the collection has no
+// text/textarea fields (and thus no _tsv column). The prefix parameter qualifies
+// the column reference for JOIN queries.
 func BuildSearchClause(q string, fields []schema.Field, prefix string, argStart int) (clause string, args []any) {
 	if q == "" {
 		return "", nil
@@ -171,10 +185,13 @@ func BuildSearchClause(q string, fields []schema.Field, prefix string, argStart 
 	return fmt.Sprintf("AND %s @@ plainto_tsquery('simple', $%d)", col, argStart), []any{q}
 }
 
-// ParseFilters converts query params into a WHERE clause with parameterised args.
-// Only field slugs present in `fields` are accepted; unknown params are silently ignored.
+// ParseFilters converts URL query parameters into a parameterized WHERE clause.
+// Each parameter key must match a known field slug; unknown keys and reserved
+// parameters (sort, page, limit, etc.) are silently ignored. Values use the
+// format "op:value" where op is one of: eq, neq, gt, gte, lt, lte, like, in,
+// is_null. For example: ?status=eq:active&amount=gte:1000.
 //
-// Equivalent to ParseFiltersWithPrefix(params, fields, "").
+// This is the legacy filter interface. For nested AND/OR groups, use ParseJSONFilter.
 func ParseFilters(params url.Values, fields []schema.Field) (where string, args []any, err error) {
 	return ParseFiltersWithPrefix(params, fields, "")
 }
@@ -285,9 +302,17 @@ type SortJoin struct {
 	OwnerColumn string // owning column slug (e.g. "subsidiary")
 }
 
-// ParseSortWithRelations supports dot-notation like "-subsidiary.name" by
-// generating LEFT JOIN clauses against the related table. The `cache` is used
-// to look up the target collection's slug; pass nil to disable relation sort.
+// ParseSortWithRelations parses the "sort" query parameter into an ORDER BY clause,
+// supporting dot-notation for sorting by fields on related tables.
+//
+// Sort syntax: comma-separated field names, "-" prefix for DESC. Examples:
+//   - "name"         -> ORDER BY "name" ASC
+//   - "-created_at"  -> ORDER BY "created_at" DESC
+//   - "-subsidiary.name" -> LEFT JOIN on the subsidiary relation, ORDER BY rel0."name" DESC
+//
+// For dot-notation sorts, resolveRelation is called to look up the target table.
+// Each relation sort generates a SortJoin that the caller must add to the FROM clause.
+// If param is empty, defaults to ORDER BY created_at DESC.
 func ParseSortWithRelations(param string, fields []schema.Field, resolveRelation func(field schema.Field) (targetTable string, ok bool)) (orderBy string, joins []SortJoin) {
 	if param == "" {
 		return "ORDER BY created_at DESC", nil
@@ -351,8 +376,10 @@ func ParseSortWithRelations(param string, fields []schema.Field, resolveRelation
 	return "ORDER BY " + strings.Join(parts, ", "), joins
 }
 
-// ParsePagination extracts page and limit from query params.
-// Page is capped at 10 000 to prevent integer overflow in offset calculation.
+// ParsePagination extracts page and limit from URL query parameters.
+// Defaults: page=1, limit=20. Limit is clamped to [1, 100]. Page is capped
+// at 10,000 to prevent integer overflow in the offset calculation. The returned
+// offset is computed as (page - 1) * limit for use in SQL OFFSET clauses.
 func ParsePagination(params url.Values) (page, limit, offset int) {
 	page = 1
 	limit = 20

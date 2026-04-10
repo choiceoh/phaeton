@@ -1,3 +1,18 @@
+/**
+ * KanbanView — Drag-and-drop board view grouped by a select field.
+ *
+ * Built on @dnd-kit for accessible drag-and-drop between columns.
+ * Each column corresponds to one of the groupField's select choices,
+ * plus an "(empty)" column for entries with no value set.
+ *
+ * Key behaviors:
+ * - Dragging a card between columns fires onCardMove, which updates
+ *   the group field value on the entry via the parent's mutation.
+ * - Drop animations: scale-bounce on successful drop, spring-back on cancel.
+ * - Cards show the title field prominently and up to 3 additional fields.
+ * - Collapsed columns can be toggled to save horizontal space.
+ * - Keyboard navigation: arrow keys move focus between cards within a column.
+ */
 import {
   DndContext,
   DragOverlay,

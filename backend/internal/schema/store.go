@@ -27,6 +27,9 @@ func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 const colCols = `id, slug, label, description, icon, is_system, process_enabled, sort_order, access_config, created_at, updated_at, created_by`
 
+// scanCollection reads a single row matching the colCols column list into a Collection.
+// It handles NULL-able optional columns (description, icon, created_by) via pointer intermediaries
+// and unmarshals the access_config JSONB column into the AccessConfig struct.
 func scanCollection(row pgx.Row) (Collection, error) {
 	var (
 		c         Collection
@@ -59,6 +62,8 @@ func scanCollection(row pgx.Row) (Collection, error) {
 	return c, nil
 }
 
+// ListCollections returns all collections ordered by sort_order then label.
+// Fields are NOT populated — call GetCollection for a single collection with fields.
 func (s *Store) ListCollections(ctx context.Context) ([]Collection, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT `+colCols+` FROM _meta.collections ORDER BY sort_order, label`)
@@ -78,6 +83,8 @@ func (s *Store) ListCollections(ctx context.Context) ([]Collection, error) {
 	return out, rows.Err()
 }
 
+// GetCollection fetches a single collection by UUID, including its fields (with relations).
+// Returns an error wrapping ErrNotFound if the UUID does not match any collection.
 func (s *Store) GetCollection(ctx context.Context, id string) (Collection, error) {
 	uid, err := parseUUID(id)
 	if err != nil {
@@ -121,6 +128,8 @@ func (s *Store) GetCollectionBySlug(ctx context.Context, slug string) (Collectio
 }
 
 // CreateCollectionTx inserts a collection row inside an existing transaction.
+// It takes a pgx.Tx (not the pool) because collection creation must be atomic
+// with the corresponding CREATE TABLE DDL executed by the migration engine.
 func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCollectionReq) (Collection, error) {
 	var (
 		id pgtype.UUID
@@ -242,6 +251,9 @@ func (s *Store) DeleteCollectionTx(ctx context.Context, tx pgx.Tx, id string) er
 
 // ---------- Field ----------
 
+// ListFields returns all fields for a collection, ordered by sort_order then slug.
+// Each field includes its relation metadata (if any) via a LEFT JOIN on _meta.relations,
+// so relation fields are fully populated in a single query.
 func (s *Store) ListFields(ctx context.Context, collectionID string) ([]Field, error) {
 	uid, err := parseUUID(collectionID)
 	if err != nil {
@@ -298,6 +310,8 @@ func (s *Store) GetField(ctx context.Context, id string) (Field, error) {
 }
 
 // CreateFieldTx inserts a field (and optional relation) inside an existing transaction.
+// It takes a pgx.Tx because field creation must be atomic with the corresponding
+// ALTER TABLE ADD COLUMN DDL executed by the migration engine.
 func (s *Store) CreateFieldTx(ctx context.Context, tx pgx.Tx, collectionID string, req *CreateFieldIn) (Field, error) {
 	colUID, err := parseUUID(collectionID)
 	if err != nil {
@@ -358,6 +372,9 @@ func (s *Store) CreateFieldTx(ctx context.Context, tx pgx.Tx, collectionID strin
 	return f, nil
 }
 
+// UpdateFieldTx applies a partial update to a field's metadata inside an existing transaction.
+// Only non-nil fields in the request are updated (dynamic SET clause construction).
+// The actual DB column type change (if field_type changed) is handled by the migration engine.
 func (s *Store) UpdateFieldTx(ctx context.Context, tx pgx.Tx, id string, req *UpdateFieldReq) error {
 	uid, err := parseUUID(id)
 	if err != nil {
@@ -428,6 +445,9 @@ func (s *Store) UpdateFieldTx(ctx context.Context, tx pgx.Tx, id string, req *Up
 	return err
 }
 
+// DeleteFieldTx removes a field's metadata row from _meta.fields inside an existing transaction.
+// It does NOT drop the physical DB column — that is the migration engine's responsibility,
+// ensuring the DDL and meta deletion happen atomically within the same transaction.
 func (s *Store) DeleteFieldTx(ctx context.Context, tx pgx.Tx, id string) error {
 	uid, err := parseUUID(id)
 	if err != nil {
@@ -483,6 +503,9 @@ func (s *Store) createRelationTx(ctx context.Context, tx pgx.Tx, fieldID string,
 
 // ---------- scan helpers ----------
 
+// scanFieldRow reads a single row from the fields+relations LEFT JOIN query into a Field.
+// The last five columns (rID, rTarget, rType, rJunc, rOnDel) are nullable because
+// non-relation fields have no matching row in _meta.relations.
 func scanFieldRow(row pgx.Row) (Field, error) {
 	var (
 		f     Field

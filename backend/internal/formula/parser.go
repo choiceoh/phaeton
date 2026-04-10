@@ -1,3 +1,15 @@
+// Package formula implements a safe expression parser that converts user-written
+// formulas into PostgreSQL expressions.
+//
+// The parser follows a three-stage pipeline:
+//  1. Lexer (lex): tokenizes the input string into numbers, strings, identifiers, operators
+//  2. Parser: validates syntax, checks field slug references, resolves functions
+//  3. SQL generator: emits a parameterized PostgreSQL expression
+//
+// Only whitelisted functions are allowed (SUM, AVG, IF, COALESCE, etc.) to prevent
+// SQL injection. Field references are validated against the collection's field slugs.
+// Cross-collection functions (LOOKUP, SUMREL, etc.) use a RelationResolver callback
+// to generate safe subqueries.
 package formula
 
 import (
@@ -60,7 +72,15 @@ type RelationInfo struct {
 // relation metadata, or an error if the field is not a valid relation.
 type RelationResolver func(relationSlug string) (*RelationInfo, error)
 
-// lex tokenizes a formula expression string.
+// lex tokenizes a formula expression string into a slice of tokens.
+// Recognition rules:
+//   - Numbers: digit sequences with optional decimal point (e.g. "3.14")
+//   - Identifiers: letter/underscore start, then letters/digits/underscores (field slugs or function names)
+//   - Strings: single-quoted with backslash escaping (e.g. 'hello')
+//   - Operators: two-char (<=, >=, !=, <>) and single-char (+, -, *, /, %, <, >, =)
+//   - Delimiters: comma, parentheses, dot
+//
+// Returns an error for unterminated strings or unexpected characters.
 func lex(input string) ([]token, error) {
 	var tokens []token
 	i := 0
@@ -147,6 +167,12 @@ func lex(input string) ([]token, error) {
 }
 
 // Parser converts a token stream into a safe PostgreSQL expression.
+// It maintains parsing state:
+//   - tokens/pos: the token stream and current position (recursive descent)
+//   - slugs: set of valid field slugs for the current collection (for validation)
+//   - refSlugs: accumulates local field slugs referenced in the expression (output)
+//   - crossRefs: accumulates relation field slugs used in cross-collection functions (output)
+//   - resolver: optional callback to resolve relation metadata for LOOKUP/SUMREL/etc.
 type Parser struct {
 	tokens    []token
 	pos       int
@@ -186,8 +212,10 @@ type ParseResult struct {
 	CrossRefs []string // Relation field slugs used in cross-collection functions.
 }
 
-// Parse parses the full expression and returns a safe SQL expression string
-// along with the list of referenced field slugs.
+// Parse parses a formula expression string and returns a safe PostgreSQL SQL expression
+// along with the list of local field slugs referenced. This is the simple entry point
+// that does not support cross-collection functions (LOOKUP, SUMREL, etc.).
+// Use ParseWithResolver for cross-collection support.
 func Parse(expression string, validSlugs map[string]bool) (sql string, refs []string, err error) {
 	result, err := ParseWithResolver(expression, validSlugs, nil)
 	if err != nil {
@@ -198,6 +226,8 @@ func Parse(expression string, validSlugs map[string]bool) (sql string, refs []st
 
 // ParseWithResolver parses a formula expression with support for cross-collection
 // functions (LOOKUP, SUMREL, etc.) via the provided resolver callback.
+// It strips a leading '=' (Excel convention), tokenizes, runs the recursive descent
+// parser, and returns a ParseResult containing the SQL, local refs, and cross-refs.
 func ParseWithResolver(expression string, validSlugs map[string]bool, resolver RelationResolver) (*ParseResult, error) {
 	expression = strings.TrimSpace(expression)
 	if expression == "" {
@@ -231,7 +261,8 @@ func ParseWithResolver(expression string, validSlugs map[string]bool, resolver R
 	}, nil
 }
 
-// parseExpr handles the lowest-precedence operators: comparison.
+// parseExpr handles the lowest-precedence operators: comparison (<, >, <=, >=, =, !=, <>).
+// Precedence levels (lowest to highest): comparison -> add/sub -> mul/div -> unary -> primary.
 func (p *Parser) parseExpr() (string, error) {
 	left, err := p.parseAddSub()
 	if err != nil {
@@ -324,7 +355,10 @@ func (p *Parser) parseUnary() (string, error) {
 	return p.parsePrimary()
 }
 
-// parsePrimary handles atoms: numbers, strings, identifiers, function calls, parenthesized exprs.
+// parsePrimary handles atoms: numeric literals, string literals, identifiers (field slugs
+// or function calls), and parenthesized sub-expressions. Identifiers are checked against
+// the allowed function whitelist first, then cross-collection functions, then validated
+// as field slugs. Unknown identifiers cause an error.
 func (p *Parser) parsePrimary() (string, error) {
 	t := p.peek()
 
@@ -385,7 +419,9 @@ func (p *Parser) parsePrimary() (string, error) {
 	}
 }
 
-// parseFunctionCall parses FUNC(arg1, arg2, ...).
+// parseFunctionCall parses a whitelisted function call: FUNC(arg1, arg2, ...).
+// Only functions in allowedFunctions are routed here. The result is emitted
+// directly as SQL (e.g. "ROUND(col, 2)") since only safe function names are allowed.
 func (p *Parser) parseFunctionCall(name string) (string, error) {
 	if _, err := p.expect(tokLParen); err != nil {
 		return "", fmt.Errorf("expected '(' after function %s", name)

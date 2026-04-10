@@ -1,3 +1,20 @@
+/**
+ * CalendarView — Month/week/day calendar displaying entries by a date field.
+ *
+ * Data is fetched server-side via useCalendarView, which returns entries
+ * grouped by the visible date range. Supports three view modes:
+ * - Month: grid of weeks; multi-day events span across cells (colSpan).
+ * - Week: delegated to CalendarWeekView sub-component.
+ * - Day: delegated to CalendarDayView sub-component.
+ *
+ * Key behaviors:
+ * - Drag-and-drop (@dnd-kit) to move entries between dates, updating
+ *   the date field value via onEntryUpdate callback.
+ * - Month navigation with direction-based slide animations (left/right).
+ * - Click on an empty date cell to create a new entry pre-filled with that date.
+ * - Color coding: entries are colored by a select field value using a
+ *   rotating palette of 8 distinct colors.
+ */
 import {
   DndContext,
   DragOverlay,
