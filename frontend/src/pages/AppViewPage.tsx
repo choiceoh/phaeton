@@ -25,6 +25,7 @@ import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
+import HotkeyHelpDialog from '@/components/common/HotkeyHelpDialog'
 import {
   Dialog,
   DialogContent,
@@ -66,6 +67,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useHotkeys } from '@/hooks/useHotkeys'
 import { useCollection } from '@/hooks/useCollections'
 import {
   useBatchUpdateEntry,
@@ -97,10 +99,12 @@ export default function AppViewPage() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editEntry, setEditEntry] = useState<Record<string, unknown> | undefined>()
+  const [duplicateData, setDuplicateData] = useState<Record<string, unknown> | undefined>()
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importedCount, setImportedCount] = useState(0)
   const [newEntryId, setNewEntryId] = useState<string | null>(null)
+  const [hotkeyHelpOpen, setHotkeyHelpOpen] = useState(false)
 
   // Filter state
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
@@ -227,6 +231,14 @@ export default function AppViewPage() {
     () => collection?.fields?.find((f) => f.field_type === 'file'),
     [collection],
   )
+
+  // Keyboard shortcuts
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useHotkeys([
+    { key: '?', handler: () => setHotkeyHelpOpen(true) },
+    { key: 'mod+n', handler: () => { setEditEntry(undefined); setSheetOpen(true) } },
+    { key: 'mod+f', handler: () => searchInputRef.current?.focus() },
+  ])
 
   // Formula fields are read-only in the grid.
   const formulaReadonlyCols = useMemo(
@@ -502,10 +514,17 @@ export default function AppViewPage() {
             }, 1500)
             // Offer undo only when old value differs.
             if (oldValue !== event.value) {
-              undoToast.push('수정되었습니다', () => {
-                const undoBody: Record<string, unknown> = { [event.columnId]: oldValue }
-                updateEntry.mutate({ id: event.rowId, body: undoBody })
-              })
+              undoToast.push(
+                '수정되었습니다',
+                () => {
+                  const undoBody: Record<string, unknown> = { [event.columnId]: oldValue }
+                  updateEntry.mutate({ id: event.rowId, body: undoBody })
+                },
+                () => {
+                  const redoBody: Record<string, unknown> = { [event.columnId]: event.value }
+                  updateEntry.mutate({ id: event.rowId, body: redoBody })
+                },
+              )
             }
           },
           onError: (err) => {
@@ -879,6 +898,15 @@ export default function AppViewPage() {
     }
   }
 
+  function handleDuplicate(data: Record<string, unknown>) {
+    setSheetOpen(false)
+    setTimeout(() => {
+      setDuplicateData(data)
+      setEditEntry(undefined)
+      setSheetOpen(true)
+    }, 200)
+  }
+
   function handleDelete() {
     if (!deleteId) return
     // Capture entry data for undo (recreate).
@@ -888,14 +916,40 @@ export default function AppViewPage() {
         setDeleteId(null)
         if (deletedRow) {
           const { id: _id, _version: _v, created_at: _ca, updated_at: _ua, _optimistic: _o, ...rest } = deletedRow as Record<string, unknown>
-          undoToast.push('삭제되었습니다', () => {
-            createEntry.mutate(rest)
-          })
+          undoToast.push(
+            '삭제되었습니다',
+            () => { createEntry.mutate(rest) },
+            () => { deleteEntry.mutate(String(deletedRow.id)) },
+          )
         } else {
           toast.success('삭제되었습니다')
         }
       },
       onError: (err) => toast.error(formatError(err)),
+    })
+  }
+
+  function handleBulkStatusChange(status: string) {
+    const ids = Array.from(selectedRowIds)
+    if (ids.length === 0) return
+    const updates = ids.map((id) => {
+      const version = getRowVersion(id)
+      return { id, fields: { _status: status }, _version: version }
+    })
+    const toastId = toast.loading(`${ids.length}건 상태 변경 중...`)
+    batchUpdateEntry.mutate(updates, {
+      onSuccess: () => {
+        toast.success(`${ids.length}건의 상태가 "${status}"(으)로 변경되었습니다`, { id: toastId })
+        setSelectedRowIds(new Set())
+      },
+      onError: (err) => {
+        if (err instanceof ApiError && err.isConflict()) {
+          toast.error('일부 항목이 이미 수정되었습니다. 새로고침합니다.', { id: toastId })
+          refetch()
+        } else {
+          toast.error(formatError(err), { id: toastId })
+        }
+      },
     })
   }
 
@@ -984,6 +1038,7 @@ export default function AppViewPage() {
       <div className="relative w-full sm:w-auto order-first">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
+          ref={searchInputRef}
           className="h-8 w-full sm:w-[200px] pl-8 text-sm"
           placeholder="검색..."
           value={searchInputValue}
@@ -1324,6 +1379,29 @@ export default function AppViewPage() {
             {selectedRowIds.size > 0 && (
               <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
                 <span className="font-medium">{selectedRowIds.size}건 선택</span>
+                {process?.is_enabled && (process.statuses?.length ?? 0) > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent h-7"
+                    >
+                      상태 변경
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      {process.statuses!.map((s) => (
+                        <DropdownMenuItem
+                          key={s.id}
+                          onClick={() => handleBulkStatusChange(s.name)}
+                        >
+                          <span
+                            className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: s.color }}
+                          />
+                          {s.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
                 <RoleGate roles={['director', 'pm']}>
                   <Button
                     variant="destructive"
@@ -1463,14 +1541,15 @@ export default function AppViewPage() {
 
       <EntrySheet
         open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
+        onClose={() => { setSheetOpen(false); setDuplicateData(undefined) }}
         fields={collection.fields ?? []}
         slug={collection.slug}
-        initialData={editEntry ?? (entryDefaults && Object.keys(entryDefaults).length > 0 ? entryDefaults : undefined)}
+        initialData={editEntry ?? duplicateData ?? (entryDefaults && Object.keys(entryDefaults).length > 0 ? entryDefaults : undefined)}
         onSubmit={handleSubmit}
         submitting={createEntry.isPending || updateEntry.isPending}
-        title={editEntry ? `${TERM.record} 편집` : TERM.newRecord}
+        title={editEntry ? `${TERM.record} 편집` : duplicateData ? '항목 복제' : TERM.newRecord}
         process={process}
+        onDuplicate={handleDuplicate}
       />
 
       <ConfirmDialog
@@ -1537,6 +1616,7 @@ export default function AppViewPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <HotkeyHelpDialog open={hotkeyHelpOpen} onOpenChange={setHotkeyHelpOpen} />
     </div>
   )
 }

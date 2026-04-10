@@ -78,6 +78,25 @@ export default function EntryForm({
     if (errors[name]) setErrors((prev) => { const next = { ...prev }; delete next[name]; return next })
   }
 
+  function handleBlur(field: Field) {
+    if (!field.is_required || isLayoutType(field.field_type)) return
+    const val = data[field.slug]
+    if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+      setErrors((prev) => ({ ...prev, [field.slug]: '필수 항목입니다' }))
+    }
+    // Number range validation
+    if ((field.field_type === 'number' || field.field_type === 'integer') && val != null && val !== '') {
+      const num = Number(val)
+      const minVal = field.options?.min as number | undefined
+      const maxVal = field.options?.max as number | undefined
+      if (minVal != null && num < minVal) {
+        setErrors((prev) => ({ ...prev, [field.slug]: `최소 ${minVal} 이상이어야 합니다` }))
+      } else if (maxVal != null && num > maxVal) {
+        setErrors((prev) => ({ ...prev, [field.slug]: `최대 ${maxVal} 이하여야 합니다` }))
+      }
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
@@ -202,9 +221,10 @@ export default function EntryForm({
                   field={field}
                   value={extractValue(data[field.slug], field)}
                   onChange={(v) => setValue(field.slug, v)}
+                  onBlur={() => handleBlur(field)}
                 />
                 {errors[field.slug] && (
-                  <p key={shakeKey} className="mt-1 text-xs text-destructive animate-shake">{errors[field.slug]}</p>
+                  <p key={shakeKey} className="mt-1 text-xs text-destructive animate-shake animate-fade-in">{errors[field.slug]}</p>
                 )}
               </div>
             </div>
@@ -280,10 +300,12 @@ function FieldInput({
   field,
   value,
   onChange,
+  onBlur,
 }: {
   field: Field
   value: unknown
   onChange: (v: unknown) => void
+  onBlur?: () => void
 }) {
   const h = field.height || 1
 
@@ -293,6 +315,7 @@ function FieldInput({
         <Textarea
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           rows={(field.options?.rows as number) || Math.max(4, h * 2)}
           required={field.is_required}
         />
@@ -303,6 +326,7 @@ function FieldInput({
           type="time"
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           required={field.is_required}
         />
       )
@@ -313,6 +337,7 @@ function FieldInput({
           <Textarea
             value={(value as string) || ''}
             onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
             required={field.is_required}
             rows={h * 2}
           />
@@ -327,6 +352,7 @@ function FieldInput({
           type={inputType}
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           required={field.is_required}
         />
       )
@@ -362,6 +388,7 @@ function FieldInput({
               max={100}
               value={value === null || value === undefined ? '' : num}
               onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+              onBlur={onBlur}
               required={field.is_required}
             />
             <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -388,6 +415,7 @@ function FieldInput({
             type="number"
             value={value === null || value === undefined ? '' : (value as number)}
             onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+            onBlur={onBlur}
             required={field.is_required}
             className={prefix ? 'pl-8' : suffix ? 'pr-8' : ''}
           />
@@ -413,6 +441,7 @@ function FieldInput({
           type="datetime-local"
           value={(value as string)?.slice(0, 16) || ''}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           required={field.is_required}
         />
       )
@@ -445,7 +474,7 @@ function FieldInput({
       }
       return (
         <Select value={(value as string) || ''} onValueChange={onChange}>
-          <SelectTrigger>
+          <SelectTrigger onBlur={onBlur}>
             <SelectValue placeholder="항목 선택" />
           </SelectTrigger>
           <SelectContent>
@@ -533,12 +562,13 @@ function FieldInput({
               onChange(e.target.value)
             }
           }}
+          onBlur={onBlur}
           rows={Math.max(4, h * 2)}
         />
       )
     default:
       return (
-        <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} />
+        <Input value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
       )
   }
 }

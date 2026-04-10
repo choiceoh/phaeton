@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 
 import AIChatPanel from '@/components/common/AIChatPanel'
+import CommandPalette from '@/components/common/CommandPalette'
 import { AIAvailabilityProvider } from '@/contexts/AIAvailabilityContext'
 import LoadingState from '@/components/common/LoadingState'
 import NotificationBell from '@/components/common/NotificationBell'
@@ -76,6 +77,7 @@ export default function RootLayout() {
           <Outlet />
         </main>
         <AIChatPanel />
+        <CommandPalette />
       </div>
     </AIAvailabilityProvider>
   )

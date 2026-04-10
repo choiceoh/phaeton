@@ -1,4 +1,4 @@
-import { History, Loader2, MessageSquare } from 'lucide-react'
+import { Copy, History, Loader2, MessageSquare, Printer } from 'lucide-react'
 import { useRef, useState } from 'react'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -29,6 +29,7 @@ interface Props {
   submitting?: boolean
   title?: string
   process?: Process
+  onDuplicate?: (data: Record<string, unknown>) => void
 }
 
 const OP_LABELS: Record<string, string> = {
@@ -47,6 +48,7 @@ export default function EntrySheet({
   submitting,
   title,
   process,
+  onDuplicate,
 }: Props) {
   const recordId = initialData?.id ? String(initialData.id) : undefined
   const isEdit = !!recordId
@@ -79,12 +81,41 @@ export default function EntrySheet({
     <Sheet open={open} onOpenChange={(o) => { if (!o) { onClose(); setTab('form') } }}>
       <SheetContent ref={contentRef} className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[640px] sm:max-w-2xl">
         <SheetHeader>
-          <SheetTitle>{title || '새 항목'}</SheetTitle>
+          <div className="flex items-center justify-between">
+            <SheetTitle>{title || '새 항목'}</SheetTitle>
+            {isEdit && (
+              <div className="flex items-center gap-1" data-print-hide>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => window.print()}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  인쇄
+                </Button>
+                {onDuplicate && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => {
+                      const { id, _version, created_at, updated_at, _created_by, _optimistic, _updated_at, _created_at, ...rest } = initialData as Record<string, unknown>
+                      onDuplicate(rest)
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    복제
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </SheetHeader>
         <div className="mt-4">
           {isEdit ? (
             <Tabs value={tab} onValueChange={(v) => { setTab(v); contentRef.current?.scrollTo(0, 0) }}>
-              <TabsList>
+              <TabsList data-print-hide>
                 <TabsTrigger value="form">편집</TabsTrigger>
                 <TabsTrigger value="comments">댓글</TabsTrigger>
                 <TabsTrigger value="history">이력</TabsTrigger>
