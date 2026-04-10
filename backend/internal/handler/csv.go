@@ -40,7 +40,7 @@ func (h *DynHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	args = append(args, searchArgs...)
 
 	orderBy := ParseSort(params.Get("sort"), fields)
-	selectCols := buildSelectCols(fields)
+	selectCols := buildSelectCols(fields, false, &selectColOpts{cache: h.cache})
 
 	sql := fmt.Sprintf("SELECT %s FROM %s WHERE deleted_at IS NULL %s %s",
 		selectCols, qTable, where, orderBy)
@@ -232,7 +232,7 @@ func (h *DynHandler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	qTable := fmt.Sprintf("%q.%q", "data", col.Slug)
-	selectCols := buildSelectCols(fields)
+	selectCols := buildSelectCols(fields, false, &selectColOpts{cache: h.cache})
 
 	created := make([]map[string]any, 0, len(bodies))
 	for i, body := range bodies {

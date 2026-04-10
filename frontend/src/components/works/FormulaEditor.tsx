@@ -44,6 +44,8 @@ const FORMULA_HELP = [
   { label: '산술', examples: '+ - * / %' },
   { label: '함수', examples: 'SUM, AVG, MIN, MAX, COUNT, ROUND, ABS, COALESCE' },
   { label: '조건', examples: 'IF(조건, 참, 거짓)' },
+  { label: '참조', examples: 'LOOKUP(관계필드, 대상필드)' },
+  { label: '집계', examples: 'SUMREL(관계필드, 대상필드), AVGREL, COUNTREL' },
 ]
 
 export default function FormulaEditor({
@@ -64,6 +66,7 @@ export default function FormulaEditor({
   const dataFields = fields.filter(
     (f) => !['label', 'line', 'spacer', 'formula'].includes(f.field_type),
   )
+  const relationFields = fields.filter((f) => f.field_type === 'relation')
 
   const fetchPreview = useCallback(
     async (expr: string) => {
@@ -160,6 +163,32 @@ export default function FormulaEditor({
           ))}
         </div>
       </div>
+
+      {/* Relation fields for cross-collection formulas */}
+      {relationFields.length > 0 && (
+        <div className="space-y-1">
+          <Label className="text-xs font-semibold text-muted-foreground">관계 필드 (시트 간 참조)</Label>
+          <div className="flex flex-wrap gap-1">
+            {relationFields.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                className="rounded border border-dashed px-1.5 py-0.5 text-xs font-mono hover:bg-accent"
+                onClick={() => {
+                  const before = expression.length > 0 && expression[expression.length - 1] !== '(' ? '' : ''
+                  onChange(expression + before + `LOOKUP(${f.slug}, )`)
+                }}
+                title={`LOOKUP(${f.slug}, 대상필드) 또는 SUMREL(${f.slug}, 대상필드)`}
+              >
+                {f.slug}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            클릭하면 LOOKUP 함수가 삽입됩니다. SUMREL/AVGREL/COUNTREL도 사용 가능
+          </p>
+        </div>
+      )}
 
       {/* Preview result */}
       {preview && (
