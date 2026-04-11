@@ -30,6 +30,8 @@ export interface EntryListParams {
   filters?: Record<string, string> // { status: "eq:active", capacity: "gte:100" }
   /** JSON-serialized FilterGroup for AND/OR filter groups */
   _filter?: string
+  /** "true" to load reverse-relation data */
+  reverse?: string
 }
 
 export interface EntryListResult {
@@ -46,6 +48,7 @@ function buildQueryString(params: EntryListParams): string {
   if (params.limit) search.set('limit', String(params.limit))
   if (params.sort) search.set('sort', params.sort)
   if (params.expand) search.set('expand', params.expand)
+  if (params.reverse) search.set('reverse', params.reverse)
   if (params._filter) {
     search.set('_filter', params._filter)
   } else if (params.filters) {

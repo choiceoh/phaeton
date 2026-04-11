@@ -51,7 +51,7 @@ export function useLocalEntries(
     queryKey: queryKeys.entries.bulk(slug ?? ''),
     queryFn: () =>
       api.getList<EntryRow>(
-        `/data/${slug}?_bulk=true&limit=${BULK_LIMIT}&expand=auto`,
+        `/data/${slug}?_bulk=true&limit=${BULK_LIMIT}&expand=auto&reverse=true`,
       ),
     enabled: !!slug,
     staleTime: 5 * 60_000,

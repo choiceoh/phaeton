@@ -49,6 +49,17 @@ export type FieldType =
 /** Cardinality of a relation between two collections. */
 export type RelationType = 'one_to_one' | 'one_to_many' | 'many_to_many'
 
+/** Describes a relation field in another collection that points TO the current collection. */
+export interface ReverseRelField {
+  source_collection_id: string
+  source_collection_slug: string
+  source_collection_label: string
+  source_field_slug: string
+  source_field_label: string
+  relation_type: RelationType
+  junction_table?: string
+}
+
 /** FK metadata linking one collection's field to another collection's rows. */
 export interface Relation {
   id: string
@@ -296,6 +307,7 @@ export interface Collection {
   updated_at: string
   created_by?: string
   fields?: Field[]
+  reverse_relations?: ReverseRelField[]
 }
 
 /** Workbook is the "앱" (app) entity — a container for related sheets (collections). */

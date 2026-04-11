@@ -249,7 +249,7 @@ export default function AppViewPage() {
   // Server mode: existing paginated approach.
   const serverResult = useEntries(
     !isLocalMode ? collection?.slug : undefined,
-    { page, limit, sort: sortParam, expand, filters },
+    { page, limit, sort: sortParam, expand, filters, reverse: 'true' },
   )
 
   const list = isLocalMode ? localResult.data : serverResult.data
@@ -507,6 +507,16 @@ export default function AppViewPage() {
 
   function handleEntryClick(entry: Record<string, unknown>) {
     navigate(`/apps/${appId}/entries/${entry.id}`)
+  }
+
+  /** Navigate to the source collection filtered by the reverse-relation FK. */
+  function handleReverseCellClick(sourceCollectionId: string, sourceFieldSlug: string, recordId: string) {
+    const filter = JSON.stringify({
+      logic: 'and',
+      conditions: [{ field: sourceFieldSlug, operator: 'eq', value: recordId }],
+      groups: [],
+    })
+    navigate(`/apps/${sourceCollectionId}?_filter=${encodeURIComponent(filter)}`)
   }
 
   function handleBulkStatusChange(status: string) {
@@ -1082,6 +1092,7 @@ export default function AppViewPage() {
                 </Button>
               ) : undefined
             }
+            onReverseCellClick={handleReverseCellClick}
           />
         </ErrorBoundary>
       )}
