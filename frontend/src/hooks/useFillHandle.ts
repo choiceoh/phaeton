@@ -23,6 +23,8 @@ interface UseFillHandleOptions {
   readOnlyColumns: Set<string>
   containerRef: React.RefObject<HTMLDivElement | null>
   onFill: (updates: { id: string; fields: Record<string, unknown> }[]) => void
+  /** Called when fill extends into empty rows (free grid mode). */
+  onFillIntoEmptyRows?: (rows: Record<string, unknown>[]) => void
 }
 
 export interface FillPreviewRange {
@@ -103,6 +105,7 @@ export function useFillHandle({
   readOnlyColumns,
   containerRef,
   onFill,
+  onFillIntoEmptyRows,
 }: UseFillHandleOptions) {
   const [fillPreview, setFillPreview] = useState<FillPreviewRange | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -203,6 +206,8 @@ export function useFillHandle({
       const fillCount = currentPreview.endRow - currentPreview.startRow + 1
       const updates: { id: string; fields: Record<string, unknown> }[] = []
 
+      const emptyRowEntries: Map<number, Record<string, unknown>> = new Map()
+
       for (let col = src.startCol; col <= src.endCol; col++) {
         const colId = columnIds[col]
         if (!colId || readOnlyColumns.has(colId)) continue
@@ -220,6 +225,13 @@ export function useFillHandle({
 
         for (let i = 0; i < fillCount; i++) {
           const targetRowIdx = currentPreview.startRow + i
+          if (targetRowIdx >= data.length) {
+            // Empty row — collect for batch creation
+            const entry = emptyRowEntries.get(targetRowIdx) ?? {}
+            entry[colId] = fillVals[i]
+            emptyRowEntries.set(targetRowIdx, entry)
+            continue
+          }
           const row = data[targetRowIdx]
           if (!row) continue
 
@@ -236,11 +248,18 @@ export function useFillHandle({
       if (updates.length > 0) {
         onFill(updates)
       }
+      if (emptyRowEntries.size > 0 && onFillIntoEmptyRows) {
+        // Sort by row index to maintain order
+        const sorted = Array.from(emptyRowEntries.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([, fields]) => fields)
+        onFillIntoEmptyRows(sorted)
+      }
 
       dragStateRef.current = null
       return null
     })
-  }, [columnIds, readOnlyColumns, fields, data, onFill])
+  }, [columnIds, readOnlyColumns, fields, data, onFill, onFillIntoEmptyRows])
 
   // Cleanup on unmount
   useEffect(() => {

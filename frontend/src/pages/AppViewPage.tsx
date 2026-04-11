@@ -1234,6 +1234,7 @@ export default function AppViewPage() {
             onRenameColumn={canManage && !isReadOnly ? handleRenameColumn : undefined}
             onDeleteColumn={canManage && !isReadOnly ? handleDeleteColumn : undefined}
             onAddColumn={canManage && !isReadOnly ? handleAddColumn : undefined}
+            clientMode={isClientMode}
           />
           </div>
         </ErrorBoundary>
