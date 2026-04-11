@@ -9,6 +9,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/common/DataTable'
+import { useFormulaEngine } from '@/hooks/useFormulaEngine'
 import type { CellPosition } from '@/hooks/useGridNavigation'
 import { useInlineEditing } from '@/hooks/useInlineEditing'
 import { isLayoutType, isComputedType } from '@/lib/constants'
@@ -43,23 +44,66 @@ interface SpreadsheetViewProps {
   onUpdateFieldOptions?: (fieldId: string, options: Record<string, unknown>) => Promise<void>
 }
 
+/**
+ * Parse a date string from various formats (Excel, Korean, ISO, US).
+ * Returns ISO date string (YYYY-MM-DD) or null.
+ */
+function parseDateFlexible(raw: string): string | null {
+  // ISO: 2024-03-15
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+  // Korean dot: 2024.03.15
+  const dotMatch = raw.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/)
+  if (dotMatch) {
+    return `${dotMatch[1]}-${dotMatch[2].padStart(2, '0')}-${dotMatch[3].padStart(2, '0')}`
+  }
+  // Korean text: 2024년 3월 15일
+  const koMatch = raw.match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/)
+  if (koMatch) {
+    return `${koMatch[1]}-${koMatch[2].padStart(2, '0')}-${koMatch[3].padStart(2, '0')}`
+  }
+  // US format: 3/15/2024 or 03/15/2024
+  const usMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (usMatch) {
+    return `${usMatch[3]}-${usMatch[1].padStart(2, '0')}-${usMatch[2].padStart(2, '0')}`
+  }
+  // ISO datetime: 2024-03-15T09:00:00
+  const dtMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T ]/)
+  if (dtMatch) return dtMatch[1]
+  return null
+}
+
 /** Coerce a pasted string value to the appropriate type for a field. */
 function coerceValue(raw: string, field: Field): unknown {
   if (raw === '') return null
   switch (field.field_type) {
     case 'number':
     case 'integer': {
+      const cleaned = raw.replace(/[,₩$€¥\s]/g, '').replace(/%$/, '')
       const dp = (field.options as Record<string, unknown> | undefined)?.decimal_places
       const effectiveDp = typeof dp === 'number' ? dp : (field.field_type === 'integer' ? 0 : undefined)
-      if (effectiveDp === 0) return parseInt(raw, 10) || null
-      return parseFloat(raw) || null
+      if (effectiveDp === 0) {
+        const n = parseInt(cleaned, 10)
+        return isNaN(n) ? null : n
+      }
+      const n = parseFloat(cleaned)
+      return isNaN(n) ? null : n
     }
     case 'boolean':
-      return raw.toLowerCase() === 'true' || raw === '1' || raw === '✓'
-    case 'date':
-    case 'datetime':
+      return ['true', '1', '✓', '참', 'yes', 'y'].includes(raw.toLowerCase())
+    case 'date': {
+      const parsed = parseDateFlexible(raw)
+      return parsed ?? raw
+    }
+    case 'datetime': {
+      // Try to preserve full datetime, fall back to date-only
+      if (/^\d{4}-\d{2}-\d{2}[T ]/.test(raw)) return raw
+      const parsed = parseDateFlexible(raw)
+      return parsed ?? raw
+    }
     case 'time':
       return raw
+    case 'multiselect':
+      return raw.split(',').map((s) => s.trim()).filter(Boolean)
     default:
       return raw
   }
@@ -161,6 +205,9 @@ export default function SpreadsheetView({
     [collection],
   )
 
+  // Formula engine for instant formula recomputation after cell edits
+  const { recomputeRow } = useFormulaEngine(editableFields)
+
   // System columns that should never be editable
   const readOnlyColumns = useMemo(
     () => new Set(['_select', '_actions', 'created_at', '_status']),
@@ -215,7 +262,14 @@ export default function SpreadsheetView({
     columnIds: visibleColumnIds,
     onCellSave: async (rowId, fieldSlug, value) => {
       try {
-        await updateEntry({ id: rowId, body: { [fieldSlug]: value } })
+        // Recompute formula fields locally for instant feedback.
+        // Formula values are included in the optimistic update body so they
+        // appear immediately in the React Query cache. The server ignores
+        // formula keys (no DB column).
+        const row = data.find((r) => String(r.id) === rowId)
+        const patchedRow = row ? { ...row, [fieldSlug]: value } : undefined
+        const formulaOverrides = patchedRow ? recomputeRow(patchedRow, fieldSlug) : {}
+        await updateEntry({ id: rowId, body: { [fieldSlug]: value, ...formulaOverrides } })
       } catch (err) {
         toast.error('저장 ��패')
         throw err
@@ -223,7 +277,10 @@ export default function SpreadsheetView({
     },
     onCellClear: async (rowId, fieldSlug) => {
       try {
-        await updateEntry({ id: rowId, body: { [fieldSlug]: null } })
+        const row = data.find((r) => String(r.id) === rowId)
+        const patchedRow = row ? { ...row, [fieldSlug]: null } : undefined
+        const formulaOverrides = patchedRow ? recomputeRow(patchedRow, fieldSlug) : {}
+        await updateEntry({ id: rowId, body: { [fieldSlug]: null, ...formulaOverrides } })
       } catch (err) {
         toast.error('삭제 실패')
         throw err
@@ -249,7 +306,14 @@ export default function SpreadsheetView({
           fields[colId] = coerceValue(matrix[r][c], field)
         }
         if (Object.keys(fields).length > 0) {
-          updates.push({ id: String(dataRow.id), fields })
+          // Recompute formula fields for each pasted row
+          const patchedRow = { ...dataRow, ...fields }
+          const changedSlugs = Object.keys(fields)
+          let formulaOverrides: Record<string, unknown> = {}
+          for (const slug of changedSlugs) {
+            formulaOverrides = { ...formulaOverrides, ...recomputeRow(patchedRow, slug) }
+          }
+          updates.push({ id: String(dataRow.id), fields: { ...fields, ...formulaOverrides } })
         }
       }
       if (updates.length > 0) {
@@ -257,7 +321,7 @@ export default function SpreadsheetView({
         toast.success(`${updates.length}행 붙여넣기 완료`)
       }
     },
-    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry, recomputeRow],
   )
 
   return (

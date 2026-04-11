@@ -32,7 +32,13 @@ export function extractSelectionData(
     for (let c = c1; c <= c2; c++) {
       const colId = columnIds[c]
       if (!colId) continue
-      cells.push(row[colId] ?? '')
+      const val = row[colId]
+      // Join arrays (multiselect) as comma-separated for Excel compatibility.
+      if (Array.isArray(val)) {
+        cells.push(val.join(', '))
+      } else {
+        cells.push(val ?? '')
+      }
     }
     result.push(cells)
   }

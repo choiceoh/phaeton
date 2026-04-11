@@ -251,19 +251,23 @@ export default function AppListPage() {
               {groupLabels.map((label) => {
                 const apps = grouped.get(label) ?? []
                 const isOpen = isSearching || !collapsed.has(label)
+                // 폴더에 앱이 1개뿐이고 이름이 같으면 그룹 헤더 생략
+                const singleMatch = apps.length === 1 && apps[0].label === label
                 return (
                   <div key={label}>
-                    <button
-                      onClick={() => toggleCollapse(label)}
-                      className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors"
-                    >
-                      {isOpen
-                        ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                      {label}
-                      <span className="text-xs font-normal text-muted-foreground">({apps.length})</span>
-                    </button>
-                    {isOpen && (
+                    {!singleMatch && (
+                      <button
+                        onClick={() => toggleCollapse(label)}
+                        className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors"
+                      >
+                        {isOpen
+                          ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                        {label}
+                        <span className="text-xs font-normal text-muted-foreground">({apps.length})</span>
+                      </button>
+                    )}
+                    {(singleMatch || isOpen) && (
                       <AppGrid
                         apps={apps}
                         sheetCounts={sheetCounts}

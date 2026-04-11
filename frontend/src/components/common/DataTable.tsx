@@ -84,6 +84,17 @@ import GridCell from './GridCell'
 import GridContextMenu from './GridContextMenu'
 import type { EntryRow, Field } from '@/lib/types'
 
+/** Convert a 0-based column index to Excel-style letter (0→A, 25→Z, 26→AA). */
+function colIndexToLetter(idx: number): string {
+  let result = ''
+  let n = idx
+  while (n >= 0) {
+    result = String.fromCharCode(65 + (n % 26)) + result
+    n = Math.floor(n / 26) - 1
+  }
+  return result
+}
+
 interface Props<T> {
   columns: ColumnDef<T, unknown>[]
   data: T[]
@@ -228,9 +239,15 @@ export function DataTable<T>({
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
-  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>(
-    initialColumnPinning ?? { left: [], right: [] },
-  )
+  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>(() => {
+    const base = initialColumnPinning ?? { left: [], right: [] }
+    // Ensure _rowNum is always pinned left.
+    const left = base.left ?? []
+    if (!left.includes('_rowNum')) {
+      return { ...base, left: ['_rowNum', ...left] }
+    }
+    return base
+  })
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({})
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([])
 
@@ -254,52 +271,76 @@ export function DataTable<T>({
     return () => { el.removeEventListener('scroll', check); ro.disconnect() }
   }, [data, columnVisibility])
 
-  // Prepend checkbox column when selectable.
+  // Prepend row number column + optional checkbox column.
   const augmentedColumns = useMemo(() => {
-    if (!selectable) return columns
-    const checkCol: ColumnDef<T, unknown> = {
-      id: '_select',
+    const cols: ColumnDef<T, unknown>[] = []
+
+    // Row number column — always first, always pinned left.
+    const rowNumCol: ColumnDef<T, unknown> = {
+      id: '_rowNum',
       enableSorting: false,
       enableHiding: false,
+      enableResizing: false,
       size: 40,
-      header: () => {
-        const allIds = data.map((d) => String((d as EntryRow).id))
-        const allSelected = allIds.length > 0 && allIds.every((id) => selectedRowIds?.has(id))
-        return (
-          <Checkbox
-            checked={allSelected}
-            onCheckedChange={(checked) => {
-              if (checked) {
-                const next = new Set(selectedRowIds)
-                allIds.forEach((id) => next.add(id))
-                onSelectionChange?.(next)
-              } else {
-                const next = new Set(selectedRowIds)
-                allIds.forEach((id) => next.delete(id))
-                onSelectionChange?.(next)
-              }
-            }}
-          />
-        )
-      },
+      header: () => null,
       cell: ({ row }) => {
-        const id = String((row.original as EntryRow).id)
+        const idx = data.indexOf(row.original)
+        const num = (page - 1) * limit + idx + 1
         return (
-          <Checkbox
-            checked={selectedRowIds?.has(id) ?? false}
-            onCheckedChange={(checked) => {
-              const next = new Set(selectedRowIds)
-              if (checked) next.add(id)
-              else next.delete(id)
-              onSelectionChange?.(next)
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
+          <span className="text-[11px] text-stone-400 select-none text-center block tabular-nums">{num}</span>
         )
       },
     }
-    return [checkCol, ...columns]
-  }, [selectable, columns, data, selectedRowIds, onSelectionChange])
+    cols.push(rowNumCol)
+
+    if (selectable) {
+      const checkCol: ColumnDef<T, unknown> = {
+        id: '_select',
+        enableSorting: false,
+        enableHiding: false,
+        size: 32,
+        header: () => {
+          const allIds = data.map((d) => String((d as EntryRow).id))
+          const allSelected = allIds.length > 0 && allIds.every((id) => selectedRowIds?.has(id))
+          return (
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  const next = new Set(selectedRowIds)
+                  allIds.forEach((id) => next.add(id))
+                  onSelectionChange?.(next)
+                } else {
+                  const next = new Set(selectedRowIds)
+                  allIds.forEach((id) => next.delete(id))
+                  onSelectionChange?.(next)
+                }
+              }}
+            />
+          )
+        },
+        cell: ({ row }) => {
+          const id = String((row.original as EntryRow).id)
+          return (
+            <Checkbox
+              checked={selectedRowIds?.has(id) ?? false}
+              onCheckedChange={(checked) => {
+                const next = new Set(selectedRowIds)
+                if (checked) next.add(id)
+                else next.delete(id)
+                onSelectionChange?.(next)
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          )
+        },
+      }
+      cols.push(checkCol)
+    }
+
+    cols.push(...columns)
+    return cols
+  }, [selectable, columns, data, page, limit, selectedRowIds, onSelectionChange])
 
   const table = useReactTable({
     data,
@@ -338,11 +379,11 @@ export function DataTable<T>({
   const visibleCols = table.getVisibleFlatColumns()
   const colIds = useMemo(() => visibleCols.map((c) => c.id), [visibleCols])
 
-  // Skip indices for action columns during tab navigation.
+  // Skip indices for non-data columns during tab navigation.
   const skipColIndices = useMemo(() => {
     const skip: number[] = []
     colIds.forEach((id, i) => {
-      if (id === '_actions') skip.push(i)
+      if (id === '_actions' || id === '_rowNum' || id === '_select') skip.push(i)
     })
     return skip
   }, [colIds])
@@ -483,7 +524,7 @@ export function DataTable<T>({
   )
 
   // Virtual scrolling — only activate when row count exceeds threshold.
-  const ROW_HEIGHT = 41
+  const ROW_HEIGHT = 28
   const VIRTUAL_THRESHOLD = 40
   const useVirtual = visibleRows.length > VIRTUAL_THRESHOLD
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
@@ -502,8 +543,26 @@ export function DataTable<T>({
     rowVirtualizer.scrollToIndex(grid.activeCell.row, { align: 'auto' })
   }, [useVirtual, grid.activeCell, rowVirtualizer])
 
+  // Formula bar: compute cell reference and display value.
+  const formulaBarInfo = useMemo(() => {
+    if (!editable || !grid.activeCell) return null
+    const { row, col } = grid.activeCell
+    // Count non-data columns before this col to compute letter index.
+    const nonDataCols = new Set(['_rowNum', '_select', '_actions'])
+    let dataColIdx = 0
+    for (let i = 0; i < col; i++) {
+      if (!nonDataCols.has(colIds[i])) dataColIdx++
+    }
+    if (nonDataCols.has(colIds[col])) return null
+    const letter = colIndexToLetter(dataColIdx)
+    const rowNum = (page - 1) * limit + row + 1
+    const colId = colIds[col]
+    const value = data[row] ? String((data[row] as Record<string, unknown>)[colId] ?? '') : ''
+    return { ref: `${letter}${rowNum}`, value }
+  }, [editable, grid.activeCell, colIds, data, page, limit])
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-1">{toolbar}</div>
@@ -557,6 +616,18 @@ export function DataTable<T>({
         </DropdownMenu>
       </div>
 
+      {/* Formula bar */}
+      {editable && (
+        <div className="flex items-center border border-stone-300 bg-white h-7 text-sm">
+          <div className="w-14 px-2 border-r border-stone-300 bg-[#f0f0f0] text-center text-[11px] font-medium text-stone-600 flex items-center justify-center h-full select-none tabular-nums">
+            {formulaBarInfo?.ref ?? ''}
+          </div>
+          <div className="flex-1 px-2 truncate text-stone-700 text-[13px]">
+            {formulaBarInfo?.value ?? ''}
+          </div>
+        </div>
+      )}
+
       {/* Select-all-filtered banner */}
       {selectable && selectedRowIds && data.length > 0 && (() => {
         const allPageIds = data.map((d) => String((d as EntryRow).id))
@@ -584,12 +655,12 @@ export function DataTable<T>({
           scrollRef.current = el
           ;(grid.containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
         }}
-        className={`rounded-lg border border-stone-200/80 bg-white shadow-sm overflow-auto focus:outline-none ${useVirtual ? 'max-h-[calc(100vh-280px)]' : ''}`}
+        className={`border border-stone-300 bg-white overflow-auto focus:outline-none ${useVirtual ? 'max-h-[calc(100vh-340px)]' : ''}`}
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
         <Table style={{ width: table.getCenterTotalSize() }} role="grid" aria-rowcount={total ?? data.length}>
-          <TableHeader role="rowgroup" className="bg-stone-50/80">
+          <TableHeader role="rowgroup" className="bg-[#f0f0f0]">
             <DndContext
               sensors={dndSensors}
               collisionDetection={closestCenter}
@@ -604,7 +675,7 @@ export function DataTable<T>({
                   const isPinned = header.column.getIsPinned()
                   const pinnedLeftCols = columnPinning.left ?? []
                   const isLastPinnedLeft = isPinned === 'left' && headerIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
-                  const isSystemCol = header.column.id === '_select' || header.column.id === '_actions'
+                  const isSystemCol = header.column.id === '_select' || header.column.id === '_actions' || header.column.id === '_rowNum'
 
                   return (
                     <SortableTableHead
@@ -613,7 +684,7 @@ export function DataTable<T>({
                       disabled={!!isPinned || isSystemCol}
                       role="columnheader"
                       aria-sort={sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : canSort ? 'none' : undefined}
-                      className={`relative group ${isPinned ? 'bg-stone-50' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-border' : ''}`}
+                      className={`relative group ${isPinned ? 'bg-[#f0f0f0]' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-stone-400' : ''}`}
                       style={{
                         width: header.getSize(),
                         position: isPinned ? 'sticky' : undefined,
@@ -682,7 +753,7 @@ export function DataTable<T>({
                   key={row.id}
                   role="row"
                   aria-rowindex={(page - 1) * limit + rowIdx + 2}
-                  className={`${onRowClick ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
+                  className={`${onRowClick ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-blue-50/40`}
                   style={useVirtual ? {
                     position: 'absolute',
                     top: 0,
@@ -714,11 +785,13 @@ export function DataTable<T>({
                     const edgeLeft = inSel && colIdx === selNorm.c1
                     const edgeRight = inSel && colIdx === selNorm.c2
 
+                    const isRowNum = cell.column.id === '_rowNum'
+
                     return (
                       <TableCell
                         key={cell.id}
                         role="gridcell"
-                        className={`${isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-border' : ''} relative ${isActive ? 'ring-2 ring-primary ring-inset' : ''} ${edgeTop ? 'border-t-2 border-t-primary' : ''} ${edgeBottom ? 'border-b-2 border-b-primary' : ''} ${edgeLeft ? 'border-l-2 border-l-primary' : ''} ${edgeRight ? 'border-r-2 border-r-primary' : ''}`}
+                        className={`${isRowNum ? 'bg-[#f0f0f0] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-stone-400' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#d4e5f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#2266cc]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#2266cc]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#2266cc]' : ''} ${edgeRight ? 'border-r-2 border-r-[#2266cc]' : ''}`}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
@@ -779,12 +852,18 @@ export function DataTable<T>({
                   transform: `translateY(${rowVirtualizer.getTotalSize()}px)`,
                 } : undefined}
               >
-                {table.getVisibleFlatColumns().map((col, colIdx) => {
-                  const isSystem = col.id === '_select' || col.id === '_actions' || col.id === '_status' || col.id === 'created_at'
+                {table.getVisibleFlatColumns().map((col) => {
+                  const isRowNum = col.id === '_rowNum'
+                  const isSystem = col.id === '_select' || col.id === '_actions' || col.id === '_status' || col.id === 'created_at' || isRowNum
+                  // Show "+ 새 항목" in first data column
+                  const isFirstDataCol = !isSystem && table.getVisibleFlatColumns().findIndex((c) => {
+                    const id = c.id
+                    return id !== '_rowNum' && id !== '_select' && id !== '_actions' && id !== '_status' && id !== 'created_at'
+                  }) === table.getVisibleFlatColumns().indexOf(col)
                   return (
                     <TableCell
                       key={col.id}
-                      className="text-muted-foreground"
+                      className={`text-muted-foreground ${isRowNum ? 'bg-[#f0f0f0]' : ''}`}
                       style={{ width: col.getSize() }}
                       onClick={() => {
                         if (!isSystem && onNewRowChange) {
@@ -792,7 +871,7 @@ export function DataTable<T>({
                         }
                       }}
                     >
-                      {colIdx === 0 && !isSystem ? (
+                      {isRowNum ? null : isFirstDataCol ? (
                         <span className="text-xs text-muted-foreground/60">+ 새 항목</span>
                       ) : isSystem ? null : (
                         <NewRowCell
@@ -811,15 +890,13 @@ export function DataTable<T>({
           {/* Summary row */}
           {summaryRow && Object.keys(summaryRow).length > 0 && (
             <TableFooter>
-              <TableRow className="border-t-2 bg-muted/30 font-medium">
-                {table.getVisibleFlatColumns().map((col, i) => {
+              <TableRow className="border-t-2 font-medium">
+                {table.getVisibleFlatColumns().map((col) => {
                   const summary = summaryRow[col.id]
                   const currentFn = summaryFn?.[col.id] || 'sum'
+                  const isRowNum = col.id === '_rowNum'
                   return (
-                    <TableCell key={col.id} className="text-xs py-1.5">
-                      {i === 0 && !summary ? (
-                        <span className="text-muted-foreground font-normal">집계</span>
-                      ) : null}
+                    <TableCell key={col.id} className={`text-xs py-1 ${isRowNum ? 'bg-[#f0f0f0]' : ''}`}>
                       {summary ? (
                         <div className="flex items-center gap-1.5">
                           {onSummaryFnChange && (
@@ -853,23 +930,19 @@ export function DataTable<T>({
         </Table>
       </div>
       {canScrollRight && (
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent rounded-r-md" />
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
       )}
       </div>
 
-      {/* Selection indicator */}
-      {grid.selection && (
-        <div className="text-xs text-muted-foreground">
-          {(() => {
-            const r1 = Math.min(grid.selection.startRow, grid.selection.endRow)
-            const r2 = Math.max(grid.selection.startRow, grid.selection.endRow)
-            const c1 = Math.min(grid.selection.startCol, grid.selection.endCol)
-            const c2 = Math.max(grid.selection.startCol, grid.selection.endCol)
-            const rows = r2 - r1 + 1
-            const cols = c2 - c1 + 1
-            return `${rows}행 x ${cols}열 선택`
-          })()}
-        </div>
+      {/* Status bar (Excel-like) */}
+      {editable && (
+        <StatusBar
+          selection={grid.selection}
+          activeCell={grid.activeCell}
+          data={data as Record<string, unknown>[]}
+          colIds={colIds}
+          fields={editableFields}
+        />
       )}
 
       {/* Header context menu (right-click) */}
@@ -1159,6 +1232,80 @@ function NewRowCell({
     default:
       return <span className="text-xs text-muted-foreground/40">{field.label}</span>
   }
+}
+
+// Excel-like status bar with selection info and numeric aggregates.
+function StatusBar({
+  selection,
+  activeCell,
+  data,
+  colIds,
+  fields,
+}: {
+  selection: { startRow: number; startCol: number; endRow: number; endCol: number } | null
+  activeCell: CellPosition | null
+  data: Record<string, unknown>[]
+  colIds: string[]
+  fields?: Field[]
+}) {
+  const stats = useMemo(() => {
+    if (!selection) return null
+    const r1 = Math.min(selection.startRow, selection.endRow)
+    const r2 = Math.max(selection.startRow, selection.endRow)
+    const c1 = Math.min(selection.startCol, selection.endCol)
+    const c2 = Math.max(selection.startCol, selection.endCol)
+    const rows = r2 - r1 + 1
+    const cols = c2 - c1 + 1
+
+    // Collect numeric values from selected cells.
+    const numericTypes = new Set(['number', 'integer', 'decimal'])
+    const nums: number[] = []
+    for (let r = r1; r <= r2; r++) {
+      const row = data[r]
+      if (!row) continue
+      for (let c = c1; c <= c2; c++) {
+        const colId = colIds[c]
+        if (!colId) continue
+        const field = fields?.find((f) => f.slug === colId)
+        if (!field || !numericTypes.has(field.field_type)) continue
+        const v = row[colId]
+        if (v != null && typeof v === 'number' && !isNaN(v)) nums.push(v)
+        else if (v != null && typeof v === 'string') {
+          const n = parseFloat(v)
+          if (!isNaN(n)) nums.push(n)
+        }
+      }
+    }
+
+    let sum = 0
+    let avg = 0
+    if (nums.length > 0) {
+      sum = nums.reduce((a, b) => a + b, 0)
+      avg = sum / nums.length
+    }
+
+    return { rows, cols, nums, sum, avg }
+  }, [selection, data, colIds, fields])
+
+  if (!selection && !activeCell) return null
+
+  return (
+    <div className="flex items-center justify-end gap-4 text-[11px] text-stone-500 bg-[#f0f0f0] border border-stone-300 px-3 h-6">
+      {stats && (
+        <>
+          <span>{stats.rows}행 x {stats.cols}열</span>
+          {stats.nums.length > 0 && (
+            <>
+              <span className="text-stone-300">|</span>
+              <span>합계: <strong className="text-stone-700 tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+              <span>평균: <strong className="text-stone-700 tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+              <span>개수: <strong className="text-stone-700 tabular-nums">{stats.nums.length}</strong></span>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
 }
 
 // Renders a compact set of page number buttons around the current page.

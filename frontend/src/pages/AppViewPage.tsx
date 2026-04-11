@@ -13,10 +13,12 @@ import {
   ArrowDownUp,
   Download,
   Ellipsis,
+  FileSpreadsheet,
   FileText,
   Filter,
   LayoutGrid,
   Loader2,
+  Lock,
   Mail,
   Pencil,
   Plus,
@@ -50,7 +52,7 @@ import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import BulkEditPanel from '@/components/works/BulkEditPanel'
-import CSVImportPreview from '@/components/works/CSVImportPreview'
+import ImportPreview from '@/components/works/CSVImportPreview'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
 import AutomationsPanel from '@/components/works/AutomationsPanel'
@@ -92,6 +94,7 @@ import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/u
 import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
 import { useConflictAwareUpdate } from '@/hooks/useConflictAwareUpdate'
+import { useWorkbookLock } from '@/hooks/useLock'
 import { useRetryToast } from '@/hooks/useRetryToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { TERM } from '@/lib/constants'
@@ -160,6 +163,10 @@ export default function AppViewPage() {
   const { data: currentUser } = useCurrentUser()
   const canManage = canManageCollection(currentUser, collection?.created_by)
   const updateField = useUpdateField()
+
+  // Workbook lock — one user edits at a time.
+  const { isLockedByOther } = useWorkbookLock(collection?.workbook_id)
+  const isReadOnly = isLockedByOther
 
   // Show toast when automation runs are detected.
   useAutomationRunToasts(collection?.id)
@@ -390,6 +397,13 @@ export default function AppViewPage() {
     window.open(`/api/data/${collection.slug}/export.pdf${qs ? `?${qs}` : ''}`, '_blank')
   }
 
+  // Excel export.
+  function handleXlsxExport() {
+    if (!collection) return
+    const qs = buildExportQS()
+    window.open(`/api/data/${collection.slug}/export.xlsx${qs ? `?${qs}` : ''}`, '_blank')
+  }
+
   // Email report.
   const [emailDialogOpen, setEmailDialogOpen] = useState(false)
   const [emailTo, setEmailTo] = useState('')
@@ -433,7 +447,7 @@ export default function AppViewPage() {
     if (!collection) return
     setCsvPreviewOpen(false)
     setImportingCSV(true)
-    const toastId = toast.loading('CSV 가져오는 중...')
+    const toastId = toast.loading('파일 가져오는 중...')
 
     try {
       const formData = new FormData()
@@ -889,6 +903,10 @@ export default function AppViewPage() {
             더보기
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={handleXlsxExport}>
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />
+              Excel 내보내기
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleCsvExport}>
               <Download className="h-3.5 w-3.5 mr-2" />
               CSV 내보내기
@@ -918,7 +936,7 @@ export default function AppViewPage() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv"
+          accept=".csv,.xlsx,.xls"
           className="hidden"
           onChange={handleImportCSV}
         />
@@ -977,6 +995,13 @@ export default function AppViewPage() {
         }
       />
 
+      {isReadOnly && (
+        <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <Lock className="h-4 w-4 shrink-0" />
+          다른 사용자가 편집 중입니다. 읽기 전용으로 표시됩니다.
+        </div>
+      )}
+
       {entriesLoading && !list && <LoadingState variant="table" />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
@@ -996,7 +1021,7 @@ export default function AppViewPage() {
             createEntry={async (body) => { await createEntry.mutateAsync(body) }}
             deleteEntry={(id) => bulkDelete.mutate([id])}
             batchUpdateEntry={(updates) => batchUpdateEntry.mutate(updates)}
-            canManage={canManage}
+            canManage={canManage && !isReadOnly}
             toolbar={tableToolbar}
             toolbarRight={sheetTabs}
             summaryRow={summaryRow}
@@ -1027,11 +1052,12 @@ export default function AppViewPage() {
       )}
 
 
-      <CSVImportPreview
+      <ImportPreview
         open={csvPreviewOpen}
         onOpenChange={setCsvPreviewOpen}
         file={csvPreviewFile}
         fields={collection.fields ?? []}
+        slug={collection.slug}
         onConfirm={handleCSVConfirm}
       />
 

@@ -113,7 +113,6 @@ func run() int {
 
 	// Schema & dynamic handlers (PR #53 — built-in dynamic handler).
 	schemaHandler := handler.NewSchemaHandler(pool, store, cache, migEngine)
-	workbookHandler := handler.NewWorkbookHandler(store, cache, migEngine)
 	dynHandler := handler.NewDynHandler(pool, cache, bus)
 	viewHandler := handler.NewViewHandler(store)
 	savedViewHandler := handler.NewSavedViewHandler(store)
@@ -133,6 +132,7 @@ func run() int {
 	// SSE real-time events.
 	sseBroker := events.NewBroker()
 	sseHandler := handler.NewSSEHandler(sseBroker)
+	workbookHandler := handler.NewWorkbookHandler(store, cache, migEngine, sseBroker)
 	// Forward bus events to SSE broker, including cross-sheet invalidation.
 	bus.Subscribe(func(_ context.Context, ev events.Event) {
 		sseBroker.Broadcast(events.SSEMessage{
@@ -287,6 +287,30 @@ func run() int {
 		go syncRunner.Start(ctx)
 		autoEngine.SetBaseContext(ctx)
 		autoScheduler.Start(ctx)
+
+		// Expired workbook lock cleanup — every 5 minutes, release locks older than 30 min.
+		go func() {
+			ticker := time.NewTicker(5 * time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					n, err := store.ReleaseExpiredLocks(ctx, 30*time.Minute)
+					if err != nil {
+						slog.Error("release expired locks", "error", err)
+						continue
+					}
+					if n > 0 {
+						slog.Info("released expired workbook locks", "count", n)
+						sseBroker.Broadcast(events.SSEMessage{
+							Type: string(events.EventWorkbookUnlocked),
+						})
+					}
+				}
+			}
+		}()
 
 		logging.PrintBanner(os.Stderr, logging.BannerInfo{
 			Version: version,
@@ -478,6 +502,11 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Post("/workbooks/{id}/sheets", cfg.workbookH.CreateSheet)
 			r.Post("/sheets/{id}/move", cfg.workbookH.MoveSheet)
 
+			// Workbook lock (edit lock — one user at a time).
+			r.Get("/workbooks/{workbookId}/lock", cfg.workbookH.GetLock)
+			r.Post("/workbooks/{workbookId}/lock", cfg.workbookH.AcquireLock)
+			r.Delete("/workbooks/{workbookId}/lock", cfg.workbookH.ReleaseLock)
+
 			// Create collection: all authenticated users.
 			r.Post("/collections", cfg.schemaH.CreateCollection)
 
@@ -559,19 +588,22 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Get("/{slug}/gantt", cfg.dynH.GanttView)
 			r.Get("/{slug}/kanban", cfg.dynH.KanbanView)
 			r.Get("/{slug}/export.csv", cfg.dynH.ExportCSV)
+			r.Get("/{slug}/export.xlsx", cfg.dynH.ExportXLSX)
 			r.Get("/{slug}/export.pdf", cfg.dynH.ExportPDF)
 			r.Post("/{slug}/email-report", cfg.reportH.EmailReport)
 			r.Get("/{slug}/{id}", cfg.dynH.Get)
 
-			// Write: director, pm, engineer.
+			// Write: director, pm, engineer — also check workbook lock.
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("director", "pm", "engineer"))
+				r.Use(middleware.WorkbookLock(cfg.cache))
 				r.Post("/{slug}", cfg.dynH.Create)
 				r.Post("/{slug}/bulk", cfg.dynH.BulkCreate)
 				r.Post("/{slug}/formula-preview", cfg.dynH.FormulaPreview)
 				r.Patch("/{slug}/batch", cfg.dynH.BatchUpdate)
 				r.Delete("/{slug}/bulk", cfg.dynH.BulkDelete)
-				r.Post("/{slug}/import", cfg.dynH.ImportCSV)
+				r.Post("/{slug}/import", cfg.dynH.ImportFile)
+				r.Post("/{slug}/import/preview", cfg.dynH.ImportPreview)
 				r.Patch("/{slug}/{id}", cfg.dynH.Update)
 				r.Delete("/{slug}/{id}", cfg.dynH.Delete)
 			})

@@ -78,24 +78,33 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 
 | 커밋 | 내용 |
 |------|------|
-| #283 | Folder 모델, Workbook 확장, 역참조 메타(ReverseRelField), 크로스시트 수식 구문(`SheetSlug!col`), SSE 크로스시트 무효화, 캐시 의존성 그래프 |
+| #292 | 워크북 동시 편집 방어 — 잠금 시스템 (API, 미들웨어, SSE, 프론트 잠금 훅/읽기 전용 UI) |
+| #291 | 스프레드시트 전환으로 무효화된 프론트엔드 테스트 전체 삭제 |
+| #290 | 디자인 철학을 엑셀 중심으로 전환 — "엑셀이랑 똑같은데 더 고급지다" |
+| #289 | 엑셀 느낌 시각적 그리드 개선 — 행번호, 수식입력줄, 상태바, 그리드선, 활성셀 |
+| #288 | JS 수식 엔진 (같은 시트 로컬 연산) + 셀 편집 즉각 반영 |
+| #287 | Excel(XLSX) 내보내기/가져오기 + 붙여넣기 호환성 강화 |
+| #283 | Folder 모델, 역참조 메타(ReverseRelField), 크로스시트 수식 구문(`SheetSlug!col`), SSE 크로스시트 무효화, 캐시 의존성 그래프 |
 | #282 | 관계 리브랜딩, 자동화/대시보드/설정/프로세스 시트 통합 |
-| #281 | 뷰 타입 제거 — SpreadsheetView 단일 + SavedView 시트 탭, Kanban/Calendar/Gallery/Gantt/Form 삭제 |
-| #280 | Workbook 모델 (`_meta.workbooks`, `group_label`), Collection에 `workbook_id` FK, 워크북 API |
+| #281 | 뷰 타입 제거 — SpreadsheetView 단일 + SavedView 시트 탭 |
+| #280 | Workbook 모델, Collection에 `workbook_id` FK, 워크북 API |
 | #277-279 | SpreadsheetView 추가, 뷰 탭 툴바 통합, 여백 축소 |
 
 **이미 구현된 인프라:**
+- **워크북 잠금 시스템** — 동시 편집 차단, 잠금 API, WorkbookLock 미들웨어, SSE 이벤트, 만료 정리 ✅
+- **JS 수식 엔진** — 같은 시트 수식 로컬 연산 (`frontend/src/lib/formulaEngine.ts`), 셀 편집 즉각 반영 ✅
+- **엑셀 UI** — 행번호, 수식입력줄, 상태바, 그리드선, 활성셀 하이라이트 ✅
+- **Excel(XLSX) 가져오기/내보내기** + 붙여넣기 호환성 ✅
 - Folder 모델 (`_meta.folders`, 1단계 중첩) + CRUD API ✅
 - Workbook 모델 + API + 프론트 훅 ✅
 - SpreadsheetView (인라인 편집, 클립보드, 새 행) ✅
-- 크로스시트 수식 함수 (LOOKUP, SUMREL, AVGREL, MINREL, MAXREL, COUNTREL) ✅
-- 크로스시트 수식 구문 파서 (`SheetSlug!column` 토큰화 + SheetResolver 콜백) ✅
-- 역참조 메타데이터 (`ReverseRelField` 구조체 + 캐시 `reverseRels` 인덱스) ✅
-- SSE 크로스시트 무효화 (`cross_sheet_invalidation` 이벤트, `hasCrossRef` 감지) ✅
-- 캐시 의존성 그래프 (`SheetsInWorkbook`, `SiblingSheets`, `ReverseRelations`, `WorkbookForCollection`) ✅
+- 크로스시트 수식 함수 (LOOKUP, SUMREL 등) + 구문 파서 (`SheetSlug!column`) ✅
+- 역참조 메타데이터 (`ReverseRelField`, 캐시 `reverseRels` 인덱스) ✅
+- SSE 크로스시트 무효화 + 프론트 `cross_sheet_invalidation` 핸들링 ✅
+- 캐시 의존성 그래프 (`SheetsInWorkbook`, `SiblingSheets`, `ReverseRelations`) ✅
 - 관계 시스템 (1:1, 1:N, M:N + junction table) ✅
 - Lookup/Rollup computed fields ✅
-- SSE 실시간 동기화 ✅
+- SSE 실시간 동기화 (잠금 이벤트 포함) ✅
 - 용어 변경 (collection → 시트) ✅
 - DataTable (@tanstack/react-table + virtual scroll) ✅
 - 인라인 셀 편집 + 키보드 네비게이션 ✅
@@ -103,42 +112,27 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 
 ---
 
-## 4. 남은 작업 — 핵심 GAP 4가지
+## 4. 남은 작업
 
-### GAP 1: 로컬 처리 전환
+### GAP 1: 로컬 처리 전환 — 대부분 완료
 
-**목표**: 셀 편집, 필터/정렬, 같은 시트 수식을 클라이언트에서 즉시 처리
+**완료:**
+- JS 수식 엔진 (`frontend/src/lib/formulaEngine.ts`) — 같은 시트 수식 로컬 연산 ✅ (#288)
+- 셀 편집 즉각 반영 ✅ (#288)
+- 앱 잠금 시스템 — 워크북 단위 동시 편집 차단 ✅ (#292)
 
-**작업 항목:**
+**남은 작업:**
 
-1. **데이터 로드 전략 변경**
-   - `useEntries` 훅 수정: 5,000행 이하 시 전체 데이터 한 번에 fetch (`limit=ALL`)
-   - React Query 캐시에 전체 데이터 보관
-   - 파일: `frontend/src/hooks/useEntries.ts`
-
-2. **셀 편집 로컬화**
-   - `useInlineEditing` 수정: 편집 즉시 로컬 상태 반영
-   - 변경 큐(change queue) 구현: 변경 사항 적재 → 디바운스(1~2초) → 배치 API 호출
-   - 서버 저장 실패 시 롤백 + 토스트
-   - 파일: `frontend/src/hooks/useInlineEditing.ts`, 새 훅 `useChangeQueue.ts`
-
-3. **클라이언트 필터/정렬**
+1. **데이터 전체 로드 + 클라이언트 필터/정렬**
+   - `useEntries` 훅: 5,000행 이하 시 전체 데이터 fetch → 클라이언트 필터/정렬
    - `@tanstack/react-table`의 `getFilteredRowModel()`, `getSortedRowModel()` 활성화
-   - 서버 쿼리 파라미터(`?_filter=`, `?sort=`) 대신 테이블 상태로 필터/정렬
-   - 5,000행 초과 시 서버 폴백 (현재 방식 유지)
-   - 파일: `frontend/src/pages/AppViewPage.tsx`, `frontend/src/components/common/DataTable.tsx`
+   - 5,000행 초과 시 서버 폴백 유지
+   - 파일: `frontend/src/hooks/useEntries.ts`, `frontend/src/pages/AppViewPage.tsx`
 
-4. **JS 수식 엔진**
-   - Go `formula/parser.go` 로직을 TypeScript로 포팅
-   - 같은 시트 필드 참조만 처리, 크로스시트 함수는 서버 위임
-   - 셀 값 변경 → 의존 수식 즉시 재계산
-   - 파일: 새 파일 `frontend/src/lib/formulaEngine.ts`
-
-5. **앱 잠금 시스템**
-   - 백엔드: 앱 열기 시 잠금 획득 API, 하트비트, 자동 해제
-   - 프론트: 잠금 상태 표시, 읽기 전용 모드
-   - `_version` 기반 충돌 처리 제거
-   - 파일: `backend/internal/handler/dynamic.go`, 새 파일 `backend/internal/handler/lock.go`, `frontend/src/hooks/useLock.ts`
+2. **셀 편집 디바운스 배치 저장** (선택적 최적화)
+   - 현재: 셀 편집마다 개별 API 호출. 잠금 모드에서는 충돌 없으므로 배치 가능
+   - 변경 큐 → 디바운스(1~2초) → 배치 API 호출로 네트워크 호출 감소
+   - 파일: `frontend/src/hooks/useInlineEditing.ts`
 
 ### GAP 2: 양방향 링크 (Bidirectional Links)
 
@@ -158,22 +152,10 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
    - 클릭 시 원본 시트/행으로 이동
    - 파일: `frontend/src/components/common/GridCell.tsx`, `frontend/src/components/common/DataTable.tsx`
 
-### GAP 3: 크로스시트 자동 동기화
+### ~~GAP 3: 크로스시트 자동 동기화~~ — 완료 ✅
 
-**백엔드 인프라 완료** (#283): 
-- `Event.WorkbookID` 필드 추가 ✅
-- `cache.SheetsInWorkbook()`, `cache.SiblingSheets()` 메서드 ✅
-- `cross_sheet_invalidation` SSE 이벤트 타입 + `hasCrossRef()` 감지 로직 (main.go) ✅
-- 레코드 변경 → 같은 워크북 형제 시트 중 참조하는 시트에 SSE 브로드캐스트 ✅
-
-**남은 작업**: 프론트에서 `cross_sheet_invalidation` 이벤트를 수신하여 캐시 무효화.
-
-**작업 항목:**
-
-1. **프론트: 크로스시트 캐시 무효화** ← 핵심 남은 작업
-   - `useSSE`에서 `cross_sheet_invalidation` 이벤트 수신 → 해당 컬렉션 entries 캐시 무효화
-   - 현재 보고 있는 시트가 무효화 대상이면 데이터 리프레시
-   - 파일: `frontend/src/hooks/useSSE.ts`
+- 백엔드: `cross_sheet_invalidation` SSE 이벤트 + `hasCrossRef()` 감지 ✅ (#283)
+- 프론트: `useSSE`에서 `cross_sheet_invalidation` 수신 → entries 캐시 무효화 ✅ (#292)
 
 ### GAP 4: 네비게이션 / UX 재구성
 
@@ -239,14 +221,16 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 
 ## 7. 구현 우선순위
 
-### Phase 1: 로컬 처리 전환 (GAP 1) — 체감 효과 가장 큼
-1. 전체 데이터 로드 전략 변경
-2. 셀 편집 로컬화 + 변경 큐
-3. 클라이언트 필터/정렬
-4. JS 수식 엔진 (같은 시트)
-5. 앱 잠금 시스템
+### ~~Phase 1: 로컬 처리 전환~~ — 대부분 완료
+- ~~JS 수식 엔진~~ ✅ (#288)
+- ~~앱 잠금 시스템~~ ✅ (#292)
+- 남은 것: 클라이언트 필터/정렬 (전체 데이터 로드 + tanstack 클라이언트 모드)
 
-### Phase 2: 네비게이션 재구성 (GAP 4)
+### ~~Phase 4: 크로스시트 동기화~~ — 완료 ✅
+- ~~백엔드 의존성 그래프 + SSE~~ ✅ (#283)
+- ~~프론트 캐시 무효화~~ ✅ (#292)
+
+### Phase 2: 네비게이션 재구성 (GAP 4) — 다음 우선
 1. 좌측 사이드바 (시트 트리)
 2. 하단 시트 탭
 3. EntryPage → 슬라이드오버
@@ -254,14 +238,8 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 5. 불필요 페이지 삭제
 
 ### Phase 3: 양방향 링크 (GAP 2)
-1. 역참조 가상 필드
-2. 역참조 데이터 확장
-3. 역참조 열 렌더링
-
-### Phase 4: 크로스시트 동기화 (GAP 3)
-1. 의존성 그래프
-2. SSE 이벤트 확장
-3. 프론트 크로스시트 캐시 무효화
+1. 역참조 데이터 조회 API (핸들러)
+2. 역참조 열 렌더링 (프론트)
 
 ---
 

@@ -136,6 +136,32 @@ async function uploadFile(file: File): Promise<UploadResult> {
   return json.data as UploadResult
 }
 
+/**
+ * POST a FormData payload to an arbitrary API path.
+ * Returns the parsed JSON response (envelope-unwrapped).
+ */
+async function uploadForm<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    body: form,
+    credentials: 'include',
+  })
+
+  if (!res.ok) {
+    let message = res.statusText || `HTTP ${res.status}`
+    try {
+      const parsed = await res.json()
+      message = parsed.message ?? parsed.error ?? message
+    } catch {
+      // body wasn't JSON
+    }
+    throw new ApiError(res.status, `HTTP_${res.status}`, message)
+  }
+
+  const json = await res.json()
+  return json as T
+}
+
 export const api = {
   /** GET a single resource; envelope-unwrapped to `T`. */
   get: <T>(path: string, opts?: RequestOptions) => request<T>('GET', path, undefined, opts),
@@ -157,4 +183,6 @@ export const api = {
   del: <T>(path: string, body?: unknown, opts?: RequestOptions) => request<T>('DELETE', path, body, opts),
   /** Upload a file via multipart/form-data. Returns the stored URL, name, and size. */
   upload: uploadFile,
+  /** POST a FormData payload to an arbitrary API path. */
+  uploadForm,
 }

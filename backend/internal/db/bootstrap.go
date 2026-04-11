@@ -413,6 +413,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS workbook_id UUID REFERENCES _meta.workbooks(id) ON DELETE SET NULL`,
 		`ALTER TABLE _meta.workbooks ADD COLUMN IF NOT EXISTS group_label VARCHAR(255)`,
 		`CREATE INDEX IF NOT EXISTS idx_meta_collections_workbook ON _meta.collections(workbook_id)`,
+		// Workbook edit lock — only one user edits at a time.
+		`ALTER TABLE _meta.workbooks ADD COLUMN IF NOT EXISTS locked_by UUID`,
+		`ALTER TABLE _meta.workbooks ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ`,
 	}
 
 	for _, stmt := range append(stmts, alters...) {

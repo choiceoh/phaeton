@@ -188,6 +188,8 @@ type Workbook struct {
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 	CreatedBy  string    `json:"created_by,omitempty"`
+	LockedBy   string    `json:"locked_by,omitempty"` // User ID holding the edit lock; empty = unlocked.
+	LockedAt   time.Time `json:"locked_at,omitempty"` // When the lock was acquired.
 }
 
 // Field defines a single column inside a collection.
