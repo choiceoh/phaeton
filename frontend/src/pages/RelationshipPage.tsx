@@ -13,11 +13,11 @@ export default function RelationshipPage() {
   return (
     <div>
       <PageHeader
-        title="관계 시각화"
-        description="앱 간 관계 필드 연결을 시각적으로 확인합니다"
+        title="시트 관계도"
+        description="시트 간 참조 필드 연결을 시각적으로 확인합니다"
         breadcrumb={[
           { label: '앱 목록', href: '/apps' },
-          { label: '관계 시각화' },
+          { label: '시트 관계도' },
         ]}
       />
 
@@ -26,8 +26,8 @@ export default function RelationshipPage() {
       {!isLoading && edges.length === 0 && (
         <EmptyState
           icon={<GitBranch className="h-10 w-10" />}
-          title="관계가 없습니다"
-          description="앱에 관계(relation) 필드를 추가하면 여기에 연결 관계가 표시됩니다."
+          title="참조 관계가 없습니다"
+          description="시트에 참조 필드를 추가하면 여기에 시트 간 관계가 표시됩니다."
           action={
             <Link to="/apps" className="text-primary underline text-sm">
               앱 목록으로 돌아가기
@@ -40,10 +40,10 @@ export default function RelationshipPage() {
         <div className="rounded-lg border bg-card" style={{ height: 'calc(100vh - 220px)', minHeight: 500 }}>
           <div className="flex items-center justify-between border-b px-4 py-2">
             <span className="text-sm text-muted-foreground">
-              {nodes.length}개 앱, {edges.length}개 관계
+              {nodes.length}개 시트, {edges.length}개 참조
             </span>
             <span className="text-xs text-muted-foreground">
-              노드를 드래그하여 이동, 더블클릭으로 앱 열기
+              노드를 드래그하여 이동, 더블클릭으로 시트 열기
             </span>
           </div>
           <RelationshipGraph nodes={nodes} edges={edges} />

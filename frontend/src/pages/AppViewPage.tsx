@@ -11,7 +11,6 @@
 import type { SortingState } from '@tanstack/react-table'
 import {
   ArrowDownUp,
-  BarChart3,
   Download,
   Ellipsis,
   FileText,
@@ -27,6 +26,7 @@ import {
   Trash2,
   Upload,
   X,
+  Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -53,6 +53,8 @@ import BulkEditPanel from '@/components/works/BulkEditPanel'
 import CSVImportPreview from '@/components/works/CSVImportPreview'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
+import AutomationsPanel from '@/components/works/AutomationsPanel'
+import SettingsPanel from '@/components/works/SettingsPanel'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import SpreadsheetView from '@/components/works/views/SpreadsheetView'
 import { Badge } from '@/components/ui/badge'
@@ -69,6 +71,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Sheet as SheetPanel,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { useHotkeys } from '@/hooks/useHotkeys'
 import { useCollection } from '@/hooks/useCollections'
 import {
@@ -137,6 +145,10 @@ export default function AppViewPage() {
 
   // Process toggle (frontend-only)
   const [processVisible, setProcessVisible] = useState(true)
+
+  // Settings & Automations panel state
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [automationsOpen, setAutomationsOpen] = useState(false)
 
   // Saved views state
   const [activeView, setActiveView] = useState<SavedView | null>(null)
@@ -894,6 +906,12 @@ export default function AppViewPage() {
                 가져오기
               </DropdownMenuItem>
             </RoleGate>
+            {canManage && (
+              <DropdownMenuItem onClick={() => setAutomationsOpen(true)}>
+                <Zap className="h-3.5 w-3.5 mr-2" />
+                자동화
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         <input
@@ -942,12 +960,6 @@ export default function AppViewPage() {
         description={collection.description}
         actions={
           <>
-            <Link to={`/apps/${collection.id}/dashboard`}>
-              <Button variant="outline" className="gap-1">
-                <BarChart3 className="h-4 w-4" />
-                대시보드
-              </Button>
-            </Link>
             <Link to={`/apps/${collection.id}/interface`}>
               <Button variant="outline" className="gap-1">
                 <LayoutGrid className="h-4 w-4" />
@@ -955,9 +967,7 @@ export default function AppViewPage() {
               </Button>
             </Link>
             {canManage && (
-              <Link to={`/apps/${collection.id}/settings`}>
-                <Button variant="outline">설정</Button>
-              </Link>
+              <Button variant="outline" onClick={() => setSettingsOpen(true)}>설정</Button>
             )}
             <Button onClick={() => navigate(`/apps/${appId}/entries/new`)}>
               {TERM.newRecord}
@@ -1086,6 +1096,34 @@ export default function AppViewPage() {
         </DialogContent>
       </Dialog>
       <HotkeyHelpDialog open={hotkeyHelpOpen} onOpenChange={setHotkeyHelpOpen} />
+
+      <SheetPanel open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent className="sm:max-w-2xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>시트 설정</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <SettingsPanel
+              collection={collection}
+              onDelete={() => {
+                setSettingsOpen(false)
+                navigate('/apps')
+              }}
+            />
+          </div>
+        </SheetContent>
+      </SheetPanel>
+
+      <SheetPanel open={automationsOpen} onOpenChange={setAutomationsOpen}>
+        <SheetContent className="sm:max-w-2xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>자동화</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <AutomationsPanel collectionId={collection.id} />
+          </div>
+        </SheetContent>
+      </SheetPanel>
     </div>
   )
 }

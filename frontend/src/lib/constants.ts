@@ -35,7 +35,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   time: '시간',
   select: '선택',
   multiselect: '다중 선택',
-  relation: '연결',
+  relation: '다른 시트 참조',
   user: '사용자',
   file: '파일',
   json: 'json',
@@ -74,16 +74,16 @@ export const ROLE_LABELS: Record<string, string> = {
 }
 
 export const ON_DELETE_OPTIONS = [
-  { value: 'SET NULL', label: '연결 해제', description: '연결만 끊고 상대 레코드는 유지합니다' },
-  { value: 'CASCADE', label: '함께 삭제', description: '이 레코드 삭제 시 연결된 상대도 삭제됩니다' },
-  { value: 'RESTRICT', label: '삭제 차단', description: '연결된 상대가 있으면 삭제할 수 없습니다' },
-  { value: 'NO ACTION', label: '동작 없음', description: '삭제 시 연결 상태를 변경하지 않습니다' },
+  { value: 'SET NULL', label: '참조 해제', description: '참조만 끊고 상대 레코드는 유지합니다' },
+  { value: 'CASCADE', label: '함께 삭제', description: '이 레코드 삭제 시 참조된 상대도 삭제됩니다' },
+  { value: 'RESTRICT', label: '삭제 차단', description: '참조된 상대가 있으면 삭제할 수 없습니다' },
+  { value: 'NO ACTION', label: '동작 없음', description: '삭제 시 참조 상태를 변경하지 않습니다' },
 ]
 
 export const RELATION_TYPE_OPTIONS = [
-  { value: 'one_to_one', label: '1:1', description: '하나의 레코드가 상대 앱의 하나와만 연결됩니다' },
-  { value: 'one_to_many', label: '1:N', description: '하나의 레코드가 상대 앱의 여러 레코드와 연결됩니다' },
-  { value: 'many_to_many', label: 'N:M', description: '양쪽 레코드가 서로 여러 개와 자유롭게 연결됩니다' },
+  { value: 'one_to_one', label: '1:1', description: '하나의 레코드가 상대 시트의 하나와만 참조됩니다' },
+  { value: 'one_to_many', label: '1:N', description: '하나의 레코드가 상대 시트의 여러 레코드와 참조됩니다' },
+  { value: 'many_to_many', label: 'N:M', description: '양쪽 레코드가 서로 여러 개와 자유롭게 참조됩니다' },
 ]
 
 export const RELATION_TYPE_LABELS: Record<string, string> = Object.fromEntries(

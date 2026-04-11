@@ -678,7 +678,7 @@ export interface UpdateSavedViewReq {
 // --- Automations ---
 
 /** Event that fires an automation rule. */
-export type TriggerType = 'record_created' | 'record_updated' | 'record_deleted' | 'status_change' | 'schedule' | 'form_submit'
+export type TriggerType = 'record_created' | 'record_updated' | 'record_deleted' | 'status_change' | 'schedule'
 /** Side-effect an automation can perform when its conditions pass. */
 export type ActionType = 'send_notification' | 'update_field' | 'call_webhook'
 /** Comparison operators for automation condition predicates. */

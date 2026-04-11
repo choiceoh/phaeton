@@ -482,12 +482,12 @@ export default function FieldProperties({ field, collections, siblingFields, onC
             </section>
           )}
 
-          {/* 연결 설정 */}
+          {/* 참조 설정 */}
           {isRelation && (
             <section className="space-y-3 rounded-md border bg-muted/30 p-3">
-              <Label className="text-xs font-semibold text-muted-foreground">연결 설정</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">참조 설정</Label>
               <div className="space-y-1">
-                <Label className="text-xs">대상 앱</Label>
+                <Label className="text-xs">대상 시트</Label>
                 <Select
                   value={field.relation?.target_collection_id || ''}
                   onValueChange={(v) =>
@@ -512,7 +512,7 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">연결 유형</Label>
+                <Label className="text-xs">참조 유형</Label>
                 <Select
                   value={field.relation?.relation_type || 'one_to_many'}
                   onValueChange={(v) =>
