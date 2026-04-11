@@ -79,3 +79,75 @@ export async function copyToClipboard(
   await navigator.clipboard.writeText(tsv)
 }
 
+/**
+ * Parse a TSV (tab-separated values) string into a 2D string array.
+ *
+ * Handles RFC 4180 quoting: fields wrapped in double-quotes may contain
+ * embedded tabs, newlines, and escaped double-quotes (`""`).
+ */
+export function parseTSV(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let i = 0
+
+  while (i < text.length) {
+    if (text[i] === '"') {
+      // Quoted field
+      let field = ''
+      i++ // skip opening quote
+      while (i < text.length) {
+        if (text[i] === '"') {
+          if (i + 1 < text.length && text[i + 1] === '"') {
+            field += '"'
+            i += 2
+          } else {
+            i++ // skip closing quote
+            break
+          }
+        } else {
+          field += text[i]
+          i++
+        }
+      }
+      row.push(field)
+      // Skip delimiter after field
+      if (i < text.length && text[i] === '\t') i++
+      else if (i < text.length && (text[i] === '\n' || text[i] === '\r')) {
+        if (text[i] === '\r' && i + 1 < text.length && text[i + 1] === '\n') i++
+        i++
+        rows.push(row)
+        row = []
+      }
+    } else {
+      // Unquoted field
+      let field = ''
+      while (i < text.length && text[i] !== '\t' && text[i] !== '\n' && text[i] !== '\r') {
+        field += text[i]
+        i++
+      }
+      row.push(field)
+      if (i < text.length && text[i] === '\t') {
+        i++
+      } else if (i < text.length && (text[i] === '\n' || text[i] === '\r')) {
+        if (text[i] === '\r' && i + 1 < text.length && text[i + 1] === '\n') i++
+        i++
+        rows.push(row)
+        row = []
+      }
+    }
+  }
+
+  // Push last row if it has content
+  if (row.length > 0) rows.push(row)
+
+  return rows
+}
+
+/**
+ * Read TSV data from the system clipboard and parse it.
+ */
+export async function pasteFromClipboard(): Promise<string[][]> {
+  const text = await navigator.clipboard.readText()
+  return parseTSV(text)
+}
+

@@ -71,14 +71,18 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { CellPosition } from '@/hooks/useGridNavigation'
 import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
-import { copyToClipboard } from '@/lib/clipboard'
+import type { CellSaveState } from '@/hooks/useInlineEditing'
+import { copyToClipboard, pasteFromClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
 
 import { Checkbox } from '@/components/ui/checkbox'
 
 import EmptyState from './EmptyState'
-import type { EntryRow } from '@/lib/types'
+import GridCell from './GridCell'
+import GridContextMenu from './GridContextMenu'
+import type { EntryRow, Field } from '@/lib/types'
 
 interface Props<T> {
   columns: ColumnDef<T, unknown>[]
@@ -123,6 +127,46 @@ interface Props<T> {
   totalFiltered?: number
   /** Called when user clicks "select all filtered". */
   onSelectAllFiltered?: () => void
+
+  // --- Inline editing props (optional, used by SpreadsheetView) ---
+  /** Enable inline cell editing mode. */
+  editable?: boolean
+  /** Collection fields metadata for cell editors. */
+  fields?: Field[]
+  /** Currently editing cell position. */
+  editingCell?: CellPosition | null
+  /** Current edit value. */
+  editValue?: unknown
+  /** Called when edit value changes. */
+  onEditValueChange?: (v: unknown) => void
+  /** Called to start editing a cell (double-click or key). */
+  onStartEditing?: (row: number, col: number, initialChar?: string) => void
+  /** Called to commit the current edit. */
+  onCommitEdit?: () => void
+  /** Called to cancel the current edit. */
+  onCancelEdit?: () => void
+  /** Save state per cell ("rowId:colSlug" → 'saving'|'saved'). */
+  cellSaveState?: Map<string, CellSaveState>
+  /** Whether a cell is currently being edited (suppresses navigation). */
+  isEditingCell?: boolean
+  /** Keyboard handler for editing mode. */
+  onEditKeyDown?: (e: React.KeyboardEvent) => void
+  /** Get field metadata for a column index. */
+  getFieldForCol?: (colIdx: number) => Field | null
+  /** Called when Delete/Backspace clears a cell. */
+  onClearCell?: (row: number, col: number) => void
+  /** Called when pasting data from clipboard. */
+  onPaste?: (startRow: number, startCol: number, matrix: string[][]) => void
+  /** Cell context menu actions. */
+  onDeleteRow?: (rowId: string) => void
+  /** Show the bottom empty row for new entries. */
+  showNewRow?: boolean
+  /** Current values in the new row. */
+  newRowValues?: Record<string, unknown>
+  /** Called when a field in the new row changes. */
+  onNewRowChange?: (fieldSlug: string, value: unknown) => void
+  /** Called to commit the new row. */
+  onNewRowCommit?: () => void
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -158,6 +202,26 @@ export function DataTable<T>({
   onSelectionChange,
   totalFiltered,
   onSelectAllFiltered,
+  // Inline editing props
+  editable,
+  fields: editableFields,
+  editingCell,
+  editValue,
+  onEditValueChange,
+  onStartEditing,
+  onCommitEdit,
+  onCancelEdit,
+  cellSaveState,
+  isEditingCell,
+  onEditKeyDown,
+  getFieldForCol,
+  onClearCell,
+  onPaste,
+  onDeleteRow,
+  showNewRow,
+  newRowValues,
+  onNewRowChange,
+  onNewRowCommit,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
@@ -284,9 +348,12 @@ export function DataTable<T>({
     rowCount: visibleRows.length,
     colCount: colIds.length,
     skipColumns: skipColIndices,
+    isEditing: isEditingCell,
+    onStartEditing: editable ? onStartEditing : undefined,
+    onClearCell: editable ? onClearCell : undefined,
   })
 
-  // Clipboard: copy.
+  // Clipboard: copy & paste.
   const handleClipboard = useCallback(
     async (e: React.KeyboardEvent) => {
       if (!grid.activeCell) return
@@ -302,9 +369,29 @@ export function DataTable<T>({
         e.preventDefault()
         await copyToClipboard(data as EntryRow[], colIds, range)
       }
+
+      if (isCtrl && e.key === 'v' && editable && onPaste) {
+        e.preventDefault()
+        try {
+          const matrix = await pasteFromClipboard()
+          if (matrix.length > 0) {
+            onPaste(grid.activeCell.row, grid.activeCell.col, matrix)
+          }
+        } catch {
+          // Clipboard read may fail if permission denied
+        }
+      }
     },
-    [grid.activeCell, grid.selection, data, colIds],
+    [grid.activeCell, grid.selection, data, colIds, editable, onPaste],
   )
+
+  // Cell right-click context menu state (for editable mode).
+  const [cellMenu, setCellMenu] = useState<{
+    x: number
+    y: number
+    rowIdx: number
+    colIdx: number
+  } | null>(null)
 
   // Header right-click context menu state.
   const [headerMenu, setHeaderMenu] = useState<{
@@ -336,10 +423,15 @@ export function DataTable<T>({
   // Combined keydown handler.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // When editing, route to editing handler first
+      if (isEditingCell && onEditKeyDown) {
+        onEditKeyDown(e)
+        if (e.defaultPrevented) return
+      }
       handleClipboard(e)
       grid.handleKeyDown(e)
     },
-    [handleClipboard, grid.handleKeyDown],
+    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown],
   )
 
   // Clear grid state when data changes (page navigation).
@@ -563,7 +655,7 @@ export function DataTable<T>({
           <TableBody
             ref={tableBodyRef}
             role="rowgroup"
-            style={useVirtual ? { height: rowVirtualizer.getTotalSize(), position: 'relative' } : undefined}
+            style={useVirtual ? { height: rowVirtualizer.getTotalSize() + (showNewRow ? ROW_HEIGHT : 0), position: 'relative' } : undefined}
           >
             {visibleRows.length === 0 ? (
               <TableRow role="row">
@@ -630,13 +722,82 @@ export function DataTable<T>({
                           e.stopPropagation()
                           grid.handleCellClick(rowIdx, colIdx, e)
                         }}
+                        onDoubleClick={(e) => {
+                          if (editable && onStartEditing) {
+                            e.stopPropagation()
+                            onStartEditing(rowIdx, colIdx, '')
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          if (editable) {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setCellMenu({ x: e.clientX, y: e.clientY, rowIdx, colIdx })
+                          }
+                        }}
                       >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        {editable && getFieldForCol ? (
+                          <GridCell
+                            field={getFieldForCol(colIdx)}
+                            value={(row.original as Record<string, unknown>)[cell.column.id]}
+                            isEditing={editingCell?.row === rowIdx && editingCell?.col === colIdx}
+                            editValue={editValue}
+                            onEditValueChange={onEditValueChange ?? (() => {})}
+                            onCommit={onCommitEdit ?? (() => {})}
+                            onCancel={onCancelEdit ?? (() => {})}
+                            onKeyDown={onEditKeyDown ?? (() => {})}
+                            saveState={cellSaveState?.get(`${(row.original as EntryRow).id}:${cell.column.id}`) ?? null}
+                            displayContent={flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          />
+                        ) : (
+                          flexRender(cell.column.columnDef.cell, cell.getContext())
+                        )}
                       </TableCell>
                     )
                   })}
                 </TableRow>
                 )})
+            )}
+            {/* Bottom empty row for new entries (editable mode) */}
+            {showNewRow && visibleRows.length > 0 && (
+              <TableRow
+                className="bg-muted/20 hover:bg-muted/40 border-t border-dashed"
+                style={useVirtual ? {
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${ROW_HEIGHT}px`,
+                  transform: `translateY(${rowVirtualizer.getTotalSize()}px)`,
+                } : undefined}
+              >
+                {table.getVisibleFlatColumns().map((col, colIdx) => {
+                  const isSystem = col.id === '_select' || col.id === '_actions' || col.id === '_status' || col.id === 'created_at'
+                  return (
+                    <TableCell
+                      key={col.id}
+                      className="text-muted-foreground"
+                      style={{ width: col.getSize() }}
+                      onClick={() => {
+                        if (!isSystem && onNewRowChange) {
+                          // Focus the new row cell
+                        }
+                      }}
+                    >
+                      {colIdx === 0 && !isSystem ? (
+                        <span className="text-xs text-muted-foreground/60">+ 새 항목</span>
+                      ) : isSystem ? null : (
+                        <NewRowCell
+                          field={editableFields?.find((f) => f.slug === col.id) ?? null}
+                          value={newRowValues?.[col.id]}
+                          onChange={(v) => onNewRowChange?.(col.id, v)}
+                          onCommit={() => onNewRowCommit?.()}
+                        />
+                      )}
+                    </TableCell>
+                  )
+                })}
+              </TableRow>
             )}
           </TableBody>
           {/* Summary row */}
@@ -763,6 +924,45 @@ export function DataTable<T>({
             </button>
           )}
         </div>
+      )}
+
+      {/* Cell context menu (right-click, editable mode) */}
+      {editable && cellMenu && (
+        <GridContextMenu
+          position={cellMenu}
+          onCopy={async () => {
+            const range = grid.selection ?? (grid.activeCell ? {
+              startRow: grid.activeCell.row,
+              startCol: grid.activeCell.col,
+              endRow: grid.activeCell.row,
+              endCol: grid.activeCell.col,
+            } : null)
+            if (range) {
+              await copyToClipboard(data as EntryRow[], colIds, range)
+            }
+          }}
+          onPaste={async () => {
+            if (!grid.activeCell || !onPaste) return
+            try {
+              const matrix = await pasteFromClipboard()
+              if (matrix.length > 0) {
+                onPaste(grid.activeCell.row, grid.activeCell.col, matrix)
+              }
+            } catch { /* permission denied */ }
+          }}
+          onDeleteRow={() => {
+            const row = visibleRows[cellMenu.rowIdx]
+            if (row) {
+              const rowId = String((row.original as EntryRow).id)
+              onDeleteRow?.(rowId)
+            }
+          }}
+          onClearCell={() => {
+            onClearCell?.(cellMenu.rowIdx, cellMenu.colIdx)
+          }}
+          onClose={() => setCellMenu(null)}
+          canDelete={!!onDeleteRow}
+        />
       )}
 
       {/* Pagination footer */}
@@ -892,6 +1092,65 @@ function SortableTableHead({
       {children}
     </TableHead>
   )
+}
+
+// Simple inline input for new row cells.
+function NewRowCell({
+  field,
+  value,
+  onChange,
+  onCommit,
+}: {
+  field: Field | null
+  value: unknown
+  onChange: (v: unknown) => void
+  onCommit: () => void
+}) {
+  if (!field) return null
+
+  // Only support simple types in the new row
+  switch (field.field_type) {
+    case 'text':
+    case 'textarea':
+      return (
+        <input
+          type="text"
+          className="w-full bg-transparent border-none outline-none text-sm px-0 placeholder:text-muted-foreground/40"
+          placeholder={field.label}
+          value={String(value ?? '')}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              onCommit()
+            }
+          }}
+        />
+      )
+    case 'number':
+    case 'integer':
+      return (
+        <input
+          type="number"
+          className="w-full bg-transparent border-none outline-none text-sm px-0 placeholder:text-muted-foreground/40 [&::-webkit-inner-spin-button]:appearance-none"
+          placeholder={field.label}
+          value={value != null ? String(value) : ''}
+          onChange={(e) => {
+            const raw = e.target.value
+            if (raw === '') onChange(null)
+            else onChange(field.field_type === 'integer' ? parseInt(raw, 10) : parseFloat(raw))
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              onCommit()
+            }
+          }}
+        />
+      )
+    default:
+      return <span className="text-xs text-muted-foreground/40">{field.label}</span>
+  }
 }
 
 // Renders a compact set of page number buttons around the current page.

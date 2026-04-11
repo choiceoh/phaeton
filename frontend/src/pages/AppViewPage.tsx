@@ -37,6 +37,7 @@ import {
   Upload,
   X,
   Ellipsis,
+  Sheet,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
@@ -70,6 +71,7 @@ import GalleryView from '@/components/works/views/GalleryView'
 import FormView from '@/components/works/views/FormView'
 import GanttView from '@/components/works/views/GanttView'
 import KanbanView from '@/components/works/views/KanbanView'
+import SpreadsheetView from '@/components/works/views/SpreadsheetView'
 import ViewGuide from '@/components/works/views/ViewGuide'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -941,6 +943,10 @@ export default function AppViewPage() {
   const viewTabs = (
     <TabsList className="h-8 overflow-x-auto scrollbar-none shrink-0">
       <TabsTrigger value="list" className="h-7 text-xs px-2.5">목록</TabsTrigger>
+      <TabsTrigger value="spreadsheet" className="h-7 text-xs px-2.5 gap-1">
+        <Sheet className="h-3 w-3" />
+        엑셀
+      </TabsTrigger>
       {hasProcessKanban && <TabsTrigger value="status-kanban" className="h-7 text-xs px-2.5">상태별</TabsTrigger>}
       {hasKanban && <TabsTrigger value="kanban" className="h-7 text-xs px-2.5">보드</TabsTrigger>}
       {hasCalendar && (
@@ -1406,6 +1412,48 @@ export default function AppViewPage() {
             {list.data.length === 0 && (
               <ViewGuide fields={collection.fields ?? []} />
             )}
+            </ErrorBoundary>
+          </TabsContent>
+
+          <TabsContent value="spreadsheet" className="mt-0">
+            <ErrorBoundary key="spreadsheet">
+              <SpreadsheetView
+                collection={collection}
+                data={list.data}
+                total={list.total}
+                page={page}
+                limit={limit}
+                onPageChange={setPage}
+                onLimitChange={setLimit}
+                onSortChange={handleHeaderSortChange}
+                onRowClick={handleEntryClick}
+                updateEntry={async (params) => { await updateEntry.mutateAsync(params) }}
+                createEntry={async (body) => { await createEntry.mutateAsync(body) }}
+                deleteEntry={(id) => bulkDelete.mutate([id])}
+                batchUpdateEntry={(updates) => batchUpdateEntry.mutate(updates)}
+                canManage={canManage}
+                toolbar={tableToolbar}
+                summaryRow={summaryRow}
+                summaryFn={columnAggFn}
+                onSummaryFnChange={handleAggFnChange}
+                emptyTitle={searchText || hasActiveFilters ? '검색 결과가 없습니다' : TERM.noRecords}
+                emptyDescription={searchText || hasActiveFilters ? '검색어 또��� 필터 조건을 ���경해 보세요.' : TERM.noRecordsDesc}
+                emptyAction={
+                  searchText || hasActiveFilters ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSearchText('')
+                        setSearchInputValue('')
+                        setFilterGroup(emptyFilterGroup())
+                      }}
+                    >
+                      필터 초기화
+                    </Button>
+                  ) : undefined
+                }
+              />
             </ErrorBoundary>
           </TabsContent>
 
