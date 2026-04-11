@@ -156,19 +156,22 @@ func (ac AccessConfig) AllowsRole(operation, role string) bool {
 // Collection is the top-level schema unit (maps to a PostgreSQL table in the data schema).
 // The actual data table lives at wd_<slug> in the public schema.
 type Collection struct {
-	ID             string       `json:"id"`
-	Slug           string       `json:"slug"`           // Immutable identifier; becomes the DB table suffix (wd_<slug>).
-	Label          string       `json:"label"`           // Human-readable display name shown in UI.
-	Description    string       `json:"description,omitempty"`
-	Icon           string       `json:"icon,omitempty"`
-	IsSystem       bool         `json:"is_system"`       // System collections (e.g. users, departments) cannot be deleted by end users.
-	ProcessEnabled bool         `json:"process_enabled"` // When true, entries have a _status column and follow a workflow (프로세스 관리).
-	SortOrder      int          `json:"sort_order"`      // Display ordering in the sidebar app list.
-	AccessConfig   AccessConfig `json:"access_config"`   // Role-based + row-level security configuration.
-	CreatedAt      time.Time    `json:"created_at"`
-	UpdatedAt      time.Time    `json:"updated_at"`
-	CreatedBy      string       `json:"created_by,omitempty"`
-	Fields         []Field      `json:"fields,omitempty"` // Populated by GetCollection / cache; empty for list queries.
+	ID               string       `json:"id"`
+	Slug             string       `json:"slug"`               // Immutable identifier; becomes the DB table suffix (wd_<slug>).
+	Label            string       `json:"label"`               // Human-readable display name shown in UI.
+	Description      string       `json:"description,omitempty"`
+	Icon             string       `json:"icon,omitempty"`
+	IsSystem         bool         `json:"is_system"`           // System collections (e.g. users, departments) cannot be deleted by end users.
+	ProcessEnabled   bool         `json:"process_enabled"`     // When true, entries have a _status column and follow a workflow (프로세스 관리).
+	SortOrder        int          `json:"sort_order"`          // Display ordering in the sidebar app list.
+	TitleFieldID     string       `json:"title_field_id,omitempty"`     // Field used as the primary display title in views.
+	DefaultSortField string       `json:"default_sort_field,omitempty"` // Field slug used as the default sort column.
+	DefaultSortOrder string       `json:"default_sort_order,omitempty"` // "asc" or "desc" (default: "desc").
+	AccessConfig     AccessConfig `json:"access_config"`       // Role-based + row-level security configuration.
+	CreatedAt        time.Time    `json:"created_at"`
+	UpdatedAt        time.Time    `json:"updated_at"`
+	CreatedBy        string       `json:"created_by,omitempty"`
+	Fields           []Field      `json:"fields,omitempty"`    // Populated by GetCollection / cache; empty for list queries.
 }
 
 // Field defines a single column inside a collection.
@@ -277,12 +280,15 @@ type CreateRelIn struct {
 }
 
 type UpdateCollectionReq struct {
-	Label          *string       `json:"label,omitempty"`
-	Description    *string       `json:"description,omitempty"`
-	Icon           *string       `json:"icon,omitempty"`
-	SortOrder      *int          `json:"sort_order,omitempty"`
-	ProcessEnabled *bool         `json:"process_enabled,omitempty"`
-	AccessConfig   *AccessConfig `json:"access_config,omitempty"`
+	Label            *string       `json:"label,omitempty"`
+	Description      *string       `json:"description,omitempty"`
+	Icon             *string       `json:"icon,omitempty"`
+	SortOrder        *int          `json:"sort_order,omitempty"`
+	ProcessEnabled   *bool         `json:"process_enabled,omitempty"`
+	AccessConfig     *AccessConfig `json:"access_config,omitempty"`
+	TitleFieldID     *string       `json:"title_field_id,omitempty"`
+	DefaultSortField *string       `json:"default_sort_field,omitempty"`
+	DefaultSortOrder *string       `json:"default_sort_order,omitempty"`
 }
 
 type UpdateFieldReq struct {

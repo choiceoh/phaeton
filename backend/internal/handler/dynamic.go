@@ -85,7 +85,15 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		return pgutil.QuoteQualified("data", target.Slug), true
 	}
-	orderBy, sortJoins := ParseSortWithRelations(params.Get("sort"), fields, resolveRel)
+	sortParam := params.Get("sort")
+	if sortParam == "" && col.DefaultSortField != "" {
+		prefix := ""
+		if col.DefaultSortOrder == "desc" || col.DefaultSortOrder == "" {
+			prefix = "-"
+		}
+		sortParam = prefix + col.DefaultSortField
+	}
+	orderBy, sortJoins := ParseSortWithRelations(sortParam, fields, resolveRel)
 
 	// Filters: support both legacy query params and JSON _filter param.
 	var (

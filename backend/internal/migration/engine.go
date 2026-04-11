@@ -240,6 +240,33 @@ func updateCollectionTx(ctx context.Context, tx pgx.Tx, id string, req *schema.U
 		args = append(args, *req.SortOrder)
 		idx++
 	}
+	if req.TitleFieldID != nil {
+		sets = append(sets, fmt.Sprintf("title_field_id = $%d", idx))
+		if *req.TitleFieldID == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, pgUUID(*req.TitleFieldID))
+		}
+		idx++
+	}
+	if req.DefaultSortField != nil {
+		sets = append(sets, fmt.Sprintf("default_sort_field = $%d", idx))
+		if *req.DefaultSortField == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, *req.DefaultSortField)
+		}
+		idx++
+	}
+	if req.DefaultSortOrder != nil {
+		sets = append(sets, fmt.Sprintf("default_sort_order = $%d", idx))
+		if *req.DefaultSortOrder == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, *req.DefaultSortOrder)
+		}
+		idx++
+	}
 	if len(sets) == 0 {
 		return nil
 	}

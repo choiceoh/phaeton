@@ -289,6 +289,9 @@ export interface Collection {
   is_system: boolean
   process_enabled: boolean
   sort_order: number
+  title_field_id?: string
+  default_sort_field?: string
+  default_sort_order?: 'asc' | 'desc'
   access_config: AccessConfig
   created_at: string
   updated_at: string

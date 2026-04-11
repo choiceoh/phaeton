@@ -201,6 +201,14 @@ func (h *DynHandler) CalendarView(w http.ResponseWriter, r *http.Request) {
 
 	// Find title field for labels.
 	titleFieldSlug := params.Get("title_field")
+	if titleFieldSlug == "" && col.TitleFieldID != "" {
+		for _, f := range fields {
+			if f.ID == col.TitleFieldID {
+				titleFieldSlug = f.Slug
+				break
+			}
+		}
+	}
 	if titleFieldSlug == "" {
 		for _, f := range fields {
 			if f.FieldType == schema.FieldText {
@@ -417,6 +425,14 @@ func (h *DynHandler) GanttView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Auto-detect title field.
+	if titleFieldSlug == "" && col.TitleFieldID != "" {
+		for _, f := range fields {
+			if f.ID == col.TitleFieldID {
+				titleFieldSlug = f.Slug
+				break
+			}
+		}
+	}
 	if titleFieldSlug == "" {
 		for _, f := range fields {
 			if f.FieldType == schema.FieldText {
