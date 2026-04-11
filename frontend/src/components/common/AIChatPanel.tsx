@@ -31,40 +31,11 @@ export default function AIChatPanel() {
   const hints = useMemo(() => {
     if (!collection) return DEFAULT_HINTS
     const name = collection.label
-    const isView = location.pathname.endsWith(appId ?? '')
-    const isDashboard = location.pathname.includes('/dashboard')
-    const isSettings = location.pathname.includes('/settings')
-    const isProcess = location.pathname.includes('/process')
-
-    if (isDashboard) {
-      return [
-        `"${name}" 대시보드에 차트를 추가하려면?`,
-        `"${name}" 데이터를 요약해 주세요`,
-        `대시보드 위젯 종류에는 어떤 것이 있나요?`,
-      ]
-    }
-    if (isProcess) {
-      return [
-        `"${name}" 프로세스 단계를 설정하려면?`,
-        `상태 전이 조건은 어떻게 설정하나요?`,
-        `자동화 규칙을 추가하는 방법은?`,
-      ]
-    }
-    if (isSettings) {
-      return [
-        `"${name}" 앱 설정에서 뭘 바꿀 수 있나요?`,
-        `접근 권한을 설정하려면?`,
-        `필드를 추가하거나 수정하는 방법은?`,
-      ]
-    }
-    if (isView) {
-      return [
-        `"${name}"에 데이터를 추가하려면?`,
-        `"${name}" 필드를 수정하는 방법은?`,
-        `뷰를 추가하거나 전환하려면 어떻게 하나요?`,
-      ]
-    }
-    return DEFAULT_HINTS
+    return [
+      `"${name}"에 데이터를 추가하려면?`,
+      `"${name}" 필드를 수정하는 방법은?`,
+      `뷰를 추가하거나 전환하려면 어떻게 하나요?`,
+    ]
   }, [collection, location.pathname, appId])
 
   const scrollToBottom = useCallback(() => {

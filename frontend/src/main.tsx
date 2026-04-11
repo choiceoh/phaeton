@@ -11,21 +11,16 @@ import { queryClient } from './lib/queryClient'
 import AIChatPage from './pages/AIChatPage'
 import AppBuilderPage from './pages/AppBuilderPage'
 import AppListPage from './pages/AppListPage'
-import AppSettingsPage from './pages/AppSettingsPage'
 import AppViewPage from './pages/AppViewPage'
-import AutomationsPage from './pages/AutomationsPage'
-import DashboardPage from './pages/DashboardPage'
 import EntryPage from './pages/EntryPage'
 import GlobalAutomationsPage from './pages/GlobalAutomationsPage'
 import GlobalCalendarPage from './pages/GlobalCalendarPage'
-import GlobalDashboardPage from './pages/GlobalDashboardPage'
 import InterfaceDesignerPage from './pages/InterfaceDesignerPage'
 import LoginPage from './pages/LoginPage'
 import MigrationHistoryPage from './pages/MigrationHistoryPage'
 import MyTasksPage from './pages/MyTasksPage'
 import NotFoundPage from './pages/NotFoundPage'
 import OrgChartPage from './pages/OrgChartPage'
-import ProcessPage from './pages/ProcessPage'
 import ProfilePage from './pages/ProfilePage'
 import RelationshipPage from './pages/RelationshipPage'
 import SettingsPage from './pages/SettingsPage'
@@ -49,13 +44,8 @@ const router = createBrowserRouter([
       { path: 'apps/:appId', element: <EB><AppViewPage /></EB> },
       { path: 'apps/:appId/entries/new', element: <EB><EntryPage /></EB> },
       { path: 'apps/:appId/entries/:entryId', element: <EB><EntryPage /></EB> },
-      { path: 'apps/:appId/dashboard', element: <EB><DashboardPage /></EB> },
       { path: 'apps/:appId/interface', element: <EB><InterfaceDesignerPage /></EB> },
-      { path: 'apps/:appId/settings', element: <EB><AppSettingsPage /></EB> },
-      { path: 'apps/:appId/process', element: <EB><ProcessPage /></EB> },
-      { path: 'apps/:appId/automations', element: <EB><AutomationsPage /></EB> },
       { path: 'my-tasks', element: <EB><MyTasksPage /></EB> },
-      { path: 'dashboard', element: <EB><GlobalDashboardPage /></EB> },
       { path: 'calendar', element: <EB><GlobalCalendarPage /></EB> },
       { path: 'automations', element: <EB><GlobalAutomationsPage /></EB> },
       { path: 'settings', element: <EB><SettingsPage /></EB> },

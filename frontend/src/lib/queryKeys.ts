@@ -136,13 +136,6 @@ export const queryKeys = {
       [...queryKeys.automations.all, 'runs', id] as const,
   },
 
-  /** Chart configuration keys, scoped by collection ID. */
-  charts: {
-    all: ['charts'] as const,
-    list: (collectionId: string) =>
-      [...queryKeys.charts.all, 'list', collectionId] as const,
-  },
-
   /** Webhook event keys. */
   webhooks: {
     all: ['webhooks'] as const,

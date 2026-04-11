@@ -20,18 +20,18 @@ export default function GlobalAutomationsPage() {
     <div>
       <PageHeader
         title="자동화"
-        description="전체 컬렉션의 자동화 규칙을 관리합니다"
+        description="시트를 선택하면 해당 시트의 자동화를 관리할 수 있습니다"
       />
 
       {apps.length === 0 ? (
         <div className="py-16 text-center text-muted-foreground">
           <Zap className="mx-auto mb-3 h-10 w-10" />
-          <p>아직 컬렉션이 없습니다</p>
+          <p>아직 시트가 없습니다</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {apps.map((app) => (
-            <Link key={app.id} to={`/apps/${app.id}/automations`}>
+            <Link key={app.id} to={`/apps/${app.id}`}>
               <Card className="flex items-center justify-between p-4 hover:bg-accent/50 transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <Zap className="h-4 w-4 shrink-0 text-muted-foreground" />
