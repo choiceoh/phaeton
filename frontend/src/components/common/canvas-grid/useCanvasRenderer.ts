@@ -7,12 +7,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { clearTextCache } from './CellPainter'
 
-interface CanvasRefs {
-  pinned: HTMLCanvasElement | null
-  main: HTMLCanvasElement | null
-  overlay: HTMLCanvasElement | null
-}
-
 interface CanvasContexts {
   pinned: CanvasRenderingContext2D | null
   main: CanvasRenderingContext2D | null

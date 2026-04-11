@@ -2,7 +2,6 @@ import type {
   FieldOptionsMap,
   FieldType,
   ExpandedRecord,
-  EntryRow,
   CommonFieldOptions,
 } from '@/lib/types'
 
@@ -100,11 +99,3 @@ export function extractRelationIds(v: unknown): string[] {
   return v.map(extractRelationId).filter((id): id is string => id !== undefined)
 }
 
-// --- Entry row helper ---
-
-/**
- * Cast a generic record to EntryRow. The server always provides at least `id`.
- */
-export function asEntryRow(row: Record<string, unknown>): EntryRow {
-  return row as EntryRow
-}

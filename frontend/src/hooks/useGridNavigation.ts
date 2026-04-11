@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef } from 'react'
 
-import { useGridStore } from '@/stores/grid'
+import { useGridStore, type CellPosition } from '@/stores/grid'
 import { selectActiveCell, selectSelection } from '@/stores/grid/selectors'
 
 // Re-export types from canonical source for backward compat.

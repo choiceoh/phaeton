@@ -15,7 +15,7 @@ import type { CellPosition, SelectionRange } from '@/hooks/useGridNavigation'
 import type { FillPreviewRange } from '@/hooks/useFillHandle'
 import type { DragGhostRange } from '@/hooks/useCellDragMove'
 import type { CellSaveState } from '@/hooks/useInlineEditing'
-import { GridLayout, type GridLayoutConfig } from './GridLayout'
+import { GridLayout } from './GridLayout'
 import { paintViewport, paintPinnedColumns } from './CellPainter'
 import { paintOverlay } from './OverlayPainter'
 import type { OverlayState } from './types'
@@ -95,7 +95,7 @@ export function CanvasGrid({
   emptyRowCount,
   columnWidths,
   rowSizing,
-  defaultRowHeight,
+  defaultRowHeight: _defaultRowHeight,
   pinnedLeftCount,
   headerHeight,
   activeCell,
@@ -145,7 +145,6 @@ export function CanvasGrid({
   const timestampRef = useRef(0)
 
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
-  const totalRows = data.length + emptyRowCount
 
   // ─── Canvas sizing ──────────────────────────────────────────
 
@@ -444,11 +443,6 @@ export function CanvasGrid({
       </div>
     )
   })()
-
-  // ─── Content sizing ─────────────────────────────────────────
-
-  const contentWidth = gridLayout.totalContentWidth
-  const contentHeight = gridLayout.totalContentHeight
 
   // ─── Render ─────────────────────────────────────────────────
 
