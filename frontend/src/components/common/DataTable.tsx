@@ -214,6 +214,12 @@ interface Props<T> {
   onAddColumn?: () => void
   /** Whether column management is enabled. */
   columnManagement?: boolean
+  /** Free grid mode: edits are local-only, no server calls */
+  freeGridMode?: boolean
+  /** Returns true if a cell has been locally modified but not saved */
+  cellDirtyFn?: (rowId: string, fieldSlug: string) => boolean
+  /** Returns error message for a cell (from coercion failure on save attempt) */
+  cellErrorFn?: (rowId: string, fieldSlug: string) => string | null
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -282,6 +288,9 @@ export function DataTable<T>({
   onDeleteColumn,
   onAddColumn,
   columnManagement,
+  freeGridMode,
+  cellDirtyFn,
+  cellErrorFn,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
@@ -1084,6 +1093,11 @@ export function DataTable<T>({
                     const dgLeft = inDragGhost && colIdx === dg.startCol
                     const dgRight = inDragGhost && colIdx === dg.endCol
 
+                    // Free grid dirty/error indicators
+                    const rowId = String((row.original as EntryRow).id)
+                    const isCellDirty = freeGridMode && cellDirtyFn && !isRowNum && cellDirtyFn(rowId, cell.column.id)
+                    const cellError = freeGridMode && cellErrorFn && !isRowNum ? cellErrorFn(rowId, cell.column.id) : null
+
                     // Is this cell the bottom-right corner of the active cell/selection? (fill handle position)
                     const isFillHandleCell = editable && onFill && !isRowNum && (() => {
                       if (grid.selection) {
@@ -1102,7 +1116,8 @@ export function DataTable<T>({
                         role="gridcell"
                         data-row={rowIdx}
                         data-col={colIdx}
-                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''}`}
+                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''} ${cellError ? 'cell-error' : ''}`}
+                        title={cellError ?? undefined}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
@@ -1171,6 +1186,9 @@ export function DataTable<T>({
                           }
                         }}
                       >
+                        {isCellDirty && (
+                          <span className="absolute top-0 left-0 w-0 h-0 border-l-[5px] border-t-[5px] border-l-blue-500 border-t-blue-500 border-r-[5px] border-b-[5px] border-r-transparent border-b-transparent z-[1]" />
+                        )}
                         {editable && getFieldForCol ? (
                           <GridCell
                             field={getFieldForCol(colIdx)}
@@ -1181,7 +1199,7 @@ export function DataTable<T>({
                             onCommit={onCommitEdit ?? (() => {})}
                             onCancel={onCancelEdit ?? (() => {})}
                             onKeyDown={onEditKeyDown ?? (() => {})}
-                            saveState={cellSaveState?.get(`${(row.original as EntryRow).id}:${cell.column.id}`) ?? null}
+                            saveState={freeGridMode ? null : (cellSaveState?.get(`${(row.original as EntryRow).id}:${cell.column.id}`) ?? null)}
                             displayContent={flexRender(cell.column.columnDef.cell, cell.getContext())}
                           />
                         ) : (

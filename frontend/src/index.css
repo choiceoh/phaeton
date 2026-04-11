@@ -527,6 +527,12 @@
   cursor: crosshair;
 }
 
+/* ── Free grid: error cell indicator ── */
+.cell-error {
+  background-color: rgb(254 226 226 / 0.6) !important;
+  box-shadow: inset 0 0 0 1px rgb(239 68 68 / 0.5);
+}
+
 /* Fill preview range (dotted border during drag) */
 .fill-preview-top { border-top: 2px dashed #005a9e !important; }
 .fill-preview-bottom { border-bottom: 2px dashed #005a9e !important; }

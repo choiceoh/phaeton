@@ -11,9 +11,10 @@ import { toast } from 'sonner'
 import { DataTable } from '@/components/common/DataTable'
 import { useFormulaEngine } from '@/hooks/useFormulaEngine'
 import { useInlineEditing } from '@/hooks/useInlineEditing'
+import { coerceValue } from '@/lib/coercion'
 import { isLayoutType, isComputedType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
-import type { Collection, Field } from '@/lib/types'
+import type { Collection } from '@/lib/types'
 
 interface SpreadsheetViewProps {
   collection: Collection
@@ -49,70 +50,15 @@ interface SpreadsheetViewProps {
   onRenameColumn?: (columnId: string, newLabel: string) => void
   onDeleteColumn?: (columnId: string) => void
   onAddColumn?: () => void
+  /** Free grid mode: edits are local-only, no server calls */
+  freeGridMode?: boolean
+  /** Returns true if a cell has been locally modified but not saved */
+  cellDirtyFn?: (rowId: string, fieldSlug: string) => boolean
+  /** Returns error message for a cell (from coercion failure on save attempt) */
+  cellErrorFn?: (rowId: string, fieldSlug: string) => string | null
 }
 
-/**
- * Parse a date string from various formats (Excel, Korean, ISO, US).
- * Returns ISO date string (YYYY-MM-DD) or null.
- */
-function parseDateFlexible(raw: string): string | null {
-  // ISO: 2024-03-15
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
-  // Korean dot: 2024.03.15
-  const dotMatch = raw.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/)
-  if (dotMatch) {
-    return `${dotMatch[1]}-${dotMatch[2].padStart(2, '0')}-${dotMatch[3].padStart(2, '0')}`
-  }
-  // Korean text: 2024년 3월 15일
-  const koMatch = raw.match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/)
-  if (koMatch) {
-    return `${koMatch[1]}-${koMatch[2].padStart(2, '0')}-${koMatch[3].padStart(2, '0')}`
-  }
-  // US format: 3/15/2024 or 03/15/2024
-  const usMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (usMatch) {
-    return `${usMatch[3]}-${usMatch[1].padStart(2, '0')}-${usMatch[2].padStart(2, '0')}`
-  }
-  // ISO datetime: 2024-03-15T09:00:00
-  const dtMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T ]/)
-  if (dtMatch) return dtMatch[1]
-  return null
-}
-
-/** Coerce a pasted string value to the appropriate type for a field. */
-function coerceValue(raw: string, field: Field): unknown {
-  if (raw === '') return null
-  switch (field.field_type) {
-    case 'number': {
-      const cleaned = raw.replace(/[,₩$€¥\s]/g, '').replace(/%$/, '')
-      const n = parseFloat(cleaned)
-      return isNaN(n) ? null : n
-    }
-    case 'integer': {
-      const cleaned = raw.replace(/[,₩$€¥\s]/g, '')
-      const n = parseInt(cleaned, 10)
-      return isNaN(n) ? null : n
-    }
-    case 'boolean':
-      return ['true', '1', '✓', '참', 'yes', 'y'].includes(raw.toLowerCase())
-    case 'date': {
-      const parsed = parseDateFlexible(raw)
-      return parsed ?? raw
-    }
-    case 'datetime': {
-      // Try to preserve full datetime, fall back to date-only
-      if (/^\d{4}-\d{2}-\d{2}[T ]/.test(raw)) return raw
-      const parsed = parseDateFlexible(raw)
-      return parsed ?? raw
-    }
-    case 'time':
-      return raw
-    case 'multiselect':
-      return raw.split(',').map((s) => s.trim()).filter(Boolean)
-    default:
-      return raw
-  }
-}
+// parseDateFlexible and coerceValue are imported from @/lib/coercion
 
 export default function SpreadsheetView({
   collection,
@@ -145,6 +91,9 @@ export default function SpreadsheetView({
   onRenameColumn,
   onDeleteColumn,
   onAddColumn,
+  freeGridMode,
+  cellDirtyFn,
+  cellErrorFn,
 }: SpreadsheetViewProps) {
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
 
@@ -466,12 +415,18 @@ export default function SpreadsheetView({
       onNewRowCommit={() => {
         if (Object.keys(newRowValues).length > 0) {
           createEntry(newRowValues).then(() => setNewRowValues({})).catch(() => {})
+        } else if (freeGridMode) {
+          // In free grid mode, allow committing empty rows too
+          createEntry({}).then(() => setNewRowValues({})).catch(() => {})
         }
       }}
       columnManagement={canManage && !!(onRenameColumn || onDeleteColumn || onAddColumn)}
       onRenameColumn={onRenameColumn}
       onDeleteColumn={onDeleteColumn}
       onAddColumn={onAddColumn}
+      freeGridMode={freeGridMode}
+      cellDirtyFn={cellDirtyFn}
+      cellErrorFn={cellErrorFn}
     />
   )
 }
