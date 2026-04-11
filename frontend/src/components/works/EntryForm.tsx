@@ -50,6 +50,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { api } from '@/lib/api'
+import { formatError } from '@/lib/api/errors'
 import { isLayoutType } from '@/lib/constants'
 import type { Field, Process, SubColumn } from '@/lib/types'
 import { extractRelationId, extractRelationIds, getChoices, getDisplayType, getFieldOptions, getVisibilityRules, isExpandedRecord } from '@/lib/fieldGuards'
@@ -892,12 +893,16 @@ function FileInput({
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('파일은 50MB 이하여야 합니다')
+      return
+    }
     setUploading(true)
     try {
       const result = await api.upload(file)
       onChange(result.url)
-    } catch {
-      toast.error('파일 업로드에 실패했습니다')
+    } catch (err) {
+      toast.error(formatError(err))
     } finally {
       setUploading(false)
     }
