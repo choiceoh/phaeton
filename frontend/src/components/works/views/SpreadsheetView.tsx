@@ -39,20 +39,64 @@ interface SpreadsheetViewProps {
   emptyAction?: React.ReactNode
 }
 
+/**
+ * Parse a date string from various formats (Excel, Korean, ISO, US).
+ * Returns ISO date string (YYYY-MM-DD) or null.
+ */
+function parseDateFlexible(raw: string): string | null {
+  // ISO: 2024-03-15
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+  // Korean dot: 2024.03.15
+  const dotMatch = raw.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/)
+  if (dotMatch) {
+    return `${dotMatch[1]}-${dotMatch[2].padStart(2, '0')}-${dotMatch[3].padStart(2, '0')}`
+  }
+  // Korean text: 2024년 3월 15일
+  const koMatch = raw.match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/)
+  if (koMatch) {
+    return `${koMatch[1]}-${koMatch[2].padStart(2, '0')}-${koMatch[3].padStart(2, '0')}`
+  }
+  // US format: 3/15/2024 or 03/15/2024
+  const usMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (usMatch) {
+    return `${usMatch[3]}-${usMatch[1].padStart(2, '0')}-${usMatch[2].padStart(2, '0')}`
+  }
+  // ISO datetime: 2024-03-15T09:00:00
+  const dtMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T ]/)
+  if (dtMatch) return dtMatch[1]
+  return null
+}
+
 /** Coerce a pasted string value to the appropriate type for a field. */
 function coerceValue(raw: string, field: Field): unknown {
   if (raw === '') return null
   switch (field.field_type) {
-    case 'number':
-      return parseFloat(raw) || null
-    case 'integer':
-      return parseInt(raw, 10) || null
+    case 'number': {
+      const cleaned = raw.replace(/[,₩$€¥\s]/g, '').replace(/%$/, '')
+      const n = parseFloat(cleaned)
+      return isNaN(n) ? null : n
+    }
+    case 'integer': {
+      const cleaned = raw.replace(/[,₩$€¥\s]/g, '')
+      const n = parseInt(cleaned, 10)
+      return isNaN(n) ? null : n
+    }
     case 'boolean':
-      return raw.toLowerCase() === 'true' || raw === '1' || raw === '✓'
-    case 'date':
-    case 'datetime':
+      return ['true', '1', '✓', '참', 'yes', 'y'].includes(raw.toLowerCase())
+    case 'date': {
+      const parsed = parseDateFlexible(raw)
+      return parsed ?? raw
+    }
+    case 'datetime': {
+      // Try to preserve full datetime, fall back to date-only
+      if (/^\d{4}-\d{2}-\d{2}[T ]/.test(raw)) return raw
+      const parsed = parseDateFlexible(raw)
+      return parsed ?? raw
+    }
     case 'time':
       return raw
+    case 'multiselect':
+      return raw.split(',').map((s) => s.trim()).filter(Boolean)
     default:
       return raw
   }
