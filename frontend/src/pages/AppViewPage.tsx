@@ -937,6 +937,37 @@ export default function AppViewPage() {
     )
   }
 
+  // View tabs rendered in DataTable toolbar right area.
+  const viewTabs = (
+    <TabsList className="h-8 overflow-x-auto scrollbar-none shrink-0">
+      <TabsTrigger value="list" className="h-7 text-xs px-2.5">목록</TabsTrigger>
+      {hasProcessKanban && <TabsTrigger value="status-kanban" className="h-7 text-xs px-2.5">상태별</TabsTrigger>}
+      {hasKanban && <TabsTrigger value="kanban" className="h-7 text-xs px-2.5">보드</TabsTrigger>}
+      {hasCalendar && (
+        <TabsTrigger value="calendar" className="h-7 text-xs px-2.5 gap-1">
+          <Calendar className="h-3 w-3" />
+          캘린더
+        </TabsTrigger>
+      )}
+      {hasGallery && (
+        <TabsTrigger value="gallery" className="h-7 text-xs px-2.5 gap-1">
+          <LayoutGrid className="h-3 w-3" />
+          갤러리
+        </TabsTrigger>
+      )}
+      {hasGantt && (
+        <TabsTrigger value="gantt" className="h-7 text-xs px-2.5 gap-1">
+          <GanttChart className="h-3 w-3" />
+          간트
+        </TabsTrigger>
+      )}
+      <TabsTrigger value="form" className="h-7 text-xs px-2.5 gap-1">
+        <FileText className="h-3 w-3" />
+        폼
+      </TabsTrigger>
+    </TabsList>
+  )
+
   // Toolbar rendered inside DataTable.
   const tableToolbar = (
     <>
@@ -1278,6 +1309,7 @@ export default function AppViewPage() {
   return (
     <div>
       <PageHeader
+        compact
         breadcrumb={[
           { label: '앱 목록', href: '/apps' },
           { label: collection.label },
@@ -1315,33 +1347,9 @@ export default function AppViewPage() {
 
       {list && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-4 max-w-full overflow-x-auto scrollbar-none">
-            <TabsTrigger value="list">목록</TabsTrigger>
-            {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}
-            {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
-            {hasCalendar && (
-              <TabsTrigger value="calendar" className="gap-1">
-                <Calendar className="h-3.5 w-3.5" />
-                캘린더
-              </TabsTrigger>
-            )}
-            {hasGallery && (
-              <TabsTrigger value="gallery" className="gap-1">
-                <LayoutGrid className="h-3.5 w-3.5" />
-                갤러리
-              </TabsTrigger>
-            )}
-            {hasGantt && (
-              <TabsTrigger value="gantt" className="gap-1">
-                <GanttChart className="h-3.5 w-3.5" />
-                간트
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="form" className="gap-1">
-              <FileText className="h-3.5 w-3.5" />
-              폼
-            </TabsTrigger>
-          </TabsList>
+          {activeTab !== 'list' && (
+            <div className="mb-3">{viewTabs}</div>
+          )}
 
           <TabsContent value="list" className="mt-0">
             <ErrorBoundary key="list">
@@ -1381,6 +1389,7 @@ export default function AppViewPage() {
               summaryFn={columnAggFn}
               onSummaryFnChange={handleAggFnChange}
               toolbar={tableToolbar}
+              toolbarRight={viewTabs}
               key={viewVisKey}
               initialColumnVisibility={viewVisibility ?? initialColumnVisibility}
               onColumnVisibilityChange={handleColumnVisibilityChange}

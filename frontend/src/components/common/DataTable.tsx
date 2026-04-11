@@ -100,6 +100,8 @@ interface Props<T> {
   /** Called when user changes the aggregate function for a column. */
   onSummaryFnChange?: (columnId: string, fn: string) => void
   toolbar?: React.ReactNode
+  /** Extra content rendered between toolbar and column toggle (e.g. view tabs). */
+  toolbarRight?: React.ReactNode
   initialColumnVisibility?: VisibilityState
   /** Called when column visibility changes */
   onColumnVisibilityChange?: (visibility: VisibilityState) => void
@@ -144,6 +146,7 @@ export function DataTable<T>({
   summaryFn,
   onSummaryFnChange,
   toolbar,
+  toolbarRight,
   initialColumnVisibility,
   onColumnVisibilityChange: onColumnVisibilityChangeProp,
   initialColumnPinning,
@@ -400,10 +403,11 @@ export function DataTable<T>({
   }, [useVirtual, grid.activeCell, rowVirtualizer])
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-1">{toolbar}</div>
+        {toolbarRight}
         <DropdownMenu>
           <DropdownMenuTrigger
             className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent"
