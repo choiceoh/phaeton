@@ -268,6 +268,89 @@ export default function SpreadsheetView({
     moveTo: () => {}, // Navigation managed by DataTable's internal grid
   })
 
+  // Cut handler (Ctrl+X): clear selected cells after copy
+  const handleCut = useCallback(
+    (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let r = startRow; r <= endRow; r++) {
+        const rowData = data[r]
+        if (!rowData) continue
+        const fields: Record<string, unknown> = {}
+        for (let c = startCol; c <= endCol; c++) {
+          const colId = visibleColumnIds[c]
+          if (!colId || readOnlyColumns.has(colId)) continue
+          const field = editableFields.find((f) => f.slug === colId)
+          if (!field || isComputedType(field.field_type)) continue
+          fields[colId] = null
+        }
+        if (Object.keys(fields).length > 0) {
+          updates.push({ id: String(rowData.id), fields })
+        }
+      }
+      if (updates.length > 0) batchUpdateEntry(updates)
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+  )
+
+  // Fill down handler (Ctrl+D): copy first row values to rows below
+  const handleFillDown = useCallback(
+    (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let c = startCol; c <= endCol; c++) {
+        const colId = visibleColumnIds[c]
+        if (!colId || readOnlyColumns.has(colId)) continue
+        const field = editableFields.find((f) => f.slug === colId)
+        if (!field || isComputedType(field.field_type)) continue
+        const sourceValue = data[startRow]?.[colId]
+        for (let r = startRow + 1; r <= endRow; r++) {
+          const rowData = data[r]
+          if (!rowData) continue
+          const existing = updates.find((u) => u.id === String(rowData.id))
+          if (existing) {
+            existing.fields[colId] = sourceValue
+          } else {
+            updates.push({ id: String(rowData.id), fields: { [colId]: sourceValue } })
+          }
+        }
+      }
+      if (updates.length > 0) {
+        batchUpdateEntry(updates)
+        toast.success(`${updates.length}행 채우기 완료`)
+      }
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+  )
+
+  // Fill right handler (Ctrl+R): copy first column values to columns right
+  const handleFillRight = useCallback(
+    (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let r = startRow; r <= endRow; r++) {
+        const rowData = data[r]
+        if (!rowData) continue
+        const sourceColId = visibleColumnIds[startCol]
+        if (!sourceColId) continue
+        const sourceValue = rowData[sourceColId]
+        const fields: Record<string, unknown> = {}
+        for (let c = startCol + 1; c <= endCol; c++) {
+          const colId = visibleColumnIds[c]
+          if (!colId || readOnlyColumns.has(colId)) continue
+          const field = editableFields.find((f) => f.slug === colId)
+          if (!field || isComputedType(field.field_type)) continue
+          fields[colId] = sourceValue
+        }
+        if (Object.keys(fields).length > 0) {
+          updates.push({ id: String(rowData.id), fields })
+        }
+      }
+      if (updates.length > 0) {
+        batchUpdateEntry(updates)
+        toast.success(`${updates.length}행 채우기 완료`)
+      }
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+  )
+
   // Paste handler
   const handlePaste = useCallback(
     (startRow: number, startCol: number, matrix: string[][]) => {
@@ -340,6 +423,9 @@ export default function SpreadsheetView({
       getFieldForCol={inlineEditing.getFieldForCol}
       onClearCell={inlineEditing.clearCell}
       onPaste={handlePaste}
+      onCut={canManage ? handleCut : undefined}
+      onFillDown={canManage ? handleFillDown : undefined}
+      onFillRight={canManage ? handleFillRight : undefined}
       onDeleteRow={canManage ? deleteEntry : undefined}
       showNewRow={canManage}
       newRowValues={newRowValues}

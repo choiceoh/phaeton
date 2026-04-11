@@ -13,7 +13,7 @@ export interface SelectionRange {
 }
 
 // Normalize selection range so start <= end.
-function normalize(range: SelectionRange): SelectionRange {
+export function normalize(range: SelectionRange): SelectionRange {
   return {
     startRow: Math.min(range.startRow, range.endRow),
     startCol: Math.min(range.startCol, range.endCol),
@@ -45,6 +45,70 @@ interface UseGridNavigationOptions {
   onStartEditing?: (row: number, col: number, key: string) => void
   /** Called when Delete/Backspace is pressed on an active cell. */
   onClearCell?: (row: number, col: number) => void
+  /** Returns cell value at (row, col) for Ctrl+Arrow jump navigation. */
+  getData?: (row: number, col: number) => unknown
+  /** Number of visible rows for PageUp/PageDown navigation. */
+  pageSize?: number
+}
+
+/**
+ * Find the jump target for Ctrl+Arrow navigation (Excel behavior).
+ * If current cell is empty → jump to the next non-empty cell in that direction.
+ * If current cell is non-empty → jump to the last non-empty cell before a gap.
+ */
+function findJumpTarget(
+  row: number,
+  col: number,
+  dRow: number,
+  dCol: number,
+  getData: (r: number, c: number) => unknown,
+  rowCount: number,
+  colCount: number,
+): { row: number; col: number } {
+  const isEmpty = (r: number, c: number) => {
+    const v = getData(r, c)
+    return v === null || v === undefined || v === ''
+  }
+  const inBounds = (r: number, c: number) =>
+    r >= 0 && r < rowCount && c >= 0 && c < colCount
+
+  let r = row + dRow
+  let c = col + dCol
+
+  if (!inBounds(r, c)) return { row, col }
+
+  if (isEmpty(row, col)) {
+    // Skip empties until we hit a non-empty or the edge
+    while (inBounds(r, c) && isEmpty(r, c)) {
+      r += dRow
+      c += dCol
+    }
+    if (!inBounds(r, c)) {
+      // Reached edge without finding data
+      return { row: Math.max(0, Math.min(r - dRow, rowCount - 1)), col: Math.max(0, Math.min(c - dCol, colCount - 1)) }
+    }
+    return { row: r, col: c }
+  } else {
+    // Current cell is non-empty — skip non-empties
+    if (isEmpty(r, c)) {
+      // Next cell is empty — skip empties to find next non-empty
+      while (inBounds(r, c) && isEmpty(r, c)) {
+        r += dRow
+        c += dCol
+      }
+      if (!inBounds(r, c)) {
+        return { row: Math.max(0, Math.min(r - dRow, rowCount - 1)), col: Math.max(0, Math.min(c - dCol, colCount - 1)) }
+      }
+      return { row: r, col: c }
+    } else {
+      // Next cell is also non-empty — skip to end of contiguous data
+      while (inBounds(r + dRow, c + dCol) && !isEmpty(r + dRow, c + dCol)) {
+        r += dRow
+        c += dCol
+      }
+      return { row: r, col: c }
+    }
+  }
 }
 
 export function useGridNavigation({
@@ -54,6 +118,8 @@ export function useGridNavigation({
   isEditing = false,
   onStartEditing,
   onClearCell,
+  getData,
+  pageSize = 20,
 }: UseGridNavigationOptions) {
   const [activeCell, setActiveCell] = useState<CellPosition | null>(null)
   const [selection, setSelection] = useState<SelectionRange | null>(null)
@@ -102,6 +168,17 @@ export function useGridNavigation({
 
       const { row, col } = activeCell
       const shift = e.shiftKey
+      const isCtrl = e.ctrlKey || e.metaKey
+
+      // Ctrl+Arrow: jump to data boundary
+      if (isCtrl && getData && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault()
+        const dRow = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0
+        const dCol = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0
+        const target = findJumpTarget(row, col, dRow, dCol, getData, rowCount, colCount)
+        moveTo(target.row, target.col, shift)
+        return
+      }
 
       switch (e.key) {
         case 'ArrowUp':
@@ -139,11 +216,21 @@ export function useGridNavigation({
           break
         case 'Home':
           e.preventDefault()
-          moveTo(row, 0, shift)
+          if (isCtrl) moveTo(0, 0, shift)
+          else moveTo(row, 0, shift)
           break
         case 'End':
           e.preventDefault()
-          moveTo(row, colCount - 1, shift)
+          if (isCtrl) moveTo(rowCount - 1, colCount - 1, shift)
+          else moveTo(row, colCount - 1, shift)
+          break
+        case 'PageUp':
+          e.preventDefault()
+          moveTo(row - pageSize, col, shift)
+          break
+        case 'PageDown':
+          e.preventDefault()
+          moveTo(row + pageSize, col, shift)
           break
         case 'Delete':
         case 'Backspace':
@@ -163,7 +250,7 @@ export function useGridNavigation({
           break
       }
     },
-    [activeCell, moveTo, nextCol, colCount, isEditing, onStartEditing, onClearCell],
+    [activeCell, moveTo, nextCol, colCount, rowCount, isEditing, onStartEditing, onClearCell, getData, pageSize],
   )
 
   const handleCellClick = useCallback(
