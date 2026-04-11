@@ -43,6 +43,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import NumberFlow from '@number-flow/react'
 import {
   ArrowDownUp,
   ChevronsLeft,
@@ -1860,9 +1861,9 @@ function StatusBarBridge({
             {stats.nums.length > 0 && (
               <>
                 <span className="text-[#c0c0c0]">|</span>
-                <span>합계: <strong className="text-[#333] tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-                <span>평균: <strong className="text-[#333] tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-                <span>개수: <strong className="text-[#333] tabular-nums">{stats.nums.length}</strong></span>
+                <span>합계: <strong className="text-[#333]"><NumberFlow value={stats.sum} locales="ko-KR" format={{ maximumFractionDigits: 2 }} /></strong></span>
+                <span>평균: <strong className="text-[#333]"><NumberFlow value={stats.avg} locales="ko-KR" format={{ maximumFractionDigits: 2 }} /></strong></span>
+                <span>개수: <strong className="text-[#333]"><NumberFlow value={stats.nums.length} /></strong></span>
               </>
             )}
           </>
