@@ -8,7 +8,7 @@
  */
 
 import type { Field } from '@/lib/types'
-import { isExpandedRecord, getDisplayLabel, getFieldOptions, getDisplayType } from '@/lib/fieldGuards'
+import { isExpandedRecord, getDisplayLabel, getFieldOptions, getDisplayType, getDecimalPlaces } from '@/lib/fieldGuards'
 
 /**
  * Format a single cell value for display.
@@ -89,6 +89,18 @@ export function formatCell(value: unknown, field: Field): string {
       return '★'.repeat(Math.min(num, max)) + '☆'.repeat(Math.max(0, max - num))
     }
     if (displayType === 'progress') return `${num}%`
+  }
+
+  // Number with decimal_places (no display_type)
+  if (field.field_type === 'number' || field.field_type === 'integer') {
+    const num = Number(value)
+    if (!isNaN(num)) {
+      const dp = getDecimalPlaces(field)
+      if (dp !== undefined) {
+        return num.toLocaleString('ko-KR', { minimumFractionDigits: dp, maximumFractionDigits: dp })
+      }
+      return num.toLocaleString('ko-KR')
+    }
   }
 
   // Text display subtypes

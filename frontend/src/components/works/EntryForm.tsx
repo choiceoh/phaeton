@@ -53,7 +53,7 @@ import { api } from '@/lib/api'
 import { formatError } from '@/lib/api/errors'
 import { isLayoutType } from '@/lib/constants'
 import type { Field, Process, SubColumn } from '@/lib/types'
-import { extractRelationId, extractRelationIds, getChoices, getDisplayType, getFieldOptions, getVisibilityRules, isExpandedRecord } from '@/lib/fieldGuards'
+import { extractRelationId, extractRelationIds, getChoices, getDecimalPlaces, getDisplayType, getFieldOptions, getVisibilityRules, isExpandedRecord } from '@/lib/fieldGuards'
 
 interface Props {
   fields: Field[]
@@ -567,6 +567,8 @@ function FieldInput({
         ? numOpts2?.currency_code === 'USD' ? '$' : '₩'
         : undefined
       const suffix = displayType === 'percent' ? '%' : undefined
+      const dp = getDecimalPlaces(field)
+      const step = dp !== undefined ? (dp === 0 ? '1' : `0.${'0'.repeat(dp - 1)}1`) : 'any'
       return (
         <div className="relative">
           {prefix && (
@@ -577,6 +579,7 @@ function FieldInput({
           <Input
             {...ariaProps}
             type="number"
+            step={step}
             value={value === null || value === undefined ? '' : (value as number)}
             onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
             onBlur={onBlur}

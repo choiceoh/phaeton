@@ -80,7 +80,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { useHotkeys } from '@/hooks/useHotkeys'
-import { useCollection } from '@/hooks/useCollections'
+import { useCollection, useUpdateField } from '@/hooks/useCollections'
 import {
   useBatchUpdateEntry,
   useBulkDeleteEntries,
@@ -162,6 +162,7 @@ export default function AppViewPage() {
   const { data: process } = useProcess(appId)
   const { data: currentUser } = useCurrentUser()
   const canManage = canManageCollection(currentUser, collection?.created_by)
+  const updateField = useUpdateField()
 
   // Workbook lock — one user edits at a time.
   const { isLockedByOther } = useWorkbookLock(collection?.workbook_id)
@@ -1026,6 +1027,9 @@ export default function AppViewPage() {
             summaryRow={summaryRow}
             summaryFn={columnAggFn}
             onSummaryFnChange={handleAggFnChange}
+            onUpdateFieldOptions={async (fieldId, options) => {
+              await updateField.mutateAsync({ fieldId, body: { options } })
+            }}
             emptyTitle={searchText || hasActiveFilters ? '검색 결과가 없습니다' : TERM.noRecords}
             emptyDescription={searchText || hasActiveFilters ? '검색어 또는 필터 조건을 변경해 보세요.' : TERM.noRecordsDesc}
             emptyAction={

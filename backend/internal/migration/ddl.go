@@ -34,7 +34,7 @@ func FieldTypeToPG(ft schema.FieldType) string {
 	case schema.FieldNumber:
 		return "NUMERIC"
 	case schema.FieldInteger:
-		return "INTEGER"
+		return "NUMERIC" // unified with FieldNumber; existing INTEGER columns are left as-is
 	case schema.FieldBoolean:
 		return "BOOLEAN"
 	case schema.FieldDate:

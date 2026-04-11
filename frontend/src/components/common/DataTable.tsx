@@ -184,6 +184,8 @@ interface Props<T> {
   onNewRowChange?: (fieldSlug: string, value: unknown) => void
   /** Called to commit the new row. */
   onNewRowCommit?: () => void
+  /** Called when the active cell changes (for format toolbar). */
+  onActiveCellChange?: (cell: CellPosition | null) => void
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -242,6 +244,7 @@ export function DataTable<T>({
   newRowValues,
   onNewRowChange,
   onNewRowCommit,
+  onActiveCellChange,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
@@ -419,6 +422,11 @@ export function DataTable<T>({
     getData: editable ? getGridData : undefined,
     pageSize: gridPageSize,
   })
+
+  // Notify parent about active cell changes (for format toolbar).
+  useEffect(() => {
+    onActiveCellChange?.(grid.activeCell)
+  }, [grid.activeCell, onActiveCellChange])
 
   // Clipboard: copy & paste.
   const handleClipboard = useCallback(

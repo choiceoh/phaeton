@@ -41,6 +41,25 @@ export function getDisplayType(field: FieldLike): string | undefined {
 }
 
 /**
+ * Returns true for number and integer (deprecated alias) field types.
+ */
+export function isNumericField(field: FieldLike): boolean {
+  return field.field_type === 'number' || field.field_type === 'integer'
+}
+
+/**
+ * Get effective decimal_places for a field.
+ * - integer fields default to 0 (whole number behavior).
+ * - number fields with no decimal_places return undefined (free decimal).
+ */
+export function getDecimalPlaces(field: FieldLike): number | undefined {
+  const opts = field.options as { decimal_places?: unknown } | undefined
+  if (typeof opts?.decimal_places === 'number') return opts.decimal_places
+  if (field.field_type === 'integer') return 0
+  return undefined
+}
+
+/**
  * Get visibility rules from any field's options.
  */
 export function getVisibilityRules(field: FieldLike): CommonFieldOptions['visibility_rules'] {
