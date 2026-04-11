@@ -14,7 +14,6 @@ import AppListPage from './pages/AppListPage'
 import AppViewPage from './pages/AppViewPage'
 import EntryPage from './pages/EntryPage'
 import GlobalAutomationsPage from './pages/GlobalAutomationsPage'
-import GlobalCalendarPage from './pages/GlobalCalendarPage'
 import InterfaceDesignerPage from './pages/InterfaceDesignerPage'
 import LoginPage from './pages/LoginPage'
 import MigrationHistoryPage from './pages/MigrationHistoryPage'
@@ -46,7 +45,6 @@ const router = createBrowserRouter([
       { path: 'apps/:appId/entries/:entryId', element: <EB><EntryPage /></EB> },
       { path: 'apps/:appId/interface', element: <EB><InterfaceDesignerPage /></EB> },
       { path: 'my-tasks', element: <EB><MyTasksPage /></EB> },
-      { path: 'calendar', element: <EB><GlobalCalendarPage /></EB> },
       { path: 'automations', element: <EB><GlobalAutomationsPage /></EB> },
       { path: 'settings', element: <EB><SettingsPage /></EB> },
       { path: 'history', element: <EB><MigrationHistoryPage /></EB> },
