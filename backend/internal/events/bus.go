@@ -34,6 +34,7 @@ type Event struct {
 	RecordID       string
 	ActorUserID    string
 	ActorName      string
+	WorkbookID     string // Parent workbook ID (for cross-sheet invalidation).
 	Title          string
 	Body           string
 

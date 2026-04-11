@@ -15,6 +15,7 @@ type SSEMessage struct {
 	RecordID       string `json:"record_id,omitempty"`
 	ActorUserID    string `json:"actor_user_id,omitempty"`
 	ActorName      string `json:"actor_name,omitempty"`
+	WorkbookID     string `json:"workbook_id,omitempty"`
 }
 
 // Broker fans out events to connected SSE clients.

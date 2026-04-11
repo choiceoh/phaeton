@@ -373,6 +373,22 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_webhook_events_topic_time ON _meta.webhook_events(topic, received_at DESC)`,
 	)
 
+	// --- folders ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.folders (
+			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			slug       VARCHAR(63) UNIQUE NOT NULL,
+			label      VARCHAR(255) NOT NULL,
+			icon       VARCHAR(63),
+			parent_id  UUID REFERENCES _meta.folders(id) ON DELETE CASCADE,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			created_by UUID
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_meta_folders_parent ON _meta.folders(parent_id)`,
+	)
+
 	// --- _meta.workbooks ---
 	stmts = append(stmts,
 		`CREATE TABLE IF NOT EXISTS _meta.workbooks (
@@ -396,6 +412,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE _meta.webhook_events ADD COLUMN IF NOT EXISTS error_message TEXT`,
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS workbook_id UUID REFERENCES _meta.workbooks(id) ON DELETE SET NULL`,
 		`ALTER TABLE _meta.workbooks ADD COLUMN IF NOT EXISTS group_label VARCHAR(255)`,
+		`CREATE INDEX IF NOT EXISTS idx_meta_collections_workbook ON _meta.collections(workbook_id)`,
 	}
 
 	for _, stmt := range append(stmts, alters...) {

@@ -113,6 +113,7 @@ func run() int {
 
 	// Schema & dynamic handlers (PR #53 — built-in dynamic handler).
 	schemaHandler := handler.NewSchemaHandler(pool, store, cache, migEngine)
+	workbookHandler := handler.NewWorkbookHandler(store, cache, migEngine)
 	dynHandler := handler.NewDynHandler(pool, cache, bus)
 	viewHandler := handler.NewViewHandler(store)
 	savedViewHandler := handler.NewSavedViewHandler(store)
@@ -132,7 +133,7 @@ func run() int {
 	// SSE real-time events.
 	sseBroker := events.NewBroker()
 	sseHandler := handler.NewSSEHandler(sseBroker)
-	// Forward bus events to SSE broker.
+	// Forward bus events to SSE broker, including cross-sheet invalidation.
 	bus.Subscribe(func(_ context.Context, ev events.Event) {
 		sseBroker.Broadcast(events.SSEMessage{
 			Type:           string(ev.Type),
@@ -141,7 +142,27 @@ func run() int {
 			RecordID:       ev.RecordID,
 			ActorUserID:    ev.ActorUserID,
 			ActorName:      ev.ActorName,
+			WorkbookID:     ev.WorkbookID,
 		})
+
+		// Cross-sheet invalidation: when a record changes, notify sibling sheets
+		// that have computed fields referencing the changed sheet.
+		if ev.WorkbookID != "" && (ev.Type == events.EventRecordCreate || ev.Type == events.EventRecordUpdate || ev.Type == events.EventRecordDelete) {
+			siblings := cache.SheetsInWorkbook(ev.WorkbookID)
+			for _, sib := range siblings {
+				if sib.ID == ev.CollectionID {
+					continue
+				}
+				if hasCrossRef(sib, ev.CollectionID, cache) {
+					sseBroker.Broadcast(events.SSEMessage{
+						Type:           "cross_sheet_invalidation",
+						CollectionID:   sib.ID,
+						CollectionSlug: sib.Slug,
+						WorkbookID:     ev.WorkbookID,
+					})
+				}
+			}
+		}
 	})
 
 	// API rate limiter: 60 req/s per user, burst of 120.
@@ -220,6 +241,7 @@ func run() int {
 		pool:          pool,
 		cache:         cache,
 		schemaH:       schemaHandler,
+		workbookH:     workbookHandler,
 		dynH:          dynHandler,
 		viewH:         viewHandler,
 		savedViewH:    savedViewHandler,
@@ -305,6 +327,7 @@ type routerConfig struct {
 	pool          *pgxpool.Pool
 	cache         *schema.Cache
 	schemaH       *handler.SchemaHandler
+	workbookH     *handler.WorkbookHandler
 	dynH          *handler.DynHandler
 	viewH         *handler.ViewHandler
 	savedViewH    *handler.SavedViewHandler
@@ -433,6 +456,13 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Get("/relationship-graph", cfg.schemaH.RelationshipGraph)
 			r.Get("/collections/{id}/process/transitions", cfg.schemaH.AvailableTransitions)
 
+			// Folders: all authenticated users.
+			r.Get("/folders", cfg.workbookH.ListFolders)
+			r.Get("/folders/{id}", cfg.workbookH.GetFolder)
+			r.Post("/folders", cfg.workbookH.CreateFolder)
+			r.Patch("/folders/{id}", cfg.workbookH.UpdateFolder)
+			r.Delete("/folders/{id}", cfg.workbookH.DeleteFolder)
+
 			// Workbooks (apps): read for all, write for director/pm.
 			r.Get("/workbooks", cfg.schemaH.ListWorkbooks)
 			r.Get("/workbooks/sheet-counts", cfg.schemaH.SheetCounts)
@@ -442,6 +472,11 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 				r.Patch("/workbooks/{workbookId}", cfg.schemaH.UpdateWorkbook)
 				r.Delete("/workbooks/{workbookId}", cfg.schemaH.DeleteWorkbook)
 			})
+
+			// Sheets within workbook.
+			r.Get("/workbooks/{id}/sheets", cfg.workbookH.ListSheets)
+			r.Post("/workbooks/{id}/sheets", cfg.workbookH.CreateSheet)
+			r.Post("/sheets/{id}/move", cfg.workbookH.MoveSheet)
 
 			// Create collection: all authenticated users.
 			r.Post("/collections", cfg.schemaH.CreateCollection)
@@ -628,5 +663,36 @@ func writeIndex(w http.ResponseWriter, indexHTML []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Write(indexHTML)
+}
+
+// hasCrossRef checks whether a collection has any computed fields (formula, lookup, rollup)
+// that reference the given target collection, either directly via relation fields or
+// through cross-sheet formulas. Used for SSE cross-sheet invalidation.
+func hasCrossRef(col schema.Collection, targetCollectionID string, cache *schema.Cache) bool {
+	for _, f := range col.Fields {
+		// Check if any relation field points to the target collection.
+		if f.FieldType == schema.FieldRelation && f.Relation != nil && f.Relation.TargetCollectionID == targetCollectionID {
+			// If there are computed fields in this collection, changes to the target
+			// could affect them.
+			for _, cf := range col.Fields {
+				if cf.FieldType.IsComputed() {
+					return true
+				}
+			}
+		}
+	}
+	// Also check reverse: if the target has a relation to this collection,
+	// rollup/lookup fields here might reference it.
+	revRels := cache.ReverseRelations(col.ID)
+	for _, rev := range revRels {
+		if rev.SourceCollectionID == targetCollectionID {
+			for _, cf := range col.Fields {
+				if cf.FieldType.IsComputed() {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 

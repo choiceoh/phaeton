@@ -341,6 +341,37 @@ func (e *Engine) DropCollection(ctx context.Context, collectionID string) error 
 	return nil
 }
 
+// DropCollectionInTx drops a collection's data table and meta within an existing transaction.
+// Used by workbook deletion to cascade-drop all sheets atomically.
+// Does NOT commit the transaction or update the cache — the caller is responsible for both.
+func (e *Engine) DropCollectionInTx(ctx context.Context, tx pgx.Tx, collectionID string) error {
+	col, ok := e.cache.CollectionByID(collectionID)
+	if !ok {
+		return fmt.Errorf("collection %s: %w", collectionID, schema.ErrNotFound)
+	}
+	if col.IsSystem {
+		return fmt.Errorf("%w: system collection %q cannot be deleted", schema.ErrInvalidInput, col.Slug)
+	}
+
+	ddlUp, _ := GenerateDropTable(col.Slug)
+	ddlDown, _ := GenerateCreateTable(col, col.Fields)
+	payload, err := json.Marshal(map[string]any{"collection": col})
+	if err != nil {
+		return fmt.Errorf("marshal migration payload: %w", err)
+	}
+
+	if err := execStmts(ctx, tx, ddlUp); err != nil {
+		return fmt.Errorf("exec drop table: %w", err)
+	}
+	if err := e.store.DeleteCollectionTx(ctx, tx, collectionID); err != nil {
+		return err
+	}
+	if err := recordMigration(ctx, tx, collectionID, OpDropCollection, payload, ddlUp, ddlDown, Dangerous); err != nil {
+		return err
+	}
+	return nil
+}
+
 // ---------- Add Field ----------
 
 // AddField adds a field (column) to an existing collection. It operates in two modes:

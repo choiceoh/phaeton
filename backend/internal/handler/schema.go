@@ -34,6 +34,16 @@ func NewSchemaHandler(pool *pgxpool.Pool, store *schema.Store, cache *schema.Cac
 
 func (h *SchemaHandler) ListCollections(w http.ResponseWriter, r *http.Request) {
 	cols := h.cache.Collections()
+	// Optional workbook_id filter.
+	if wbID := r.URL.Query().Get("workbook_id"); wbID != "" {
+		filtered := make([]schema.Collection, 0)
+		for _, c := range cols {
+			if c.WorkbookID == wbID {
+				filtered = append(filtered, c)
+			}
+		}
+		cols = filtered
+	}
 	writeJSON(w, http.StatusOK, cols)
 }
 
@@ -87,7 +97,17 @@ func (h *SchemaHandler) GetCollection(w http.ResponseWriter, r *http.Request) {
 		handleErr(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, col)
+
+	// Include reverse relations for bidirectional link visibility.
+	revRels := h.cache.ReverseRelations(col.ID)
+	type collectionWithReverse struct {
+		schema.Collection
+		ReverseRelations []schema.ReverseRelField `json:"reverse_relations,omitempty"`
+	}
+	writeJSON(w, http.StatusOK, collectionWithReverse{
+		Collection:       col,
+		ReverseRelations: revRels,
+	})
 }
 
 func (h *SchemaHandler) CreateCollection(w http.ResponseWriter, r *http.Request) {
