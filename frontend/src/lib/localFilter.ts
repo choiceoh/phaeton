@@ -1,5 +1,5 @@
 /**
- * Client-side filter engine for local mode (≤5,000 rows).
+ * Client-side filter engine for local mode (≤1,000 rows).
  *
  * Evaluates FilterGroup trees against EntryRow arrays entirely in JS,
  * mirroring the server-side filter logic in backend/internal/handler/filter.go.

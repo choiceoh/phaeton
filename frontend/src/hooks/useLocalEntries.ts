@@ -1,5 +1,5 @@
 /**
- * Local-mode entries hook for collections with ≤5,000 rows.
+ * Local-mode entries hook for collections with ≤1,000 rows.
  *
  * Fetches the entire dataset in a single bulk request, then applies
  * filtering, sorting, and pagination entirely client-side via useMemo.
@@ -22,7 +22,7 @@ import { isFilterGroupEmpty } from '@/lib/types'
 import type { EntryListResult } from '@/hooks/useEntries'
 import type { SortItem } from '@/components/works/SortPanel'
 
-const BULK_LIMIT = 5000
+const BULK_LIMIT = 1000
 
 export interface UseLocalEntriesParams {
   page: number

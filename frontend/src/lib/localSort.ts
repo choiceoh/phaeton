@@ -1,5 +1,5 @@
 /**
- * Client-side sort engine for local mode (≤5,000 rows).
+ * Client-side sort engine for local mode (≤1,000 rows).
  *
  * Type-aware multi-field stable sort with Korean locale collation
  * and null-last semantics.
