@@ -825,7 +825,7 @@ export default function AppViewPage() {
     <div className="flex items-center gap-1 overflow-x-auto scrollbar-none shrink-0">
       <button
         type="button"
-        className={`inline-flex items-center h-7 px-2.5 text-xs rounded-md border transition-colors ${
+        className={`inline-flex items-center h-8 px-2.5 text-xs rounded-md border transition-colors ${
           !activeView ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input hover:bg-accent'
         }`}
         onClick={() => clearView()}
@@ -836,7 +836,7 @@ export default function AppViewPage() {
         <button
           key={v.id}
           type="button"
-          className={`inline-flex items-center gap-1 h-7 px-2.5 text-xs rounded-md border transition-colors ${
+          className={`inline-flex items-center gap-1 h-8 px-2.5 text-xs rounded-md border transition-colors ${
             activeView?.id === v.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input hover:bg-accent'
           }`}
           onClick={() => {
@@ -1162,15 +1162,15 @@ export default function AppViewPage() {
   pageActionsRef.current = (
     <>
       <Link to={`/apps/${collection.id}/interface`}>
-        <Button variant="outline" size="sm" className="h-7 gap-1 text-[11px]">
+        <Button variant="outline" size="sm" className="h-8 gap-1 text-[11px]">
           <LayoutGrid className="h-3.5 w-3.5" />
           인터페이스
         </Button>
       </Link>
       {canManage && (
-        <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => setSettingsOpen(true)}>설정</Button>
+        <Button variant="outline" size="sm" className="h-8 text-[11px]" onClick={() => setSettingsOpen(true)}>설정</Button>
       )}
-      <Button size="sm" className="h-7 text-[11px]" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
+      <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
         {TERM.newRecord}
       </Button>
     </>
