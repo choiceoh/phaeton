@@ -23,8 +23,6 @@ const ERROR_BG = 'rgba(254, 226, 226, 0.6)'
 const ERROR_BORDER = 'rgba(239, 68, 68, 0.5)'
 
 const CELL_PAD_X = 4  // px-1 = 4px
-const CELL_PAD_Y = 0
-
 const DEFAULT_FONT = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif'
 const ROW_NUM_FONT = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif'
 
@@ -126,11 +124,11 @@ export function paintViewport({
   data,
   columnIds,
   fields,
-  emptyRowCount,
+  emptyRowCount: _emptyRowCount,
   cellFormats,
   cellDirtyFn,
   cellErrorFn,
-  cellSaveState,
+  cellSaveState: _cellSaveState,
   page,
   limit,
   systemColumns,
@@ -371,14 +369,14 @@ export function paintPinnedColumns({
   data,
   columnIds,
   fields,
-  emptyRowCount,
+  emptyRowCount: _emptyRowCount,
   cellFormats,
-  cellDirtyFn,
-  cellErrorFn,
-  cellSaveState,
+  cellDirtyFn: _cellDirtyFn,
+  cellErrorFn: _cellErrorFn,
+  cellSaveState: _cellSaveState,
   page,
   limit,
-  systemColumns,
+  systemColumns: _systemColumns,
   pinnedLeftCount,
 }: PaintViewportOptions): void {
   if (pinnedLeftCount <= 0) return

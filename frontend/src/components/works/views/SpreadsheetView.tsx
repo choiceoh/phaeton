@@ -256,6 +256,7 @@ export default function SpreadsheetView({
 
   // Inline editing
   const inlineEditing = useInlineEditing({
+    store: gridStoreRef.current!,
     data,
     fields: editableFields,
     columnIds: visibleColumnIds,

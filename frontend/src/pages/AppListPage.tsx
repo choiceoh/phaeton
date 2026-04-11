@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 import ErrorState from '@/components/common/ErrorState'
@@ -153,6 +154,8 @@ export default function AppListPage() {
     const sheetId = firstSheetId(app.id)
     if (sheetId) {
       navigate(`/apps/${sheetId}`)
+    } else {
+      toast.info('시트가 없습니다. 사이드바에서 시트를 추가하세요.')
     }
   }
 
