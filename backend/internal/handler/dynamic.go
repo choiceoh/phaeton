@@ -437,6 +437,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Publish automation event.
 	if recID, ok := records[0]["id"].(string); ok {
+		wbID, _ := h.cache.WorkbookForCollection(col.ID)
 		h.bus.Publish(r.Context(), events.Event{
 			Type:           events.EventRecordCreate,
 			CollectionID:   col.ID,
@@ -444,6 +445,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 			RecordID:       recID,
 			ActorUserID:    user.UserID,
 			ActorName:      user.Name,
+			WorkbookID:     wbID,
 			NewRecord:      records[0],
 		})
 	}
@@ -689,6 +691,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 	h.loadM2MFields(r.Context(), records, fields, col.Slug)
 
 	// Publish automation event.
+	wbID, _ := h.cache.WorkbookForCollection(col.ID)
 	ev := events.Event{
 		Type:           events.EventRecordUpdate,
 		CollectionID:   col.ID,
@@ -696,6 +699,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		RecordID:       id,
 		ActorUserID:    user.UserID,
 		ActorName:      user.Name,
+		WorkbookID:     wbID,
 		OldRecord:      oldRow,
 		NewRecord:      records[0],
 	}
@@ -1536,6 +1540,7 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	recordChange(r.Context(), h.pool, col.ID, id, user.UserID, user.Name, "delete", map[string]any{"_deleted": true})
 
 	// Publish automation event.
+	delWbID, _ := h.cache.WorkbookForCollection(col.ID)
 	h.bus.Publish(r.Context(), events.Event{
 		Type:           events.EventRecordDelete,
 		CollectionID:   col.ID,
@@ -1543,6 +1548,7 @@ func (h *DynHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RecordID:       id,
 		ActorUserID:    user.UserID,
 		ActorName:      user.Name,
+		WorkbookID:     delWbID,
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

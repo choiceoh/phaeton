@@ -165,6 +165,7 @@ type Collection struct {
 	ProcessEnabled bool         `json:"process_enabled"` // When true, entries have a _status column and follow a workflow (프로세스 관리).
 	SortOrder      int          `json:"sort_order"`      // Display ordering in the sidebar app list.
 	AccessConfig   AccessConfig `json:"access_config"`   // Role-based + row-level security configuration.
+	WorkbookID     string       `json:"workbook_id,omitempty"` // Parent workbook ID.
 	CreatedAt      time.Time    `json:"created_at"`
 	UpdatedAt      time.Time    `json:"updated_at"`
 	CreatedBy      string       `json:"created_by,omitempty"`
@@ -237,13 +238,60 @@ func parseUUID(s string) (pgtype.UUID, error) {
 	return u, nil
 }
 
+// --- Folder ---
+
+// Folder groups related workbooks. Supports at most one level of nesting (parent_id).
+type Folder struct {
+	ID        string    `json:"id"`
+	Slug      string    `json:"slug"`
+	Label     string    `json:"label"`
+	Icon      string    `json:"icon,omitempty"`
+	ParentID  string    `json:"parent_id,omitempty"`
+	SortOrder int       `json:"sort_order"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	CreatedBy string    `json:"created_by,omitempty"`
+}
+
+// --- Workbook ---
+
+// Workbook is a container for related sheets (collections), analogous to an Excel workbook.
+type Workbook struct {
+	ID           string       `json:"id"`
+	Slug         string       `json:"slug"`
+	Label        string       `json:"label"`
+	Description  string       `json:"description,omitempty"`
+	Icon         string       `json:"icon,omitempty"`
+	FolderID     string       `json:"folder_id,omitempty"`
+	SortOrder    int          `json:"sort_order"`
+	AccessConfig AccessConfig `json:"access_config"`
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
+	CreatedBy    string       `json:"created_by,omitempty"`
+	Sheets       []Collection `json:"sheets,omitempty"` // Populated by GetWorkbook / cache; empty for list queries.
+}
+
+// --- ReverseRelField ---
+
+// ReverseRelField describes a relation field in another collection that points TO
+// the current collection. Used to generate automatic bidirectional link columns.
+type ReverseRelField struct {
+	SourceCollectionID    string       `json:"source_collection_id"`
+	SourceCollectionSlug  string       `json:"source_collection_slug"`
+	SourceCollectionLabel string       `json:"source_collection_label"`
+	SourceFieldSlug       string       `json:"source_field_slug"`
+	SourceFieldLabel      string       `json:"source_field_label"`
+	RelationType          RelationType `json:"relation_type"`
+	JunctionTable         string       `json:"junction_table,omitempty"`
+}
+
 // --- Request DTOs ---
 //
 // DTOs use pointer fields (*string, *bool) to distinguish "not provided" from zero-value
 // in partial-update requests. The CreatedBy field uses `json:"-"` because it is set
 // server-side by the handler from the JWT claims, never from client JSON.
 
-// CreateCollectionReq is the input for creating a new collection (app).
+// CreateCollectionReq is the input for creating a new collection (app/sheet).
 type CreateCollectionReq struct {
 	Slug         string          `json:"slug"`
 	Label        string          `json:"label"`
@@ -252,7 +300,8 @@ type CreateCollectionReq struct {
 	IsSystem     bool            `json:"is_system,omitempty"`
 	AccessConfig *AccessConfig   `json:"access_config,omitempty"`
 	Fields       []CreateFieldIn `json:"fields,omitempty"`
-	CreatedBy    string          `json:"-"` // set by handler, not from JSON
+	WorkbookID   string          `json:"workbook_id,omitempty"` // Parent workbook.
+	CreatedBy    string          `json:"-"`                     // set by handler, not from JSON
 }
 
 type CreateFieldIn struct {
@@ -360,4 +409,41 @@ type UpdateSavedViewReq struct {
 	VisibleFields json.RawMessage `json:"visible_fields,omitempty"`
 	IsDefault     *bool           `json:"is_default,omitempty"`
 	IsPublic      *bool           `json:"is_public,omitempty"`
+}
+
+// --- Folder DTOs ---
+
+type CreateFolderReq struct {
+	Slug      string `json:"slug"`
+	Label     string `json:"label"`
+	Icon      string `json:"icon,omitempty"`
+	ParentID  string `json:"parent_id,omitempty"`
+	CreatedBy string `json:"-"` // set by handler
+}
+
+type UpdateFolderReq struct {
+	Label     *string `json:"label,omitempty"`
+	Icon      *string `json:"icon,omitempty"`
+	SortOrder *int    `json:"sort_order,omitempty"`
+}
+
+// --- Workbook DTOs ---
+
+type CreateWorkbookReq struct {
+	Slug         string       `json:"slug"`
+	Label        string       `json:"label"`
+	Description  string       `json:"description,omitempty"`
+	Icon         string       `json:"icon,omitempty"`
+	FolderID     string       `json:"folder_id,omitempty"`
+	AccessConfig *AccessConfig `json:"access_config,omitempty"`
+	CreatedBy    string       `json:"-"` // set by handler
+}
+
+type UpdateWorkbookReq struct {
+	Label        *string      `json:"label,omitempty"`
+	Description  *string      `json:"description,omitempty"`
+	Icon         *string      `json:"icon,omitempty"`
+	FolderID     *string      `json:"folder_id,omitempty"`
+	SortOrder    *int         `json:"sort_order,omitempty"`
+	AccessConfig *AccessConfig `json:"access_config,omitempty"`
 }

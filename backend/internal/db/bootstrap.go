@@ -373,6 +373,40 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_webhook_events_topic_time ON _meta.webhook_events(topic, received_at DESC)`,
 	)
 
+	// --- folders ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.folders (
+			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			slug       VARCHAR(63) UNIQUE NOT NULL,
+			label      VARCHAR(255) NOT NULL,
+			icon       VARCHAR(63),
+			parent_id  UUID REFERENCES _meta.folders(id) ON DELETE CASCADE,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			created_by UUID
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_meta_folders_parent ON _meta.folders(parent_id)`,
+	)
+
+	// --- workbooks ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.workbooks (
+			id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			slug          VARCHAR(63) UNIQUE NOT NULL,
+			label         VARCHAR(255) NOT NULL,
+			description   TEXT,
+			icon          VARCHAR(63),
+			folder_id     UUID REFERENCES _meta.folders(id) ON DELETE SET NULL,
+			sort_order    INTEGER NOT NULL DEFAULT 0,
+			access_config JSONB DEFAULT '{}',
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+			created_by    UUID
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_meta_workbooks_folder ON _meta.workbooks(folder_id)`,
+	)
+
 	// --- incremental schema evolution (safe for existing deployments) ---
 	alters := []string{
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS process_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
@@ -381,6 +415,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE _meta.fields ADD COLUMN IF NOT EXISTS height SMALLINT NOT NULL DEFAULT 1`,
 		`ALTER TABLE _meta.process_transitions ADD COLUMN IF NOT EXISTS allowed_user_ids UUID[] NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE _meta.webhook_events ADD COLUMN IF NOT EXISTS error_message TEXT`,
+		// Workbook model: add workbook_id FK to collections.
+		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS workbook_id UUID REFERENCES _meta.workbooks(id) ON DELETE CASCADE`,
+		`CREATE INDEX IF NOT EXISTS idx_meta_collections_workbook ON _meta.collections(workbook_id)`,
 	}
 
 	for _, stmt := range append(stmts, alters...) {
@@ -422,6 +459,54 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		stmt := fmt.Sprintf(`ALTER TABLE "data".%q ADD COLUMN IF NOT EXISTS _version INTEGER NOT NULL DEFAULT 1`, slug)
 		if _, err := tx.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("bootstrap: add _version to %s: %w", slug, err)
+		}
+	}
+
+	// --- Migrate existing collections into workbooks (idempotent) ---
+	// Each collection without a workbook_id gets wrapped into its own workbook
+	// with the same slug, label, icon, description, and access_config.
+	migrateRows, err := tx.Query(ctx, `
+		SELECT id, slug, label, description, icon, access_config, created_by
+		FROM _meta.collections
+		WHERE workbook_id IS NULL`)
+	if err != nil {
+		return fmt.Errorf("bootstrap: list orphan collections: %w", err)
+	}
+	type orphan struct {
+		id, slug, label string
+		desc, icon      *string
+		acRaw           []byte
+		createdBy       *string
+	}
+	var orphans []orphan
+	for migrateRows.Next() {
+		var o orphan
+		if err := migrateRows.Scan(&o.id, &o.slug, &o.label, &o.desc, &o.icon, &o.acRaw, &o.createdBy); err != nil {
+			migrateRows.Close()
+			return fmt.Errorf("bootstrap: scan orphan: %w", err)
+		}
+		orphans = append(orphans, o)
+	}
+	migrateRows.Close()
+	if err := migrateRows.Err(); err != nil {
+		return fmt.Errorf("bootstrap: orphan rows: %w", err)
+	}
+	for _, o := range orphans {
+		// Create a workbook mirroring the collection metadata.
+		var wbID string
+		err := tx.QueryRow(ctx, `
+			INSERT INTO _meta.workbooks (slug, label, description, icon, access_config, created_by)
+			VALUES ($1, $2, $3, $4, COALESCE($5::jsonb, '{}'), $6)
+			RETURNING id`,
+			o.slug, o.label, o.desc, o.icon, o.acRaw, o.createdBy,
+		).Scan(&wbID)
+		if err != nil {
+			return fmt.Errorf("bootstrap: create workbook for %s: %w", o.slug, err)
+		}
+		if _, err := tx.Exec(ctx,
+			`UPDATE _meta.collections SET workbook_id = $1 WHERE id = $2`, wbID, o.id,
+		); err != nil {
+			return fmt.Errorf("bootstrap: set workbook_id for %s: %w", o.slug, err)
 		}
 	}
 

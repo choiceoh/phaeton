@@ -25,29 +25,31 @@ func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // ---------- Collection ----------
 
-const colCols = `id, slug, label, description, icon, is_system, process_enabled, sort_order, access_config, created_at, updated_at, created_by`
+const colCols = `id, slug, label, description, icon, is_system, process_enabled, sort_order, access_config, created_at, updated_at, created_by, workbook_id`
 
 // scanCollection reads a single row matching the colCols column list into a Collection.
-// It handles NULL-able optional columns (description, icon, created_by) via pointer intermediaries
+// It handles NULL-able optional columns (description, icon, created_by, workbook_id) via pointer intermediaries
 // and unmarshals the access_config JSONB column into the AccessConfig struct.
 func scanCollection(row pgx.Row) (Collection, error) {
 	var (
-		c         Collection
-		id        pgtype.UUID
-		createdBy pgtype.UUID
-		desc      *string
-		icon      *string
-		acRaw     []byte
+		c          Collection
+		id         pgtype.UUID
+		createdBy  pgtype.UUID
+		workbookID pgtype.UUID
+		desc       *string
+		icon       *string
+		acRaw      []byte
 	)
 	err := row.Scan(
 		&id, &c.Slug, &c.Label, &desc, &icon,
-		&c.IsSystem, &c.ProcessEnabled, &c.SortOrder, &acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy,
+		&c.IsSystem, &c.ProcessEnabled, &c.SortOrder, &acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy, &workbookID,
 	)
 	if err != nil {
 		return Collection{}, err
 	}
 	c.ID = uuidStr(id)
 	c.CreatedBy = uuidStr(createdBy)
+	c.WorkbookID = uuidStr(workbookID)
 	if desc != nil {
 		c.Description = *desc
 	}
@@ -147,11 +149,15 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 	if req.CreatedBy != "" {
 		createdByUUID, _ = parseUUID(req.CreatedBy)
 	}
+	var wbUID pgtype.UUID
+	if req.WorkbookID != "" {
+		wbUID, _ = parseUUID(req.WorkbookID)
+	}
 	err := tx.QueryRow(ctx, `
-		INSERT INTO _meta.collections (slug, label, description, icon, is_system, access_config, created_by)
-		VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'), $7)
+		INSERT INTO _meta.collections (slug, label, description, icon, is_system, access_config, created_by, workbook_id)
+		VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'), $7, $8)
 		RETURNING id, created_at, updated_at`,
-		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), req.IsSystem, jsonOrNil(acJSON), createdByUUID,
+		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), req.IsSystem, jsonOrNil(acJSON), createdByUUID, wbUID,
 	).Scan(&id, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return Collection{}, fmt.Errorf("insert collection: %w", err)
@@ -163,6 +169,7 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 	c.Icon = req.Icon
 	c.IsSystem = req.IsSystem
 	c.CreatedBy = req.CreatedBy
+	c.WorkbookID = req.WorkbookID
 	return c, nil
 }
 

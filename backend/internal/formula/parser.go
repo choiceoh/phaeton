@@ -33,6 +33,7 @@ const (
 	tokLParen
 	tokRParen
 	tokDot
+	tokBang // '!' for cross-sheet references (SheetSlug!column)
 	tokEOF
 )
 
@@ -73,6 +74,10 @@ type RelationInfo struct {
 // function. It receives the relation field slug and should return the resolved
 // relation metadata, or an error if the field is not a valid relation.
 type RelationResolver func(relationSlug string) (*RelationInfo, error)
+
+// SheetResolver resolves cross-sheet column references (SheetSlug!column_name).
+// Returns a SQL expression for the reference, or an error if the sheet/column is invalid.
+type SheetResolver func(sheetSlug, columnSlug string) (sql string, err error)
 
 // lex tokenizes a formula expression string into a slice of tokens.
 // Recognition rules:
@@ -160,6 +165,9 @@ func lex(input string) ([]token, error) {
 		case '.':
 			tokens = append(tokens, token{tokDot, "."})
 			i++
+		case '!':
+			tokens = append(tokens, token{tokBang, "!"})
+			i++
 		default:
 			return nil, fmt.Errorf("unexpected character %q at position %d", ch, i)
 		}
@@ -176,12 +184,13 @@ func lex(input string) ([]token, error) {
 //   - crossRefs: accumulates relation field slugs used in cross-collection functions (output)
 //   - resolver: optional callback to resolve relation metadata for LOOKUP/SUMREL/etc.
 type Parser struct {
-	tokens    []token
-	pos       int
-	slugs     map[string]bool // valid field slugs for this collection
-	refSlugs  []string        // referenced field slugs (output)
-	crossRefs []string        // cross-collection relation slugs referenced
-	resolver  RelationResolver
+	tokens        []token
+	pos           int
+	slugs         map[string]bool // valid field slugs for this collection
+	refSlugs      []string        // referenced field slugs (output)
+	crossRefs     []string        // cross-collection relation slugs referenced
+	resolver      RelationResolver
+	sheetResolver SheetResolver // optional resolver for SheetSlug!column syntax
 }
 
 func (p *Parser) peek() token {
@@ -231,6 +240,12 @@ func Parse(expression string, validSlugs map[string]bool) (sql string, refs []st
 // It strips a leading '=' (Excel convention), tokenizes, runs the recursive descent
 // parser, and returns a ParseResult containing the SQL, local refs, and cross-refs.
 func ParseWithResolver(expression string, validSlugs map[string]bool, resolver RelationResolver) (*ParseResult, error) {
+	return ParseFull(expression, validSlugs, resolver, nil)
+}
+
+// ParseFull parses a formula expression with full support for cross-collection
+// functions and cross-sheet references (SheetSlug!column syntax).
+func ParseFull(expression string, validSlugs map[string]bool, resolver RelationResolver, sheetResolver SheetResolver) (*ParseResult, error) {
 	expression = strings.TrimSpace(expression)
 	if expression == "" {
 		return nil, fmt.Errorf("empty expression")
@@ -245,7 +260,7 @@ func ParseWithResolver(expression string, validSlugs map[string]bool, resolver R
 		return nil, err
 	}
 
-	p := &Parser{tokens: tokens, slugs: validSlugs, resolver: resolver}
+	p := &Parser{tokens: tokens, slugs: validSlugs, resolver: resolver, sheetResolver: sheetResolver}
 	result, err := p.parseExpr()
 	if err != nil {
 		return nil, err
@@ -382,6 +397,24 @@ func (p *Parser) parsePrimary() (string, error) {
 	case tokIdent:
 		p.advance()
 		upper := strings.ToUpper(t.val)
+
+		// Cross-sheet reference: SheetSlug!column_name
+		if p.peek().typ == tokBang {
+			p.advance() // consume '!'
+			colTok := p.advance()
+			if colTok.typ != tokIdent {
+				return "", fmt.Errorf("expected column name after %s!", t.val)
+			}
+			if p.sheetResolver == nil {
+				return "", fmt.Errorf("sheet reference %s!%s requires cross-sheet support", t.val, colTok.val)
+			}
+			sql, err := p.sheetResolver(t.val, colTok.val)
+			if err != nil {
+				return "", fmt.Errorf("sheet reference %s!%s: %w", t.val, colTok.val, err)
+			}
+			p.crossRefs = append(p.crossRefs, t.val)
+			return sql, nil
+		}
 
 		// IF function → CASE WHEN ... THEN ... ELSE ... END
 		if upper == "IF" {
