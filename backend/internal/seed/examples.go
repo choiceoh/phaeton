@@ -44,10 +44,10 @@ func inventoryPreset() Preset {
 				}),
 			},
 			{Slug: "sku", Label: "품번", FieldType: schema.FieldText, IsUnique: true},
-			{Slug: "quantity", Label: "수량", FieldType: schema.FieldInteger},
+			{Slug: "quantity", Label: "수량", FieldType: schema.FieldNumber, Options: jsonRaw(map[string]any{"decimal_places": 0})},
 			{Slug: "unit_price", Label: "단가(원)", FieldType: schema.FieldNumber},
 			{Slug: "location", Label: "보관 위치", FieldType: schema.FieldText},
-			{Slug: "min_stock", Label: "안전 재고", FieldType: schema.FieldInteger},
+			{Slug: "min_stock", Label: "안전 재고", FieldType: schema.FieldNumber, Options: jsonRaw(map[string]any{"decimal_places": 0})},
 			{Slug: "last_checked", Label: "최종 점검일", FieldType: schema.FieldDate},
 		},
 	}

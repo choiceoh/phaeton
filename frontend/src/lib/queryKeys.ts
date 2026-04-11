@@ -65,6 +65,8 @@ export const queryKeys = {
     /** Paginated/filtered entry list for a collection. */
     list: (slug: string, query?: Record<string, unknown>) =>
       [...queryKeys.entries.all, slug, 'list', query ?? {}] as const,
+    /** All rows for a collection in local (bulk) mode. */
+    bulk: (slug: string) => [...queryKeys.entries.all, slug, 'bulk'] as const,
     /** Single entry by collection slug and record ID. */
     detail: (slug: string, id: string) =>
       [...queryKeys.entries.all, slug, 'detail', id] as const,

@@ -121,6 +121,7 @@ export interface NumberFieldOptions extends CommonFieldOptions {
   display_type?: 'currency' | 'percent' | 'rating' | 'progress'
   currency_code?: string
   max_rating?: number
+  decimal_places?: number // undefined = free decimal, 0 = integer behavior, 1-4 = fixed
 }
 
 export type IntegerFieldOptions = NumberFieldOptions

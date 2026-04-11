@@ -429,7 +429,7 @@ func (h *DynHandler) GanttView(w http.ResponseWriter, r *http.Request) {
 	// Auto-detect progress field.
 	if progressFieldSlug == "" {
 		for _, f := range fields {
-			if f.FieldType == schema.FieldNumber || f.FieldType == schema.FieldInteger {
+			if f.FieldType.IsNumeric() {
 				if hasDisplayType(f.Options, "progress") {
 					progressFieldSlug = f.Slug
 					break

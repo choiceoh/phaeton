@@ -28,7 +28,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: '텍스트',
   textarea: '긴 글',
   number: '숫자',
-  integer: '정수',
+  integer: '숫자 (정수)',
   boolean: '체크박스',
   date: '날짜',
   datetime: '일시',
@@ -108,6 +108,15 @@ export const NUMBER_DISPLAY_TYPES = [
   { value: 'currency', label: '통화 (₩)' },
   { value: 'percent', label: '퍼센트 (%)' },
   { value: 'progress', label: '진행률 바' },
+]
+
+export const DECIMAL_PLACES_OPTIONS = [
+  { value: '', label: '자동' },
+  { value: '0', label: '0 (정수)' },
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+  { value: '4', label: '4' },
 ]
 
 export const TEXT_DISPLAY_TYPES = [

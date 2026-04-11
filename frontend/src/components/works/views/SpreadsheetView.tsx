@@ -10,10 +10,13 @@ import { toast } from 'sonner'
 
 import { DataTable } from '@/components/common/DataTable'
 import { useFormulaEngine } from '@/hooks/useFormulaEngine'
+import type { CellPosition } from '@/hooks/useGridNavigation'
 import { useInlineEditing } from '@/hooks/useInlineEditing'
 import { isLayoutType, isComputedType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { Collection, Field } from '@/lib/types'
+
+import FormatToolbar from '../FormatToolbar'
 
 interface SpreadsheetViewProps {
   collection: Collection
@@ -39,6 +42,7 @@ interface SpreadsheetViewProps {
   emptyDescription?: string
   emptyAction?: React.ReactNode
   onReverseCellClick?: (sourceCollectionId: string, sourceFieldSlug: string, recordId: string) => void
+  onUpdateFieldOptions?: (fieldId: string, options: Record<string, unknown>) => Promise<void>
 }
 
 /**
@@ -73,14 +77,16 @@ function parseDateFlexible(raw: string): string | null {
 function coerceValue(raw: string, field: Field): unknown {
   if (raw === '') return null
   switch (field.field_type) {
-    case 'number': {
-      const cleaned = raw.replace(/[,₩$€¥\s]/g, '').replace(/%$/, '')
-      const n = parseFloat(cleaned)
-      return isNaN(n) ? null : n
-    }
+    case 'number':
     case 'integer': {
-      const cleaned = raw.replace(/[,₩$€¥\s]/g, '')
-      const n = parseInt(cleaned, 10)
+      const cleaned = raw.replace(/[,₩$€¥\s]/g, '').replace(/%$/, '')
+      const dp = (field.options as Record<string, unknown> | undefined)?.decimal_places
+      const effectiveDp = typeof dp === 'number' ? dp : (field.field_type === 'integer' ? 0 : undefined)
+      if (effectiveDp === 0) {
+        const n = parseInt(cleaned, 10)
+        return isNaN(n) ? null : n
+      }
+      const n = parseFloat(cleaned)
       return isNaN(n) ? null : n
     }
     case 'boolean':
@@ -128,8 +134,24 @@ export default function SpreadsheetView({
   emptyDescription,
   emptyAction,
   onReverseCellClick,
+  onUpdateFieldOptions,
 }: SpreadsheetViewProps) {
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
+  const [activeColumnField, setActiveColumnField] = useState<Field | null>(null)
+
+  // Track active cell column to show format toolbar
+  const dataFields = useMemo(
+    () => collection?.fields?.filter((f) => !isLayoutType(f.field_type)) ?? [],
+    [collection],
+  )
+  const handleActiveCellChange = useCallback(
+    (cell: CellPosition | null) => {
+      if (!cell) { setActiveColumnField(null); return }
+      const field = dataFields[cell.col] ?? null
+      setActiveColumnField(field)
+    },
+    [dataFields],
+  )
 
   // Column visibility/pinning persistence
   const colVisStorageKey = collection.id ? `phaeton:colvis:${collection.id}:spreadsheet` : null
@@ -319,6 +341,89 @@ export default function SpreadsheetView({
     moveTo: () => {}, // Navigation managed by DataTable's internal grid
   })
 
+  // Cut handler (Ctrl+X): clear selected cells after copy
+  const handleCut = useCallback(
+    (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let r = startRow; r <= endRow; r++) {
+        const rowData = data[r]
+        if (!rowData) continue
+        const fields: Record<string, unknown> = {}
+        for (let c = startCol; c <= endCol; c++) {
+          const colId = visibleColumnIds[c]
+          if (!colId || readOnlyColumns.has(colId)) continue
+          const field = editableFields.find((f) => f.slug === colId)
+          if (!field || isComputedType(field.field_type)) continue
+          fields[colId] = null
+        }
+        if (Object.keys(fields).length > 0) {
+          updates.push({ id: String(rowData.id), fields })
+        }
+      }
+      if (updates.length > 0) batchUpdateEntry(updates)
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+  )
+
+  // Fill down handler (Ctrl+D): copy first row values to rows below
+  const handleFillDown = useCallback(
+    (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let c = startCol; c <= endCol; c++) {
+        const colId = visibleColumnIds[c]
+        if (!colId || readOnlyColumns.has(colId)) continue
+        const field = editableFields.find((f) => f.slug === colId)
+        if (!field || isComputedType(field.field_type)) continue
+        const sourceValue = data[startRow]?.[colId]
+        for (let r = startRow + 1; r <= endRow; r++) {
+          const rowData = data[r]
+          if (!rowData) continue
+          const existing = updates.find((u) => u.id === String(rowData.id))
+          if (existing) {
+            existing.fields[colId] = sourceValue
+          } else {
+            updates.push({ id: String(rowData.id), fields: { [colId]: sourceValue } })
+          }
+        }
+      }
+      if (updates.length > 0) {
+        batchUpdateEntry(updates)
+        toast.success(`${updates.length}행 채우기 완료`)
+      }
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+  )
+
+  // Fill right handler (Ctrl+R): copy first column values to columns right
+  const handleFillRight = useCallback(
+    (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let r = startRow; r <= endRow; r++) {
+        const rowData = data[r]
+        if (!rowData) continue
+        const sourceColId = visibleColumnIds[startCol]
+        if (!sourceColId) continue
+        const sourceValue = rowData[sourceColId]
+        const fields: Record<string, unknown> = {}
+        for (let c = startCol + 1; c <= endCol; c++) {
+          const colId = visibleColumnIds[c]
+          if (!colId || readOnlyColumns.has(colId)) continue
+          const field = editableFields.find((f) => f.slug === colId)
+          if (!field || isComputedType(field.field_type)) continue
+          fields[colId] = sourceValue
+        }
+        if (Object.keys(fields).length > 0) {
+          updates.push({ id: String(rowData.id), fields })
+        }
+      }
+      if (updates.length > 0) {
+        batchUpdateEntry(updates)
+        toast.success(`${updates.length}행 채우기 완료`)
+      }
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+  )
+
   // Paste handler
   const handlePaste = useCallback(
     (startRow: number, startCol: number, matrix: string[][]) => {
@@ -370,7 +475,18 @@ export default function SpreadsheetView({
       summaryRow={summaryRow}
       summaryFn={summaryFn}
       onSummaryFnChange={onSummaryFnChange}
-      toolbar={toolbar}
+      toolbar={
+        <>
+          {toolbar}
+          {canManage && onUpdateFieldOptions && activeColumnField && (
+            <FormatToolbar
+              field={activeColumnField}
+              collectionId={collection.id}
+              onUpdateOptions={onUpdateFieldOptions}
+            />
+          )}
+        </>
+      }
       toolbarRight={toolbarRight}
       initialColumnVisibility={initialColumnVisibility}
       onColumnVisibilityChange={handleColumnVisibilityChange}
@@ -391,7 +507,11 @@ export default function SpreadsheetView({
       getFieldForCol={inlineEditing.getFieldForCol}
       onClearCell={inlineEditing.clearCell}
       onPaste={handlePaste}
+      onCut={canManage ? handleCut : undefined}
+      onFillDown={canManage ? handleFillDown : undefined}
+      onFillRight={canManage ? handleFillRight : undefined}
       onDeleteRow={canManage ? deleteEntry : undefined}
+      onActiveCellChange={handleActiveCellChange}
       showNewRow={canManage}
       newRowValues={newRowValues}
       onNewRowChange={(slug, v) => setNewRowValues((prev) => ({ ...prev, [slug]: v }))}
