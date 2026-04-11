@@ -85,6 +85,7 @@ import { copyToClipboard, pasteFromClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
 
 import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 import EmptyState from './EmptyState'
 import GridCell from './GridCell'
@@ -101,6 +102,72 @@ function colIndexToLetter(idx: number): string {
   }
   return result
 }
+
+// ── fx 팝오버 — 함수 목록 ──────────────────────────────────────────────────
+
+const FX_CATEGORIES = [
+  {
+    label: '집계',
+    fns: [
+      { name: 'SUM', syntax: 'SUM(값1, 값2, ...)', desc: '합계' },
+      { name: 'AVG', syntax: 'AVG(값1, 값2, ...)', desc: '평균' },
+      { name: 'MIN', syntax: 'MIN(값1, 값2, ...)', desc: '최솟값' },
+      { name: 'MAX', syntax: 'MAX(값1, 값2, ...)', desc: '최댓값' },
+      { name: 'COUNT', syntax: 'COUNT(값1, 값2, ...)', desc: '개수' },
+    ],
+  },
+  {
+    label: '수학',
+    fns: [
+      { name: 'ROUND', syntax: 'ROUND(숫자, 자릿수)', desc: '반올림' },
+      { name: 'CEIL', syntax: 'CEIL(숫자)', desc: '올림' },
+      { name: 'FLOOR', syntax: 'FLOOR(숫자)', desc: '내림' },
+      { name: 'CEILING', syntax: 'CEILING(숫자, 배수)', desc: '배수 올림' },
+      { name: 'ABS', syntax: 'ABS(숫자)', desc: '절대값' },
+    ],
+  },
+  {
+    label: '조건',
+    fns: [
+      { name: 'IF', syntax: 'IF(조건, 참, 거짓)', desc: '조건 분기' },
+      { name: 'IFS', syntax: 'IFS(조건1, 값1, 조건2, 값2, ...)', desc: '다중 조건' },
+      { name: 'IFERROR', syntax: 'IFERROR(수식, 대체값)', desc: '오류 시 대체' },
+      { name: 'COALESCE', syntax: 'COALESCE(값1, 값2, ...)', desc: '첫 번째 비공백' },
+      { name: 'NULLIF', syntax: 'NULLIF(값1, 값2)', desc: '같으면 NULL' },
+    ],
+  },
+  {
+    label: '텍스트',
+    fns: [
+      { name: 'CONCATENATE', syntax: 'CONCATENATE(텍스트1, 텍스트2, ...)', desc: '텍스트 연결' },
+    ],
+  },
+  {
+    label: '날짜',
+    fns: [
+      { name: 'TODAY', syntax: 'TODAY()', desc: '오늘 날짜' },
+      { name: 'NOW', syntax: 'NOW()', desc: '현재 시각' },
+      { name: 'YEAR', syntax: 'YEAR(날짜)', desc: '연도 추출' },
+      { name: 'MONTH', syntax: 'MONTH(날짜)', desc: '월 추출' },
+      { name: 'DATEDIFF', syntax: 'DATEDIFF(시작, 종료, 단위)', desc: '날짜 차이' },
+      { name: 'WORKDAY', syntax: 'WORKDAY(날짜, 일수)', desc: '영업일 계산' },
+    ],
+  },
+  {
+    label: '크로스시트',
+    fns: [
+      { name: 'LOOKUP', syntax: 'LOOKUP(관계, 대상항목)', desc: '관계 조회' },
+      { name: 'VLOOKUP', syntax: 'VLOOKUP(관계, 대상항목)', desc: '값 조회' },
+      { name: 'SUMREL', syntax: 'SUMREL(관계, 대상항목)', desc: '관계 합계' },
+      { name: 'AVGREL', syntax: 'AVGREL(관계, 대상항목)', desc: '관계 평균' },
+      { name: 'MINREL', syntax: 'MINREL(관계, 대상항목)', desc: '관계 최솟값' },
+      { name: 'MAXREL', syntax: 'MAXREL(관계, 대상항목)', desc: '관계 최댓값' },
+      { name: 'COUNTREL', syntax: 'COUNTREL(관계, 대상항목)', desc: '관계 개수' },
+      { name: 'COUNTIF', syntax: 'COUNTIF(관계, 대상항목)', desc: '조건부 개수' },
+      { name: 'SUMIF', syntax: 'SUMIF(관계, 대상항목)', desc: '조건부 합계' },
+    ],
+  },
+]
 
 interface Props<T> {
   columns: ColumnDef<T, unknown>[]
@@ -319,6 +386,7 @@ export function DataTable<T>({
   // Horizontal scroll indicator state.
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollRight, setCanScrollRight] = useState(false)
+  const [fxOpen, setFxOpen] = useState(false)
 
   useEffect(() => {
     const el = scrollRef.current
@@ -810,9 +878,39 @@ export function DataTable<T>({
           <div className="w-16 px-1.5 border-r border-[#d4d4d4] bg-[#e6e6e6] text-center font-medium text-[#333] flex items-center justify-center h-full select-none tabular-nums">
             {formulaBarInfo?.ref ?? ''}
           </div>
-          <div className="w-6 border-r border-[#d4d4d4] flex items-center justify-center text-[#666] italic select-none h-full">
-            fx
-          </div>
+          <Popover open={fxOpen} onOpenChange={setFxOpen}>
+            <PopoverTrigger
+              className="w-6 border-r border-[#d4d4d4] flex items-center justify-center text-[#666] italic select-none h-full cursor-pointer hover:bg-[#d9e1f2] transition-colors"
+            >
+              fx
+            </PopoverTrigger>
+            <PopoverContent className="w-72 max-h-80 overflow-y-auto p-0" align="start" sideOffset={2}>
+              {FX_CATEGORIES.map((cat) => (
+                <div key={cat.label}>
+                  <div className="sticky top-0 bg-muted/80 backdrop-blur-sm px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
+                    {cat.label}
+                  </div>
+                  {cat.fns.map((fn) => (
+                    <button
+                      key={fn.name}
+                      type="button"
+                      className="w-full text-left px-2 py-1 text-[11px] hover:bg-accent flex items-baseline gap-1.5"
+                      onClick={() => {
+                        setFxOpen(false)
+                        const ac = grid.activeCell
+                        if (ac && onStartEditing) {
+                          onStartEditing(ac.row, ac.col, `=${fn.name}(`)
+                        }
+                      }}
+                    >
+                      <span className="font-mono font-medium text-foreground shrink-0">{fn.name}</span>
+                      <span className="text-muted-foreground truncate">{fn.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </PopoverContent>
+          </Popover>
           <div className="flex-1 px-1.5 truncate text-[#333] text-[12px]">
             {formulaBarInfo?.value ?? ''}
           </div>

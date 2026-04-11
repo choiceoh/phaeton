@@ -46,10 +46,13 @@ const RESULT_TYPES = [
 
 const FORMULA_HELP = [
   { label: '산술', examples: '+ - * / %' },
-  { label: '함수', examples: 'SUM, AVG, MIN, MAX, COUNT, ROUND, ABS, COALESCE' },
-  { label: '조건', examples: 'IF(조건, 참, 거짓)' },
-  { label: '참조', examples: 'LOOKUP(연결항목, 대상항목)' },
-  { label: '요약', examples: 'SUMREL(연결항목, 대상항목), AVGREL, COUNTREL' },
+  { label: '집계', examples: 'SUM, AVG, MIN, MAX, COUNT' },
+  { label: '수학', examples: 'ROUND, CEIL, FLOOR, CEILING, ABS' },
+  { label: '조건', examples: 'IF(조건, 참, 거짓), IFS, IFERROR, COALESCE, NULLIF' },
+  { label: '텍스트', examples: 'CONCATENATE(텍스트1, 텍스트2, ...)' },
+  { label: '날짜', examples: 'TODAY, NOW, YEAR, MONTH, DATEDIFF, WORKDAY' },
+  { label: '참조', examples: 'LOOKUP, VLOOKUP, COUNTIF, SUMIF' },
+  { label: '요약', examples: 'SUMREL, AVGREL, MINREL, MAXREL, COUNTREL' },
 ]
 
 export default function FormulaEditor({
