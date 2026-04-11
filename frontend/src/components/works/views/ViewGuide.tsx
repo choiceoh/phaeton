@@ -1,4 +1,4 @@
-import { Calendar, GanttChart, Image, LayoutGrid } from 'lucide-react'
+import { Calendar, GanttChart } from 'lucide-react'
 
 import type { Field } from '@/lib/types'
 
@@ -15,22 +15,10 @@ interface Hint {
 
 const HINTS: Hint[] = [
   {
-    icon: <LayoutGrid className="h-3.5 w-3.5" />,
-    label: '칸반',
-    when: (fields) => !fields.some((f) => f.field_type === 'select'),
-    message: '선택(Select) 항목을 추가하면 칸반 보드를 사용할 수 있습니다.',
-  },
-  {
     icon: <Calendar className="h-3.5 w-3.5" />,
     label: '캘린더',
     when: (fields) => !fields.some((f) => f.field_type === 'date' || f.field_type === 'datetime'),
     message: '날짜 항목을 추가하면 캘린더 보기를 사용할 수 있습니다.',
-  },
-  {
-    icon: <Image className="h-3.5 w-3.5" />,
-    label: '갤러리',
-    when: (fields) => !fields.some((f) => f.field_type === 'file'),
-    message: '파일 항목을 추가하면 갤러리 보기를 사용할 수 있습니다.',
   },
   {
     icon: <GanttChart className="h-3.5 w-3.5" />,

@@ -14,7 +14,6 @@ import AppListPage from './pages/AppListPage'
 import AppSettingsPage from './pages/AppSettingsPage'
 import AppViewPage from './pages/AppViewPage'
 import AutomationsPage from './pages/AutomationsPage'
-import DashboardPage from './pages/DashboardPage'
 import EntryPage from './pages/EntryPage'
 import GlobalAutomationsPage from './pages/GlobalAutomationsPage'
 import GlobalCalendarPage from './pages/GlobalCalendarPage'
@@ -50,7 +49,6 @@ const router = createBrowserRouter([
       { path: 'apps/:appId', element: <EB><AppViewPage /></EB> },
       { path: 'apps/:appId/entries/new', element: <EB><EntryPage /></EB> },
       { path: 'apps/:appId/entries/:entryId', element: <EB><EntryPage /></EB> },
-      { path: 'apps/:appId/dashboard', element: <EB><DashboardPage /></EB> },
       { path: 'apps/:appId/interface', element: <EB><InterfaceDesignerPage /></EB> },
       { path: 'apps/:appId/settings', element: <EB><AppSettingsPage /></EB> },
       { path: 'apps/:appId/process', element: <EB><ProcessPage /></EB> },

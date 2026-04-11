@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useParams } from 'react-router'
 import { Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatError } from '@/lib/api/errors'
@@ -19,17 +18,13 @@ import {
   Line,
 } from 'recharts'
 
-import ErrorState from '@/components/common/ErrorState'
-import LoadingState from '@/components/common/LoadingState'
-import PageHeader from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { useAIBuildChart } from '@/hooks/useAI'
 import { useCharts, useCreateChart, useDeleteChart } from '@/hooks/useCharts'
-import { useCollection } from '@/hooks/useCollections'
 import { useAggregate, useCollectionCount } from '@/hooks/useEntries'
-import type { Field } from '@/lib/types'
+import type { Collection, Field } from '@/lib/types'
 
 const COLORS = [
   '#1f2937', '#374151', '#4b5563', '#6b7280',
@@ -37,19 +32,18 @@ const COLORS = [
   '#475569', '#64748b', '#94a3b8', '#cbd5e1',
 ]
 
-export default function DashboardPage() {
-  const { appId } = useParams()
-  const { data: collection, isLoading, isError, error } = useCollection(appId)
+interface Props {
+  appId: string
+  collection: Collection
+}
+
+export default function ChartTabContent({ appId, collection }: Props) {
   const aiAvailable = useAIAvailable()
   const buildChart = useAIBuildChart(appId)
-  const createChart = useCreateChart(appId ?? '')
-  const deleteChart = useDeleteChart(appId ?? '')
+  const createChart = useCreateChart(appId)
+  const deleteChart = useDeleteChart(appId)
   const { data: savedCharts } = useCharts(appId)
   const [chartPrompt, setChartPrompt] = useState('')
-
-  if (isLoading) return <LoadingState variant="summary" />
-  if (isError) return <ErrorState error={error} />
-  if (!collection) return null
 
   const fields = collection.fields ?? []
   const selectFields = fields.filter((f) => f.field_type === 'select')
@@ -80,19 +74,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div>
-      <PageHeader
-        breadcrumb={[
-          { label: '앱 목록', href: '/apps' },
-          { label: collection.label, href: `/apps/${collection.id}` },
-          { label: '대시보드' },
-        ]}
-        title="대시보드"
-        description="데이터를 한눈에 요약합니다"
-      />
-
+    <div className="space-y-6">
       {/* Summary cards */}
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <SummaryCard slug={collection.slug} label="전체 건수" />
         {numericFields.slice(0, 3).map((f) => (
           <NumericSummaryCard
@@ -105,7 +89,7 @@ export default function DashboardPage() {
 
       {/* AI chart builder */}
       {aiAvailable && (
-        <div className="mb-6 flex gap-2">
+        <div className="flex gap-2">
           <Input
             value={chartPrompt}
             onChange={(e) => setChartPrompt(e.target.value)}
@@ -132,13 +116,12 @@ export default function DashboardPage() {
 
       {/* Saved charts */}
       {savedCharts?.data && savedCharts.data.length > 0 && (
-        <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {savedCharts.data.map((chart) => (
             <SavedChartCard
               key={chart.id}
               chart={chart}
               slug={collection.slug}
-              fields={fields}
               onDelete={() => deleteChart.mutate(chart.id)}
             />
           ))}
@@ -166,7 +149,6 @@ export default function DashboardPage() {
   )
 }
 
-// -- Summary card: total count --
 function SummaryCard({ slug, label }: { slug: string; label: string }) {
   const { data: count, isLoading } = useCollectionCount(slug)
   return (
@@ -179,7 +161,6 @@ function SummaryCard({ slug, label }: { slug: string; label: string }) {
   )
 }
 
-// -- Summary card: numeric field aggregate --
 function NumericSummaryCard({ slug, field }: { slug: string; field: Field }) {
   const { data: sumData } = useAggregate(slug, {
     group: '_created_by',
@@ -219,7 +200,6 @@ function NumericSummaryCard({ slug, field }: { slug: string; field: Field }) {
   )
 }
 
-// -- Bar + Pie chart card for a select field --
 function ChartCard({
   slug,
   selectField,
@@ -251,7 +231,6 @@ function ChartCard({
 
   return (
     <>
-      {/* Bar chart */}
       <div className="rounded-lg border bg-card p-4">
         <div className="mb-3 text-sm font-medium">{barLabel}</div>
         <ResponsiveContainer width="100%" height={260}>
@@ -269,7 +248,6 @@ function ChartCard({
         </ResponsiveContainer>
       </div>
 
-      {/* Pie chart */}
       <div className="rounded-lg border bg-card p-4">
         <div className="mb-3 text-sm font-medium">{selectField.label} 분포</div>
         <ResponsiveContainer width="100%" height={260}>
@@ -299,7 +277,6 @@ function ChartCard({
   )
 }
 
-// -- Timeline chart (entries over time) --
 function TimelineCard({ slug, dateField }: { slug: string; dateField: Field }) {
   const { data } = useAggregate(slug, {
     group: dateField.slug,
@@ -308,7 +285,6 @@ function TimelineCard({ slug, dateField }: { slug: string; dateField: Field }) {
 
   if (!data?.length || data.length < 2) return null
 
-  // Sort by date
   const sorted = [...data].sort((a, b) => a.group.localeCompare(b.group))
 
   return (
@@ -336,7 +312,6 @@ function TimelineCard({ slug, dateField }: { slug: string; dateField: Field }) {
   )
 }
 
-// -- Saved chart card (from AI or manual creation) --
 function SavedChartCard({
   chart,
   slug,
@@ -344,7 +319,6 @@ function SavedChartCard({
 }: {
   chart: { id: string; name: string; chart_type: string; config: Record<string, unknown> }
   slug: string
-  fields: Field[]
   onDelete: () => void
 }) {
   const groupField = String(chart.config.group_field ?? '')
