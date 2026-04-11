@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, FileText, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import EmptyState from '@/components/common/EmptyState'
@@ -14,7 +14,6 @@ interface Props {
   entries: Record<string, unknown>[]
   onEntryClick?: (entry: Record<string, unknown>) => void
   onEntrySubmit: (data: Record<string, unknown>, entryId?: string) => void
-  onEntryDelete?: (entryId: string) => void
   submitting?: boolean
   process?: Process
   slug?: string
@@ -26,7 +25,6 @@ export default function FormView({
   fields,
   entries,
   onEntrySubmit,
-  onEntryDelete,
   submitting,
   process,
   slug,
@@ -162,16 +160,6 @@ export default function FormView({
           <Button variant="outline" size="sm" onClick={() => setMode('edit')}>
             편집
           </Button>
-          {onEntryDelete && currentEntry && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => onEntryDelete(String(currentEntry.id))}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
         </div>
       </div>
 
