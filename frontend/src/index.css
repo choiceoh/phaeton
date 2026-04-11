@@ -567,6 +567,27 @@
 .drag-ghost-copy-right { border-right: 2px dashed #005a9e !important; }
 .drag-ghost-bg { background: rgba(0, 0, 0, 0.04) !important; }
 
+/* Marching ants (copy feedback) — blinking dashed border */
+.copy-range-cell {
+  position: relative;
+}
+.copy-range-cell::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  z-index: 6;
+  border: 2px dashed transparent;
+  animation: copy-blink 0.5s step-end infinite;
+}
+.copy-edge-top::before { border-top-color: #005a9e; }
+.copy-edge-bottom::before { border-bottom-color: #005a9e; }
+.copy-edge-left::before { border-left-color: #005a9e; }
+.copy-edge-right::before { border-right-color: #005a9e; }
+@keyframes copy-blink {
+  50% { opacity: 0; }
+}
+
 /* Hide scrollbar while allowing scroll (for mobile tabs) */
 .scrollbar-none {
   -ms-overflow-style: none;

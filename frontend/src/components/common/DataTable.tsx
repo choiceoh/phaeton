@@ -623,6 +623,9 @@ export function DataTable<T>({
     onAutoScrollStop: autoScroll.stop,
   })
 
+  // Copied range state for marching ants feedback.
+  const [copiedRange, setCopiedRange] = useState<SelectionRange | null>(null)
+
   // Notify parent of active cell / selection changes (for formatting toolbar).
   useEffect(() => {
     onActiveCellChange?.(grid.activeCell, grid.selection)
@@ -650,10 +653,12 @@ export function DataTable<T>({
         }
         e.preventDefault()
         await copyToClipboard(data as EntryRow[], colIds, range)
+        setCopiedRange(range)
       }
 
       if (isCtrl && e.key === 'v' && editable && onPaste) {
         e.preventDefault()
+        setCopiedRange(null)
         try {
           const matrix = await pasteFromClipboard()
           if (matrix.length > 0) {
@@ -714,6 +719,10 @@ export function DataTable<T>({
         onEditKeyDown(e)
         if (e.defaultPrevented) return
       }
+      // Escape clears copied range (marching ants)
+      if (e.key === 'Escape' && copiedRange) {
+        setCopiedRange(null)
+      }
       // Formatting shortcuts: Ctrl/Cmd + B/I
       if (onFormatShortcut && (e.ctrlKey || e.metaKey) && !isEditingCell && grid.activeCell) {
         if (e.key === 'b' || e.key === 'B') {
@@ -730,7 +739,7 @@ export function DataTable<T>({
       handleClipboard(e)
       grid.handleKeyDown(e)
     },
-    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown, onFormatShortcut, grid.activeCell],
+    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown, copiedRange, onFormatShortcut, grid.activeCell],
   )
 
   // Clear grid state when data changes (page navigation).
@@ -1225,6 +1234,19 @@ export function DataTable<T>({
                     const fpLeft = inFillPreview && colIdx === fp.startCol
                     const fpRight = inFillPreview && colIdx === fp.endCol
 
+                    // Copy range edge flags (marching ants)
+                    const cpNorm = copiedRange ? {
+                      r1: Math.min(copiedRange.startRow, copiedRange.endRow),
+                      r2: Math.max(copiedRange.startRow, copiedRange.endRow),
+                      c1: Math.min(copiedRange.startCol, copiedRange.endCol),
+                      c2: Math.max(copiedRange.startCol, copiedRange.endCol),
+                    } : null
+                    const inCopy = cpNorm && rowIdx >= cpNorm.r1 && rowIdx <= cpNorm.r2 && colIdx >= cpNorm.c1 && colIdx <= cpNorm.c2
+                    const cpTop = inCopy && rowIdx === cpNorm.r1
+                    const cpBottom = inCopy && rowIdx === cpNorm.r2
+                    const cpLeft = inCopy && colIdx === cpNorm.c1
+                    const cpRight = inCopy && colIdx === cpNorm.c2
+
                     // Drag ghost edge flags
                     const dg = cellDrag.dragGhost
                     const inDragGhost = dg && rowIdx >= dg.startRow && rowIdx <= dg.endRow && colIdx >= dg.startCol && colIdx <= dg.endCol
@@ -1262,7 +1284,7 @@ export function DataTable<T>({
                         role="gridcell"
                         data-row={rowIdx}
                         data-col={colIdx}
-                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''} ${cellError ? 'cell-error' : ''}`}
+                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inCopy ? 'copy-range-cell' : ''} ${cpTop ? 'copy-edge-top' : ''} ${cpBottom ? 'copy-edge-bottom' : ''} ${cpLeft ? 'copy-edge-left' : ''} ${cpRight ? 'copy-edge-right' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''} ${cellError ? 'cell-error' : ''}`}
                         title={cellError ?? undefined}
                         style={{
                           width: cell.column.getSize(),
@@ -1330,6 +1352,7 @@ export function DataTable<T>({
                         onDoubleClick={(e) => {
                           if (editable && onStartEditing) {
                             e.stopPropagation()
+                            setCopiedRange(null)
                             onStartEditing(rowIdx, colIdx, '')
                           }
                         }}
