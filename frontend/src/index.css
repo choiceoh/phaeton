@@ -506,6 +506,12 @@
   }
 }
 
+/* ── Grid drag body classes (applied via JS classList) ── */
+.grid-drag-select { user-select: none; cursor: cell; }
+.grid-drag-move   { user-select: none; cursor: move; }
+.grid-drag-copy   { user-select: none; cursor: copy; }
+.grid-drag-fill   { user-select: none; cursor: crosshair; }
+
 /* ── Grid cell & row micro-transitions ── */
 [data-slot="table-cell"] {
   transition: background-color 80ms ease-out;

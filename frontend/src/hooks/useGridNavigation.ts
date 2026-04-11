@@ -1,32 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+/**
+ * useGridNavigation — Keyboard & mouse navigation for spreadsheet grids.
+ *
+ * State (activeCell, selection) lives in the Zustand grid store.
+ * This hook is a thin wrapper that wires DOM event handlers to store actions
+ * and keeps non-reactive refs (anchor, drag-select) locally.
+ */
+import { useCallback, useEffect, useRef } from 'react'
 
-export interface CellPosition {
-  row: number
-  col: number
-}
+import { useGridStore } from '@/stores/grid'
+import { selectActiveCell, selectSelection } from '@/stores/grid/selectors'
 
-export interface SelectionRange {
-  startRow: number
-  startCol: number
-  endRow: number
-  endCol: number
-}
-
-// Normalize selection range so start <= end.
-export function normalize(range: SelectionRange): SelectionRange {
-  return {
-    startRow: Math.min(range.startRow, range.endRow),
-    startCol: Math.min(range.startCol, range.endCol),
-    endRow: Math.max(range.startRow, range.endRow),
-    endCol: Math.max(range.startCol, range.endCol),
-  }
-}
-
-export function isCellInRange(row: number, col: number, range: SelectionRange | null): boolean {
-  if (!range) return false
-  const n = normalize(range)
-  return row >= n.startRow && row <= n.endRow && col >= n.startCol && col <= n.endCol
-}
+// Re-export types from canonical source for backward compat.
+export type { CellPosition, SelectionRange } from '@/stores/grid'
+export { normalize, isCellInRange } from '@/stores/grid'
 
 /** Check if a key represents a printable character (triggers edit mode). */
 function isPrintableKey(e: React.KeyboardEvent): boolean {
@@ -53,8 +39,6 @@ interface UseGridNavigationOptions {
 
 /**
  * Find the jump target for Ctrl+Arrow navigation (Excel behavior).
- * If current cell is empty → jump to the next non-empty cell in that direction.
- * If current cell is non-empty → jump to the last non-empty cell before a gap.
  */
 function findJumpTarget(
   row: number,
@@ -78,20 +62,16 @@ function findJumpTarget(
   if (!inBounds(r, c)) return { row, col }
 
   if (isEmpty(row, col)) {
-    // Skip empties until we hit a non-empty or the edge
     while (inBounds(r, c) && isEmpty(r, c)) {
       r += dRow
       c += dCol
     }
     if (!inBounds(r, c)) {
-      // Reached edge without finding data
       return { row: Math.max(0, Math.min(r - dRow, rowCount - 1)), col: Math.max(0, Math.min(c - dCol, colCount - 1)) }
     }
     return { row: r, col: c }
   } else {
-    // Current cell is non-empty — skip non-empties
     if (isEmpty(r, c)) {
-      // Next cell is empty — skip empties to find next non-empty
       while (inBounds(r, c) && isEmpty(r, c)) {
         r += dRow
         c += dCol
@@ -101,7 +81,6 @@ function findJumpTarget(
       }
       return { row: r, col: c }
     } else {
-      // Next cell is also non-empty — skip to end of contiguous data
       while (inBounds(r + dRow, c + dCol) && !isEmpty(r + dRow, c + dCol)) {
         r += dRow
         c += dCol
@@ -121,16 +100,20 @@ export function useGridNavigation({
   getData,
   pageSize = 20,
 }: UseGridNavigationOptions) {
-  const [activeCell, setActiveCell] = useState<CellPosition | null>(null)
-  const [selection, setSelection] = useState<SelectionRange | null>(null)
+  // ── Store subscriptions (fine-grained selectors) ───────────────────
+  const activeCell = useGridStore(selectActiveCell)
+  const selection = useGridStore(selectSelection)
+  const setActiveCell = useGridStore((s) => s.setActiveCell)
+  const setSelection = useGridStore((s) => s.setSelection)
+
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Anchor for shift-extend selection.
-  const anchorRef = useRef<CellPosition | null>(null)
+  const anchorRef = useRef<{ row: number; col: number } | null>(null)
 
   // Drag-to-select state.
   const dragSelectRef = useRef<{
-    anchor: CellPosition
+    anchor: { row: number; col: number }
     startClientX: number
     startClientY: number
     started: boolean
@@ -169,14 +152,12 @@ export function useGridNavigation({
         setSelection(null)
       }
     },
-    [clampRow, clampCol],
+    [clampRow, clampCol, setActiveCell, setSelection],
   )
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // When editing, suppress all navigation keys — editing hook handles them.
       if (isEditing) return
-
       if (!activeCell) return
 
       const { row, col } = activeCell
@@ -255,7 +236,6 @@ export function useGridNavigation({
           onStartEditing?.(row, col, '')
           break
         default:
-          // Printable character → start editing with that character
           if (isPrintableKey(e) && onStartEditing) {
             e.preventDefault()
             onStartEditing(row, col, e.key)
@@ -263,12 +243,11 @@ export function useGridNavigation({
           break
       }
     },
-    [activeCell, moveTo, nextCol, colCount, rowCount, isEditing, onStartEditing, onClearCell, getData, pageSize],
+    [activeCell, moveTo, nextCol, colCount, rowCount, isEditing, onStartEditing, onClearCell, getData, pageSize, setActiveCell, setSelection],
   )
 
   const handleCellClick = useCallback(
     (row: number, col: number, e: React.MouseEvent) => {
-      // Suppress click after drag-select
       if (didDragSelectRef.current) {
         didDragSelectRef.current = false
         return
@@ -283,13 +262,9 @@ export function useGridNavigation({
         setSelection(null)
       }
     },
-    [activeCell],
+    [activeCell, setActiveCell, setSelection],
   )
 
-  /**
-   * Resolve the cell under a given viewport coordinate and update selection.
-   * Shared by mousemove handler and auto-scroll onTick callback.
-   */
   const updateDragSelection = useCallback(
     (clientX: number, clientY: number) => {
       if (!dragSelectRef.current?.started) return
@@ -312,19 +287,13 @@ export function useGridNavigation({
       })
       setActiveCell({ row: clampRow(targetRow), col: clampCol(targetCol) })
     },
-    [clampRow, clampCol],
+    [clampRow, clampCol, setActiveCell, setSelection],
   )
 
-  /**
-   * Drag-to-select: mousedown on a cell starts potential range selection.
-   * After 5px movement threshold, begins extending selection via mousemove.
-   * onAutoScroll is called during drag to enable edge-triggered auto-scroll.
-   */
   const handleCellMouseDown = useCallback(
     (row: number, col: number, e: React.MouseEvent, onAutoScroll?: (x: number, y: number) => void, onAutoScrollStop?: () => void) => {
       if (e.button !== 0 || e.shiftKey) return
 
-      // Immediately select the clicked cell (Excel behavior)
       anchorRef.current = { row, col }
       setActiveCell({ row, col })
       setSelection(null)
@@ -345,8 +314,7 @@ export function useGridNavigation({
           if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return
           dragSelectRef.current.started = true
           didDragSelectRef.current = true
-          document.body.style.userSelect = 'none'
-          document.body.style.cursor = 'cell'
+          document.body.classList.add('grid-drag-select')
         }
 
         // Store latest mouse position and batch via RAF (one update per frame).
@@ -366,8 +334,7 @@ export function useGridNavigation({
         document.removeEventListener('mouseup', handleMouseUp)
         cancelAnimationFrame(dragRafRef.current)
         dragRafRef.current = 0
-        document.body.style.userSelect = ''
-        document.body.style.cursor = ''
+        document.body.classList.remove('grid-drag-select')
         onAutoScrollStop?.()
         dragSelectRef.current = null
       }
@@ -375,7 +342,7 @@ export function useGridNavigation({
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [clampRow, clampCol, updateDragSelection],
+    [clampRow, clampCol, updateDragSelection, setActiveCell, setSelection],
   )
 
   /** Select an entire column (click on column header). */
@@ -395,7 +362,7 @@ export function useGridNavigation({
       }
       setActiveCell({ row: 0, col })
     },
-    [rowCount],
+    [rowCount, setActiveCell, setSelection],
   )
 
   /** Select an entire row (click on row number). */
@@ -415,7 +382,7 @@ export function useGridNavigation({
       }
       setActiveCell({ row, col: 0 })
     },
-    [colCount],
+    [colCount, setActiveCell, setSelection],
   )
 
   // Select all (Ctrl+A).
@@ -430,7 +397,7 @@ export function useGridNavigation({
     }
     el.addEventListener('keydown', onSelectAll)
     return () => el.removeEventListener('keydown', onSelectAll)
-  }, [rowCount, colCount])
+  }, [rowCount, colCount, setSelection])
 
   return {
     activeCell,

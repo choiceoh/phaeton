@@ -1,15 +1,19 @@
 /**
  * useInlineEditing — Cell editing state machine for spreadsheet-like grids.
  *
- * States: idle → editing → saving → idle
+ * States: idle -> editing -> saving -> idle
  *
- * Coordinates with useGridNavigation by consuming `activeCell` and providing
- * `isEditing` to suppress navigation keys during editing.
+ * State (editingCell, editValue, cellSaveState) lives in the Zustand grid store.
+ * This hook is a thin wrapper that wires callbacks and keeps refs locally.
  */
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef } from 'react'
 
-import type { CellPosition } from '@/hooks/useGridNavigation'
+import { useGridStore } from '@/stores/grid'
+import { selectEditingCell, selectEditValue, selectCellSaveState } from '@/stores/grid/selectors'
 import type { Field, FieldType } from '@/lib/types'
+
+// Re-export for backward compat.
+export type { CellSaveState } from '@/stores/grid'
 
 /** Field types that cannot be inline-edited. */
 const READ_ONLY_TYPES: Set<FieldType> = new Set([
@@ -21,8 +25,6 @@ const READ_ONLY_TYPES: Set<FieldType> = new Set([
 const DIALOG_TYPES: Set<FieldType> = new Set([
   'file', 'table', 'spreadsheet', 'json',
 ])
-
-export type CellSaveState = 'saving' | 'saved'
 
 export interface UseInlineEditingOptions {
   data: Record<string, unknown>[]
@@ -52,14 +54,19 @@ export function useInlineEditing({
   emptyRowCount = 0,
   onEmptyRowSave,
 }: UseInlineEditingOptions) {
-  const [editingCell, setEditingCell] = useState<CellPosition | null>(null)
-  const [editValue, setEditValue] = useState<unknown>(null)
-  const [cellSaveState, setCellSaveState] = useState<Map<string, CellSaveState>>(new Map())
+  // ── Store subscriptions ────────────────────────────────────────────
+  const editingCell = useGridStore(selectEditingCell)
+  const editValue = useGridStore(selectEditValue)
+  const cellSaveState = useGridStore(selectCellSaveState)
+  const setEditingCell = useGridStore((s) => s.setEditingCell)
+  const setEditValue = useGridStore((s) => s.setEditValue)
+  const updateCellSaveState = useGridStore((s) => s.updateCellSaveState)
+
   const originalValueRef = useRef<unknown>(null)
 
   const isEditing = editingCell !== null
 
-  /** Map column index → Field. Returns null for non-editable columns. */
+  /** Map column index -> Field. Returns null for non-editable columns. */
   const getFieldForCol = useCallback(
     (colIdx: number): Field | null => {
       const colId = columnIds[colIdx]
@@ -88,10 +95,9 @@ export function useInlineEditing({
     (row: number, col: number, initialChar?: string) => {
       if (!isEditableCol(col)) return
       const isEmptyRow = row >= data.length && row < data.length + emptyRowCount
-      if (row >= data.length && !isEmptyRow) return // beyond grid boundary
+      if (row >= data.length && !isEmptyRow) return
 
       if (isEmptyRow) {
-        // Empty row: start editing with blank value
         originalValueRef.current = null
         setEditValue(initialChar ?? '')
         setEditingCell({ row, col })
@@ -107,29 +113,18 @@ export function useInlineEditing({
         const rowId = String(data[row]?.id)
         const newVal = !currentValue
         const key = `${rowId}:${colId}`
-        setCellSaveState((prev) => new Map(prev).set(key, 'saving'))
+        updateCellSaveState(key, 'saving')
         onCellSave(rowId, colId, newVal).then(() => {
-          setCellSaveState((prev) => new Map(prev).set(key, 'saved'))
-          setTimeout(() => {
-            setCellSaveState((prev) => {
-              const next = new Map(prev)
-              next.delete(key)
-              return next
-            })
-          }, 1500)
+          updateCellSaveState(key, 'saved')
+          setTimeout(() => updateCellSaveState(key, null), 1500)
         }).catch(() => {
-          setCellSaveState((prev) => {
-            const next = new Map(prev)
-            next.delete(key)
-            return next
-          })
+          updateCellSaveState(key, null)
         })
         return
       }
 
       originalValueRef.current = currentValue
 
-      // If a character key started the edit, use it as initial value
       if (initialChar) {
         setEditValue(initialChar)
       } else {
@@ -137,7 +132,7 @@ export function useInlineEditing({
       }
       setEditingCell({ row, col })
     },
-    [isEditableCol, data, columnIds, getFieldForCol, onCellSave, emptyRowCount],
+    [isEditableCol, data, columnIds, getFieldForCol, onCellSave, emptyRowCount, setEditingCell, setEditValue, updateCellSaveState],
   )
 
   /** Commit the current edit. */
@@ -147,7 +142,7 @@ export function useInlineEditing({
       const { row, col } = editingCell
       const colId = columnIds[col]
 
-      // Empty row commit — create new entry
+      // Empty row commit
       if (row >= data.length) {
         setEditingCell(null)
         if (editValue != null && editValue !== '' && onEmptyRowSave) {
@@ -159,71 +154,50 @@ export function useInlineEditing({
       const rowId = String(data[row]?.id)
       const key = `${rowId}:${colId}`
 
-      // Don't save if value unchanged
       if (editValue === originalValueRef.current) {
         setEditingCell(null)
         return
       }
 
       setEditingCell(null)
-      setCellSaveState((prev) => new Map(prev).set(key, 'saving'))
+      updateCellSaveState(key, 'saving')
 
       try {
         await onCellSave(rowId, colId, editValue)
-        setCellSaveState((prev) => new Map(prev).set(key, 'saved'))
-        setTimeout(() => {
-          setCellSaveState((prev) => {
-            const next = new Map(prev)
-            next.delete(key)
-            return next
-          })
-        }, 1500)
+        updateCellSaveState(key, 'saved')
+        setTimeout(() => updateCellSaveState(key, null), 1500)
       } catch {
-        setCellSaveState((prev) => {
-          const next = new Map(prev)
-          next.delete(key)
-          return next
-        })
+        updateCellSaveState(key, null)
       }
     },
-    [editingCell, editValue, data, columnIds, onCellSave, onEmptyRowSave],
+    [editingCell, editValue, data, columnIds, onCellSave, onEmptyRowSave, setEditingCell, updateCellSaveState],
   )
 
   /** Cancel the current edit. */
   const cancelEdit = useCallback(() => {
     setEditingCell(null)
     setEditValue(null)
-  }, [])
+  }, [setEditingCell, setEditValue])
 
   /** Clear a cell value (Delete/Backspace in idle mode). */
   const clearCell = useCallback(
     (row: number, col: number) => {
       if (!isEditableCol(col)) return
-      if (row >= data.length) return // empty rows: no-op
+      if (row >= data.length) return
 
       const colId = columnIds[col]
       const rowId = String(data[row]?.id)
       const key = `${rowId}:${colId}`
 
-      setCellSaveState((prev) => new Map(prev).set(key, 'saving'))
+      updateCellSaveState(key, 'saving')
       onCellClear(rowId, colId).then(() => {
-        setCellSaveState((prev) => new Map(prev).set(key, 'saved'))
-        setTimeout(() => {
-          setCellSaveState((prev) => {
-            const next = new Map(prev)
-            next.delete(key)
-            return next
-          })
-        }, 1500)
+        updateCellSaveState(key, 'saved')
+        setTimeout(() => updateCellSaveState(key, null), 1500)
       }).catch(() => {
-        setCellSaveState((prev) => {
-          const next = new Map(prev)
-          next.delete(key)
-          return next
-        })
+        updateCellSaveState(key, null)
       })
     },
-    [isEditableCol, data, columnIds, onCellClear],
+    [isEditableCol, data, columnIds, onCellClear, updateCellSaveState],
   )
 
   /** Handle keyboard events when in editing mode. */
@@ -233,7 +207,7 @@ export function useInlineEditing({
 
       switch (e.key) {
         case 'Enter':
-          if (e.shiftKey) return // Allow Shift+Enter for textarea newlines
+          if (e.shiftKey) return
           e.preventDefault()
           e.stopPropagation()
           commitEdit().then(() => {

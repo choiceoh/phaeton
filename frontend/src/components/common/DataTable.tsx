@@ -52,7 +52,7 @@ import {
   Plus,
   Settings2,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -72,13 +72,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { CellPosition, SelectionRange } from '@/hooks/useGridNavigation'
-import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
+import type { CellPosition, SelectionRange, CellSaveState } from '@/stores/grid'
+import { isCellInRange, createGridStore, GridStoreContext } from '@/stores/grid'
+import type { GridStore } from '@/stores/grid'
+import { useGridNavigation } from '@/hooks/useGridNavigation'
 import { useExcelToolbarOptional } from '@/contexts/ExcelToolbarContext'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
 import { useCellDragMove } from '@/hooks/useCellDragMove'
 import { useFillHandle } from '@/hooks/useFillHandle'
-import type { CellSaveState } from '@/hooks/useInlineEditing'
 import { copyToClipboard, pasteFromClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
 
@@ -367,6 +368,14 @@ export function DataTable<T>({
   cellDirtyFn,
   cellErrorFn,
 }: Props<T>) {
+  // ── Grid store ─────────────────────────────────────────────────────
+  // If parent (SpreadsheetView) already provides a store, use that.
+  // Otherwise create a local fallback for standalone DataTable usage.
+  const parentStore = useContext(GridStoreContext)
+  const fallbackRef = useRef<GridStore | null>(null)
+  if (!parentStore && !fallbackRef.current) fallbackRef.current = createGridStore()
+  const gridStore = parentStore ?? fallbackRef.current!
+
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
   const [columnPinning, setColumnPinning] = useState<ColumnPinningState>(() => {
@@ -608,10 +617,8 @@ export function DataTable<T>({
     }, []),
   })
 
-  // Fill handle hook.
+  // Fill handle hook (reads activeCell/selection from store).
   const fillHandle = useFillHandle({
-    activeCell: grid.activeCell,
-    selection: grid.selection,
     data: data as Record<string, unknown>[],
     columnIds: colIds,
     fields: editableFields ?? [],
@@ -623,10 +630,8 @@ export function DataTable<T>({
     onAutoScrollStop: autoScroll.stop,
   })
 
-  // Cell drag move/copy hook.
+  // Cell drag move/copy hook (reads activeCell/selection from store).
   const cellDrag = useCellDragMove({
-    activeCell: grid.activeCell,
-    selection: grid.selection,
     data: data as Record<string, unknown>[],
     columnIds: colIds,
     fields: editableFields ?? [],
@@ -859,6 +864,7 @@ export function DataTable<T>({
   }, [editable, grid.activeCell, colIds, data, page, limit])
 
   return (
+    <GridStoreContext.Provider value={gridStore}>
     <div className="flex flex-col h-full gap-1">
       {/* Toolbar — hidden when content is piped to ExcelRibbon */}
       {(toolbar || toolbarRight) && <div className="flex items-center justify-between gap-2">
@@ -1796,6 +1802,7 @@ export function DataTable<T>({
         </div>
       )}
     </div>
+    </GridStoreContext.Provider>
   )
 }
 

@@ -5,12 +5,13 @@
  * Receives data from the parent (AppViewPage) — no duplicate fetching.
  */
 import type { ColumnDef, SortingState, VisibilityState, ColumnPinningState } from '@tanstack/react-table'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/common/DataTable'
 import { useFormulaEngine } from '@/hooks/useFormulaEngine'
 import { useInlineEditing } from '@/hooks/useInlineEditing'
+import { createGridStore, GridStoreContext } from '@/stores/grid'
 import { coerceValue } from '@/lib/coercion'
 import { isLayoutType, isComputedType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
@@ -99,6 +100,10 @@ export default function SpreadsheetView({
   cellDirtyFn,
   cellErrorFn,
 }: SpreadsheetViewProps) {
+  // Grid store — created here so useInlineEditing and DataTable share it.
+  const gridStoreRef = useRef<ReturnType<typeof createGridStore> | null>(null)
+  if (!gridStoreRef.current) gridStoreRef.current = createGridStore()
+
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
 
   // Column visibility/pinning persistence
@@ -366,6 +371,7 @@ export default function SpreadsheetView({
   )
 
   return (
+    <GridStoreContext.Provider value={gridStoreRef.current}>
     <DataTable
       columns={columns}
       data={data}
@@ -434,5 +440,6 @@ export default function SpreadsheetView({
       cellDirtyFn={cellDirtyFn}
       cellErrorFn={cellErrorFn}
     />
+    </GridStoreContext.Provider>
   )
 }

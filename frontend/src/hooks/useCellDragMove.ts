@@ -5,16 +5,22 @@
  * fill-handle corner), changes cursor to 'move', and on drag:
  * - Move: clears source cells and writes values to target
  * - Copy (Ctrl held): writes values to target without clearing source
+ *
+ * State (dragGhost, dragMoveDragging) lives in the Zustand grid store.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
-import type { CellPosition, SelectionRange } from './useGridNavigation'
+import { useGridStore, useGridStoreApi } from '@/stores/grid'
+import { selectActiveCell, selectSelection, selectDragGhost, selectDragMoveDragging } from '@/stores/grid/selectors'
 import type { CellFormats, EntryRow, Field } from '@/lib/types'
 import { isComputedType, isLayoutType } from '@/lib/constants'
 
+// Re-export for backward compat.
+export type { DragGhostRange } from '@/stores/grid'
+
 interface UseCellDragMoveOptions {
-  activeCell: CellPosition | null
-  selection: SelectionRange | null
+  activeCell?: null // ignored — read from store
+  selection?: null  // ignored — read from store
   data: Record<string, unknown>[]
   columnIds: string[]
   fields: Field[]
@@ -24,18 +30,10 @@ interface UseCellDragMoveOptions {
   onAutoScrollStop?: () => void
 }
 
-export interface DragGhostRange {
-  startRow: number
-  endRow: number
-  startCol: number
-  endCol: number
-  mode: 'move' | 'copy'
-}
+const EDGE_THRESHOLD = 6
+const FILL_HANDLE_SIZE = 10
 
-const EDGE_THRESHOLD = 6 // pixels from cell border
-const FILL_HANDLE_SIZE = 10 // pixels from bottom-right corner (avoid fill handle)
-
-function getSourceRange(activeCell: CellPosition | null, selection: SelectionRange | null) {
+function getSourceRange(activeCell: { row: number; col: number } | null, selection: { startRow: number; startCol: number; endRow: number; endCol: number } | null) {
   if (selection) {
     return {
       startRow: Math.min(selection.startRow, selection.endRow),
@@ -55,10 +53,6 @@ function getSourceRange(activeCell: CellPosition | null, selection: SelectionRan
   return null
 }
 
-/**
- * Check if the mouse position is near the border of the given cell element,
- * but NOT in the fill-handle corner (bottom-right).
- */
 function isNearBorder(el: HTMLElement, clientX: number, clientY: number): boolean {
   const rect = el.getBoundingClientRect()
   const x = clientX - rect.left
@@ -66,16 +60,12 @@ function isNearBorder(el: HTMLElement, clientX: number, clientY: number): boolea
   const w = rect.width
   const h = rect.height
 
-  // Exclude the fill-handle corner (bottom-right area)
   if (x >= w - FILL_HANDLE_SIZE && y >= h - FILL_HANDLE_SIZE) return false
 
-  // Check if near any border
   return x < EDGE_THRESHOLD || x > w - EDGE_THRESHOLD || y < EDGE_THRESHOLD || y > h - EDGE_THRESHOLD
 }
 
 export function useCellDragMove({
-  activeCell,
-  selection,
   data,
   columnIds,
   fields,
@@ -84,8 +74,15 @@ export function useCellDragMove({
   onAutoScroll,
   onAutoScrollStop,
 }: UseCellDragMoveOptions) {
-  const [dragGhost, setDragGhost] = useState<DragGhostRange | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
+  // ── Store subscriptions ────────────────────────────────────────────
+  const activeCell = useGridStore(selectActiveCell)
+  const selection = useGridStore(selectSelection)
+  const dragGhost = useGridStore(selectDragGhost)
+  const isDragging = useGridStore(selectDragMoveDragging)
+  const setDragGhost = useGridStore((s) => s.setDragGhost)
+  const setDragMoveDragging = useGridStore((s) => s.setDragMoveDragging)
+  const storeApi = useGridStoreApi()
+
   const didDragRef = useRef(false)
   const dragStateRef = useRef<{
     sourceRange: ReturnType<typeof getSourceRange>
@@ -97,7 +94,6 @@ export function useCellDragMove({
 
   const sourceRange = getSourceRange(activeCell, selection)
 
-  // Check if a cell is part of the active cell or selection
   const isCellInSource = useCallback(
     (row: number, col: number) => {
       if (!sourceRange) return false
@@ -123,10 +119,6 @@ export function useCellDragMove({
     [isDragging, isCellInSource],
   )
 
-  /**
-   * Resolve the cell under a viewport coordinate and update drag ghost.
-   * Called from both mousemove and auto-scroll onTick.
-   */
   const updateDragGhost = useCallback(
     (clientX: number, clientY: number, ctrlKey = false) => {
       if (!dragStateRef.current) return
@@ -153,14 +145,12 @@ export function useCellDragMove({
         mode,
       })
     },
-    [],
+    [setDragGhost],
   )
 
-  // Keep a ref for the latest updateDragGhost for auto-scroll onTick
   const updateDragGhostRef = useRef(updateDragGhost)
   updateDragGhostRef.current = updateDragGhost
 
-  // Track the latest ctrlKey state for auto-scroll onTick
   const lastCtrlRef = useRef(false)
 
   const handleCellMouseDown = useCallback(
@@ -170,7 +160,6 @@ export function useCellDragMove({
       const cell = (e.target as HTMLElement).closest('[data-row]') as HTMLElement | null
       if (!cell) return
 
-      // Only start drag if near border
       if (!isNearBorder(cell, e.clientX, e.clientY)) return
 
       e.preventDefault()
@@ -188,14 +177,18 @@ export function useCellDragMove({
       const handleMouseMove = (ev: MouseEvent) => {
         if (!dragStateRef.current) return
 
-        // Only start visual drag after moving a minimum distance
         const dx = ev.clientX - dragStateRef.current.startClientX
         const dy = ev.clientY - dragStateRef.current.startClientY
         if (Math.abs(dx) < 5 && Math.abs(dy) < 5 && !isDragging) return
 
-        setIsDragging(true)
+        setDragMoveDragging(true)
         didDragRef.current = true
         lastCtrlRef.current = ev.ctrlKey || ev.metaKey
+
+        // Apply drag cursor class based on copy/move mode
+        document.body.classList.remove('grid-drag-move', 'grid-drag-copy')
+        document.body.classList.add(lastCtrlRef.current ? 'grid-drag-copy' : 'grid-drag-move')
+
         onAutoScroll?.(ev.clientX, ev.clientY)
         updateDragGhostRef.current(ev.clientX, ev.clientY, ev.ctrlKey || ev.metaKey)
       }
@@ -203,159 +196,157 @@ export function useCellDragMove({
       const handleMouseUp = () => {
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
+        document.body.classList.remove('grid-drag-move', 'grid-drag-copy')
         onAutoScrollStop?.()
 
-        setIsDragging(false)
+        setDragMoveDragging(false)
 
-        // Execute the move/copy using the latest ghost state
         setTimeout(() => {
-          setDragGhost((currentGhost) => {
-            if (!currentGhost || !dragStateRef.current?.sourceRange) {
-              dragStateRef.current = null
-              return null
+          const currentGhost = storeApi.getState().dragGhost
+          if (!currentGhost || !dragStateRef.current?.sourceRange) {
+            setDragGhost(null)
+            dragStateRef.current = null
+            return
+          }
+
+          const src = dragStateRef.current.sourceRange
+          const isCopy = currentGhost.mode === 'copy'
+          const updates: { id: string; fields: Record<string, unknown> }[] = []
+
+          // Read all source values first
+          const sourceValues: Record<string, unknown>[][] = []
+          for (let r = src.startRow; r <= src.endRow; r++) {
+            const rowVals: Record<string, unknown> = {}
+            for (let c = src.startCol; c <= src.endCol; c++) {
+              const colId = columnIds[c]
+              if (colId && data[r]) rowVals[colId] = data[r][colId]
             }
+            sourceValues.push([rowVals])
+          }
 
-            const src = dragStateRef.current.sourceRange
-            const isCopy = currentGhost.mode === 'copy'
-            const updates: { id: string; fields: Record<string, unknown> }[] = []
-
-            // Read all source values first
-            const sourceValues: Record<string, unknown>[][] = []
+          // Clear source cells (for move, not copy)
+          if (!isCopy) {
             for (let r = src.startRow; r <= src.endRow; r++) {
-              const rowVals: Record<string, unknown> = {}
+              const row = data[r]
+              if (!row) continue
+              const rowId = String(row.id)
+              const clearFields: Record<string, unknown> = {}
               for (let c = src.startCol; c <= src.endCol; c++) {
                 const colId = columnIds[c]
-                if (colId && data[r]) rowVals[colId] = data[r][colId]
-              }
-              sourceValues.push([rowVals])
-            }
-
-            // Clear source cells (for move, not copy)
-            if (!isCopy) {
-              for (let r = src.startRow; r <= src.endRow; r++) {
-                const row = data[r]
-                if (!row) continue
-                const rowId = String(row.id)
-                const clearFields: Record<string, unknown> = {}
-                for (let c = src.startCol; c <= src.endCol; c++) {
-                  const colId = columnIds[c]
-                  if (!colId || readOnlyColumns.has(colId)) continue
-                  const field = fields.find((f) => f.slug === colId)
-                  if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
-                  clearFields[colId] = null
-                }
-                if (Object.keys(clearFields).length > 0) {
-                  let update = updates.find((u) => u.id === rowId)
-                  if (!update) {
-                    update = { id: rowId, fields: {} }
-                    updates.push(update)
-                  }
-                  Object.assign(update.fields, clearFields)
-                }
-              }
-            }
-
-            // Write to target cells
-            const rowOffset = currentGhost.startRow - src.startRow
-            const colOffset = currentGhost.startCol - src.startCol
-            for (let r = src.startRow; r <= src.endRow; r++) {
-              const targetRowIdx = r + rowOffset
-              const targetRow = data[targetRowIdx]
-              if (!targetRow) continue
-              const rowId = String(targetRow.id)
-              const writeFields: Record<string, unknown> = {}
-
-              for (let c = src.startCol; c <= src.endCol; c++) {
-                const srcColId = columnIds[c]
-                const targetColIdx = c + colOffset
-                const targetColId = columnIds[targetColIdx]
-                if (!srcColId || !targetColId || readOnlyColumns.has(targetColId)) continue
-                const field = fields.find((f) => f.slug === targetColId)
+                if (!colId || readOnlyColumns.has(colId)) continue
+                const field = fields.find((f) => f.slug === colId)
                 if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
-                writeFields[targetColId] = data[r]?.[srcColId]
+                clearFields[colId] = null
               }
-
-              if (Object.keys(writeFields).length > 0) {
+              if (Object.keys(clearFields).length > 0) {
                 let update = updates.find((u) => u.id === rowId)
                 if (!update) {
                   update = { id: rowId, fields: {} }
                   updates.push(update)
                 }
-                Object.assign(update.fields, writeFields)
+                Object.assign(update.fields, clearFields)
               }
             }
+          }
 
-            // Move/copy cell formats along with values.
-            if (updates.length > 0) {
-              // Clear source formats on move.
-              if (!isCopy) {
-                for (let r = src.startRow; r <= src.endRow; r++) {
-                  const srcRow = data[r] as EntryRow | undefined
-                  if (!srcRow?._cell_formats) continue
-                  const update = updates.find((u) => u.id === String(srcRow.id))
-                  if (!update) continue
-                  const existing: CellFormats = { ...(srcRow._cell_formats ?? {}) }
-                  let changed = false
-                  for (let c = src.startCol; c <= src.endCol; c++) {
-                    const colId = columnIds[c]
-                    if (colId && existing[colId]) {
-                      delete existing[colId]
-                      changed = true
-                    }
-                  }
-                  if (changed) update.fields._cell_formats = existing
-                }
+          // Write to target cells
+          const rowOffset = currentGhost.startRow - src.startRow
+          const colOffset = currentGhost.startCol - src.startCol
+          for (let r = src.startRow; r <= src.endRow; r++) {
+            const targetRowIdx = r + rowOffset
+            const targetRow = data[targetRowIdx]
+            if (!targetRow) continue
+            const rowId = String(targetRow.id)
+            const writeFields: Record<string, unknown> = {}
+
+            for (let c = src.startCol; c <= src.endCol; c++) {
+              const srcColId = columnIds[c]
+              const targetColIdx = c + colOffset
+              const targetColId = columnIds[targetColIdx]
+              if (!srcColId || !targetColId || readOnlyColumns.has(targetColId)) continue
+              const field = fields.find((f) => f.slug === targetColId)
+              if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
+              writeFields[targetColId] = data[r]?.[srcColId]
+            }
+
+            if (Object.keys(writeFields).length > 0) {
+              let update = updates.find((u) => u.id === rowId)
+              if (!update) {
+                update = { id: rowId, fields: {} }
+                updates.push(update)
               }
-              // Copy source formats to target.
-              const rowOffset = currentGhost.startRow - src.startRow
-              const colOffset = currentGhost.startCol - src.startCol
+              Object.assign(update.fields, writeFields)
+            }
+          }
+
+          // Move/copy cell formats along with values.
+          if (updates.length > 0) {
+            if (!isCopy) {
               for (let r = src.startRow; r <= src.endRow; r++) {
                 const srcRow = data[r] as EntryRow | undefined
-                const targetRowIdx = r + rowOffset
-                const targetRow = data[targetRowIdx] as EntryRow | undefined
-                if (!targetRow) continue
-                const update = updates.find((u) => u.id === String(targetRow.id))
+                if (!srcRow?._cell_formats) continue
+                const update = updates.find((u) => u.id === String(srcRow.id))
                 if (!update) continue
-                const existing: CellFormats = update.fields._cell_formats
-                  ? (update.fields._cell_formats as CellFormats)
-                  : { ...(targetRow._cell_formats ?? {}) }
+                const existing: CellFormats = { ...(srcRow._cell_formats ?? {}) }
                 let changed = false
                 for (let c = src.startCol; c <= src.endCol; c++) {
-                  const srcColId = columnIds[c]
-                  const targetColId = columnIds[c + colOffset]
-                  if (!srcColId || !targetColId) continue
-                  const srcFmt = srcRow?._cell_formats?.[srcColId]
-                  if (srcFmt) {
-                    existing[targetColId] = { ...srcFmt }
-                    changed = true
-                  } else if (existing[targetColId]) {
-                    delete existing[targetColId]
+                  const colId = columnIds[c]
+                  if (colId && existing[colId]) {
+                    delete existing[colId]
                     changed = true
                   }
                 }
                 if (changed) update.fields._cell_formats = existing
               }
-              onMove(updates)
             }
+            const rowOff = currentGhost.startRow - src.startRow
+            const colOff = currentGhost.startCol - src.startCol
+            for (let r = src.startRow; r <= src.endRow; r++) {
+              const srcRow = data[r] as EntryRow | undefined
+              const targetRowIdx = r + rowOff
+              const targetRow = data[targetRowIdx] as EntryRow | undefined
+              if (!targetRow) continue
+              const update = updates.find((u) => u.id === String(targetRow.id))
+              if (!update) continue
+              const existing: CellFormats = update.fields._cell_formats
+                ? (update.fields._cell_formats as CellFormats)
+                : { ...(targetRow._cell_formats ?? {}) }
+              let changed = false
+              for (let c = src.startCol; c <= src.endCol; c++) {
+                const srcColId = columnIds[c]
+                const targetColId = columnIds[c + colOff]
+                if (!srcColId || !targetColId) continue
+                const srcFmt = srcRow?._cell_formats?.[srcColId]
+                if (srcFmt) {
+                  existing[targetColId] = { ...srcFmt }
+                  changed = true
+                } else if (existing[targetColId]) {
+                  delete existing[targetColId]
+                  changed = true
+                }
+              }
+              if (changed) update.fields._cell_formats = existing
+            }
+            onMove(updates)
+          }
 
-            dragStateRef.current = null
-            return null
-          })
+          setDragGhost(null)
+          dragStateRef.current = null
         }, 0)
       }
 
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [sourceRange, isCellInSource, columnIds, readOnlyColumns, fields, data, onMove],
+    [sourceRange, isCellInSource, columnIds, readOnlyColumns, fields, data, onMove, isDragging, setDragMoveDragging, setDragGhost, onAutoScroll, onAutoScrollStop, storeApi],
   )
 
   // Reset on active cell change
   useEffect(() => {
     setDragGhost(null)
-    setIsDragging(false)
+    setDragMoveDragging(false)
     didDragRef.current = false
-  }, [activeCell?.row, activeCell?.col])
+  }, [activeCell?.row, activeCell?.col, setDragGhost, setDragMoveDragging])
 
   return {
     dragGhost,
