@@ -819,10 +819,12 @@ export function DataTable<T>({
     [table],
   )
 
-  // Virtual scrolling — only activate when row count exceeds threshold.
+  // Virtual scrolling — only activate when DATA row count exceeds threshold.
+  // Empty placeholder rows are lightweight and should not trigger virtualization;
+  // doing so causes blank grids when the scroll container height isn't resolved yet.
   const ROW_HEIGHT = 20
   const VIRTUAL_THRESHOLD = 40
-  const useVirtual = totalGridRows > VIRTUAL_THRESHOLD
+  const useVirtual = visibleRows.length > VIRTUAL_THRESHOLD
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
 
   const getRowHeight = useCallback((index: number) => rowSizing[index] || ROW_HEIGHT, [rowSizing])
