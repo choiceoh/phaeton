@@ -14,12 +14,9 @@ import AppListPage from './pages/AppListPage'
 import AppViewPage from './pages/AppViewPage'
 import EntryPage from './pages/EntryPage'
 import GlobalAutomationsPage from './pages/GlobalAutomationsPage'
-import InterfaceDesignerPage from './pages/InterfaceDesignerPage'
 import LoginPage from './pages/LoginPage'
 import MigrationHistoryPage from './pages/MigrationHistoryPage'
-import MyTasksPage from './pages/MyTasksPage'
 import NotFoundPage from './pages/NotFoundPage'
-import OrgChartPage from './pages/OrgChartPage'
 import ProfilePage from './pages/ProfilePage'
 import RelationshipPage from './pages/RelationshipPage'
 import SettingsPage from './pages/SettingsPage'
@@ -43,13 +40,10 @@ const router = createBrowserRouter([
       { path: 'apps/:appId', element: <EB><AppViewPage /></EB> },
       { path: 'apps/:appId/entries/new', element: <EB><EntryPage /></EB> },
       { path: 'apps/:appId/entries/:entryId', element: <EB><EntryPage /></EB> },
-      { path: 'apps/:appId/interface', element: <EB><InterfaceDesignerPage /></EB> },
-      { path: 'my-tasks', element: <EB><MyTasksPage /></EB> },
       { path: 'automations', element: <EB><GlobalAutomationsPage /></EB> },
       { path: 'settings', element: <EB><SettingsPage /></EB> },
       { path: 'history', element: <EB><MigrationHistoryPage /></EB> },
       { path: 'admin/users', element: <EB><UsersPage /></EB> },
-      { path: 'admin/org', element: <EB><OrgChartPage /></EB> },
       { path: 'ai', element: <EB><AIChatPage /></EB> },
       { path: 'profile', element: <EB><ProfilePage /></EB> },
       { path: '*', element: <NotFoundPage /> },

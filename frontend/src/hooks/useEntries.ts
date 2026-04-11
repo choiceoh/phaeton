@@ -78,6 +78,29 @@ export function useEntries(slug: string | undefined, params: EntryListParams = {
   })
 }
 
+/** Threshold: collections with ≤ this many rows use client-side filter/sort. */
+export const CLIENT_MODE_THRESHOLD = 5000
+
+/**
+ * Fetch ALL entries for a collection (up to CLIENT_MODE_THRESHOLD).
+ *
+ * Used when the total row count is small enough for client-side
+ * filtering/sorting via @tanstack/react-table. No server-side
+ * filter/sort params are sent — the client handles them locally.
+ *
+ * Only enabled when `enabled` is true (caller must check total first).
+ */
+export function useAllEntries(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.entries.list(slug ?? '', { _all: true }),
+    queryFn: () =>
+      api.getList<EntryRow>(`/data/${slug}?limit=${CLIENT_MODE_THRESHOLD}&expand=auto`),
+    enabled: !!slug && enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  })
+}
+
 /**
  * Fetch a single entry by ID. The optional `expand` parameter is a
  * comma-separated list of relation field slugs to resolve inline,

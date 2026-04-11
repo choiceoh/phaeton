@@ -22,6 +22,9 @@ import {
   type VisibilityState,
   flexRender,
   getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -47,9 +50,11 @@ import {
   ChevronsLeft,
   ChevronsRight,
   GripVertical,
+  Pencil,
   PinIcon,
   PinOffIcon,
   Settings2,
+  Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -72,7 +77,7 @@ import {
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { CellPosition } from '@/hooks/useGridNavigation'
-import { isCellInRange, normalize, useGridNavigation } from '@/hooks/useGridNavigation'
+import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
 import type { CellSaveState } from '@/hooks/useInlineEditing'
 import { copyToClipboard, pasteFromClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
@@ -168,12 +173,6 @@ interface Props<T> {
   onClearCell?: (row: number, col: number) => void
   /** Called when pasting data from clipboard. */
   onPaste?: (startRow: number, startCol: number, matrix: string[][]) => void
-  /** Called when Ctrl+X cuts the selection (copy + clear). */
-  onCut?: (startRow: number, startCol: number, endRow: number, endCol: number) => void
-  /** Called when Ctrl+D fills selection down from first row. */
-  onFillDown?: (startRow: number, startCol: number, endRow: number, endCol: number) => void
-  /** Called when Ctrl+R fills selection right from first column. */
-  onFillRight?: (startRow: number, startCol: number, endRow: number, endCol: number) => void
   /** Cell context menu actions. */
   onDeleteRow?: (rowId: string) => void
   /** Show the bottom empty row for new entries. */
@@ -184,8 +183,18 @@ interface Props<T> {
   onNewRowChange?: (fieldSlug: string, value: unknown) => void
   /** Called to commit the new row. */
   onNewRowCommit?: () => void
-  /** Called when the active cell changes (for format toolbar). */
-  onActiveCellChange?: (cell: CellPosition | null) => void
+  /** When true, filtering/sorting/pagination is handled client-side. */
+  clientMode?: boolean
+  /** Global filter string for client-side text search. */
+  globalFilter?: string
+  /** Per-column filters for client-side filtering. */
+  columnFilters?: { id: string; value: unknown }[]
+  /** Called when the user requests to rename a column (via header context menu). */
+  onRenameColumn?: (columnId: string) => void
+  /** Called when the user requests to delete a column (via header context menu). */
+  onDeleteColumn?: (columnId: string) => void
+  /** Extra column appended at the end (e.g. "+" add column). Header-only, no data cells. */
+  extraHeaderColumn?: React.ReactNode
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -236,15 +245,17 @@ export function DataTable<T>({
   getFieldForCol,
   onClearCell,
   onPaste,
-  onCut,
-  onFillDown,
-  onFillRight,
   onDeleteRow,
   showNewRow,
   newRowValues,
   onNewRowChange,
   onNewRowCommit,
-  onActiveCellChange,
+  clientMode,
+  globalFilter: globalFilterProp,
+  columnFilters: columnFiltersProp,
+  onRenameColumn,
+  onDeleteColumn,
+  extraHeaderColumn,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
@@ -354,7 +365,15 @@ export function DataTable<T>({
   const table = useReactTable({
     data,
     columns: augmentedColumns,
-    state: { sorting, columnVisibility, columnPinning, columnSizing, columnOrder },
+    state: {
+      sorting,
+      columnVisibility,
+      columnPinning,
+      columnSizing,
+      columnOrder,
+      ...(clientMode && globalFilterProp != null ? { globalFilter: globalFilterProp } : {}),
+      ...(clientMode && columnFiltersProp ? { columnFilters: columnFiltersProp } : {}),
+    },
     onColumnOrderChange: setColumnOrder,
     onSortingChange: (updater) => {
       const next = typeof updater === 'function' ? updater(sorting) : updater
@@ -373,15 +392,30 @@ export function DataTable<T>({
     },
     onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
-    manualPagination: true,
-    manualSorting: true,
+    // In client mode, tanstack handles filtering/sorting/pagination.
+    // In server mode, the server handles them (manual = true).
+    manualPagination: !clientMode,
+    manualSorting: !clientMode,
+    manualFiltering: !clientMode,
+    ...(clientMode
+      ? {
+          getFilteredRowModel: getFilteredRowModel(),
+          getSortedRowModel: getSortedRowModel(),
+          getPaginationRowModel: getPaginationRowModel(),
+          globalFilterFn: 'includesString' as const,
+        }
+      : {}),
     columnResizeMode: 'onChange',
     pageCount: total && limit ? Math.ceil(total / limit) : -1,
   })
 
-  const totalPages = total && limit ? Math.ceil(total / limit) : 0
-  const showingFrom = total ? (page - 1) * limit + 1 : 0
-  const showingTo = Math.min(page * limit, total ?? 0)
+  // In client mode, use the filtered row count from tanstack.
+  const effectiveTotal = clientMode
+    ? table.getFilteredRowModel().rows.length
+    : (total ?? 0)
+  const totalPages = effectiveTotal && limit ? Math.ceil(effectiveTotal / limit) : 0
+  const showingFrom = effectiveTotal ? (page - 1) * limit + 1 : 0
+  const showingTo = Math.min(page * limit, effectiveTotal)
 
   // Grid navigation state.
   const visibleRows = table.getRowModel().rows
@@ -397,21 +431,6 @@ export function DataTable<T>({
     return skip
   }, [colIds])
 
-  const getGridData = useCallback(
-    (row: number, col: number) => {
-      const colId = colIds[col]
-      return (data[row] as Record<string, unknown> | undefined)?.[colId]
-    },
-    [data, colIds],
-  )
-
-  const gridPageSize = useMemo(() => {
-    const el = scrollRef.current
-    if (!el) return 20
-    return Math.max(1, Math.floor(el.clientHeight / ROW_HEIGHT) - 1)
-  }, // eslint-disable-next-line react-hooks/exhaustive-deps
-  [scrollRef.current, visibleRows.length])
-
   const grid = useGridNavigation({
     rowCount: visibleRows.length,
     colCount: colIds.length,
@@ -419,14 +438,7 @@ export function DataTable<T>({
     isEditing: isEditingCell,
     onStartEditing: editable ? onStartEditing : undefined,
     onClearCell: editable ? onClearCell : undefined,
-    getData: editable ? getGridData : undefined,
-    pageSize: gridPageSize,
   })
-
-  // Notify parent about active cell changes (for format toolbar).
-  useEffect(() => {
-    onActiveCellChange?.(grid.activeCell)
-  }, [grid.activeCell, onActiveCellChange])
 
   // Clipboard: copy & paste.
   const handleClipboard = useCallback(
@@ -456,52 +468,8 @@ export function DataTable<T>({
           // Clipboard read may fail if permission denied
         }
       }
-
-      // Ctrl+X: cut (copy + clear)
-      if (isCtrl && e.key === 'x' && editable && onCut) {
-        const range = grid.selection ?? {
-          startRow: grid.activeCell.row,
-          startCol: grid.activeCell.col,
-          endRow: grid.activeCell.row,
-          endCol: grid.activeCell.col,
-        }
-        e.preventDefault()
-        await copyToClipboard(data as EntryRow[], colIds, range)
-        const n = normalize(range)
-        onCut(n.startRow, n.startCol, n.endRow, n.endCol)
-      }
-
-      // Ctrl+D: fill down
-      if (isCtrl && e.key === 'd' && editable && onFillDown) {
-        e.preventDefault()
-        if (grid.selection) {
-          const n = normalize(grid.selection)
-          if (n.endRow > n.startRow) onFillDown(n.startRow, n.startCol, n.endRow, n.endCol)
-        } else if (grid.activeCell.row > 0) {
-          // No selection: copy cell above into active cell
-          onFillDown(grid.activeCell.row - 1, grid.activeCell.col, grid.activeCell.row, grid.activeCell.col)
-        }
-      }
-
-      // Ctrl+R: fill right
-      if (isCtrl && e.key === 'r' && editable && onFillRight) {
-        e.preventDefault()
-        if (grid.selection) {
-          const n = normalize(grid.selection)
-          if (n.endCol > n.startCol) onFillRight(n.startRow, n.startCol, n.endRow, n.endCol)
-        } else if (grid.activeCell.col > 0) {
-          onFillRight(grid.activeCell.row, grid.activeCell.col - 1, grid.activeCell.row, grid.activeCell.col)
-        }
-      }
-
-      // Ctrl+;: insert today's date
-      if (isCtrl && e.key === ';' && editable && onPaste) {
-        e.preventDefault()
-        const today = new Date().toISOString().split('T')[0]
-        onPaste(grid.activeCell.row, grid.activeCell.col, [[today]])
-      }
     },
-    [grid.activeCell, grid.selection, data, colIds, editable, onPaste, onCut, onFillDown, onFillRight],
+    [grid.activeCell, grid.selection, data, colIds, editable, onPaste],
   )
 
   // Cell right-click context menu state (for editable mode).
@@ -797,6 +765,11 @@ export function DataTable<T>({
                   )
                 })}
                 </SortableContext>
+                {extraHeaderColumn && (
+                  <TableHead className="w-10 text-center">
+                    {extraHeaderColumn}
+                  </TableHead>
+                )}
               </TableRow>
             ))}
             </DndContext>
@@ -1071,8 +1044,37 @@ export function DataTable<T>({
               }}
             >
               <Settings2 className="h-3.5 w-3.5" />
-              컬럼 숨기기
+              숨기기
             </button>
+          )}
+          {onRenameColumn && headerMenu.column.id !== '_rowNum' && headerMenu.column.id !== '_select' && headerMenu.column.id !== 'created_at' && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+              onClick={() => {
+                onRenameColumn(headerMenu.column.id)
+                setHeaderMenu(null)
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              이름 변경
+            </button>
+          )}
+          {onDeleteColumn && headerMenu.column.id !== '_rowNum' && headerMenu.column.id !== '_select' && headerMenu.column.id !== 'created_at' && (
+            <>
+              <div className="my-1 h-px bg-border" />
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  onDeleteColumn(headerMenu.column.id)
+                  setHeaderMenu(null)
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                삭제
+              </button>
+            </>
           )}
         </div>
       )}

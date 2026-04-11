@@ -83,12 +83,6 @@ const DATA_ENTRIES: PaletteEntry[] = [
   { icon: Building2, label: '부서', type: 'relation', presetOptions: { systemSlug: '_departments' } },
 ]
 
-const DESIGN_ENTRIES: PaletteEntry[] = [
-  { icon: FIELD_ICONS.label, label: FIELD_TYPE_LABELS.label, type: 'label' },
-  { icon: FIELD_ICONS.line, label: FIELD_TYPE_LABELS.line, type: 'line' },
-  { icon: FIELD_ICONS.spacer, label: FIELD_TYPE_LABELS.spacer, type: 'spacer' },
-]
-
 const ADVANCED_ENTRIES: PaletteEntry[] = [
   { icon: FIELD_ICONS.formula, label: FIELD_TYPE_LABELS.formula, type: 'formula' },
   { icon: FIELD_ICONS.lookup, label: FIELD_TYPE_LABELS.lookup, type: 'lookup' },
@@ -99,11 +93,10 @@ const ADVANCED_ENTRIES: PaletteEntry[] = [
   { icon: FIELD_ICONS.autonumber, label: FIELD_TYPE_LABELS.autonumber, type: 'autonumber' },
 ]
 
-type TabKey = 'data' | 'design' | 'advanced'
+type TabKey = 'data' | 'advanced'
 
 const TABS: { key: TabKey; label: string; entries: PaletteEntry[] }[] = [
   { key: 'data', label: '데이터', entries: DATA_ENTRIES },
-  { key: 'design', label: '디자인', entries: DESIGN_ENTRIES },
   { key: 'advanced', label: '고급', entries: ADVANCED_ENTRIES },
 ]
 

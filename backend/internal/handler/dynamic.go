@@ -199,10 +199,8 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Load M:N links.
 	h.loadM2MFields(r.Context(), records, fields, col.Slug)
 
-	// Load reverse-relation data (opt-in via ?reverse=true).
-	if params.Get("reverse") == "true" {
-		h.loadReverseRelFields(r.Context(), records, col)
-	}
+	// Load reverse relations (bidirectional links).
+	h.loadReverseRelations(r.Context(), records, col.ID)
 
 	// Optional display formatting.
 	if params.Get("format") == "display" {
@@ -274,10 +272,8 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Load M:N links.
 	h.loadM2MFields(r.Context(), records, fields, col.Slug)
 
-	// Load reverse-relation data (opt-in via ?reverse=true).
-	if r.URL.Query().Get("reverse") == "true" {
-		h.loadReverseRelFields(r.Context(), records, col)
-	}
+	// Load reverse relations (bidirectional links).
+	h.loadReverseRelations(r.Context(), records, col.ID)
 
 	// Optional display formatting.
 	if r.URL.Query().Get("format") == "display" {
@@ -348,7 +344,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 		colNames = append(colNames, pgutil.QuoteIdent(f.Slug))
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
-		args = append(args, coerceValue(v, f))
+		args = append(args, coerceValue(v, f.FieldType))
 		idx++
 	}
 
@@ -471,6 +467,8 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 //
 //   - Optimistic locking: if the request body includes _version, the WHERE clause
 //     checks it matches the current version; a mismatch returns 409 Conflict.
+//     NOTE: With workbook-level lock in place, _version conflicts should be rare
+//     but is kept as a safety net for API key access and edge cases.
 //   - Process transitions: if the collection has process_enabled and _status is
 //     being changed, the transition is validated against allowed roles/users.
 //   - RLS: viewers can only update rows they created.
@@ -561,7 +559,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		sets = append(sets, fmt.Sprintf("%s = $%d", pgutil.QuoteIdent(f.Slug), idx))
-		args = append(args, coerceValue(v, f))
+		args = append(args, coerceValue(v, f.FieldType))
 		idx++
 	}
 
@@ -749,7 +747,7 @@ func (h *DynHandler) Totals(w http.ResponseWriter, r *http.Request) {
 	// Collect numeric fields.
 	var numFields []schema.Field
 	for _, f := range fields {
-		if f.FieldType.IsNumeric() || f.FieldType == schema.FieldAutonumber {
+		if f.FieldType == schema.FieldNumber || f.FieldType == schema.FieldInteger || f.FieldType == schema.FieldAutonumber {
 			numFields = append(numFields, f)
 		}
 	}
@@ -1013,7 +1011,7 @@ func runAggregate(ctx context.Context, pool *pgxpool.Pool, col schema.Collection
 			if !exists {
 				return nil, fmt.Errorf("%w: field %q not found", schema.ErrInvalidInput, fieldSlug)
 			}
-			if !f.FieldType.IsNumeric() && f.FieldType != schema.FieldAutonumber {
+			if f.FieldType != schema.FieldNumber && f.FieldType != schema.FieldInteger && f.FieldType != schema.FieldAutonumber {
 				return nil, fmt.Errorf("%w: %s requires numeric field, %s is %s",
 					schema.ErrInvalidInput, fn, fieldSlug, f.FieldType)
 			}
@@ -1271,7 +1269,7 @@ func buildInsertColumns(body map[string]any, fields []schema.Field, userID strin
 		}
 		cols = append(cols, pgutil.QuoteIdent(f.Slug))
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
-		args = append(args, coerceValue(v, f))
+		args = append(args, coerceValue(v, f.FieldType))
 		idx++
 	}
 	// Auto-set created_by from authenticated user.
@@ -1442,7 +1440,7 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			sets = append(sets, fmt.Sprintf("%s = $%d", pgutil.QuoteIdent(f.Slug), idx))
-			args = append(args, coerceValue(v, f))
+			args = append(args, coerceValue(v, f.FieldType))
 			idx++
 		}
 
@@ -2195,11 +2193,11 @@ func (h *DynHandler) fetchRow(ctx context.Context, col schema.Collection, fields
 }
 
 // coerceValue ensures the Go value matches what pgx expects for the column type.
-func coerceValue(v any, f schema.Field) any {
+func coerceValue(v any, ft schema.FieldType) any {
 	if v == nil {
 		return nil
 	}
-	switch f.FieldType {
+	switch ft {
 	case schema.FieldMultiselect:
 		// JSON array → []string
 		switch arr := v.(type) {
@@ -2214,11 +2212,9 @@ func coerceValue(v any, f schema.Field) any {
 		// Keep as JSONB.
 		b, _ := json.Marshal(v)
 		return b
-	case schema.FieldNumber, schema.FieldInteger:
-		if fv, ok := v.(float64); ok {
-			if dp := schema.EffectiveDecimalPlaces(f); dp != nil && *dp == 0 {
-				return int64(fv)
-			}
+	case schema.FieldInteger:
+		if f, ok := v.(float64); ok {
+			return int64(f)
 		}
 	}
 	return v
@@ -2384,27 +2380,20 @@ func (h *DynHandler) loadM2MFields(ctx context.Context, records []map[string]any
 	}
 }
 
-// displayFieldSlug returns the slug of the first text-type field in the list,
-// falling back to "id" if no text field exists.
-func displayFieldSlug(fields []schema.Field) string {
-	for _, f := range fields {
-		if f.FieldType == schema.FieldText {
-			return f.Slug
-		}
+// loadReverseRelations injects bidirectional link counts into each record.
+// For each collection that has a relation field pointing TO the current
+// collection, this queries how many source records reference each result record
+// and adds a "_reverse_{sourceSlug}_{fieldSlug}" key with {count, ids}.
+func (h *DynHandler) loadReverseRelations(ctx context.Context, records []map[string]any, collectionID string) {
+	if len(records) == 0 {
+		return
 	}
-	return "id"
-}
-
-// loadReverseRelFields populates virtual reverse-relation columns on records.
-// For each collection that has a relation field pointing TO the current collection,
-// it queries the source table and injects matching records as _rev_{sourceSlug}_{fieldSlug}.
-func (h *DynHandler) loadReverseRelFields(ctx context.Context, records []map[string]any, col schema.Collection) {
-	revRels := h.cache.ReverseRelations(col.ID)
-	if len(revRels) == 0 || len(records) == 0 {
+	revRels := h.cache.ReverseRelations(collectionID)
+	if len(revRels) == 0 {
 		return
 	}
 
-	// Collect all record IDs.
+	// Collect all target record IDs.
 	var recordIDs []string
 	for _, row := range records {
 		if id, ok := row["id"].(string); ok {
@@ -2415,45 +2404,34 @@ func (h *DynHandler) loadReverseRelFields(ctx context.Context, records []map[str
 		return
 	}
 
+	// Build placeholders once (shared across queries).
+	placeholders := make([]string, len(recordIDs))
+	args := make([]any, len(recordIDs))
+	for i, id := range recordIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	phStr := strings.Join(placeholders, ",")
+
 	for _, rev := range revRels {
-		virtualKey := "_rev_" + rev.SourceCollectionSlug + "_" + rev.SourceFieldSlug
-
-		// Determine the display field for the source collection.
-		sourceFields := h.cache.Fields(rev.SourceCollectionID)
-		dispField := displayFieldSlug(sourceFields)
-
-		// Build placeholders.
-		placeholders := make([]string, len(recordIDs))
-		args := make([]any, len(recordIDs))
-		for i, id := range recordIDs {
-			placeholders[i] = fmt.Sprintf("$%d", i+1)
-			args[i] = id
-		}
-		inClause := strings.Join(placeholders, ",")
+		key := fmt.Sprintf("_reverse_%s_%s", rev.SourceCollectionSlug, rev.SourceFieldSlug)
 
 		if rev.RelationType == schema.RelManyToMany && rev.JunctionTable != "" {
-			// M:N reverse: query junction table then batch-fetch source labels.
-			// Junction columns: {sourceSlug}_id and {currentSlug}_id
-			sourceCol := rev.SourceCollectionSlug + "_id"
-			currentCol := col.Slug + "_id"
-
-			qJunc := pgutil.QuoteQualified("data", rev.JunctionTable)
-			juncSQL := fmt.Sprintf("SELECT %s, %s FROM %s WHERE %s IN (%s)",
-				pgutil.QuoteIdent(sourceCol), pgutil.QuoteIdent(currentCol),
-				qJunc, pgutil.QuoteIdent(currentCol), inClause)
-
-			rows, err := h.pool.Query(ctx, juncSQL, args...)
+			// M:N reverse: query the junction table.
+			// In an M:N relation where the source collection has the M:N field
+			// pointing to our collection, the junction table stores
+			// (owner_id = source, target_id = our record).
+			juncTable := pgutil.QuoteQualified("data", rev.JunctionTable)
+			sql := fmt.Sprintf(
+				"SELECT target_id, owner_id FROM %s WHERE target_id IN (%s)",
+				juncTable, phStr,
+			)
+			rows, err := h.pool.Query(ctx, sql, args...)
 			if err != nil {
-				slog.Warn("loadReverseRelFields: junction query failed", "rev", virtualKey, "error", err)
-				for _, row := range records {
-					row[virtualKey] = []any{}
-				}
+				slog.Warn("loadReverseRelations: m2m query error", "key", key, "error", err)
 				continue
 			}
-
-			// linkMap: currentRecordID → []sourceIDs
 			linkMap := make(map[string][]string)
-			allSourceIDs := make(map[string]struct{})
 			for rows.Next() {
 				vals, err := rows.Values()
 				if err != nil {
@@ -2462,102 +2440,53 @@ func (h *DynHandler) loadReverseRelFields(ctx context.Context, records []map[str
 				if len(vals) < 2 {
 					continue
 				}
-				srcID := fmt.Sprint(normalizeValue(vals[0]))
-				curID := fmt.Sprint(normalizeValue(vals[1]))
-				linkMap[curID] = append(linkMap[curID], srcID)
-				allSourceIDs[srcID] = struct{}{}
+				targetID := fmt.Sprint(normalizeValue(vals[0]))
+				sourceID := fmt.Sprint(normalizeValue(vals[1]))
+				linkMap[targetID] = append(linkMap[targetID], sourceID)
 			}
 			rows.Close()
-
-			// Batch-fetch display labels for source records.
-			labelMap := make(map[string]string)
-			if len(allSourceIDs) > 0 {
-				srcIDs := make([]string, 0, len(allSourceIDs))
-				for id := range allSourceIDs {
-					srcIDs = append(srcIDs, id)
-				}
-				srcPlaceholders := make([]string, len(srcIDs))
-				srcArgs := make([]any, len(srcIDs))
-				for i, id := range srcIDs {
-					srcPlaceholders[i] = fmt.Sprintf("$%d", i+1)
-					srcArgs[i] = id
-				}
-				qSrc := pgutil.QuoteQualified("data", rev.SourceCollectionSlug)
-				labelSQL := fmt.Sprintf("SELECT id, %s FROM %s WHERE id IN (%s) AND deleted_at IS NULL",
-					pgutil.QuoteIdent(dispField), qSrc, strings.Join(srcPlaceholders, ","))
-				lRows, err := h.pool.Query(ctx, labelSQL, srcArgs...)
-				if err == nil {
-					for lRows.Next() {
-						vals, err := lRows.Values()
-						if err != nil || len(vals) < 2 {
-							continue
-						}
-						labelMap[fmt.Sprint(normalizeValue(vals[0]))] = fmt.Sprint(vals[1])
-					}
-					lRows.Close()
-				}
-			}
-
-			// Assign to records.
 			for _, row := range records {
-				id, ok := row["id"].(string)
-				if !ok {
-					id = fmt.Sprint(row["id"])
-				}
-				if srcIDs, ok := linkMap[id]; ok {
-					items := make([]any, 0, len(srcIDs))
-					for _, sid := range srcIDs {
-						lbl := labelMap[sid]
-						if lbl == "" {
-							lbl = sid
-						}
-						items = append(items, map[string]any{"id": sid, "label": lbl})
-					}
-					row[virtualKey] = items
+				id := fmt.Sprint(row["id"])
+				if ids, ok := linkMap[id]; ok {
+					row[key] = map[string]any{"count": len(ids), "ids": ids, "label": rev.SourceCollectionLabel}
 				} else {
-					row[virtualKey] = []any{}
+					row[key] = map[string]any{"count": 0, "ids": []string{}, "label": rev.SourceCollectionLabel}
 				}
 			}
 		} else {
-			// 1:1 / 1:N reverse: query source table directly.
-			qSrc := pgutil.QuoteQualified("data", rev.SourceCollectionSlug)
-			srcSQL := fmt.Sprintf("SELECT id, %s, %s FROM %s WHERE %s IN (%s) AND deleted_at IS NULL",
-				pgutil.QuoteIdent(dispField), pgutil.QuoteIdent(rev.SourceFieldSlug),
-				qSrc, pgutil.QuoteIdent(rev.SourceFieldSlug), inClause)
-
-			rows, err := h.pool.Query(ctx, srcSQL, args...)
+			// Normal (1:1, 1:N) reverse: the source table has a FK column
+			// pointing to our record IDs.
+			srcTable := pgutil.QuoteQualified("data", rev.SourceCollectionSlug)
+			srcCol := pgutil.QuoteIdent(rev.SourceFieldSlug)
+			sql := fmt.Sprintf(
+				"SELECT %s, id FROM %s WHERE %s IN (%s) AND deleted_at IS NULL",
+				srcCol, srcTable, srcCol, phStr,
+			)
+			rows, err := h.pool.Query(ctx, sql, args...)
 			if err != nil {
-				slog.Warn("loadReverseRelFields: source query failed", "rev", virtualKey, "error", err)
-				for _, row := range records {
-					row[virtualKey] = []any{}
-				}
+				slog.Warn("loadReverseRelations: query error", "key", key, "error", err)
 				continue
 			}
-
-			// linkMap: targetRecordID → []items
-			linkMap := make(map[string][]any)
+			linkMap := make(map[string][]string)
 			for rows.Next() {
 				vals, err := rows.Values()
-				if err != nil || len(vals) < 3 {
+				if err != nil {
 					continue
 				}
-				srcID := fmt.Sprint(normalizeValue(vals[0]))
-				lbl := fmt.Sprint(vals[1])
-				fkVal := fmt.Sprint(normalizeValue(vals[2]))
-				linkMap[fkVal] = append(linkMap[fkVal], map[string]any{"id": srcID, "label": lbl})
+				if len(vals) < 2 {
+					continue
+				}
+				targetID := fmt.Sprint(normalizeValue(vals[0]))
+				sourceID := fmt.Sprint(normalizeValue(vals[1]))
+				linkMap[targetID] = append(linkMap[targetID], sourceID)
 			}
 			rows.Close()
-
-			// Assign to records.
 			for _, row := range records {
-				id, ok := row["id"].(string)
-				if !ok {
-					id = fmt.Sprint(row["id"])
-				}
-				if items, ok := linkMap[id]; ok {
-					row[virtualKey] = items
+				id := fmt.Sprint(row["id"])
+				if ids, ok := linkMap[id]; ok {
+					row[key] = map[string]any{"count": len(ids), "ids": ids, "label": rev.SourceCollectionLabel}
 				} else {
-					row[virtualKey] = []any{}
+					row[key] = map[string]any{"count": 0, "ids": []string{}, "label": rev.SourceCollectionLabel}
 				}
 			}
 		}

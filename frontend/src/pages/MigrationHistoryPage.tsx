@@ -14,8 +14,8 @@ import { formatError } from '@/lib/api'
 import type { SafetyLevel } from '@/lib/types'
 
 const OP_LABELS: Record<string, string> = {
-  create_collection: '앱 생성',
-  drop_collection: '앱 삭제',
+  create_collection: '시트 생성',
+  drop_collection: '시트 삭제',
   add_field: '항목 추가',
   alter_field: '항목 변경',
   drop_field: '항목 삭제',
