@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { AnimatePresence, motion } from 'framer-motion'
-import { LogOut, Network, Settings, User, ChevronDown } from 'lucide-react'
+import { LogOut, Network, Settings, User, ChevronDown, FileSpreadsheet, Download, FileText, Mail, Upload } from 'lucide-react'
 
 import { MICRO } from '@/lib/motion'
 
@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -23,7 +24,7 @@ type RibbonTab = '홈' | '보기' | '데이터'
 
 export default function ExcelRibbon() {
   const [activeTab, setActiveTab] = useState<RibbonTab>('홈')
-  const { toolbarContent, pageActions, sheetTabs, dataTabContent } = useExcelToolbar()
+  const { toolbarContent, pageActions, sheetTabs, dataTabContent, fileMenuActions } = useExcelToolbar()
   const { data: user } = useCurrentUser()
   const logout = useLogout()
   const navigate = useNavigate()
@@ -46,16 +47,39 @@ export default function ExcelRibbon() {
             <DropdownMenuItem onClick={() => navigate('/apps')}>
               앱 목록
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/my-tasks')}>
-              내 업무
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/automations')}>
-              자동화
-            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate('/ai')}>
               AI
             </DropdownMenuItem>
+            {fileMenuActions.onXlsxExport && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={fileMenuActions.onXlsxExport}>
+                  <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />
+                  Excel 내보내기
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={fileMenuActions.onCsvExport}>
+                  <Download className="h-3.5 w-3.5 mr-2" />
+                  CSV 내보내기
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={fileMenuActions.onPdfExport}>
+                  <FileText className="h-3.5 w-3.5 mr-2" />
+                  PDF 내보내기
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={fileMenuActions.onEmailReport}>
+                  <Mail className="h-3.5 w-3.5 mr-2" />
+                  이메일 리포트
+                </DropdownMenuItem>
+                {fileMenuActions.canManage && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={fileMenuActions.onImport}>
+                      <Upload className="h-3.5 w-3.5 mr-2" />
+                      가져오기
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </>
+            )}
             {isAdmin && (
               <>
                 <DropdownMenuSeparator />
@@ -114,10 +138,12 @@ export default function ExcelRibbon() {
                 <span className="text-[11px] text-[#333]">{user.name}</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44 rounded-none">
-                <DropdownMenuLabel className="font-normal">
-                  <p className="text-xs font-medium">{user.name}</p>
-                  <p className="text-[10px] text-[#666]">{ROLE_LABELS[user.role] ?? user.role}</p>
-                </DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="font-normal">
+                    <p className="text-xs font-medium">{user.name}</p>
+                    <p className="text-[10px] text-[#666]">{ROLE_LABELS[user.role] ?? user.role}</p>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate('/profile')}>
                   <User className="mr-2 h-3.5 w-3.5" />

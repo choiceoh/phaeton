@@ -6,9 +6,10 @@
  * State (editingCell, editValue, cellSaveState) lives in the Zustand grid store.
  * This hook is a thin wrapper that wires callbacks and keeps refs locally.
  */
-import { useCallback, useRef } from 'react'
+import { useCallback, useContext, useRef } from 'react'
+import { useStore } from 'zustand'
 
-import { useGridStore } from '@/stores/grid'
+import { GridStoreContext, type GridStore } from '@/stores/grid'
 import { selectEditingCell, selectEditValue, selectCellSaveState } from '@/stores/grid/selectors'
 import type { Field, FieldType } from '@/lib/types'
 
@@ -41,6 +42,8 @@ export interface UseInlineEditingOptions {
   emptyRowCount?: number
   /** Called when a cell in an empty row is committed. */
   onEmptyRowSave?: (fieldSlug: string, value: unknown) => Promise<void>
+  /** Optional store instance — pass when calling outside GridStoreContext.Provider. */
+  store?: GridStore
 }
 
 export function useInlineEditing({
@@ -53,14 +56,21 @@ export function useInlineEditing({
   moveTo,
   emptyRowCount = 0,
   onEmptyRowSave,
+  store,
 }: UseInlineEditingOptions) {
+  // ── Store resolution ────────────────────────────────────────────────
+  // Use the explicitly passed store, or fall back to context.
+  const ctxStore = useContext(GridStoreContext)
+  const resolvedStore = store ?? ctxStore
+  if (!resolvedStore) throw new Error('useInlineEditing requires a GridStore via `store` prop or GridStoreContext.Provider')
+
   // ── Store subscriptions ────────────────────────────────────────────
-  const editingCell = useGridStore(selectEditingCell)
-  const editValue = useGridStore(selectEditValue)
-  const cellSaveState = useGridStore(selectCellSaveState)
-  const setEditingCell = useGridStore((s) => s.setEditingCell)
-  const setEditValue = useGridStore((s) => s.setEditValue)
-  const updateCellSaveState = useGridStore((s) => s.updateCellSaveState)
+  const editingCell = useStore(resolvedStore, selectEditingCell)
+  const editValue = useStore(resolvedStore, selectEditValue)
+  const cellSaveState = useStore(resolvedStore, selectCellSaveState)
+  const setEditingCell = useStore(resolvedStore, (s) => s.setEditingCell)
+  const setEditValue = useStore(resolvedStore, (s) => s.setEditValue)
+  const updateCellSaveState = useStore(resolvedStore, (s) => s.updateCellSaveState)
 
   const originalValueRef = useRef<unknown>(null)
 

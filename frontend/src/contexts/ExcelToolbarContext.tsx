@@ -1,5 +1,14 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
+export interface FileMenuActions {
+  onXlsxExport?: () => void
+  onCsvExport?: () => void
+  onPdfExport?: () => void
+  onEmailReport?: () => void
+  onImport?: () => void
+  canManage?: boolean
+}
+
 interface ExcelToolbarState {
   /** Toolbar content from AppViewPage rendered inside the ribbon */
   toolbarContent: ReactNode
@@ -25,6 +34,9 @@ interface ExcelToolbarState {
   /** Data tab content (sort/filter controls) — rendered in ExcelRibbon */
   dataTabContent: ReactNode
   setDataTabContent: (content: ReactNode) => void
+  /** File menu actions (export/import) — set by AppViewPage */
+  fileMenuActions: FileMenuActions
+  setFileMenuActions: (actions: FileMenuActions) => void
 }
 
 const ExcelToolbarContext = createContext<ExcelToolbarState | null>(null)
@@ -38,6 +50,7 @@ export function ExcelToolbarProvider({ children }: { children: ReactNode }) {
   const [readOnlyBanner, setReadOnlyBanner] = useState<ReactNode>(null)
   const [statusBar, setStatusBar] = useState<ReactNode>(null)
   const [dataTabContent, setDataTabContent] = useState<ReactNode>(null)
+  const [fileMenuActions, setFileMenuActions] = useState<FileMenuActions>({})
 
   return (
     <ExcelToolbarContext.Provider
@@ -50,6 +63,7 @@ export function ExcelToolbarProvider({ children }: { children: ReactNode }) {
         readOnlyBanner, setReadOnlyBanner,
         statusBar, setStatusBar,
         dataTabContent, setDataTabContent,
+        fileMenuActions, setFileMenuActions,
       }}
     >
       {children}
