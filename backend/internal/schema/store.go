@@ -25,29 +25,31 @@ func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // ---------- Collection ----------
 
-const colCols = `id, slug, label, description, icon, is_system, process_enabled, sort_order, access_config, created_at, updated_at, created_by`
+const colCols = `id, slug, label, description, icon, is_system, process_enabled, sort_order, access_config, created_at, updated_at, created_by, workbook_id`
 
 // scanCollection reads a single row matching the colCols column list into a Collection.
-// It handles NULL-able optional columns (description, icon, created_by) via pointer intermediaries
+// It handles NULL-able optional columns (description, icon, created_by, workbook_id) via pointer intermediaries
 // and unmarshals the access_config JSONB column into the AccessConfig struct.
 func scanCollection(row pgx.Row) (Collection, error) {
 	var (
-		c         Collection
-		id        pgtype.UUID
-		createdBy pgtype.UUID
-		desc      *string
-		icon      *string
-		acRaw     []byte
+		c          Collection
+		id         pgtype.UUID
+		createdBy  pgtype.UUID
+		workbookID pgtype.UUID
+		desc       *string
+		icon       *string
+		acRaw      []byte
 	)
 	err := row.Scan(
 		&id, &c.Slug, &c.Label, &desc, &icon,
-		&c.IsSystem, &c.ProcessEnabled, &c.SortOrder, &acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy,
+		&c.IsSystem, &c.ProcessEnabled, &c.SortOrder, &acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy, &workbookID,
 	)
 	if err != nil {
 		return Collection{}, err
 	}
 	c.ID = uuidStr(id)
 	c.CreatedBy = uuidStr(createdBy)
+	c.WorkbookID = uuidStr(workbookID)
 	if desc != nil {
 		c.Description = *desc
 	}
@@ -147,11 +149,15 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 	if req.CreatedBy != "" {
 		createdByUUID, _ = parseUUID(req.CreatedBy)
 	}
+	var workbookUUID pgtype.UUID
+	if req.WorkbookID != "" {
+		workbookUUID, _ = parseUUID(req.WorkbookID)
+	}
 	err := tx.QueryRow(ctx, `
-		INSERT INTO _meta.collections (slug, label, description, icon, is_system, access_config, created_by)
-		VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'), $7)
+		INSERT INTO _meta.collections (slug, label, description, icon, is_system, access_config, created_by, workbook_id)
+		VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'), $7, $8)
 		RETURNING id, created_at, updated_at`,
-		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), req.IsSystem, jsonOrNil(acJSON), createdByUUID,
+		req.Slug, req.Label, nilIfEmpty(req.Description), nilIfEmpty(req.Icon), req.IsSystem, jsonOrNil(acJSON), createdByUUID, workbookUUID,
 	).Scan(&id, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return Collection{}, fmt.Errorf("insert collection: %w", err)
@@ -163,6 +169,7 @@ func (s *Store) CreateCollectionTx(ctx context.Context, tx pgx.Tx, req *CreateCo
 	c.Icon = req.Icon
 	c.IsSystem = req.IsSystem
 	c.CreatedBy = req.CreatedBy
+	c.WorkbookID = req.WorkbookID
 	return c, nil
 }
 
@@ -211,6 +218,20 @@ func (s *Store) UpdateCollection(ctx context.Context, id string, req *UpdateColl
 		args = append(args, acJSON)
 		argIdx++
 	}
+	if req.WorkbookID != nil {
+		sets = append(sets, fmt.Sprintf("workbook_id = $%d", argIdx))
+		if *req.WorkbookID == "" {
+			// Empty string → clear workbook assignment.
+			args = append(args, nil)
+		} else {
+			wbUUID, err := parseUUID(*req.WorkbookID)
+			if err != nil {
+				return Collection{}, fmt.Errorf("%w: invalid workbook_id", ErrInvalidInput)
+			}
+			args = append(args, wbUUID)
+		}
+		argIdx++
+	}
 
 	if len(sets) == 0 {
 		return s.GetCollection(ctx, id)
@@ -247,6 +268,151 @@ func (s *Store) DeleteCollectionTx(ctx context.Context, tx pgx.Tx, id string) er
 		return fmt.Errorf("collection %s: %w", id, ErrNotFound)
 	}
 	return nil
+}
+
+// ---------- Workbook ----------
+
+func (s *Store) ListWorkbooks(ctx context.Context) ([]Workbook, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, label, icon, sort_order, created_at, updated_at, created_by
+		 FROM _meta.workbooks ORDER BY sort_order, label`)
+	if err != nil {
+		return nil, fmt.Errorf("list workbooks: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Workbook
+	for rows.Next() {
+		wb, err := scanWorkbook(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan workbook: %w", err)
+		}
+		out = append(out, wb)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CreateWorkbook(ctx context.Context, req *CreateWorkbookReq, createdBy string) (Workbook, error) {
+	var (
+		wb        Workbook
+		id        pgtype.UUID
+		cbUUID    pgtype.UUID
+	)
+	if createdBy != "" {
+		cbUUID, _ = parseUUID(createdBy)
+	}
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO _meta.workbooks (label, icon, created_by)
+		VALUES ($1, $2, $3)
+		RETURNING id, sort_order, created_at, updated_at`,
+		req.Label, nilIfEmpty(req.Icon), cbUUID,
+	).Scan(&id, &wb.SortOrder, &wb.CreatedAt, &wb.UpdatedAt)
+	if err != nil {
+		return Workbook{}, fmt.Errorf("insert workbook: %w", err)
+	}
+	wb.ID = uuidStr(id)
+	wb.Label = req.Label
+	wb.Icon = req.Icon
+	wb.CreatedBy = createdBy
+	return wb, nil
+}
+
+func (s *Store) UpdateWorkbook(ctx context.Context, id string, req *UpdateWorkbookReq) (Workbook, error) {
+	uid, err := parseUUID(id)
+	if err != nil {
+		return Workbook{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+
+	sets := []string{}
+	args := []any{}
+	argIdx := 1
+
+	if req.Label != nil {
+		sets = append(sets, fmt.Sprintf("label = $%d", argIdx))
+		args = append(args, *req.Label)
+		argIdx++
+	}
+	if req.Icon != nil {
+		sets = append(sets, fmt.Sprintf("icon = $%d", argIdx))
+		args = append(args, nilIfEmpty(*req.Icon))
+		argIdx++
+	}
+	if req.SortOrder != nil {
+		sets = append(sets, fmt.Sprintf("sort_order = $%d", argIdx))
+		args = append(args, *req.SortOrder)
+		argIdx++
+	}
+
+	if len(sets) == 0 {
+		return s.getWorkbook(ctx, id)
+	}
+
+	query := fmt.Sprintf(
+		"UPDATE _meta.workbooks SET %s, updated_at = now() WHERE id = $%d RETURNING id, label, icon, sort_order, created_at, updated_at, created_by",
+		joinStrings(sets, ", "), argIdx,
+	)
+	args = append(args, uid)
+
+	row := s.pool.QueryRow(ctx, query, args...)
+	wb, err := scanWorkbook(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Workbook{}, fmt.Errorf("workbook %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return Workbook{}, fmt.Errorf("update workbook: %w", err)
+	}
+	return wb, nil
+}
+
+func (s *Store) DeleteWorkbook(ctx context.Context, id string) error {
+	uid, err := parseUUID(id)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	tag, err := s.pool.Exec(ctx, `DELETE FROM _meta.workbooks WHERE id = $1`, uid)
+	if err != nil {
+		return fmt.Errorf("delete workbook: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("workbook %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+func (s *Store) getWorkbook(ctx context.Context, id string) (Workbook, error) {
+	uid, err := parseUUID(id)
+	if err != nil {
+		return Workbook{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	row := s.pool.QueryRow(ctx,
+		`SELECT id, label, icon, sort_order, created_at, updated_at, created_by FROM _meta.workbooks WHERE id = $1`, uid)
+	wb, err := scanWorkbook(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Workbook{}, fmt.Errorf("workbook %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return Workbook{}, fmt.Errorf("get workbook: %w", err)
+	}
+	return wb, nil
+}
+
+func scanWorkbook(row pgx.Row) (Workbook, error) {
+	var (
+		wb        Workbook
+		id        pgtype.UUID
+		icon      *string
+		createdBy pgtype.UUID
+	)
+	err := row.Scan(&id, &wb.Label, &icon, &wb.SortOrder, &wb.CreatedAt, &wb.UpdatedAt, &createdBy)
+	if err != nil {
+		return Workbook{}, err
+	}
+	wb.ID = uuidStr(id)
+	wb.CreatedBy = uuidStr(createdBy)
+	if icon != nil {
+		wb.Icon = *icon
+	}
+	return wb, nil
 }
 
 // ---------- Field ----------

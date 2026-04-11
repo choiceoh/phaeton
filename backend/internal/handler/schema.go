@@ -148,6 +148,66 @@ func (h *SchemaHandler) DeleteCollection(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// --- Workbooks ---
+
+func (h *SchemaHandler) ListWorkbooks(w http.ResponseWriter, r *http.Request) {
+	wbs, err := h.store.ListWorkbooks(r.Context())
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	if wbs == nil {
+		wbs = []schema.Workbook{}
+	}
+	writeJSON(w, http.StatusOK, wbs)
+}
+
+func (h *SchemaHandler) CreateWorkbook(w http.ResponseWriter, r *http.Request) {
+	var req schema.CreateWorkbookReq
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Label == "" {
+		writeError(w, http.StatusBadRequest, "label is required")
+		return
+	}
+	var createdBy string
+	if user, ok := middleware.GetUser(r.Context()); ok {
+		createdBy = user.UserID
+	}
+	wb, err := h.store.CreateWorkbook(r.Context(), &req, createdBy)
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, wb)
+}
+
+func (h *SchemaHandler) UpdateWorkbook(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "workbookId")
+	var req schema.UpdateWorkbookReq
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	wb, err := h.store.UpdateWorkbook(r.Context(), id, &req)
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, wb)
+}
+
+func (h *SchemaHandler) DeleteWorkbook(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "workbookId")
+	if err := h.store.DeleteWorkbook(r.Context(), id); err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 // --- Fields ---
 
 func (h *SchemaHandler) AddField(w http.ResponseWriter, r *http.Request) {

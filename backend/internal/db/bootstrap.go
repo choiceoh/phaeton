@@ -373,6 +373,19 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_webhook_events_topic_time ON _meta.webhook_events(topic, received_at DESC)`,
 	)
 
+	// --- _meta.workbooks ---
+	stmts = append(stmts,
+		`CREATE TABLE IF NOT EXISTS _meta.workbooks (
+			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			label      VARCHAR(255) NOT NULL,
+			icon       VARCHAR(63),
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			created_by UUID
+		)`,
+	)
+
 	// --- incremental schema evolution (safe for existing deployments) ---
 	alters := []string{
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS process_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
@@ -381,6 +394,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE _meta.fields ADD COLUMN IF NOT EXISTS height SMALLINT NOT NULL DEFAULT 1`,
 		`ALTER TABLE _meta.process_transitions ADD COLUMN IF NOT EXISTS allowed_user_ids UUID[] NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE _meta.webhook_events ADD COLUMN IF NOT EXISTS error_message TEXT`,
+		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS workbook_id UUID REFERENCES _meta.workbooks(id) ON DELETE SET NULL`,
 	}
 
 	for _, stmt := range append(stmts, alters...) {

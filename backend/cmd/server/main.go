@@ -433,6 +433,15 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Get("/relationship-graph", cfg.schemaH.RelationshipGraph)
 			r.Get("/collections/{id}/process/transitions", cfg.schemaH.AvailableTransitions)
 
+			// Workbooks: read for all, write for director/pm.
+			r.Get("/workbooks", cfg.schemaH.ListWorkbooks)
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("director", "pm"))
+				r.Post("/workbooks", cfg.schemaH.CreateWorkbook)
+				r.Patch("/workbooks/{workbookId}", cfg.schemaH.UpdateWorkbook)
+				r.Delete("/workbooks/{workbookId}", cfg.schemaH.DeleteWorkbook)
+			})
+
 			// Create collection: all authenticated users.
 			r.Post("/collections", cfg.schemaH.CreateCollection)
 

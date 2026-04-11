@@ -1,19 +1,24 @@
 import type { FieldType } from './types'
 
-// -- 용어 한국어화 (테이블→앱, 필드→항목, 레코드→데이터) --
+// -- 용어 한국어화 (시트/워크북/항목/데이터) --
 export const TERM = {
-  collection: '앱',
-  collections: '앱 목록',
+  collection: '시트',
+  collections: '시트 목록',
   field: '항목',
   fields: '항목',
   record: '데이터',
   records: '데이터',
-  newCollection: '새 앱 만들기',
+  newCollection: '새 시트 만들기',
   newRecord: '새 데이터',
-  noCollections: '아직 앱이 없습니다',
-  noCollectionsDesc: '새 앱을 만들어 데이터 관리를 시작하세요.',
+  noCollections: '아직 시트가 없습니다',
+  noCollectionsDesc: '새 시트를 만들어 데이터 관리를 시작하세요.',
   noRecords: '아직 데이터가 없습니다',
   noRecordsDesc: '"새 데이터" 버튼을 눌러 첫 데이터를 입력하세요.',
+  workbook: '워크북',
+  workbooks: '워크북',
+  newWorkbook: '새 워크북',
+  noWorkbooks: '워크북 없음',
+  uncategorized: '미분류',
 } as const
 
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {

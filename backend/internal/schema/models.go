@@ -165,10 +165,22 @@ type Collection struct {
 	ProcessEnabled bool         `json:"process_enabled"` // When true, entries have a _status column and follow a workflow (프로세스 관리).
 	SortOrder      int          `json:"sort_order"`      // Display ordering in the sidebar app list.
 	AccessConfig   AccessConfig `json:"access_config"`   // Role-based + row-level security configuration.
+	WorkbookID     string       `json:"workbook_id,omitempty"` // Optional workbook grouping.
 	CreatedAt      time.Time    `json:"created_at"`
 	UpdatedAt      time.Time    `json:"updated_at"`
 	CreatedBy      string       `json:"created_by,omitempty"`
 	Fields         []Field      `json:"fields,omitempty"` // Populated by GetCollection / cache; empty for list queries.
+}
+
+// Workbook groups related collections (sheets) together.
+type Workbook struct {
+	ID        string    `json:"id"`
+	Label     string    `json:"label"`
+	Icon      string    `json:"icon,omitempty"`
+	SortOrder int       `json:"sort_order"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	CreatedBy string    `json:"created_by,omitempty"`
 }
 
 // Field defines a single column inside a collection.
@@ -243,13 +255,14 @@ func parseUUID(s string) (pgtype.UUID, error) {
 // in partial-update requests. The CreatedBy field uses `json:"-"` because it is set
 // server-side by the handler from the JWT claims, never from client JSON.
 
-// CreateCollectionReq is the input for creating a new collection (app).
+// CreateCollectionReq is the input for creating a new collection (sheet).
 type CreateCollectionReq struct {
 	Slug         string          `json:"slug"`
 	Label        string          `json:"label"`
 	Description  string          `json:"description,omitempty"`
 	Icon         string          `json:"icon,omitempty"`
 	IsSystem     bool            `json:"is_system,omitempty"`
+	WorkbookID   string          `json:"workbook_id,omitempty"`
 	AccessConfig *AccessConfig   `json:"access_config,omitempty"`
 	Fields       []CreateFieldIn `json:"fields,omitempty"`
 	CreatedBy    string          `json:"-"` // set by handler, not from JSON
@@ -283,6 +296,20 @@ type UpdateCollectionReq struct {
 	SortOrder      *int          `json:"sort_order,omitempty"`
 	ProcessEnabled *bool         `json:"process_enabled,omitempty"`
 	AccessConfig   *AccessConfig `json:"access_config,omitempty"`
+	WorkbookID     *string       `json:"workbook_id"` // nullable — empty string clears the workbook
+}
+
+// --- Workbook DTOs ---
+
+type CreateWorkbookReq struct {
+	Label string `json:"label"`
+	Icon  string `json:"icon,omitempty"`
+}
+
+type UpdateWorkbookReq struct {
+	Label     *string `json:"label,omitempty"`
+	Icon      *string `json:"icon,omitempty"`
+	SortOrder *int    `json:"sort_order,omitempty"`
 }
 
 type UpdateFieldReq struct {

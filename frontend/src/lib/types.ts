@@ -290,10 +290,22 @@ export interface Collection {
   process_enabled: boolean
   sort_order: number
   access_config: AccessConfig
+  workbook_id?: string
   created_at: string
   updated_at: string
   created_by?: string
   fields?: Field[]
+}
+
+/** Workbook groups related collections (sheets) together. */
+export interface Workbook {
+  id: string
+  label: string
+  icon?: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+  created_by?: string
 }
 
 /**
