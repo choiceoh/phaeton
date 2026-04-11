@@ -80,7 +80,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { useHotkeys } from '@/hooks/useHotkeys'
-import { useCollection, useUpdateField } from '@/hooks/useCollections'
+import { useCollection, useCollectionCounts, useUpdateField } from '@/hooks/useCollections'
 import {
   useBatchUpdateEntry,
   useBulkDeleteEntries,
@@ -89,6 +89,8 @@ import {
   useTotals,
   useUpdateEntry,
 } from '@/hooks/useEntries'
+import { useLocalEntries } from '@/hooks/useLocalEntries'
+import { useDebouncedBatchSave } from '@/hooks/useDebouncedBatchSave'
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
@@ -225,19 +227,36 @@ export default function AppViewPage() {
     return Object.keys(f).length > 0 ? f : undefined
   }, [filterGroup, filterConditions, searchText])
 
-  const {
-    data: list,
-    isLoading: entriesLoading,
-    isError: entriesError,
-    error: entriesErr,
-    refetch,
-  } = useEntries(collection?.slug, {
-    page,
-    limit,
-    sort: sortParam,
-    expand,
-    filters,
-  })
+  // Determine local vs server mode based on row count.
+  const { data: collectionCounts } = useCollectionCounts()
+  const rowCount = collectionCounts?.[collection?.slug ?? ''] ?? Infinity
+  const isLocalMode = rowCount <= 5000
+
+  // Local mode: all data fetched once, filter/sort/paginate client-side.
+  const localResult = useLocalEntries(
+    isLocalMode ? collection?.slug : undefined,
+    {
+      page,
+      limit,
+      filterGroup,
+      sortItems,
+      sorting,
+      searchText,
+      fields: collection?.fields ?? [],
+    },
+  )
+
+  // Server mode: existing paginated approach.
+  const serverResult = useEntries(
+    !isLocalMode ? collection?.slug : undefined,
+    { page, limit, sort: sortParam, expand, filters },
+  )
+
+  const list = isLocalMode ? localResult.data : serverResult.data
+  const entriesLoading = isLocalMode ? localResult.isLoading : serverResult.isLoading
+  const entriesError = isLocalMode ? localResult.isError : serverResult.isError
+  const entriesErr = isLocalMode ? localResult.error : serverResult.error
+  const refetch = isLocalMode ? localResult.refetch : serverResult.refetch
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
@@ -246,6 +265,12 @@ export default function AppViewPage() {
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
   const retryToast = useRetryToast()
   const onConflictError = useConflictAwareUpdate(refetch)
+
+  // Debounced batch save for cell edits.
+  const { queueEdit } = useDebouncedBatchSave(
+    collection?.slug ?? '',
+    { isLocalMode },
+  )
 
   // Multi-select state for bulk operations.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
@@ -1017,7 +1042,17 @@ export default function AppViewPage() {
             onLimitChange={setLimit}
             onSortChange={handleHeaderSortChange}
             onRowClick={handleEntryClick}
-            updateEntry={async (params) => { await updateEntry.mutateAsync(params) }}
+            updateEntry={async (params) => {
+              if (isLocalMode) {
+                // Debounced batch save: queue the edit for batching.
+                // Extract field edits (exclude system fields).
+                for (const [key, val] of Object.entries(params.body)) {
+                  queueEdit(params.id, key, val)
+                }
+              } else {
+                await updateEntry.mutateAsync(params)
+              }
+            }}
             createEntry={async (body) => { await createEntry.mutateAsync(body) }}
             deleteEntry={(id) => bulkDelete.mutate([id])}
             batchUpdateEntry={(updates) => batchUpdateEntry.mutate(updates)}
