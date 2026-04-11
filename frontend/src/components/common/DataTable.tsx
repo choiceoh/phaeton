@@ -74,8 +74,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { CellPosition } from '@/hooks/useGridNavigation'
-import { type SelectionRange, isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
+import type { CellPosition, SelectionRange } from '@/hooks/useGridNavigation'
+import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
+import { useExcelToolbarOptional } from '@/contexts/ExcelToolbarContext'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
 import { useCellDragMove } from '@/hooks/useCellDragMove'
 import { useFillHandle } from '@/hooks/useFillHandle'
@@ -88,7 +89,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import EmptyState from './EmptyState'
 import GridCell from './GridCell'
 import GridContextMenu from './GridContextMenu'
-import type { EntryRow, Field } from '@/lib/types'
+import type { CellFormat, EntryRow, Field } from '@/lib/types'
 
 /** Convert a 0-based column index to Excel-style letter (0→A, 25→Z, 26→AA). */
 function colIndexToLetter(idx: number): string {
@@ -199,6 +200,11 @@ interface Props<T> {
   /** Per-column filters for client-side filtering. */
   columnFilters?: { id: string; value: unknown }[]
 
+  /** Called when active cell or selection changes (for formatting toolbar). */
+  onActiveCellChange?: (cell: CellPosition | null, selection: SelectionRange | null) => void
+  /** Called when formatting shortcuts (Ctrl+B, Ctrl+I) are pressed. */
+  onFormatShortcut?: (key: 'bold' | 'italic') => void
+
   // --- Free grid mode (empty rows below data) ---
   /** Number of empty rows to show below data (free grid mode). */
   emptyRowCount?: number
@@ -214,6 +220,12 @@ interface Props<T> {
   onAddColumn?: () => void
   /** Whether column management is enabled. */
   columnManagement?: boolean
+  /** Free grid mode: edits are local-only, no server calls */
+  freeGridMode?: boolean
+  /** Returns true if a cell has been locally modified but not saved */
+  cellDirtyFn?: (rowId: string, fieldSlug: string) => boolean
+  /** Returns error message for a cell (from coercion failure on save attempt) */
+  cellErrorFn?: (rowId: string, fieldSlug: string) => string | null
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -280,8 +292,13 @@ export function DataTable<T>({
   onFillIntoEmptyRows,
   onRenameColumn,
   onDeleteColumn,
+  onActiveCellChange,
+  onFormatShortcut,
   onAddColumn,
   columnManagement,
+  freeGridMode,
+  cellDirtyFn,
+  cellErrorFn,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
@@ -500,8 +517,15 @@ export function DataTable<T>({
     onClearCell: editable ? onClearCell : undefined,
   })
 
-  // Auto-scroll during drag operations.
-  const autoScroll = useAutoScroll(scrollRef)
+  // Ref-based onTick for auto-scroll (avoids circular dependency with hooks).
+  const autoScrollTickRef = useRef<(x: number, y: number) => void>(() => {})
+
+  // Auto-scroll with onTick that dispatches to the active drag operation.
+  const autoScroll = useAutoScroll(scrollRef, {
+    onTick: useCallback((x: number, y: number) => {
+      autoScrollTickRef.current(x, y)
+    }, []),
+  })
 
   // Fill handle hook.
   const fillHandle = useFillHandle({
@@ -533,6 +557,18 @@ export function DataTable<T>({
 
   // Copied range state for marching ants feedback.
   const [copiedRange, setCopiedRange] = useState<SelectionRange | null>(null)
+
+  // Notify parent of active cell / selection changes (for formatting toolbar).
+  useEffect(() => {
+    onActiveCellChange?.(grid.activeCell, grid.selection)
+  }, [grid.activeCell, grid.selection, onActiveCellChange])
+
+  // Wire up auto-scroll onTick to dispatch to whichever drag is active.
+  autoScrollTickRef.current = (x: number, y: number) => {
+    grid.updateDragSelection(x, y)
+    fillHandle.updateFillPreview(x, y)
+    cellDrag.updateDragGhost(x, y, cellDrag.lastCtrlRef.current)
+  }
 
   // Clipboard: copy & paste.
   const handleClipboard = useCallback(
@@ -619,10 +655,23 @@ export function DataTable<T>({
       if (e.key === 'Escape' && copiedRange) {
         setCopiedRange(null)
       }
+      // Formatting shortcuts: Ctrl/Cmd + B/I
+      if (onFormatShortcut && (e.ctrlKey || e.metaKey) && !isEditingCell && grid.activeCell) {
+        if (e.key === 'b' || e.key === 'B') {
+          e.preventDefault()
+          onFormatShortcut('bold')
+          return
+        }
+        if (e.key === 'i' || e.key === 'I') {
+          e.preventDefault()
+          onFormatShortcut('italic')
+          return
+        }
+      }
       handleClipboard(e)
       grid.handleKeyDown(e)
     },
-    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown, copiedRange],
+    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown, copiedRange, onFormatShortcut, grid.activeCell],
   )
 
   // Clear grid state when data changes (page navigation).
@@ -844,6 +893,7 @@ export function DataTable<T>({
                         zIndex: isPinned ? 2 : undefined,
                       }}
                       onContextMenu={(e) => handleHeaderContextMenu(e, header.column)}
+                      data-col-idx={headerIdx}
                       onMouseDown={!isSystemCol ? (e) => {
                         if (e.button !== 0) return
                         // Select entire column on click (don't conflict with sort/resize)
@@ -851,21 +901,23 @@ export function DataTable<T>({
                         if (target.closest('.cursor-col-resize')) return
                         grid.selectColumn(headerIdx, e.shiftKey)
                         e.preventDefault()
+                        document.body.style.userSelect = 'none'
 
-                        // Support drag across headers
+                        // Support drag across headers with auto-scroll
                         const handleHeaderDragMove = (ev: MouseEvent) => {
+                          autoScroll.update(ev.clientX, ev.clientY)
                           const el = document.elementFromPoint(ev.clientX, ev.clientY)
                           if (!el) return
-                          const th = (el as HTMLElement).closest('[role="columnheader"]') as HTMLElement | null
+                          const th = (el as HTMLElement).closest('[data-col-idx]') as HTMLElement | null
                           if (!th) return
-                          // Find the header index
-                          const allHeaders = Array.from(th.parentElement?.children ?? [])
-                          const idx = allHeaders.indexOf(th)
-                          if (idx >= 0) grid.selectColumn(idx, true)
+                          const idx = parseInt(th.dataset.colIdx ?? '', 10)
+                          if (!isNaN(idx)) grid.selectColumn(idx, true)
                         }
                         const handleHeaderDragUp = () => {
                           document.removeEventListener('mousemove', handleHeaderDragMove)
                           document.removeEventListener('mouseup', handleHeaderDragUp)
+                          document.body.style.userSelect = ''
+                          autoScroll.stop()
                         }
                         document.addEventListener('mousemove', handleHeaderDragMove)
                         document.addEventListener('mouseup', handleHeaderDragUp)
@@ -1106,6 +1158,11 @@ export function DataTable<T>({
                     const dgLeft = inDragGhost && colIdx === dg.startCol
                     const dgRight = inDragGhost && colIdx === dg.endCol
 
+                    // Free grid dirty/error indicators
+                    const rowId = String((row.original as EntryRow).id)
+                    const isCellDirty = freeGridMode && cellDirtyFn && !isRowNum && cellDirtyFn(rowId, cell.column.id)
+                    const cellError = freeGridMode && cellErrorFn && !isRowNum ? cellErrorFn(rowId, cell.column.id) : null
+
                     // Is this cell the bottom-right corner of the active cell/selection? (fill handle position)
                     const isFillHandleCell = editable && onFill && !isRowNum && (() => {
                       if (grid.selection) {
@@ -1118,19 +1175,30 @@ export function DataTable<T>({
                       return isActive
                     })()
 
+                    // Cell formatting from _cell_formats.
+                    const cellFmt: CellFormat | undefined = !isRowNum
+                      ? (row.original as EntryRow)._cell_formats?.[cell.column.id]
+                      : undefined
+
                     return (
                       <TableCell
                         key={cell.id}
                         role="gridcell"
                         data-row={rowIdx}
                         data-col={colIdx}
-                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inCopy ? 'copy-range-cell' : ''} ${cpTop ? 'copy-edge-top' : ''} ${cpBottom ? 'copy-edge-bottom' : ''} ${cpLeft ? 'copy-edge-left' : ''} ${cpRight ? 'copy-edge-right' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''}`}
+                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inCopy ? 'copy-range-cell' : ''} ${cpTop ? 'copy-edge-top' : ''} ${cpBottom ? 'copy-edge-bottom' : ''} ${cpLeft ? 'copy-edge-left' : ''} ${cpRight ? 'copy-edge-right' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''} ${cellError ? 'cell-error' : ''}`}
+                        title={cellError ?? undefined}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
                           left: isPinned === 'left' ? cell.column.getStart('left') : undefined,
                           right: isPinned === 'right' ? cell.column.getAfter('right') : undefined,
                           zIndex: isPinned ? 1 : undefined,
+                          ...(cellFmt?.bg && !isSelected ? { backgroundColor: cellFmt.bg } : {}),
+                          ...(cellFmt?.color ? { color: cellFmt.color } : {}),
+                          ...(cellFmt?.fontSize ? { fontSize: `${cellFmt.fontSize}px` } : {}),
+                          ...(cellFmt?.bold ? { fontWeight: 600 } : {}),
+                          ...(cellFmt?.italic ? { fontStyle: 'italic' as const } : {}),
                         }}
                         onMouseMove={editable && onCellMove ? (e) => cellDrag.handleCellMouseMove(e, rowIdx, colIdx) : undefined}
                         onMouseDown={(e) => {
@@ -1139,8 +1207,10 @@ export function DataTable<T>({
                           if (isRowNum) {
                             grid.selectRow(rowIdx, e.shiftKey)
                             e.preventDefault()
-                            // Support drag across row numbers
+                            document.body.style.userSelect = 'none'
+                            // Support drag across row numbers with auto-scroll
                             const handleRowDragMove = (ev: MouseEvent) => {
+                              autoScroll.update(ev.clientX, ev.clientY)
                               const el = document.elementFromPoint(ev.clientX, ev.clientY)
                               if (!el) return
                               const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
@@ -1151,6 +1221,8 @@ export function DataTable<T>({
                             const handleRowDragUp = () => {
                               document.removeEventListener('mousemove', handleRowDragMove)
                               document.removeEventListener('mouseup', handleRowDragUp)
+                              document.body.style.userSelect = ''
+                              autoScroll.stop()
                             }
                             document.addEventListener('mousemove', handleRowDragMove)
                             document.addEventListener('mouseup', handleRowDragUp)
@@ -1194,6 +1266,9 @@ export function DataTable<T>({
                           }
                         }}
                       >
+                        {isCellDirty && (
+                          <span className="absolute top-0 left-0 w-0 h-0 border-l-[5px] border-t-[5px] border-l-blue-500 border-t-blue-500 border-r-[5px] border-b-[5px] border-r-transparent border-b-transparent z-[1]" />
+                        )}
                         {editable && getFieldForCol ? (
                           <GridCell
                             field={getFieldForCol(colIdx)}
@@ -1204,7 +1279,7 @@ export function DataTable<T>({
                             onCommit={onCommitEdit ?? (() => {})}
                             onCancel={onCancelEdit ?? (() => {})}
                             onKeyDown={onEditKeyDown ?? (() => {})}
-                            saveState={cellSaveState?.get(`${(row.original as EntryRow).id}:${cell.column.id}`) ?? null}
+                            saveState={freeGridMode ? null : (cellSaveState?.get(`${(row.original as EntryRow).id}:${cell.column.id}`) ?? null)}
                             displayContent={flexRender(cell.column.columnDef.cell, cell.getContext())}
                           />
                         ) : (
@@ -1318,9 +1393,9 @@ export function DataTable<T>({
       )}
       </div>
 
-      {/* Status bar (Excel-like) */}
+      {/* Status bar — pushed to ExcelToolbarContext for SheetTabBar */}
       {editable && (
-        <StatusBar
+        <StatusBarBridge
           selection={grid.selection}
           activeCell={grid.activeCell}
           data={data as Record<string, unknown>[]}
@@ -1552,8 +1627,8 @@ export function DataTable<T>({
         />
       )}
 
-      {/* Pagination footer */}
-      {total !== undefined && total > 0 && (
+      {/* Pagination footer — hidden in client mode (all data loaded locally) */}
+      {!clientMode && total !== undefined && total > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <span>
@@ -1738,8 +1813,9 @@ function NewRowCell({
   }
 }
 
-// Excel-like status bar with selection info and numeric aggregates.
-function StatusBar({
+// StatusBarBridge — computes selection stats and pushes content to
+// ExcelToolbarContext so SheetTabBar can render it on the same row.
+function StatusBarBridge({
   selection,
   activeCell,
   data,
@@ -1752,6 +1828,9 @@ function StatusBar({
   colIds: string[]
   fields?: Field[]
 }) {
+  const ctx = useExcelToolbarOptional()
+  const setStatusBar = ctx?.setStatusBar
+
   const stats = useMemo(() => {
     if (!selection) return null
     const r1 = Math.min(selection.startRow, selection.endRow)
@@ -1761,7 +1840,6 @@ function StatusBar({
     const rows = r2 - r1 + 1
     const cols = c2 - c1 + 1
 
-    // Collect numeric values from selected cells.
     const numericTypes = new Set(['number', 'integer', 'decimal'])
     const nums: number[] = []
     for (let r = r1; r <= r2; r++) {
@@ -1791,26 +1869,38 @@ function StatusBar({
     return { rows, cols, nums, sum, avg }
   }, [selection, data, colIds, fields])
 
-  if (!selection && !activeCell) return null
+  useEffect(() => {
+    if (!setStatusBar) return
+    if (!selection && !activeCell) {
+      setStatusBar(null)
+      return
+    }
+    setStatusBar(
+      <>
+        {stats && (
+          <>
+            <span className="text-[#666]">{stats.rows}행 x {stats.cols}열</span>
+            {stats.nums.length > 0 && (
+              <>
+                <span className="text-[#c0c0c0]">|</span>
+                <span>합계: <strong className="text-[#333] tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+                <span>평균: <strong className="text-[#333] tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+                <span>개수: <strong className="text-[#333] tabular-nums">{stats.nums.length}</strong></span>
+              </>
+            )}
+          </>
+        )}
+      </>,
+    )
+  }, [selection, activeCell, stats, setStatusBar])
 
-  return (
-    <div className="flex items-center gap-4 text-[11px] text-[#333] bg-[#e6e6e6] border border-[#d4d4d4] px-3 h-[22px]">
-      <span className="text-[#666] mr-auto">준비</span>
-      {stats && (
-        <>
-          <span className="text-[#666]">{stats.rows}행 x {stats.cols}열</span>
-          {stats.nums.length > 0 && (
-            <>
-              <span className="text-[#c0c0c0]">|</span>
-              <span>합계: <strong className="text-[#333] tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-              <span>평균: <strong className="text-[#333] tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-              <span>개수: <strong className="text-[#333] tabular-nums">{stats.nums.length}</strong></span>
-            </>
-          )}
-        </>
-      )}
-    </div>
-  )
+  // Clean up on unmount
+  useEffect(() => {
+    if (!setStatusBar) return
+    return () => setStatusBar(null)
+  }, [setStatusBar])
+
+  return null
 }
 
 // Renders a compact set of page number buttons around the current page.

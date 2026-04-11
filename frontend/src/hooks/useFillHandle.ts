@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { CellPosition, SelectionRange } from './useGridNavigation'
-import type { Field } from '@/lib/types'
+import type { CellFormats, EntryRow, Field } from '@/lib/types'
 import { isComputedType, isLayoutType } from '@/lib/constants'
 
 interface UseFillHandleOptions {
@@ -146,6 +146,80 @@ export function useFillHandle({
     return null
   })()
 
+  /**
+   * Resolve the cell under a viewport coordinate and update fill preview.
+   * Called from both mousemove and auto-scroll onTick.
+   */
+  const updateFillPreview = useCallback(
+    (clientX: number, clientY: number) => {
+      const container = containerRef.current
+      if (!container || !dragStateRef.current) return
+
+      const el = document.elementFromPoint(clientX, clientY)
+      if (!el) return
+
+      const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
+      if (!cell) return
+
+      const targetRow = parseInt(cell.dataset.row ?? '', 10)
+      const targetCol = parseInt(cell.dataset.col ?? '', 10)
+      if (isNaN(targetRow)) return
+
+      const src = dragStateRef.current.sourceRange
+
+      // Lock direction on first significant movement
+      if (!dragStateRef.current.direction) {
+        const dx = Math.abs(clientX - dragStateRef.current.startClientX)
+        const dy = Math.abs(clientY - dragStateRef.current.startClientY)
+        if (dx < 5 && dy < 5) return
+        dragStateRef.current.direction = dy >= dx ? 'vertical' : 'horizontal'
+      }
+
+      if (dragStateRef.current.direction === 'vertical') {
+        if (targetRow > src.endRow) {
+          setFillPreview({
+            startRow: src.endRow + 1,
+            endRow: targetRow,
+            startCol: src.startCol,
+            endCol: src.endCol,
+          })
+        } else if (targetRow < src.startRow) {
+          setFillPreview({
+            startRow: targetRow,
+            endRow: src.startRow - 1,
+            startCol: src.startCol,
+            endCol: src.endCol,
+          })
+        } else {
+          setFillPreview(null)
+        }
+      } else if (dragStateRef.current.direction === 'horizontal' && !isNaN(targetCol)) {
+        if (targetCol > src.endCol) {
+          setFillPreview({
+            startRow: src.startRow,
+            endRow: src.endRow,
+            startCol: src.endCol + 1,
+            endCol: targetCol,
+          })
+        } else if (targetCol < src.startCol) {
+          setFillPreview({
+            startRow: src.startRow,
+            endRow: src.endRow,
+            startCol: targetCol,
+            endCol: src.startCol - 1,
+          })
+        } else {
+          setFillPreview(null)
+        }
+      }
+    },
+    [containerRef],
+  )
+
+  // Expose updateFillPreview via ref so DataTable can wire it to autoScroll onTick
+  const updateFillPreviewRef = useRef(updateFillPreview)
+  updateFillPreviewRef.current = updateFillPreview
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (!sourceRange) return
@@ -162,69 +236,8 @@ export function useFillHandle({
       document.body.style.userSelect = 'none'
 
       const handleMouseMove = (ev: MouseEvent) => {
-        const container = containerRef.current
-        if (!container || !dragStateRef.current) return
-
         onAutoScroll?.(ev.clientX, ev.clientY)
-
-        // Find the cell under the cursor using data attributes
-        const el = document.elementFromPoint(ev.clientX, ev.clientY)
-        if (!el) return
-
-        const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
-        if (!cell) return
-
-        const targetRow = parseInt(cell.dataset.row ?? '', 10)
-        const targetCol = parseInt(cell.dataset.col ?? '', 10)
-        if (isNaN(targetRow)) return
-
-        const src = dragStateRef.current.sourceRange
-
-        // Lock direction on first significant movement
-        if (!dragStateRef.current.direction) {
-          const dx = Math.abs(ev.clientX - dragStateRef.current.startClientX)
-          const dy = Math.abs(ev.clientY - dragStateRef.current.startClientY)
-          if (dx < 5 && dy < 5) return
-          dragStateRef.current.direction = dy >= dx ? 'vertical' : 'horizontal'
-        }
-
-        if (dragStateRef.current.direction === 'vertical') {
-          if (targetRow > src.endRow) {
-            setFillPreview({
-              startRow: src.endRow + 1,
-              endRow: targetRow,
-              startCol: src.startCol,
-              endCol: src.endCol,
-            })
-          } else if (targetRow < src.startRow) {
-            setFillPreview({
-              startRow: targetRow,
-              endRow: src.startRow - 1,
-              startCol: src.startCol,
-              endCol: src.endCol,
-            })
-          } else {
-            setFillPreview(null)
-          }
-        } else if (dragStateRef.current.direction === 'horizontal' && !isNaN(targetCol)) {
-          if (targetCol > src.endCol) {
-            setFillPreview({
-              startRow: src.startRow,
-              endRow: src.endRow,
-              startCol: src.endCol + 1,
-              endCol: targetCol,
-            })
-          } else if (targetCol < src.startCol) {
-            setFillPreview({
-              startRow: src.startRow,
-              endRow: src.endRow,
-              startCol: targetCol,
-              endCol: src.startCol - 1,
-            })
-          } else {
-            setFillPreview(null)
-          }
-        }
+        updateFillPreviewRef.current(ev.clientX, ev.clientY)
       }
 
       const handleMouseUp = () => {
@@ -244,7 +257,7 @@ export function useFillHandle({
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [sourceRange, containerRef, onAutoScroll, onAutoScrollStop],
+    [sourceRange, onAutoScroll, onAutoScrollStop],
   )
 
   /** Execute fill: apply values from source range to preview range. */
@@ -335,7 +348,38 @@ export function useFillHandle({
         }
       }
 
+      // Copy cell formats from source rows to target rows.
       if (updates.length > 0) {
+        const srcRowCount = src.endRow - src.startRow + 1
+        for (const update of updates) {
+          const targetRow = data.find((r) => String(r.id) === update.id) as EntryRow | undefined
+          if (!targetRow) continue
+          const existing: CellFormats = { ...(targetRow._cell_formats ?? {}) }
+          let changed = false
+          for (const colId of Object.keys(update.fields)) {
+            if (colId === '_cell_formats') continue
+            // Find the source cell that corresponds to this target cell.
+            const targetRowIdx = data.indexOf(targetRow as Record<string, unknown>)
+            let srcRowIdx: number
+            if (direction === 'vertical') {
+              srcRowIdx = src.startRow + ((targetRowIdx - currentPreview.startRow) % srcRowCount)
+            } else {
+              srcRowIdx = src.startRow + (targetRowIdx - src.startRow)
+            }
+            const srcRow = data[srcRowIdx] as EntryRow | undefined
+            const srcFmt = srcRow?._cell_formats?.[colId]
+            if (srcFmt) {
+              existing[colId] = { ...srcFmt }
+              changed = true
+            } else if (existing[colId]) {
+              delete existing[colId]
+              changed = true
+            }
+          }
+          if (changed) {
+            update.fields._cell_formats = existing
+          }
+        }
         onFill(updates)
       }
       if (emptyRowEntries.size > 0 && onFillIntoEmptyRows) {
@@ -419,7 +463,32 @@ export function useFillHandle({
         }
       }
 
+      // Copy cell formats from source rows to filled rows (double-click auto-fill).
       if (updates.length > 0) {
+        const srcRowCount = sourceRange.endRow - sourceRange.startRow + 1
+        for (const update of updates) {
+          const targetRow = data.find((r) => String(r.id) === update.id) as EntryRow | undefined
+          if (!targetRow) continue
+          const existing: CellFormats = { ...(targetRow._cell_formats ?? {}) }
+          let changed = false
+          for (const colId of Object.keys(update.fields)) {
+            if (colId === '_cell_formats') continue
+            const targetRowIdx = data.indexOf(targetRow as Record<string, unknown>)
+            const srcRowIdx = sourceRange.startRow + ((targetRowIdx - sourceRange.endRow - 1) % srcRowCount)
+            const srcRow = data[srcRowIdx] as EntryRow | undefined
+            const srcFmt = srcRow?._cell_formats?.[colId]
+            if (srcFmt) {
+              existing[colId] = { ...srcFmt }
+              changed = true
+            } else if (existing[colId]) {
+              delete existing[colId]
+              changed = true
+            }
+          }
+          if (changed) {
+            update.fields._cell_formats = existing
+          }
+        }
         onFill(updates)
       }
     },
@@ -444,6 +513,7 @@ export function useFillHandle({
     isDragging,
     handleFillHandleMouseDown: handleMouseDown,
     handleFillHandleDoubleClick: handleDoubleClick,
+    updateFillPreview,
     sourceRange,
   }
 }

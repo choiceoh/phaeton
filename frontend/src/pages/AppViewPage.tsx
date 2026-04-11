@@ -24,6 +24,7 @@ import {
   Plus,
   Power,
   PowerOff,
+  Save,
   Search,
   Trash2,
   Upload,
@@ -59,6 +60,7 @@ import AutomationsPanel from '@/components/works/AutomationsPanel'
 import SettingsPanel from '@/components/works/SettingsPanel'
 import SheetTabs from '@/components/works/SheetTabs'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
+import { FormattingToolbar } from '@/components/excel/FormattingToolbar'
 import SpreadsheetView from '@/components/works/views/SpreadsheetView'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -96,12 +98,15 @@ import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
+import { useCellFormatting } from '@/hooks/useCellFormatting'
 import { useConflictAwareUpdate } from '@/hooks/useConflictAwareUpdate'
+import { useGridBuffer } from '@/hooks/useGridBuffer'
 import { useWorkbookLock } from '@/hooks/useLock'
 import { useRetryToast } from '@/hooks/useRetryToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { TERM } from '@/lib/constants'
-import type { FieldType, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
+import type { CellPosition, SelectionRange } from '@/hooks/useGridNavigation'
+import type { EntryRow, FieldType, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
 import { emptyFilterGroup, isFilterGroupEmpty, flattenFilterGroup, serializeFilterGroup } from '@/lib/types'
 
 const DEFAULT_LIMIT = 20
@@ -216,6 +221,17 @@ export default function AppViewPage() {
   const [newColName, setNewColName] = useState('')
   const [newColType, setNewColType] = useState<FieldType>('text')
 
+  // Cell formatting state — tracks active cell for formatting toolbar.
+  const [fmtActiveCell, setFmtActiveCell] = useState<CellPosition | null>(null)
+  const [fmtSelection, setFmtSelection] = useState<SelectionRange | null>(null)
+  const handleActiveCellChange = useCallback(
+    (cell: CellPosition | null, sel: SelectionRange | null) => {
+      setFmtActiveCell(cell)
+      setFmtSelection(sel)
+    },
+    [],
+  )
+
   // Saved views state
   const [activeView, setActiveView] = useState<SavedView | null>(null)
   const [newViewName, setNewViewName] = useState('')
@@ -325,32 +341,36 @@ export default function AppViewPage() {
     }
   }, [list?.total]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // In client mode, apply filters and search locally.
-  const clientFilteredData = useMemo(() => {
-    if (!isClientMode || !list?.data) return list?.data ?? []
-    let rows = list.data
-    // Apply structured filters.
-    if (hasActiveFilters) {
-      rows = rows.filter((row) => matchFilterGroup(row, filterGroup))
-    }
-    // Apply text search.
-    if (searchText) {
-      rows = rows.filter((row) => matchSearch(row, searchText))
-    }
-    return rows
-  }, [isClientMode, list?.data, hasActiveFilters, filterGroup, searchText])
-
-  // Effective data and total for the view.
-  const viewData = isClientMode ? clientFilteredData : (list?.data ?? [])
-  const viewTotal = isClientMode ? clientFilteredData.length : (list?.total ?? 0)
-
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
-
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
   const retryToast = useRetryToast()
   const onConflictError = useConflictAwareUpdate(refetch)
+
+  // --- Free grid buffer (enabled when ≤ CLIENT_MODE_THRESHOLD) ---
+  const gridBuffer = useGridBuffer({
+    serverData: isClientMode ? (list?.data ?? []) : [],
+    fields: collection?.fields ?? [],
+    enabled: isClientMode,
+    slug: collection?.slug ?? '',
+  })
+
+  // In free-grid mode, data comes from gridBuffer with client-side filters applied.
+  const clientFilteredBufferData = useMemo(() => {
+    if (!isClientMode) return []
+    let rows = gridBuffer.rows
+    if (hasActiveFilters) {
+      rows = rows.filter((row) => matchFilterGroup(row, filterGroup))
+    }
+    if (searchText) {
+      rows = rows.filter((row) => matchSearch(row, searchText))
+    }
+    return rows
+  }, [isClientMode, gridBuffer.rows, hasActiveFilters, filterGroup, searchText])
+
+  const viewData = isClientMode ? clientFilteredBufferData : (list?.data ?? [])
+  const viewTotal = isClientMode ? clientFilteredBufferData.length : (list?.total ?? 0)
 
   // Multi-select state for bulk operations.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
@@ -358,12 +378,34 @@ export default function AppViewPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
 
+  // Cell formatting hook — derive column IDs from collection fields to match DataTable layout.
+  const fmtColumnIds = useMemo(() => {
+    if (!collection?.fields) return []
+    const ids = ['_rowNum']
+    for (const f of collection.fields) {
+      if (f.field_type !== 'label' && f.field_type !== 'line' && f.field_type !== 'spacer') {
+        ids.push(f.slug)
+      }
+    }
+    ids.push('created_at')
+    return ids
+  }, [collection?.fields])
+
+  const cellFormatting = useCellFormatting({
+    data: viewData as EntryRow[],
+    activeCell: fmtActiveCell,
+    selection: fmtSelection,
+    columnIds: fmtColumnIds,
+    batchUpdate: (updates) => batchUpdateEntry.mutate(updates),
+  })
+
   // Keyboard shortcuts
   const searchInputRef = useRef<HTMLInputElement>(null)
   useHotkeys([
     { key: '?', handler: () => setHotkeyHelpOpen(true) },
     { key: 'mod+n', handler: () => navigate(`/apps/${appId}/entries/new`) },
     { key: 'mod+f', handler: () => searchInputRef.current?.focus() },
+    { key: 'mod+s', handler: () => { if (isClientMode && gridBuffer.isDirty) gridBuffer.save() } },
   ])
 
   // Formula fields are read-only in the grid.
@@ -818,7 +860,7 @@ export default function AppViewPage() {
     <div className="flex items-center gap-1 overflow-x-auto scrollbar-none shrink-0">
       <button
         type="button"
-        className={`inline-flex items-center h-7 px-2.5 text-xs rounded-md border transition-colors ${
+        className={`inline-flex items-center h-8 px-2.5 text-xs rounded-md border transition-colors ${
           !activeView ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input hover:bg-accent'
         }`}
         onClick={() => clearView()}
@@ -829,7 +871,7 @@ export default function AppViewPage() {
         <button
           key={v.id}
           type="button"
-          className={`inline-flex items-center gap-1 h-7 px-2.5 text-xs rounded-md border transition-colors ${
+          className={`inline-flex items-center gap-1 h-8 px-2.5 text-xs rounded-md border transition-colors ${
             activeView?.id === v.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input hover:bg-accent'
           }`}
           onClick={() => {
@@ -957,6 +999,18 @@ export default function AppViewPage() {
       ) : (
         /* ── 기본 툴바 ── */
         <>
+      {/* ── Group 0: 셀 서식 ── */}
+      {canManage && !isReadOnly && (
+        <>
+          <FormattingToolbar
+            currentFormat={cellFormatting.currentFormat}
+            onFormatChange={cellFormatting.applyFormat}
+            disabled={!fmtActiveCell}
+          />
+          <div className="w-px h-4 bg-[#d4d4d4]" />
+        </>
+      )}
+
       {/* ── Group 1: 데이터 조회 (검색·필터·정렬) ── */}
       <div className="relative w-full sm:w-auto order-first">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1155,15 +1209,15 @@ export default function AppViewPage() {
   pageActionsRef.current = (
     <>
       <Link to={`/apps/${collection.id}/interface`}>
-        <Button variant="outline" size="sm" className="h-7 gap-1 text-[11px]">
+        <Button variant="outline" size="sm" className="h-8 gap-1 text-[11px]">
           <LayoutGrid className="h-3.5 w-3.5" />
           인터페이스
         </Button>
       </Link>
       {canManage && (
-        <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => setSettingsOpen(true)}>설정</Button>
+        <Button variant="outline" size="sm" className="h-8 text-[11px]" onClick={() => setSettingsOpen(true)}>설정</Button>
       )}
-      <Button size="sm" className="h-7 text-[11px]" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
+      <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
         {TERM.newRecord}
       </Button>
     </>
@@ -1175,6 +1229,33 @@ export default function AppViewPage() {
         <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800">
           <Lock className="h-3.5 w-3.5 shrink-0" />
           다른 사용자가 편집 중입니다. 읽기 전용으로 표시됩니다.
+        </div>
+      )}
+
+      {isClientMode && gridBuffer.isDirty && (
+        <div className="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-3 py-1 text-[11px] text-blue-800">
+          <span className="font-medium">{gridBuffer.dirtyCount}건 미저장</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 text-[11px] text-blue-800 hover:bg-blue-100"
+            disabled={gridBuffer.isSaving}
+            onClick={() => gridBuffer.save()}
+          >
+            {gridBuffer.isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+            저장 (Ctrl+S)
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-[11px] text-blue-800 hover:bg-blue-100"
+            disabled={gridBuffer.isSaving}
+            onClick={() => {
+              if (confirm('변경���항을 모두 취소하시겠습니까?')) gridBuffer.discardChanges()
+            }}
+          >
+            취소
+          </Button>
         </div>
       )}
 
@@ -1194,10 +1275,32 @@ export default function AppViewPage() {
             onLimitChange={setLimit}
             onSortChange={handleHeaderSortChange}
             onRowClick={handleEntryClick}
-            updateEntry={async (params) => { await updateEntry.mutateAsync(params) }}
-            createEntry={async (body) => { await createEntry.mutateAsync(body) }}
-            deleteEntry={(id) => bulkDelete.mutate([id])}
-            batchUpdateEntry={(updates) => batchUpdateEntry.mutate(updates)}
+            updateEntry={isClientMode
+              ? async ({ id, body }) => {
+                  for (const [slug, value] of Object.entries(body)) {
+                    gridBuffer.setCellValue(id, slug, value)
+                  }
+                }
+              : async (params) => { await updateEntry.mutateAsync(params) }
+            }
+            createEntry={isClientMode
+              ? async (body) => { gridBuffer.addRow(body) }
+              : async (body) => { await createEntry.mutateAsync(body) }
+            }
+            deleteEntry={isClientMode
+              ? (id) => gridBuffer.deleteRow(id)
+              : (id) => bulkDelete.mutate([id])
+            }
+            batchUpdateEntry={isClientMode
+              ? (updates) => {
+                  for (const u of updates) {
+                    for (const [slug, value] of Object.entries(u.fields)) {
+                      gridBuffer.setCellValue(u.id, slug, value)
+                    }
+                  }
+                }
+              : (updates) => batchUpdateEntry.mutate(updates)
+            }
             canManage={canManage && !isReadOnly}
             toolbar={null}
             toolbarRight={null}
@@ -1206,7 +1309,13 @@ export default function AppViewPage() {
             onSummaryFnChange={handleAggFnChange}
             emptyTitle={searchText || hasActiveFilters ? '검색 결과가 없습니다' : TERM.noRecords}
             emptyDescription={searchText || hasActiveFilters ? '검색어 또는 필터 조건을 변경해 보세요.' : TERM.noRecordsDesc}
-            onInsertRow={() => { createEntry.mutateAsync({}) }}
+            onInsertRow={isClientMode
+              ? () => { gridBuffer.addRow({}) }
+              : () => { createEntry.mutateAsync({}) }
+            }
+            freeGridMode={isClientMode}
+            cellDirtyFn={isClientMode ? gridBuffer.isCellDirty : undefined}
+            cellErrorFn={isClientMode ? (rowId: string, slug: string) => gridBuffer.cellErrors.get(rowId)?.get(slug) ?? null : undefined}
             onFilterByValue={(fieldSlug, value) => {
               setFilterGroup((prev) => ({
                 ...prev,
@@ -1240,6 +1349,11 @@ export default function AppViewPage() {
             onRenameColumn={canManage && !isReadOnly ? handleRenameColumn : undefined}
             onDeleteColumn={canManage && !isReadOnly ? handleDeleteColumn : undefined}
             onAddColumn={canManage && !isReadOnly ? handleAddColumn : undefined}
+            onActiveCellChange={handleActiveCellChange}
+            onFormatShortcut={(key) => {
+              if (key === 'bold') cellFormatting.applyFormat({ bold: true })
+              else if (key === 'italic') cellFormatting.applyFormat({ italic: true })
+            }}
             clientMode={isClientMode}
           />
           </div>
