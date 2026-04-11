@@ -72,7 +72,6 @@ import FormView from '@/components/works/views/FormView'
 import GanttView from '@/components/works/views/GanttView'
 import KanbanView from '@/components/works/views/KanbanView'
 import SpreadsheetView from '@/components/works/views/SpreadsheetView'
-import SetupChecklist from '@/components/works/SetupChecklist'
 import ViewGuide from '@/components/works/views/ViewGuide'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -95,7 +94,6 @@ import {
   useBatchUpdateEntry,
   useBulkDeleteEntries,
   useCreateEntry,
-  useDeleteEntry,
   useEntries,
   useTotals,
   useUpdateEntry,
@@ -111,7 +109,7 @@ import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import { highlightText } from '@/lib/highlightText'
-import type { EntryRow, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
+import type { FilterCondition, FilterGroup, SavedView } from '@/lib/types'
 import { emptyFilterGroup, isFilterGroupEmpty, flattenFilterGroup, serializeFilterGroup } from '@/lib/types'
 import { getDisplayType } from '@/lib/fieldGuards'
 
@@ -146,7 +144,6 @@ export default function AppViewPage() {
   /** Column-header sorting state consumed by @tanstack/react-table. */
   const [sorting, setSorting] = useState<SortingState>([])
   /** ID of the entry pending deletion (drives the ConfirmDialog). */
-  const [deleteId, setDeleteId] = useState<string | null>(null)
   /** Hidden file input ref for CSV import trigger. */
   const fileInputRef = useRef<HTMLInputElement>(null)
   /** Count of rows imported in the last CSV upload (shown in toast). */
@@ -262,7 +259,6 @@ export default function AppViewPage() {
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
 
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
-  const deleteEntry = useDeleteEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
   const undoToast = useUndoToast()
   const retryToast = useRetryToast()
@@ -483,25 +479,6 @@ export default function AppViewPage() {
         if (!v) return '-'
         return new Date(v as string).toLocaleDateString('ko')
       },
-    })
-    cols.push({
-      id: '_actions',
-      header: '',
-      enableSorting: false,
-      enableHiding: false,
-      size: 60,
-      cell: ({ row }) => canManage ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              setDeleteId(String(row.original.id))
-            }}
-          >
-            삭제
-          </Button>
-      ) : null,
     })
     return cols
   }, [collection, process, processVisible, searchText])
@@ -797,33 +774,6 @@ export default function AppViewPage() {
   }
 
 
-  function handleDelete() {
-    if (!deleteId) return
-    const capturedDeleteId = deleteId
-    // Capture entry data for undo (recreate).
-    const deletedRow = list?.data?.find((r) => String(r.id) === capturedDeleteId)
-    deleteEntry.mutate(capturedDeleteId, {
-      onSuccess: () => {
-        setDeleteId(null)
-        if (deletedRow) {
-          const row = deletedRow as EntryRow
-          const rest = Object.fromEntries(
-            Object.entries(row).filter(([k]) => !['id', '_version', 'created_at', 'updated_at', '_optimistic'].includes(k)),
-          )
-          undoToast.push(
-            '삭제되었습니다',
-            () => { createEntry.mutate(rest) },
-            () => { deleteEntry.mutate(String(deletedRow.id)) },
-          )
-        } else {
-          toast.success('삭제되었습니다')
-        }
-      },
-      onError: (err) => retryToast(err, () => {
-        setDeleteId(capturedDeleteId)
-      }),
-    })
-  }
 
   function handleBulkStatusChange(status: string) {
     const ids = Array.from(selectedRowIds)
@@ -993,6 +943,67 @@ export default function AppViewPage() {
   const tableToolbar = (
     <>
     <div className="flex items-center gap-2 flex-wrap w-full">
+      {selectedRowIds.size > 0 ? (
+        /* ── 일괄 액션 모드 ── */
+        <>
+          <span className="text-sm font-medium">{selectAllFilteredMode ? `전체 ${selectedRowIds.size}건 선택` : `${selectedRowIds.size}건 선택`}</span>
+          {process?.is_enabled && (process.statuses?.length ?? 0) > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-sm font-medium hover:bg-accent h-8"
+              >
+                상태 변경
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {process.statuses!.map((s) => (
+                  <DropdownMenuItem
+                    key={s.id}
+                    onClick={() => handleBulkStatusChange(s.name)}
+                  >
+                    <span
+                      className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: s.color }}
+                    />
+                    {s.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <RoleGate roles={['director', 'pm', 'engineer']}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1"
+              onClick={() => setBulkEditOpen(true)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              일괄 편집
+            </Button>
+          </RoleGate>
+          {canManage && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              일괄 삭제
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8"
+            onClick={() => setSelectedRowIds(new Set())}
+          >
+            선택 해제
+          </Button>
+        </>
+      ) : (
+        /* ── 기본 툴바 ── */
+        <>
       {/* ── Group 1: 데이터 조회 (검색·필터·정렬) ── */}
       <div className="relative w-full sm:w-auto order-first">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1241,7 +1252,10 @@ export default function AppViewPage() {
           )}
         </div>
       )}
+        </>
+      )}
     </div>
+    {selectedRowIds.size === 0 && (
     <FilterChips
       filterGroup={filterGroup}
       sortItems={sortItems}
@@ -1259,6 +1273,7 @@ export default function AppViewPage() {
         setPage(1)
       }}
     />
+    )}
     </>
   )
 
@@ -1296,32 +1311,6 @@ export default function AppViewPage() {
           </>
         }
       />
-
-      {list && (list.total ?? 0) < 5 && (
-        <SetupChecklist
-          collectionId={collection.id}
-          items={[
-            {
-              label: '항목(필드) 추가하기',
-              done: (collection.fields?.filter((f) => !isLayoutType(f.field_type)).length ?? 0) >= 2,
-              href: `/apps/${collection.id}/settings`,
-            },
-            {
-              label: '첫 데이터 입력하기',
-              done: (list.total ?? 0) > 0,
-            },
-            {
-              label: '보기(뷰) 저장하기',
-              done: (savedViews?.length ?? 0) > 0,
-            },
-            {
-              label: '프로세스 설정하기',
-              done: !!process?.is_enabled,
-              href: `/apps/${collection.id}/process`,
-            },
-          ]}
-        />
-      )}
 
       {entriesLoading && !list && <LoadingState variant="table" />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
@@ -1362,64 +1351,6 @@ export default function AppViewPage() {
 
           <TabsContent value="list" className="mt-0">
             <ErrorBoundary key="list">
-            {selectedRowIds.size > 0 && (
-              <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-                <span className="font-medium">{selectAllFilteredMode ? `전체 ${selectedRowIds.size}건 선택` : `${selectedRowIds.size}건 선택`}</span>
-                {process?.is_enabled && (process.statuses?.length ?? 0) > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent h-7"
-                    >
-                      상태 변경
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      {process.statuses!.map((s) => (
-                        <DropdownMenuItem
-                          key={s.id}
-                          onClick={() => handleBulkStatusChange(s.name)}
-                        >
-                          <span
-                            className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: s.color }}
-                          />
-                          {s.name}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-                <RoleGate roles={['director', 'pm', 'engineer']}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1"
-                    onClick={() => setBulkEditOpen(true)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    일괄 편집
-                  </Button>
-                </RoleGate>
-                {canManage && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="h-7 gap-1"
-                    onClick={() => setBulkDeleteOpen(true)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    일괄 삭제
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7"
-                  onClick={() => setSelectedRowIds(new Set())}
-                >
-                  선택 해제
-                </Button>
-              </div>
-            )}
             <DataTable
               columns={columns}
               data={list.data}
@@ -1489,7 +1420,7 @@ export default function AppViewPage() {
                 onRowClick={handleEntryClick}
                 updateEntry={async (params) => { await updateEntry.mutateAsync(params) }}
                 createEntry={async (body) => { await createEntry.mutateAsync(body) }}
-                deleteEntry={(id) => setDeleteId(id)}
+                deleteEntry={(id) => bulkDelete.mutate([id])}
                 batchUpdateEntry={(updates) => batchUpdateEntry.mutate(updates)}
                 canManage={canManage}
                 toolbar={tableToolbar}
@@ -1604,7 +1535,6 @@ export default function AppViewPage() {
               entries={list.data}
               onEntryClick={handleEntryClick}
               onEntrySubmit={handleFormViewSubmit}
-              onEntryDelete={(id) => setDeleteId(id)}
               submitting={createEntry.isPending || updateEntry.isPending}
               process={process}
               slug={collection.slug}
@@ -1635,16 +1565,6 @@ export default function AppViewPage() {
         loading={batchUpdateEntry.isPending}
       />
 
-      <ConfirmDialog
-        open={!!deleteId}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-        title={`${TERM.record}를 삭제하시겠습니까?`}
-        description="삭제된 데이터는 휴지통에서 복구할 수 있습니다."
-        variant="destructive"
-        confirmLabel="삭제"
-        onConfirm={handleDelete}
-        loading={deleteEntry.isPending}
-      />
 
       <ConfirmDialog
         open={bulkDeleteOpen}

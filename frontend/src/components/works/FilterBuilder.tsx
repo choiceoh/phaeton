@@ -324,13 +324,16 @@ function ConditionRow({
         value={cond.operator}
         onValueChange={(v) => v && onUpdate({ operator: v })}
       >
-        <SelectTrigger className="w-[120px] h-8 text-sm">
+        <SelectTrigger className="w-[140px] h-8 text-sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {opLabels.map((o) => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
+            <SelectItem key={o.value} value={o.value} label={o.label}>
+              <div className="flex flex-col items-start whitespace-normal">
+                <span>{o.label}</span>
+                <span className="text-[11px] text-muted-foreground">{o.description}</span>
+              </div>
             </SelectItem>
           ))}
         </SelectContent>

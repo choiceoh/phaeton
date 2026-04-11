@@ -66,17 +66,21 @@ export const ROLE_LABELS: Record<string, string> = {
 }
 
 export const ON_DELETE_OPTIONS = [
-  { value: 'SET NULL', label: '연결 해제' },
-  { value: 'CASCADE', label: '함께 삭제' },
-  { value: 'RESTRICT', label: '삭제 차단' },
-  { value: 'NO ACTION', label: '동작 없음' },
+  { value: 'SET NULL', label: '연결 해제', description: '연결만 끊고 상대 레코드는 유지합니다' },
+  { value: 'CASCADE', label: '함께 삭제', description: '이 레코드 삭제 시 연결된 상대도 삭제됩니다' },
+  { value: 'RESTRICT', label: '삭제 차단', description: '연결된 상대가 있으면 삭제할 수 없습니다' },
+  { value: 'NO ACTION', label: '동작 없음', description: '삭제 시 연결 상태를 변경하지 않습니다' },
 ]
 
-export const RELATION_TYPE_LABELS = {
-  one_to_one: '1:1',
-  one_to_many: '1:N',
-  many_to_many: 'N:M',
-}
+export const RELATION_TYPE_OPTIONS = [
+  { value: 'one_to_one', label: '1:1', description: '하나의 레코드가 상대 앱의 하나와만 연결됩니다' },
+  { value: 'one_to_many', label: '1:N', description: '하나의 레코드가 상대 앱의 여러 레코드와 연결됩니다' },
+  { value: 'many_to_many', label: 'N:M', description: '양쪽 레코드가 서로 여러 개와 자유롭게 연결됩니다' },
+]
+
+export const RELATION_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  RELATION_TYPE_OPTIONS.map((o) => [o.value, o.label]),
+)
 
 export const WIDTH_OPTIONS = [
   { value: 1, label: '1/6' },
@@ -118,15 +122,15 @@ export const VALIDATION_OPTIONS = [
 
 // -- 필터 연산자 --
 export const FILTER_OPERATORS = [
-  { value: 'eq', label: '같음' },
-  { value: 'neq', label: '같지 않음' },
-  { value: 'gt', label: '초과' },
-  { value: 'gte', label: '이상' },
-  { value: 'lt', label: '미만' },
-  { value: 'lte', label: '이하' },
-  { value: 'like', label: '포함' },
-  { value: 'in', label: '포함 (목록)' },
-  { value: 'is_null', label: '비어있음' },
+  { value: 'eq', label: '같음', description: '값이 정확히 일치' },
+  { value: 'neq', label: '같지 않음', description: '값이 일치하지 않음' },
+  { value: 'gt', label: '초과', description: '지정값보다 큼' },
+  { value: 'gte', label: '이상', description: '지정값 이상' },
+  { value: 'lt', label: '미만', description: '지정값보다 작음' },
+  { value: 'lte', label: '이하', description: '지정값 이하' },
+  { value: 'like', label: '포함', description: '텍스트에 포함되어 있음' },
+  { value: 'in', label: '포함 (목록)', description: '목록 중 하나와 일치' },
+  { value: 'is_null', label: '비어있음', description: '값이 입력되지 않음' },
 ] as const
 
 export type FilterOperator = (typeof FILTER_OPERATORS)[number]['value']
