@@ -19,6 +19,9 @@ interface ExcelToolbarState {
   /** Read-only banner */
   readOnlyBanner: ReactNode
   setReadOnlyBanner: (banner: ReactNode) => void
+  /** Status bar content (selection stats) — rendered in SheetTabBar */
+  statusBar: ReactNode
+  setStatusBar: (content: ReactNode) => void
 }
 
 const ExcelToolbarContext = createContext<ExcelToolbarState | null>(null)
@@ -30,6 +33,7 @@ export function ExcelToolbarProvider({ children }: { children: ReactNode }) {
   const [workbookLabel, setWorkbookLabel] = useState('')
   const [pageActions, setPageActions] = useState<ReactNode>(null)
   const [readOnlyBanner, setReadOnlyBanner] = useState<ReactNode>(null)
+  const [statusBar, setStatusBar] = useState<ReactNode>(null)
 
   return (
     <ExcelToolbarContext.Provider
@@ -40,6 +44,7 @@ export function ExcelToolbarProvider({ children }: { children: ReactNode }) {
         workbookLabel, setWorkbookLabel,
         pageActions, setPageActions,
         readOnlyBanner, setReadOnlyBanner,
+        statusBar, setStatusBar,
       }}
     >
       {children}
@@ -51,4 +56,9 @@ export function useExcelToolbar() {
   const ctx = useContext(ExcelToolbarContext)
   if (!ctx) throw new Error('useExcelToolbar must be used within ExcelToolbarProvider')
   return ctx
+}
+
+/** Optional version — returns null when outside ExcelToolbarProvider. */
+export function useExcelToolbarOptional() {
+  return useContext(ExcelToolbarContext)
 }
