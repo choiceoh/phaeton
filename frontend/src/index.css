@@ -518,13 +518,29 @@
    See DataTable.tsx — .fill-handle class */
 .fill-handle {
   position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 6px;
-  height: 6px;
+  right: -4px;
+  bottom: -4px;
+  width: 7px;
+  height: 7px;
   background: #005a9e;
   z-index: 10;
   cursor: crosshair;
+  transition: width 0.1s, height 0.1s, right 0.1s, bottom 0.1s;
+}
+/* Larger invisible hit area for easier grabbing */
+.fill-handle::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  width: 17px;
+  height: 17px;
+}
+.fill-handle:hover {
+  width: 9px;
+  height: 9px;
+  right: -5px;
+  bottom: -5px;
 }
 
 /* Fill preview range (dotted border during drag) */
