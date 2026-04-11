@@ -1028,6 +1028,22 @@ export default function AppViewPage() {
             onSummaryFnChange={handleAggFnChange}
             emptyTitle={searchText || hasActiveFilters ? '검색 결과가 없습니다' : TERM.noRecords}
             emptyDescription={searchText || hasActiveFilters ? '검색어 또는 필터 조건을 변경해 보세요.' : TERM.noRecordsDesc}
+            onInsertRow={() => { createEntry.mutateAsync({}) }}
+            onFilterByValue={(fieldSlug, value) => {
+              setFilterGroup((prev) => ({
+                ...prev,
+                conditions: [
+                  ...prev.conditions,
+                  {
+                    id: crypto.randomUUID(),
+                    field: fieldSlug,
+                    operator: value == null ? 'is_null' : 'eq',
+                    value: value == null ? '' : String(value),
+                  },
+                ],
+              }))
+              setPage(1)
+            }}
             emptyAction={
               searchText || hasActiveFilters ? (
                 <Button

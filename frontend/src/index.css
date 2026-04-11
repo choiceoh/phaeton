@@ -510,18 +510,36 @@
   pointer-events: none;
   z-index: 5;
 }
-.grid-cell-active::before {
-  content: '';
+/* Fill handle is rendered as a real DOM element for drag interaction.
+   See DataTable.tsx — .fill-handle class */
+.fill-handle {
   position: absolute;
   right: -3px;
   bottom: -3px;
   width: 6px;
   height: 6px;
   background: #1a73e8;
-  pointer-events: none;
-  z-index: 6;
+  z-index: 10;
   cursor: crosshair;
 }
+
+/* Fill preview range (dotted border during drag) */
+.fill-preview-top { border-top: 2px dashed #1a73e8 !important; }
+.fill-preview-bottom { border-bottom: 2px dashed #1a73e8 !important; }
+.fill-preview-left { border-left: 2px dashed #1a73e8 !important; }
+.fill-preview-right { border-right: 2px dashed #1a73e8 !important; }
+.fill-preview-bg { background: #e8f0fe !important; }
+
+/* Drag move/copy ghost outline */
+.drag-ghost-move-top { border-top: 2px dashed #666 !important; }
+.drag-ghost-move-bottom { border-bottom: 2px dashed #666 !important; }
+.drag-ghost-move-left { border-left: 2px dashed #666 !important; }
+.drag-ghost-move-right { border-right: 2px dashed #666 !important; }
+.drag-ghost-copy-top { border-top: 2px dashed #1a73e8 !important; }
+.drag-ghost-copy-bottom { border-bottom: 2px dashed #1a73e8 !important; }
+.drag-ghost-copy-left { border-left: 2px dashed #1a73e8 !important; }
+.drag-ghost-copy-right { border-right: 2px dashed #1a73e8 !important; }
+.drag-ghost-bg { background: rgba(0, 0, 0, 0.04) !important; }
 
 /* Hide scrollbar while allowing scroll (for mobile tabs) */
 .scrollbar-none {

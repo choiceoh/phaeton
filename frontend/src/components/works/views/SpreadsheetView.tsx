@@ -38,6 +38,8 @@ interface SpreadsheetViewProps {
   emptyTitle?: string
   emptyDescription?: string
   emptyAction?: React.ReactNode
+  onInsertRow?: () => void
+  onFilterByValue?: (fieldSlug: string, value: unknown) => void
 }
 
 /**
@@ -126,6 +128,8 @@ export default function SpreadsheetView({
   emptyTitle,
   emptyDescription,
   emptyAction,
+  onInsertRow,
+  onFilterByValue,
 }: SpreadsheetViewProps) {
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
 
@@ -268,6 +272,27 @@ export default function SpreadsheetView({
     moveTo: () => {}, // Navigation managed by DataTable's internal grid
   })
 
+  // Fill handle handler
+  const handleFill = useCallback(
+    (updates: { id: string; fields: Record<string, unknown> }[]) => {
+      // Recompute formula fields for each filled row
+      const enriched = updates.map((u) => {
+        const row = data.find((r) => String(r.id) === u.id)
+        if (!row) return u
+        const patchedRow = { ...row, ...u.fields }
+        let formulaOverrides: Record<string, unknown> = {}
+        for (const slug of Object.keys(u.fields)) {
+          formulaOverrides = { ...formulaOverrides, ...recomputeRow(patchedRow, slug) }
+        }
+        return { ...u, fields: { ...u.fields, ...formulaOverrides } }
+      })
+      if (enriched.length > 0) {
+        batchUpdateEntry(enriched)
+      }
+    },
+    [data, recomputeRow, batchUpdateEntry],
+  )
+
   // Paste handler
   const handlePaste = useCallback(
     (startRow: number, startCol: number, matrix: string[][]) => {
@@ -341,6 +366,10 @@ export default function SpreadsheetView({
       onClearCell={inlineEditing.clearCell}
       onPaste={handlePaste}
       onDeleteRow={canManage ? deleteEntry : undefined}
+      onInsertRow={canManage ? onInsertRow : undefined}
+      onFilterByValue={onFilterByValue}
+      onFill={canManage ? handleFill : undefined}
+      onCellMove={canManage ? handleFill : undefined}
       showNewRow={canManage}
       newRowValues={newRowValues}
       onNewRowChange={(slug, v) => setNewRowValues((prev) => ({ ...prev, [slug]: v }))}
