@@ -397,6 +397,8 @@ export function DataTable<T>({
     return skip
   }, [colIds])
 
+  const ROW_HEIGHT = 28
+
   const getGridData = useCallback(
     (row: number, col: number) => {
       const colId = colIds[col]
@@ -594,7 +596,6 @@ export function DataTable<T>({
   )
 
   // Virtual scrolling — only activate when row count exceeds threshold.
-  const ROW_HEIGHT = 28
   const VIRTUAL_THRESHOLD = 40
   const useVirtual = visibleRows.length > VIRTUAL_THRESHOLD
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
