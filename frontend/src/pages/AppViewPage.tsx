@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
+  LayoutGrid,
   Loader2,
   Lock,
   Mail,
@@ -30,7 +31,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Outlet, useNavigate, useParams } from 'react-router'
+import { Link, Outlet, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -48,6 +49,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
+// PageHeader replaced by ExcelLayout TitleBar + Ribbon
 import RoleGate from '@/components/common/RoleGate'
 import BulkEditPanel from '@/components/works/BulkEditPanel'
 import ImportPreview from '@/components/works/CSVImportPreview'
@@ -78,8 +80,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { useExcelToolbar } from '@/contexts/ExcelToolbarContext'
 import { useHotkeys } from '@/hooks/useHotkeys'
-import { useAddField, useCollection, useDeleteField, useUpdateField } from '@/hooks/useCollections'
+import { useAddField, useCollection, useDeleteField, useUpdateField, useWorkbooks } from '@/hooks/useCollections'
 import {
   CLIENT_MODE_THRESHOLD,
   useBatchUpdateEntry,
@@ -168,6 +171,8 @@ function removeCondFromGroup(group: FilterGroup, condId: string): FilterGroup {
 export default function AppViewPage() {
   const { appId } = useParams()
   const navigate = useNavigate()
+  const excelToolbar = useExcelToolbar()
+  const { data: workbooks } = useWorkbooks()
   /** Current page number for server-side pagination (1-based). */
   const [page, setPage] = useState(1)
   /** Rows per page; user-selectable via DataTable page size dropdown. */
@@ -1120,28 +1125,49 @@ export default function AppViewPage() {
     </>
   )
 
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/40">
-        <div className="min-w-0">
-          <h1 className="text-base font-semibold truncate">{collection.label}</h1>
-          {collection.description && (
-            <p className="text-xs text-muted-foreground truncate">{collection.description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {canManage && (
-            <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>설정</Button>
-          )}
-          <Button size="sm" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
-            {TERM.newRecord}
-          </Button>
-        </div>
-      </div>
+  // Sync toolbar content to ExcelLayout context
+  const workbookLabel = useMemo(() => {
+    if (!collection?.workbook_id || !workbooks) return ''
+    return workbooks.find((w) => w.id === collection.workbook_id)?.label ?? ''
+  }, [collection?.workbook_id, workbooks])
 
+  useEffect(() => {
+    excelToolbar.setCollectionLabel(collection.label)
+    excelToolbar.setWorkbookLabel(workbookLabel)
+  }, [collection.label, workbookLabel])
+
+  useEffect(() => {
+    excelToolbar.setToolbarContent(tableToolbar)
+  }, [tableToolbar])
+
+  useEffect(() => {
+    excelToolbar.setSheetTabs(sheetTabs)
+  }, [sheetTabs])
+
+  useEffect(() => {
+    excelToolbar.setPageActions(
+      <>
+        <Link to={`/apps/${collection.id}/interface`}>
+          <Button variant="outline" size="sm" className="h-7 gap-1 text-[11px]">
+            <LayoutGrid className="h-3.5 w-3.5" />
+            인터페이스
+          </Button>
+        </Link>
+        {canManage && (
+          <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => setSettingsOpen(true)}>설정</Button>
+        )}
+        <Button size="sm" className="h-7 text-[11px]" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
+          {TERM.newRecord}
+        </Button>
+      </>
+    )
+  }, [collection.id, canManage, appId])
+
+  return (
+    <div className="flex flex-col h-full">
       {isReadOnly && (
-        <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          <Lock className="h-4 w-4 shrink-0" />
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800">
+          <Lock className="h-3.5 w-3.5 shrink-0" />
           다른 사용자가 편집 중입니다. 읽기 전용으로 표시됩니다.
         </div>
       )}
@@ -1167,8 +1193,8 @@ export default function AppViewPage() {
             deleteEntry={(id) => bulkDelete.mutate([id])}
             batchUpdateEntry={(updates) => batchUpdateEntry.mutate(updates)}
             canManage={canManage && !isReadOnly}
-            toolbar={tableToolbar}
-            toolbarRight={sheetTabs}
+            toolbar={null}
+            toolbarRight={null}
             summaryRow={summaryRow}
             summaryFn={columnAggFn}
             onSummaryFnChange={handleAggFnChange}
