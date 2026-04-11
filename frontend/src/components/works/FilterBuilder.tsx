@@ -1,4 +1,5 @@
 import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useId, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ import {
   isLayoutType,
   operatorsForFieldType,
 } from '@/lib/constants'
+import { listItem, FAST } from '@/lib/motion'
 import type { Field, FilterCondition, FilterGroup, FilterLogic } from '@/lib/types'
 
 interface Props {
@@ -206,8 +208,16 @@ export default function FilterBuilder({
       )}
 
       {/* Root conditions */}
+      <AnimatePresence initial={false}>
       {rootConditions.map((cond, idx) => (
-        <div key={cond.id}>
+        <motion.div
+          key={cond.id}
+          variants={listItem}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={FAST}
+        >
           {idx > 0 && isGroupMode && (
             <div className="flex items-center my-1">
               <button
@@ -230,8 +240,9 @@ export default function FilterBuilder({
             onUpdate={(patch) => updateCondition(cond.id, patch)}
             onRemove={() => removeCondition(cond.id)}
           />
-        </div>
+        </motion.div>
       ))}
+      </AnimatePresence>
 
       {/* Sub-groups */}
       {isGroupMode && filterGroup!.groups.map((subGroup, gi) => (

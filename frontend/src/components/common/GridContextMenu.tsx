@@ -15,6 +15,8 @@ import {
 import { motion } from 'framer-motion'
 import { useEffect } from 'react'
 
+import { fadeScale, MICRO } from '@/lib/motion'
+
 interface GridContextMenuProps {
   position: { x: number; y: number } | null
   onCopy: () => void
@@ -102,9 +104,10 @@ export default function GridContextMenu({
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.1, ease: 'easeOut' }}
+      variants={fadeScale}
+      initial="initial"
+      animate="animate"
+      transition={MICRO}
       className="fixed z-50 min-w-[160px] border border-[#d4d4d4] bg-white p-0.5 text-[11px] shadow-sm"
       style={{ left: position.x, top: position.y }}
       onClick={(e) => e.stopPropagation()}

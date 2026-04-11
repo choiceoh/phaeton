@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { AnimatePresence, motion } from 'framer-motion'
+
+import { FAST } from '@/lib/motion'
 import {
   ChevronRight,
   Folder,
@@ -182,7 +184,7 @@ function TreeItem({
         {hasChildren ? (
           <motion.span
             animate={{ rotate: isOpen ? 90 : 0 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            transition={FAST}
             className="inline-flex shrink-0"
           >
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
@@ -199,7 +201,7 @@ function TreeItem({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            transition={FAST}
             style={{ overflow: 'hidden' }}
           >
             {node.children.map(child => (

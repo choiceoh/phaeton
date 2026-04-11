@@ -9,6 +9,8 @@ import { Check, Loader2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 
+import { MICRO, FAST } from '@/lib/motion'
+
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
@@ -60,7 +62,7 @@ export default function GridCell({
               initial={{ opacity: 0, scale: 0.5 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5 }}
-              transition={{ duration: 0.12, ease: 'easeOut' }}
+              transition={MICRO}
               className="shrink-0 inline-flex"
             >
               <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
@@ -72,7 +74,7 @@ export default function GridCell({
               initial={{ opacity: 0, scale: 0.5 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
+              transition={FAST}
               className="shrink-0 inline-flex"
             >
               <Check className="h-3 w-3 text-green-500" />

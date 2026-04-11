@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -9,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { isLayoutType } from '@/lib/constants'
+import { listItem, FAST } from '@/lib/motion'
 import type { Field } from '@/lib/types'
 
 export interface SortItem {
@@ -42,9 +44,18 @@ export default function SortPanel({ fields, sorts, onChange }: Props) {
 
   return (
     <div className="space-y-2">
+      <AnimatePresence initial={false}>
       {sorts.map((sort, i) => {
         return (
-          <div key={i} className="flex items-center gap-2">
+          <motion.div
+            key={sort.field}
+            variants={listItem}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={FAST}
+            className="flex items-center gap-2"
+          >
             {sorts.length > 1 && (
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
                 {i + 1}
@@ -91,9 +102,10 @@ export default function SortPanel({ fields, sorts, onChange }: Props) {
             >
               <Trash2 className="h-4 w-4" />
             </Button>
-          </div>
+          </motion.div>
         )
       })}
+      </AnimatePresence>
       <Button
         variant="outline"
         size="sm"

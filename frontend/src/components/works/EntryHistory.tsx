@@ -1,9 +1,11 @@
 import { History } from 'lucide-react'
+import { motion } from 'framer-motion'
 
 import EmptyState from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRecordHistory } from '@/hooks/useHistory'
+import { fadeSlideUp, FAST, staggerContainer } from '@/lib/motion'
 import type { Field } from '@/lib/types'
 import { isExpandedRecord } from '@/lib/fieldGuards'
 
@@ -53,9 +55,19 @@ export default function EntryHistory({ slug, recordId, fields }: Props) {
   }
 
   return (
-    <div className="space-y-3">
+    <motion.div
+      className="space-y-3"
+      variants={staggerContainer}
+      initial="initial"
+      animate="animate"
+    >
       {historyData.data.map((change) => (
-        <div key={change.id} className="rounded-md border p-3 text-sm">
+        <motion.div
+          key={change.id}
+          variants={fadeSlideUp}
+          transition={FAST}
+          className="rounded-md border p-3 text-sm"
+        >
           <div className="mb-1 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{OP_LABELS[change.operation] ?? change.operation}</Badge>
@@ -98,9 +110,9 @@ export default function EntryHistory({ slug, recordId, fields }: Props) {
               ))}
             </div>
           )}
-        </div>
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   )
 }
 

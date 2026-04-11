@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router'
 import { AnimatePresence, motion } from 'framer-motion'
 import { LogOut, Network, Settings, User, ChevronDown } from 'lucide-react'
 
+import { MICRO } from '@/lib/motion'
+
 import NotificationBell from '@/components/common/NotificationBell'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -151,7 +153,7 @@ export default function ExcelRibbon() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
+              transition={MICRO}
               className="flex items-center gap-1 flex-1 overflow-x-auto scrollbar-none"
             >
               {toolbarContent}
@@ -163,7 +165,7 @@ export default function ExcelRibbon() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
+              transition={MICRO}
               className="flex items-center gap-2 flex-1"
             >
               {pageActions}

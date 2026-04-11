@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router'
 import { motion } from 'framer-motion'
 import { LogOut, PanelLeftClose, PanelLeftOpen, Plus, User } from 'lucide-react'
 
+import { BASE } from '@/lib/motion'
+
 import NotificationBell from '@/components/common/NotificationBell'
 import FolderTree from './FolderTree'
 import SidebarNav from './SidebarNav'
@@ -83,7 +85,7 @@ export default function AppSidebar({ user }: { user: UserType }) {
     <motion.div
       className="relative flex h-full shrink-0 flex-col border-r border-border/60 bg-white overflow-hidden"
       animate={{ width: isOpen ? width : 40 }}
-      transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+      transition={BASE}
     >
       {/* Collapsed: toggle button only */}
       {!isOpen && (
