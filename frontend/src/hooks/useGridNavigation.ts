@@ -14,6 +14,8 @@ import { selectActiveCell, selectSelection } from '@/stores/grid/selectors'
 export type { CellPosition, SelectionRange } from '@/stores/grid'
 export { normalize, isCellInRange } from '@/stores/grid'
 
+import type { CellPosition } from '@/stores/grid'
+
 /** Check if a key represents a printable character (triggers edit mode). */
 function isPrintableKey(e: React.KeyboardEvent): boolean {
   if (e.ctrlKey || e.metaKey || e.altKey) return false
