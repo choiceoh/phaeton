@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useRef } from 'react'
 
-import { useGridStore, useGridStoreApi } from '@/stores/grid'
+import { useGridStore, useGridStoreApi, type CellPosition } from '@/stores/grid'
 import { selectActiveCell, selectSelection, selectDragGhost, selectDragMoveDragging } from '@/stores/grid/selectors'
 import type { CellFormats, EntryRow, Field } from '@/lib/types'
 import { isComputedType, isLayoutType } from '@/lib/constants'
@@ -28,6 +28,10 @@ interface UseCellDragMoveOptions {
   onMove: (updates: { id: string; fields: Record<string, unknown> }[]) => void
   onAutoScroll?: (x: number, y: number) => void
   onAutoScrollStop?: () => void
+  /** Canvas grid: resolve viewport coords to cell position (replaces elementFromPoint). */
+  cellAtPoint?: (clientX: number, clientY: number) => CellPosition | null
+  /** Canvas grid: check if point is near cell border (replaces DOM-based isNearBorder). */
+  isNearBorderFn?: (clientX: number, clientY: number, row: number, col: number) => boolean
 }
 
 const EDGE_THRESHOLD = 6
@@ -73,6 +77,8 @@ export function useCellDragMove({
   onMove,
   onAutoScroll,
   onAutoScrollStop,
+  cellAtPoint,
+  isNearBorderFn,
 }: UseCellDragMoveOptions) {
   // ── Store subscriptions ────────────────────────────────────────────
   const activeCell = useGridStore(selectActiveCell)
@@ -107,30 +113,48 @@ export function useCellDragMove({
     (e: React.MouseEvent, row: number, col: number) => {
       if (isDragging || !isCellInSource(row, col)) return
 
-      const cell = (e.target as HTMLElement).closest('[data-row]') as HTMLElement | null
-      if (!cell) return
-
-      if (isNearBorder(cell, e.clientX, e.clientY)) {
-        cell.style.cursor = e.ctrlKey || e.metaKey ? 'copy' : 'move'
+      // Canvas path: use isNearBorderFn if available, else DOM fallback
+      let nearBorder = false
+      if (isNearBorderFn) {
+        nearBorder = isNearBorderFn(e.clientX, e.clientY, row, col)
       } else {
-        cell.style.cursor = ''
+        const cell = (e.target as HTMLElement).closest('[data-row]') as HTMLElement | null
+        if (!cell) return
+        nearBorder = isNearBorder(cell, e.clientX, e.clientY)
+      }
+
+      // For Canvas mode, cursor is set on the container; for DOM, set on the cell
+      const el = (e.target as HTMLElement).closest('[data-row]') as HTMLElement | null
+      const target = el ?? e.currentTarget as HTMLElement
+      if (nearBorder) {
+        target.style.cursor = e.ctrlKey || e.metaKey ? 'copy' : 'move'
+      } else {
+        target.style.cursor = ''
       }
     },
-    [isDragging, isCellInSource],
+    [isDragging, isCellInSource, isNearBorderFn, cellAtPoint],
   )
 
   const updateDragGhost = useCallback(
     (clientX: number, clientY: number, ctrlKey = false) => {
       if (!dragStateRef.current) return
 
-      const el = document.elementFromPoint(clientX, clientY)
-      if (!el) return
-      const targetCell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
-      if (!targetCell) return
-
-      const targetRow = parseInt(targetCell.dataset.row ?? '', 10)
-      const targetCol = parseInt(targetCell.dataset.col ?? '', 10)
-      if (isNaN(targetRow) || isNaN(targetCol)) return
+      // Canvas path: use cellAtPoint if available, else DOM fallback
+      let targetRow: number
+      let targetCol: number
+      const pos = cellAtPoint?.(clientX, clientY)
+      if (pos) {
+        targetRow = pos.row
+        targetCol = pos.col
+      } else {
+        const el = document.elementFromPoint(clientX, clientY)
+        if (!el) return
+        const targetCell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
+        if (!targetCell) return
+        targetRow = parseInt(targetCell.dataset.row ?? '', 10)
+        targetCol = parseInt(targetCell.dataset.col ?? '', 10)
+        if (isNaN(targetRow) || isNaN(targetCol)) return
+      }
 
       const src = dragStateRef.current.sourceRange!
       const rowOffset = targetRow - dragStateRef.current.startRow
@@ -145,7 +169,7 @@ export function useCellDragMove({
         mode,
       })
     },
-    [setDragGhost],
+    [setDragGhost, cellAtPoint],
   )
 
   const updateDragGhostRef = useRef(updateDragGhost)
@@ -157,10 +181,18 @@ export function useCellDragMove({
     (e: React.MouseEvent, row: number, col: number) => {
       if (!isCellInSource(row, col) || !sourceRange) return
 
-      const cell = (e.target as HTMLElement).closest('[data-row]') as HTMLElement | null
-      if (!cell) return
+      // Canvas path: use isNearBorderFn if available, else DOM fallback
+      let nearBorder = false
+      if (isNearBorderFn) {
+        nearBorder = isNearBorderFn(e.clientX, e.clientY, row, col)
+      } else {
+        const cell = (e.target as HTMLElement).closest('[data-row]') as HTMLElement | null
+        if (!cell) return
+        nearBorder = isNearBorder(cell, e.clientX, e.clientY)
+      }
 
-      if (!isNearBorder(cell, e.clientX, e.clientY)) return
+      // Only start drag if near border
+      if (!nearBorder) return
 
       e.preventDefault()
       e.stopPropagation()

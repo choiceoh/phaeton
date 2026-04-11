@@ -35,6 +35,8 @@ interface UseGridNavigationOptions {
   getData?: (row: number, col: number) => unknown
   /** Number of visible rows for PageUp/PageDown navigation. */
   pageSize?: number
+  /** Canvas grid: resolve viewport coords to cell position (replaces elementFromPoint). */
+  cellAtPoint?: (clientX: number, clientY: number) => CellPosition | null
 }
 
 /**
@@ -99,6 +101,7 @@ export function useGridNavigation({
   onClearCell,
   getData,
   pageSize = 20,
+  cellAtPoint,
 }: UseGridNavigationOptions) {
   // ── Store subscriptions (fine-grained selectors) ───────────────────
   const activeCell = useGridStore(selectActiveCell)
@@ -269,14 +272,22 @@ export function useGridNavigation({
     (clientX: number, clientY: number) => {
       if (!dragSelectRef.current?.started) return
 
-      const el = document.elementFromPoint(clientX, clientY)
-      if (!el) return
-      const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
-      if (!cell) return
-
-      const targetRow = parseInt(cell.dataset.row ?? '', 10)
-      const targetCol = parseInt(cell.dataset.col ?? '', 10)
-      if (isNaN(targetRow) || isNaN(targetCol)) return
+      // Canvas path: use cellAtPoint if available, else DOM fallback
+      let targetRow: number
+      let targetCol: number
+      const pos = cellAtPoint?.(clientX, clientY)
+      if (pos) {
+        targetRow = pos.row
+        targetCol = pos.col
+      } else {
+        const el = document.elementFromPoint(clientX, clientY)
+        if (!el) return
+        const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
+        if (!cell) return
+        targetRow = parseInt(cell.dataset.row ?? '', 10)
+        targetCol = parseInt(cell.dataset.col ?? '', 10)
+        if (isNaN(targetRow) || isNaN(targetCol)) return
+      }
 
       const anchor = dragSelectRef.current.anchor
       setSelection({
@@ -287,7 +298,7 @@ export function useGridNavigation({
       })
       setActiveCell({ row: clampRow(targetRow), col: clampCol(targetCol) })
     },
-    [clampRow, clampCol, setActiveCell, setSelection],
+    [clampRow, clampCol, setActiveCell, setSelection, cellAtPoint],
   )
 
   const handleCellMouseDown = useCallback(

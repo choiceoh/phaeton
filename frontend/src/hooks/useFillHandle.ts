@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useRef } from 'react'
 
-import { useGridStore, useGridStoreApi } from '@/stores/grid'
+import { useGridStore, useGridStoreApi, type CellPosition } from '@/stores/grid'
 import { selectActiveCell, selectSelection, selectFillPreview, selectFillDragging } from '@/stores/grid/selectors'
 import type { CellFormats, EntryRow, Field } from '@/lib/types'
 import { isComputedType, isLayoutType } from '@/lib/constants'
@@ -36,6 +36,8 @@ interface UseFillHandleOptions {
   onFillIntoEmptyRows?: (rows: Record<string, unknown>[]) => void
   onAutoScroll?: (x: number, y: number) => void
   onAutoScrollStop?: () => void
+  /** Canvas grid: resolve viewport coords to cell position (replaces elementFromPoint). */
+  cellAtPoint?: (clientX: number, clientY: number) => CellPosition | null
 }
 
 type FillDirection = 'vertical' | 'horizontal' | null
@@ -108,6 +110,7 @@ export function useFillHandle({
   onFillIntoEmptyRows,
   onAutoScroll,
   onAutoScrollStop,
+  cellAtPoint,
 }: UseFillHandleOptions) {
   // ── Store subscriptions ────────────────────────────────────────────
   const activeCell = useGridStore(selectActiveCell)
@@ -151,15 +154,22 @@ export function useFillHandle({
       const container = containerRef.current
       if (!container || !dragStateRef.current) return
 
-      const el = document.elementFromPoint(clientX, clientY)
-      if (!el) return
-
-      const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
-      if (!cell) return
-
-      const targetRow = parseInt(cell.dataset.row ?? '', 10)
-      const targetCol = parseInt(cell.dataset.col ?? '', 10)
-      if (isNaN(targetRow)) return
+      // Canvas path: use cellAtPoint if available, else DOM fallback
+      let targetRow: number
+      let targetCol: number
+      const pos = cellAtPoint?.(clientX, clientY)
+      if (pos) {
+        targetRow = pos.row
+        targetCol = pos.col
+      } else {
+        const el = document.elementFromPoint(clientX, clientY)
+        if (!el) return
+        const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
+        if (!cell) return
+        targetRow = parseInt(cell.dataset.row ?? '', 10)
+        targetCol = parseInt(cell.dataset.col ?? '', 10)
+        if (isNaN(targetRow)) return
+      }
 
       const src = dragStateRef.current.sourceRange
 
@@ -188,7 +198,7 @@ export function useFillHandle({
         }
       }
     },
-    [containerRef, setFillPreview],
+    [containerRef, setFillPreview, cellAtPoint],
   )
 
   const updateFillPreviewRef = useRef(updateFillPreview)

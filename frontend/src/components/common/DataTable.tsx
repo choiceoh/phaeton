@@ -97,6 +97,8 @@ import GridContextMenu from './GridContextMenu'
 import HeaderContextMenu from './HeaderContextMenu'
 import RowContextMenu from './RowContextMenu'
 import type { CellFormat, EntryRow, Field } from '@/lib/types'
+import { CanvasGrid } from './canvas-grid'
+import { GridLayout } from './canvas-grid'
 
 /** Build cell className from flags (avoids giant template literal per cell). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -369,6 +371,8 @@ interface Props<T> {
   cellDirtyFn?: (rowId: string, fieldSlug: string) => boolean
   /** Returns error message for a cell (from coercion failure on save attempt) */
   cellErrorFn?: (rowId: string, fieldSlug: string) => string | null
+  /** Enable Canvas-based grid rendering for improved performance. */
+  useCanvasGrid?: boolean
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -442,6 +446,7 @@ export function DataTable<T>({
   freeGridMode,
   cellDirtyFn,
   cellErrorFn,
+  useCanvasGrid: canvasMode,
 }: Props<T>) {
   // ── Grid store ─────────────────────────────────────────────────────
   // If parent (SpreadsheetView) already provides a store, use that.
@@ -676,6 +681,23 @@ export function DataTable<T>({
 
   const totalGridRows = visibleRows.length + emptyRowCount
 
+  // Canvas grid: GridLayout for coordinate ↔ cell mapping.
+  const ROW_HEIGHT = 20
+  const gridLayout = useMemo(() => {
+    if (!canvasMode) return null
+    const colWidths = visibleCols.map(c => c.getSize())
+    const pinnedLeftCols = columnPinning.left ?? []
+    const pinnedCount = pinnedLeftCols.length + (selectable ? 1 : 0)
+    return new GridLayout({
+      columnWidths: colWidths,
+      rowHeight: (idx: number) => rowSizing[idx] || ROW_HEIGHT,
+      defaultRowHeight: ROW_HEIGHT,
+      totalRows: totalGridRows,
+      pinnedLeftCount: pinnedCount,
+      headerHeight: 20,
+    })
+  }, [canvasMode, visibleCols, columnPinning.left, selectable, rowSizing, totalGridRows])
+
   const grid = useGridNavigation({
     rowCount: totalGridRows,
     colCount: colIds.length,
@@ -683,6 +705,7 @@ export function DataTable<T>({
     isEditing: isEditingCell,
     onStartEditing: editable ? onStartEditing : undefined,
     onClearCell: editable ? onClearCell : undefined,
+    cellAtPoint: gridLayout?.cellAtPoint,
   })
 
   // Ref-based onTick for auto-scroll (avoids circular dependency with hooks).
@@ -706,6 +729,7 @@ export function DataTable<T>({
     onFillIntoEmptyRows,
     onAutoScroll: autoScroll.update,
     onAutoScrollStop: autoScroll.stop,
+    cellAtPoint: gridLayout?.cellAtPoint,
   })
 
   // Cell drag move/copy hook (reads activeCell/selection from store).
@@ -717,6 +741,8 @@ export function DataTable<T>({
     onMove: onCellMove ?? (() => {}),
     onAutoScroll: autoScroll.update,
     onAutoScrollStop: autoScroll.stop,
+    cellAtPoint: gridLayout?.cellAtPoint,
+    isNearBorderFn: gridLayout?.isNearCellBorder,
   })
 
   // Copied range state for marching ants feedback.
@@ -946,7 +972,6 @@ export function DataTable<T>({
   // Virtual scrolling — only activate when DATA row count exceeds threshold.
   // Empty placeholder rows are lightweight and should not trigger virtualization;
   // doing so causes blank grids when the scroll container height isn't resolved yet.
-  const ROW_HEIGHT = 20
   const VIRTUAL_THRESHOLD = 40
   const useVirtual = visibleRows.length > VIRTUAL_THRESHOLD
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
@@ -1347,6 +1372,16 @@ export function DataTable<T>({
             ))}
             </DndContext>
           </TableHeader>
+          {/* ─── Canvas Grid Mode ─────────────────────────────────── */}
+          {canvasMode && gridLayout && editable ? (
+            <TableBody
+              role="rowgroup"
+              style={{ height: gridLayout.totalContentHeight, position: 'relative' }}
+            >
+              {/* Empty tbody acts as spacer for scroll height */}
+              <tr style={{ height: 0 }}><td style={{ padding: 0, border: 'none', height: 0 }} /></tr>
+            </TableBody>
+          ) : (
           <TableBody
             ref={tableBodyRef}
             role="rowgroup"
@@ -1706,6 +1741,7 @@ export function DataTable<T>({
               </TableRow>
             )}
           </TableBody>
+          )}
           {/* Summary row */}
           {summaryRow && Object.keys(summaryRow).length > 0 && (
             <TableFooter>
@@ -1748,6 +1784,70 @@ export function DataTable<T>({
           )}
         </Table>
       </div>
+      {/* Canvas grid overlay — absolute over scrollRef, inside the relative parent */}
+      {canvasMode && gridLayout && editable && (
+        <CanvasGrid
+          data={data as Record<string, unknown>[]}
+          columnIds={colIds}
+          fields={editableFields ?? []}
+          emptyRowCount={emptyRowCount}
+          columnWidths={visibleCols.map(c => c.getSize())}
+          rowSizing={rowSizing}
+          defaultRowHeight={ROW_HEIGHT}
+          pinnedLeftCount={gridLayout.pinnedCount}
+          headerHeight={20}
+          activeCell={grid.activeCell}
+          selection={grid.selection}
+          copiedRange={copiedRange}
+          fillPreview={fillHandle.fillPreview}
+          dragGhost={cellDrag.dragGhost}
+          editingCell={editingCell ?? null}
+          editValue={editValue}
+          onEditValueChange={onEditValueChange ?? (() => {})}
+          onCommitEdit={onCommitEdit ?? (() => {})}
+          onCancelEdit={onCancelEdit ?? (() => {})}
+          onEditKeyDown={onEditKeyDown ?? (() => {})}
+          getFieldForCol={getFieldForCol ?? (() => null)}
+          cellSaveState={cellSaveState}
+          cellFormats={(rowIdx, colId) => {
+            if (rowIdx >= (data as Record<string, unknown>[]).length) return undefined
+            return ((data as Record<string, unknown>[])[rowIdx] as EntryRow)?._cell_formats?.[colId]
+          }}
+          cellDirtyFn={freeGridMode ? cellDirtyFn : undefined}
+          cellErrorFn={freeGridMode ? cellErrorFn : undefined}
+          onCellClick={(row, col, e) => grid.handleCellClick(row, col, e)}
+          onCellDoubleClick={(row, col) => {
+            if (onStartEditing) onStartEditing(row, col, '')
+          }}
+          onCellMouseDown={(row, col, e) => {
+            if (editable && onCellMove) {
+              cellDrag.handleCellMouseDown(e, row, col)
+              if (e.defaultPrevented) return
+            }
+            grid.handleCellMouseDown(row, col, e, autoScroll.update, autoScroll.stop)
+          }}
+          onCellMouseMove={(e, row, col) => {
+            if (editable && onCellMove) cellDrag.handleCellMouseMove(e, row, col)
+          }}
+          onCellContextMenu={(e, row, col) => {
+            const colId = colIds[col]
+            if (colId === '_rowNum') return
+            grid.handleCellClick(row, col, e)
+            setCellMenu({ x: e.clientX, y: e.clientY, rowIdx: row, colIdx: col })
+          }}
+          onFillHandleMouseDown={(e) => fillHandle.handleFillHandleMouseDown(e)}
+          onFillHandleDoubleClick={(e) => fillHandle.handleFillHandleDoubleClick(e)}
+          onRowNumberMouseDown={(e, row) => {
+            grid.selectRow(row, e.shiftKey)
+            e.preventDefault()
+          }}
+          page={page}
+          limit={limit}
+          systemColumns={new Set(['_select', '_actions', '_status', 'created_at'])}
+          scrollRef={scrollRef}
+          gridLayout={gridLayout}
+        />
+      )}
       {canScrollRight && (
         <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
       )}

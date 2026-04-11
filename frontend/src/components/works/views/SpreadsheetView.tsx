@@ -448,6 +448,7 @@ export default function SpreadsheetView({
       freeGridMode={freeGridMode}
       cellDirtyFn={cellDirtyFn}
       cellErrorFn={cellErrorFn}
+      useCanvasGrid
     />
     </GridStoreContext.Provider>
   )
