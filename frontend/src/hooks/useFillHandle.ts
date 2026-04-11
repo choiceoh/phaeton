@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { CellPosition, SelectionRange } from './useGridNavigation'
-import type { Field } from '@/lib/types'
+import type { CellFormats, EntryRow, Field } from '@/lib/types'
 import { isComputedType, isLayoutType } from '@/lib/constants'
 
 interface UseFillHandleOptions {
@@ -327,7 +327,38 @@ export function useFillHandle({
         }
       }
 
+      // Copy cell formats from source rows to target rows.
       if (updates.length > 0) {
+        const srcRowCount = src.endRow - src.startRow + 1
+        for (const update of updates) {
+          const targetRow = data.find((r) => String(r.id) === update.id) as EntryRow | undefined
+          if (!targetRow) continue
+          const existing: CellFormats = { ...(targetRow._cell_formats ?? {}) }
+          let changed = false
+          for (const colId of Object.keys(update.fields)) {
+            if (colId === '_cell_formats') continue
+            // Find the source cell that corresponds to this target cell.
+            const targetRowIdx = data.indexOf(targetRow as Record<string, unknown>)
+            let srcRowIdx: number
+            if (direction === 'vertical') {
+              srcRowIdx = src.startRow + ((targetRowIdx - currentPreview.startRow) % srcRowCount)
+            } else {
+              srcRowIdx = src.startRow + (targetRowIdx - src.startRow)
+            }
+            const srcRow = data[srcRowIdx] as EntryRow | undefined
+            const srcFmt = srcRow?._cell_formats?.[colId]
+            if (srcFmt) {
+              existing[colId] = { ...srcFmt }
+              changed = true
+            } else if (existing[colId]) {
+              delete existing[colId]
+              changed = true
+            }
+          }
+          if (changed) {
+            update.fields._cell_formats = existing
+          }
+        }
         onFill(updates)
       }
 
@@ -404,7 +435,32 @@ export function useFillHandle({
         }
       }
 
+      // Copy cell formats from source rows to filled rows (double-click auto-fill).
       if (updates.length > 0) {
+        const srcRowCount = sourceRange.endRow - sourceRange.startRow + 1
+        for (const update of updates) {
+          const targetRow = data.find((r) => String(r.id) === update.id) as EntryRow | undefined
+          if (!targetRow) continue
+          const existing: CellFormats = { ...(targetRow._cell_formats ?? {}) }
+          let changed = false
+          for (const colId of Object.keys(update.fields)) {
+            if (colId === '_cell_formats') continue
+            const targetRowIdx = data.indexOf(targetRow as Record<string, unknown>)
+            const srcRowIdx = sourceRange.startRow + ((targetRowIdx - sourceRange.endRow - 1) % srcRowCount)
+            const srcRow = data[srcRowIdx] as EntryRow | undefined
+            const srcFmt = srcRow?._cell_formats?.[colId]
+            if (srcFmt) {
+              existing[colId] = { ...srcFmt }
+              changed = true
+            } else if (existing[colId]) {
+              delete existing[colId]
+              changed = true
+            }
+          }
+          if (changed) {
+            update.fields._cell_formats = existing
+          }
+        }
         onFill(updates)
       }
     },

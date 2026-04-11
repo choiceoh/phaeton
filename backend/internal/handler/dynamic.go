@@ -362,7 +362,17 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 			colNames = append(colNames, `"_status"`)
 			placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
 			args = append(args, initStatus)
+			idx++
 		}
+	}
+
+	// Cell formatting: extract _cell_formats from body if provided.
+	if cf, ok := body["_cell_formats"]; ok {
+		colNames = append(colNames, `"_cell_formats"`)
+		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+		args = append(args, coerceValue(cf, schema.FieldJSON))
+		idx++
+		delete(body, "_cell_formats")
 	}
 
 	qTable := pgutil.QuoteQualified("data", col.Slug)
@@ -596,6 +606,14 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 		sets = append(sets, fmt.Sprintf("%s = $%d", pgutil.QuoteIdent("_status"), idx))
 		args = append(args, newStatusStr)
 		idx++
+	}
+
+	// Cell formatting: extract _cell_formats from body.
+	if cf, ok := body["_cell_formats"]; ok {
+		sets = append(sets, fmt.Sprintf(`"_cell_formats" = $%d`, idx))
+		args = append(args, coerceValue(cf, schema.FieldJSON))
+		idx++
+		delete(body, "_cell_formats")
 	}
 
 	args = append(args, id)
@@ -1281,6 +1299,12 @@ func buildInsertColumns(body map[string]any, fields []schema.Field, userID strin
 		cols = append(cols, `"_status"`)
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
 		args = append(args, st)
+		idx++
+	}
+	if cf, ok := body["_cell_formats"]; ok {
+		cols = append(cols, `"_cell_formats"`)
+		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+		args = append(args, coerceValue(cf, schema.FieldJSON))
 	}
 	return cols, placeholders, args
 }
@@ -1441,6 +1465,13 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 			sets = append(sets, fmt.Sprintf("%s = $%d", pgutil.QuoteIdent(f.Slug), idx))
 			args = append(args, coerceValue(v, f.FieldType))
+			idx++
+		}
+
+		// Cell formatting in batch update.
+		if cf, ok := u.Fields["_cell_formats"]; ok {
+			sets = append(sets, fmt.Sprintf(`"_cell_formats" = $%d`, idx))
+			args = append(args, coerceValue(cf, schema.FieldJSON))
 			idx++
 		}
 
@@ -1814,7 +1845,7 @@ func buildSelectCols(fields []schema.Field, hasStatus bool, opts *selectColOpts)
 		}
 		cols = append(cols, pgutil.QuoteIdent(f.Slug))
 	}
-	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`, `"_version"`)
+	cols = append(cols, `"created_at"`, `"updated_at"`, `"created_by"`, `"updated_by"`, `"deleted_at"`, `"_version"`, `"_cell_formats"`)
 	if hasStatus {
 		cols = append(cols, `"_status"`)
 	}
@@ -1849,7 +1880,7 @@ func qualifySelectCols(fields []schema.Field, prefix string, hasStatus bool, opt
 		}
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, f.Slug, f.Slug))
 	}
-	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "updated_by", "deleted_at", "_version"} {
+	for _, sysCol := range []string{"created_at", "updated_at", "created_by", "updated_by", "deleted_at", "_version", "_cell_formats"} {
 		cols = append(cols, fmt.Sprintf(`%s.%q AS %q`, prefix, sysCol, sysCol))
 	}
 	if hasStatus {

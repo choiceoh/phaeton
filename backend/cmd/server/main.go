@@ -108,6 +108,11 @@ func run() int {
 
 	migEngine := migration.NewEngine(pool, store, cache)
 
+	// Ensure _cell_formats JSONB column exists on all dynamic tables.
+	if err := migEngine.EnsureCellFormatsColumn(context.Background()); err != nil {
+		logger.Warn("ensure _cell_formats column", "error", err)
+	}
+
 	// Event bus.
 	bus := events.NewBus()
 

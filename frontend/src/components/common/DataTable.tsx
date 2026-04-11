@@ -74,7 +74,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { CellPosition } from '@/hooks/useGridNavigation'
+import type { CellPosition, SelectionRange } from '@/hooks/useGridNavigation'
 import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
 import { useCellDragMove } from '@/hooks/useCellDragMove'
@@ -88,7 +88,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import EmptyState from './EmptyState'
 import GridCell from './GridCell'
 import GridContextMenu from './GridContextMenu'
-import type { EntryRow, Field } from '@/lib/types'
+import type { CellFormat, EntryRow, Field } from '@/lib/types'
 
 /** Convert a 0-based column index to Excel-style letter (0→A, 25→Z, 26→AA). */
 function colIndexToLetter(idx: number): string {
@@ -199,6 +199,11 @@ interface Props<T> {
   /** Per-column filters for client-side filtering. */
   columnFilters?: { id: string; value: unknown }[]
 
+  /** Called when active cell or selection changes (for formatting toolbar). */
+  onActiveCellChange?: (cell: CellPosition | null, selection: SelectionRange | null) => void
+  /** Called when formatting shortcuts (Ctrl+B, Ctrl+I) are pressed. */
+  onFormatShortcut?: (key: 'bold' | 'italic') => void
+
   // --- Column management (optional, used by SpreadsheetView) ---
   /** Called to rename a column. */
   onRenameColumn?: (columnId: string, newLabel: string) => void
@@ -272,6 +277,8 @@ export function DataTable<T>({
   columnFilters: columnFiltersProp,
   onRenameColumn,
   onDeleteColumn,
+  onActiveCellChange,
+  onFormatShortcut,
   onAddColumn,
   columnManagement,
 }: Props<T>) {
@@ -488,6 +495,11 @@ export function DataTable<T>({
     onAutoScrollStop: autoScroll.stop,
   })
 
+  // Notify parent of active cell / selection changes (for formatting toolbar).
+  useEffect(() => {
+    onActiveCellChange?.(grid.activeCell, grid.selection)
+  }, [grid.activeCell, grid.selection, onActiveCellChange])
+
   // Clipboard: copy & paste.
   const handleClipboard = useCallback(
     async (e: React.KeyboardEvent) => {
@@ -567,10 +579,23 @@ export function DataTable<T>({
         onEditKeyDown(e)
         if (e.defaultPrevented) return
       }
+      // Formatting shortcuts: Ctrl/Cmd + B/I
+      if (onFormatShortcut && (e.ctrlKey || e.metaKey) && !isEditingCell && grid.activeCell) {
+        if (e.key === 'b' || e.key === 'B') {
+          e.preventDefault()
+          onFormatShortcut('bold')
+          return
+        }
+        if (e.key === 'i' || e.key === 'I') {
+          e.preventDefault()
+          onFormatShortcut('italic')
+          return
+        }
+      }
       handleClipboard(e)
       grid.handleKeyDown(e)
     },
-    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown],
+    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown, onFormatShortcut, grid.activeCell],
   )
 
   // Clear grid state when data changes (page navigation).
@@ -949,6 +974,11 @@ export function DataTable<T>({
                       return isActive
                     })()
 
+                    // Cell formatting from _cell_formats.
+                    const cellFmt: CellFormat | undefined = !isRowNum
+                      ? (row.original as EntryRow)._cell_formats?.[cell.column.id]
+                      : undefined
+
                     return (
                       <TableCell
                         key={cell.id}
@@ -962,6 +992,11 @@ export function DataTable<T>({
                           left: isPinned === 'left' ? cell.column.getStart('left') : undefined,
                           right: isPinned === 'right' ? cell.column.getAfter('right') : undefined,
                           zIndex: isPinned ? 1 : undefined,
+                          ...(cellFmt?.bg && !isSelected ? { backgroundColor: cellFmt.bg } : {}),
+                          ...(cellFmt?.color ? { color: cellFmt.color } : {}),
+                          ...(cellFmt?.fontSize ? { fontSize: `${cellFmt.fontSize}px` } : {}),
+                          ...(cellFmt?.bold ? { fontWeight: 600 } : {}),
+                          ...(cellFmt?.italic ? { fontStyle: 'italic' as const } : {}),
                         }}
                         onMouseMove={editable && onCellMove ? (e) => cellDrag.handleCellMouseMove(e, rowIdx, colIdx) : undefined}
                         onMouseDown={(e) => {

@@ -49,6 +49,8 @@ interface SpreadsheetViewProps {
   onRenameColumn?: (columnId: string, newLabel: string) => void
   onDeleteColumn?: (columnId: string) => void
   onAddColumn?: () => void
+  onActiveCellChange?: (cell: import('@/hooks/useGridNavigation').CellPosition | null, selection: import('@/hooks/useGridNavigation').SelectionRange | null) => void
+  onFormatShortcut?: (key: 'bold' | 'italic') => void
 }
 
 /**
@@ -145,6 +147,8 @@ export default function SpreadsheetView({
   onRenameColumn,
   onDeleteColumn,
   onAddColumn,
+  onActiveCellChange,
+  onFormatShortcut,
 }: SpreadsheetViewProps) {
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
 
@@ -432,6 +436,8 @@ export default function SpreadsheetView({
       onRenameColumn={onRenameColumn}
       onDeleteColumn={onDeleteColumn}
       onAddColumn={onAddColumn}
+      onActiveCellChange={onActiveCellChange}
+      onFormatShortcut={onFormatShortcut}
     />
   )
 }

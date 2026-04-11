@@ -49,7 +49,8 @@ func validatePayload(
 		// System columns the client may send (auto-managed by the server).
 		switch k {
 		case "id", "created_at", "updated_at", "deleted_at",
-			"created_by", "updated_by", "_status", "_version", "_optimistic":
+			"created_by", "updated_by", "_status", "_version", "_optimistic",
+			"_cell_formats":
 			continue
 		}
 		return fmt.Errorf("%w: unknown field %q", schema.ErrInvalidInput, k)
