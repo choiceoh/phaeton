@@ -17,9 +17,9 @@ import { useEffect } from 'react'
 interface GridContextMenuProps {
   position: { x: number; y: number } | null
   onCopy: () => void
-  onPaste: () => void
-  onDeleteRow: () => void
-  onClearCell: () => void
+  onPaste?: () => void
+  onDeleteRow?: () => void
+  onClearCell?: () => void
   onClose: () => void
   canDelete?: boolean
   onInsertRowAbove?: () => void
@@ -29,6 +29,8 @@ interface GridContextMenuProps {
   onFilterByValue?: () => void
   cellValue?: unknown
   columnLabel?: string
+  /** When true, only show read-only actions (copy, sort, filter). */
+  readonly?: boolean
 }
 
 function MenuItem({
@@ -76,6 +78,7 @@ export default function GridContextMenu({
   onFilterByValue,
   cellValue,
   columnLabel,
+  readonly,
 }: GridContextMenuProps) {
   useEffect(() => {
     if (!position) return
@@ -103,12 +106,18 @@ export default function GridContextMenu({
       onClick={(e) => e.stopPropagation()}
     >
       <MenuItem icon={ClipboardCopy} label="복사" shortcut="Ctrl+C" onClick={() => { onCopy(); onClose() }} />
-      <MenuItem icon={ClipboardPaste} label="붙여넣기" shortcut="Ctrl+V" onClick={() => { onPaste(); onClose() }} />
+      {!readonly && onPaste && (
+        <MenuItem icon={ClipboardPaste} label="붙여넣기" shortcut="Ctrl+V" onClick={() => { onPaste(); onClose() }} />
+      )}
 
-      <Separator />
-      <MenuItem icon={Eraser} label="셀 지우기" shortcut="Del" onClick={() => { onClearCell(); onClose() }} />
+      {!readonly && onClearCell && (
+        <>
+          <Separator />
+          <MenuItem icon={Eraser} label="셀 지우기" shortcut="Del" onClick={() => { onClearCell(); onClose() }} />
+        </>
+      )}
 
-      {(onInsertRowAbove || onInsertRowBelow) && (
+      {!readonly && (onInsertRowAbove || onInsertRowBelow) && (
         <>
           <Separator />
           {onInsertRowAbove && (
@@ -151,7 +160,7 @@ export default function GridContextMenu({
         </>
       )}
 
-      {canDelete && (
+      {!readonly && canDelete && onDeleteRow && (
         <>
           <Separator />
           <MenuItem icon={Trash2} label="행 삭제" onClick={() => { onDeleteRow(); onClose() }} destructive />

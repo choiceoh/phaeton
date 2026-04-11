@@ -44,15 +44,12 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  ArrowDownUp,
   ChevronsLeft,
   ChevronsRight,
-  Pencil,
   PinIcon,
   PinOffIcon,
   Plus,
   Settings2,
-  Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -90,6 +87,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import EmptyState from './EmptyState'
 import GridCell from './GridCell'
 import GridContextMenu from './GridContextMenu'
+import HeaderContextMenu from './HeaderContextMenu'
+import RowContextMenu from './RowContextMenu'
 import type { CellFormat, EntryRow, Field } from '@/lib/types'
 
 /** Convert a 0-based column index to Excel-style letter (0→A, 25→Z, 26→AA). */
@@ -439,7 +438,20 @@ export function DataTable<T>({
         const idx = data.indexOf(row.original)
         const num = (page - 1) * limit + idx + 1
         return (
-          <div className="relative h-full">
+          <div
+            className="relative h-full cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation()
+              grid.selectRow(idx, e.shiftKey)
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              // Also select the row on right-click
+              grid.selectRow(idx, e.shiftKey)
+              setRowMenu({ x: e.clientX, y: e.clientY, rowIdx: idx })
+            }}
+          >
             <span className="text-[11px] text-stone-400 select-none text-center block tabular-nums">{num}</span>
             {/* Row resize handle */}
             <div
@@ -679,6 +691,25 @@ export function DataTable<T>({
     rowIdx: number
     colIdx: number
   } | null>(null)
+
+  // Row number context menu state.
+  const [rowMenu, setRowMenu] = useState<{
+    x: number
+    y: number
+    rowIdx: number
+  } | null>(null)
+
+  // Close row context menu on click outside.
+  useEffect(() => {
+    if (!rowMenu) return
+    const close = () => setRowMenu(null)
+    document.addEventListener('click', close)
+    document.addEventListener('contextmenu', close)
+    return () => {
+      document.removeEventListener('click', close)
+      document.removeEventListener('contextmenu', close)
+    }
+  }, [rowMenu])
 
   // Column rename dialog state.
   const [renameCol, setRenameCol] = useState<{ id: string; label: string } | null>(null)
@@ -1357,11 +1388,9 @@ export function DataTable<T>({
                           }
                         }}
                         onContextMenu={(e) => {
-                          if (editable) {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setCellMenu({ x: e.clientX, y: e.clientY, rowIdx, colIdx })
-                          }
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setCellMenu({ x: e.clientX, y: e.clientY, rowIdx, colIdx })
                         }}
                       >
                         {isCellDirty && (
@@ -1503,126 +1532,49 @@ export function DataTable<T>({
       )}
 
       {/* Header context menu (right-click) */}
-      {headerMenu && (
-        <div
-          className="fixed z-50 min-w-[160px] border border-[#d4d4d4] bg-white p-0.5 text-[11px] shadow-sm"
-          style={{ left: headerMenu.x, top: headerMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {headerMenu.column.getCanSort() && (
-            <>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
-                onClick={() => {
-                  onSortChange?.([{ id: headerMenu.column.id, desc: false }])
-                  setHeaderMenu(null)
-                }}
-              >
-                <ArrowDownUp className="h-3.5 w-3.5" />
-                오름차순 정렬
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
-                onClick={() => {
-                  onSortChange?.([{ id: headerMenu.column.id, desc: true }])
-                  setHeaderMenu(null)
-                }}
-              >
-                <ArrowDownUp className="h-3.5 w-3.5 rotate-180" />
-                내림차순 정렬
-              </button>
-              <div className="my-0.5 h-px bg-[#d4d4d4]" />
-            </>
-          )}
-          {headerMenu.column.getIsPinned() ? (
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
-              onClick={() => {
-                headerMenu.column.pin(false)
-                setHeaderMenu(null)
-              }}
-            >
-              <PinOffIcon className="h-3.5 w-3.5" />
-              고정 해제
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
-                onClick={() => {
-                  headerMenu.column.pin('left')
-                  setHeaderMenu(null)
-                }}
-              >
-                <PinIcon className="h-3.5 w-3.5" />
-                왼쪽 고정
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
-                onClick={() => {
-                  headerMenu.column.pin('right')
-                  setHeaderMenu(null)
-                }}
-              >
-                <PinIcon className="h-3.5 w-3.5 rotate-90" />
-                오른쪽 고정
-              </button>
-            </>
-          )}
-          <div className="my-0.5 h-px bg-[#d4d4d4]" />
-          {headerMenu.column.getCanHide() && (
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
-              onClick={() => {
-                headerMenu.column.toggleVisibility(false)
-                setHeaderMenu(null)
-              }}
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-              숨기기
-            </button>
-          )}
-          {columnManagement && onRenameColumn && headerMenu.column.id !== '_rowNum' && headerMenu.column.id !== '_select' && (
-            <>
-              <div className="my-0.5 h-px bg-[#d4d4d4]" />
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
-                onClick={() => {
-                  const colId = headerMenu.column.id
-                  const label = String(headerMenu.column.columnDef.header ?? colId)
-                  setRenameCol({ id: colId, label })
-                  setRenameValue(label)
-                  setHeaderMenu(null)
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                이름 변경
-              </button>
-              {onDeleteColumn && (
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px] text-destructive"
-                  onClick={() => {
-                    const colId = headerMenu.column.id
-                    setHeaderMenu(null)
-                    onDeleteColumn(colId)
-                  }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  삭제
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      {headerMenu && (() => {
+        const col = headerMenu.column
+        const isSystemCol = col.id === '_rowNum' || col.id === '_select'
+        const isManageable = columnManagement && !isSystemCol
+        return (
+          <HeaderContextMenu
+            position={headerMenu}
+            onClose={() => setHeaderMenu(null)}
+            canSort={col.getCanSort()}
+            onSortAscending={() => onSortChange?.([{ id: col.id, desc: false }])}
+            onSortDescending={() => onSortChange?.([{ id: col.id, desc: true }])}
+            isPinned={col.getIsPinned()}
+            onPin={(dir) => col.pin(dir)}
+            canHide={col.getCanHide()}
+            onHide={() => col.toggleVisibility(false)}
+            onAutoFitWidth={() => {
+              // Measure the max content width for this column from rendered cells.
+              const container = scrollRef.current
+              if (!container) return
+              const colIdx = table.getVisibleFlatColumns().findIndex((c) => c.id === col.id)
+              if (colIdx === -1) return
+              const cells = container.querySelectorAll(`td:nth-child(${colIdx + 1}), th:nth-child(${colIdx + 1})`)
+              let maxW = 40
+              cells.forEach((cell) => {
+                const w = (cell as HTMLElement).scrollWidth + 8
+                if (w > maxW) maxW = w
+              })
+              setColumnSizing((prev) => ({ ...prev, [col.id]: Math.min(maxW, 400) }))
+            }}
+            columnManagement={!!isManageable}
+            onRename={isManageable && onRenameColumn ? () => {
+              const label = String(col.columnDef.header ?? col.id)
+              setRenameCol({ id: col.id, label })
+              setRenameValue(label)
+            } : undefined}
+            onDelete={isManageable && onDeleteColumn ? () => {
+              onDeleteColumn(col.id)
+            } : undefined}
+            onInsertLeft={isManageable && onAddColumn ? () => onAddColumn() : undefined}
+            onInsertRight={isManageable && onAddColumn ? () => onAddColumn() : undefined}
+          />
+        )
+      })()}
 
       {/* Column rename inline dialog */}
       {renameCol && onRenameColumn && (
@@ -1666,8 +1618,8 @@ export function DataTable<T>({
         </div>
       )}
 
-      {/* Cell context menu (right-click, editable mode) */}
-      {editable && cellMenu && (
+      {/* Cell context menu (right-click) */}
+      {cellMenu && (
         <GridContextMenu
           position={cellMenu}
           onCopy={async () => {
@@ -1722,6 +1674,32 @@ export function DataTable<T>({
             const col = table.getColumn(colIds[cellMenu.colIdx])
             return col ? String(col.columnDef.header ?? col.id) : undefined
           })()}
+          readonly={!editable}
+        />
+      )}
+
+      {/* Row number context menu (right-click) */}
+      {rowMenu && (
+        <RowContextMenu
+          position={rowMenu}
+          onClose={() => setRowMenu(null)}
+          onCopy={async () => {
+            const row = visibleRows[rowMenu.rowIdx]
+            if (row) {
+              const range = { startRow: rowMenu.rowIdx, startCol: 0, endRow: rowMenu.rowIdx, endCol: colIds.length - 1 }
+              await copyToClipboard(data as EntryRow[], colIds, range)
+            }
+          }}
+          onInsertRowAbove={onInsertRow ? () => onInsertRow() : undefined}
+          onInsertRowBelow={onInsertRow ? () => onInsertRow() : undefined}
+          onDeleteRow={onDeleteRow ? () => {
+            const row = visibleRows[rowMenu.rowIdx]
+            if (row) {
+              const rowId = String((row.original as EntryRow).id)
+              onDeleteRow(rowId)
+            }
+          } : undefined}
+          readonly={!editable}
         />
       )}
 
