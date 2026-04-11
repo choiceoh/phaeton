@@ -60,8 +60,6 @@ export default function RootLayout() {
               <NavLink to="/my-tasks" className={navCls} viewTransition>내 업무</NavLink>
               <NavLink to="/apps" className={navCls} viewTransition>앱</NavLink>
               <NavLink to="/dashboard" className={navCls} viewTransition>대시보드</NavLink>
-              <NavLink to="/calendar" className={navCls} viewTransition>캘린더</NavLink>
-
               <div className="mx-1.5 h-4 w-px bg-border" aria-hidden="true" />
 
               {/* 도구 */}
