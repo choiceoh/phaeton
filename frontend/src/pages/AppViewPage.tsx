@@ -1087,12 +1087,12 @@ export default function AppViewPage() {
               : <Ellipsis className="h-3.5 w-3.5" />}
             더보기
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={handleXlsxExport}>
+          <DropdownMenuContent align="start" className="min-w-[160px]">
+            <DropdownMenuItem onClick={handleXlsxExport} className="whitespace-nowrap">
               <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />
               Excel 내보내기
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleCsvExport}>
+            <DropdownMenuItem onClick={handleCsvExport} className="whitespace-nowrap">
               <Download className="h-3.5 w-3.5 mr-2" />
               CSV 내보내기
             </DropdownMenuItem>
