@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      includeAssets: ['logo.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Topworks',
         short_name: 'Topworks',

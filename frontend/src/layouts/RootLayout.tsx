@@ -51,8 +51,8 @@ export default function RootLayout() {
       <div className="min-h-screen overflow-x-hidden bg-background">
         <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-border/60 bg-white/80 px-6 py-2.5 backdrop-blur-md backdrop-saturate-150">
           <div className="flex items-center gap-1.5">
-            <Link to="/" className="mr-5 flex items-center gap-2.5 text-lg font-bold tracking-tight text-foreground" viewTransition>
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-white shadow-sm">T</span>
+            <Link to="/" className="mr-5 flex items-center gap-2 text-lg font-bold tracking-tight text-foreground" viewTransition>
+              <img src="/logo.png" alt="Topworks" className="h-6 w-6 grayscale" />
               <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Topworks</span>
             </Link>
             <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto">

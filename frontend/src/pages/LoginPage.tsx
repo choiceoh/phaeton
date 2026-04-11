@@ -39,7 +39,7 @@ export default function LoginPage() {
         >
           <div className="space-y-1.5">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-sm font-bold text-white shadow-sm">T</span>
+              <img src="/logo.png" alt="Topworks" className="h-8 w-8" />
               <h1 className="text-xl font-bold tracking-tight text-foreground">Topworks</h1>
             </div>
             <p className="text-sm text-muted-foreground">앱 플랫폼에 로그인하세요</p>
