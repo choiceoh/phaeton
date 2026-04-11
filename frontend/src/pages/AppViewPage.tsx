@@ -13,10 +13,6 @@ import {
   ArrowDownAZ,
   ArrowDownUp,
   ArrowUpAZ,
-  Download,
-  Ellipsis,
-  FileSpreadsheet,
-  FileText,
   Filter,
   LayoutGrid,
   Loader2,
@@ -29,9 +25,7 @@ import {
   Save,
   Search,
   Trash2,
-  Upload,
   X,
-  Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Outlet, useNavigate, useParams } from 'react-router'
@@ -652,6 +646,19 @@ export default function AppViewPage() {
   useEffect(() => { excelToolbar.setSheetTabs(sheetTabsRef.current) })
   useEffect(() => { excelToolbar.setPageActions(pageActionsRef.current) })
   useEffect(() => { excelToolbar.setDataTabContent(dataTabContentRef.current) })
+  useEffect(() => {
+    if (collection) {
+      excelToolbar.setFileMenuActions({
+        onXlsxExport: handleXlsxExport,
+        onCsvExport: handleCsvExport,
+        onPdfExport: handlePdfExport,
+        onEmailReport: () => setEmailDialogOpen(true),
+        onImport: () => fileInputRef.current?.click(),
+        canManage,
+      })
+    }
+    return () => { excelToolbar.setFileMenuActions({}) }
+  })
 
   if (colLoading) return <LoadingState variant="table" />
   if (colError) return <ErrorState error={colErr} />
@@ -1181,47 +1188,6 @@ export default function AppViewPage() {
           </Button>
         )}
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium hover:bg-accent h-8"
-            disabled={importingCSV}
-          >
-            {importingCSV
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <Ellipsis className="h-3.5 w-3.5" />}
-            더보기
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[160px]">
-            <DropdownMenuItem onClick={handleXlsxExport} className="whitespace-nowrap">
-              <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />
-              Excel 내보내기
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleCsvExport} className="whitespace-nowrap">
-              <Download className="h-3.5 w-3.5 mr-2" />
-              CSV 내보내기
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handlePdfExport}>
-              <FileText className="h-3.5 w-3.5 mr-2" />
-              PDF 내보내기
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setEmailDialogOpen(true)}>
-              <Mail className="h-3.5 w-3.5 mr-2" />
-              이메일 리포트
-            </DropdownMenuItem>
-            <RoleGate roles={['director', 'pm', 'engineer']}>
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                <Upload className="h-3.5 w-3.5 mr-2" />
-                가져오기
-              </DropdownMenuItem>
-            </RoleGate>
-            {canManage && (
-              <DropdownMenuItem onClick={() => setAutomationsOpen(true)}>
-                <Zap className="h-3.5 w-3.5 mr-2" />
-                자동화
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
         <input
           ref={fileInputRef}
           type="file"

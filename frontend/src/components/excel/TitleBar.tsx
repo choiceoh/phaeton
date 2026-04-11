@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router'
-import { LogOut, Network, Settings, User, ChevronDown } from 'lucide-react'
+import { LogOut, Network, Settings, User, ChevronDown, FileSpreadsheet, Download, FileText, Mail, Upload } from 'lucide-react'
 
 import NotificationBell from '@/components/common/NotificationBell'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -20,7 +20,7 @@ export default function TitleBar() {
   const { data: user } = useCurrentUser()
   const logout = useLogout()
   const navigate = useNavigate()
-  const { workbookLabel, collectionLabel } = useExcelToolbar()
+  const { workbookLabel, collectionLabel, fileMenuActions } = useExcelToolbar()
 
   if (!user) return null
 
@@ -42,16 +42,39 @@ export default function TitleBar() {
           <DropdownMenuItem onClick={() => navigate('/apps')}>
             앱 목록
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => navigate('/my-tasks')}>
-            내 업무
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => navigate('/automations')}>
-            자동화
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => navigate('/ai')}>
             AI
           </DropdownMenuItem>
+          {fileMenuActions.onXlsxExport && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={fileMenuActions.onXlsxExport}>
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />
+                Excel 내보내기
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={fileMenuActions.onCsvExport}>
+                <Download className="h-3.5 w-3.5 mr-2" />
+                CSV 내보내기
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={fileMenuActions.onPdfExport}>
+                <FileText className="h-3.5 w-3.5 mr-2" />
+                PDF 내보내기
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={fileMenuActions.onEmailReport}>
+                <Mail className="h-3.5 w-3.5 mr-2" />
+                이메일 리포트
+              </DropdownMenuItem>
+              {fileMenuActions.canManage && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={fileMenuActions.onImport}>
+                    <Upload className="h-3.5 w-3.5 mr-2" />
+                    가져오기
+                  </DropdownMenuItem>
+                </>
+              )}
+            </>
+          )}
           {isAdmin && (
             <>
               <DropdownMenuSeparator />
