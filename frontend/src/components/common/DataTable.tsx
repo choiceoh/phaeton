@@ -73,7 +73,7 @@ import {
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { CellPosition, SelectionRange, CellSaveState } from '@/stores/grid'
-import { isCellInRange, createGridStore, GridStoreContext } from '@/stores/grid'
+import { createGridStore, GridStoreContext } from '@/stores/grid'
 import type { GridStore } from '@/stores/grid'
 import { useGridNavigation } from '@/hooks/useGridNavigation'
 import { useExcelToolbarOptional } from '@/contexts/ExcelToolbarContext'
@@ -92,6 +92,67 @@ import GridContextMenu from './GridContextMenu'
 import HeaderContextMenu from './HeaderContextMenu'
 import RowContextMenu from './RowContextMenu'
 import type { CellFormat, EntryRow, Field } from '@/lib/types'
+
+/** Build cell className from flags (avoids giant template literal per cell). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getCellClassName(
+  isRowNum: boolean,
+  isPinned: string | false,
+  isLastPinnedLeftCell: boolean,
+  isActive: boolean,
+  isSelected: boolean,
+  edgeTop: any,
+  edgeBottom: any,
+  edgeLeft: any,
+  edgeRight: any,
+  inCopy: any,
+  cpTop: any,
+  cpBottom: any,
+  cpLeft: any,
+  cpRight: any,
+  inFillPreview: any,
+  fpTop: any,
+  fpBottom: any,
+  fpLeft: any,
+  fpRight: any,
+  inDragGhost: any,
+  dgPrefix: string,
+  dgTop: any,
+  dgBottom: any,
+  dgLeft: any,
+  dgRight: any,
+  cellError: string | null,
+): string {
+  const cls: string[] = ['relative']
+  if (isRowNum) cls.push('bg-[#e6e6e6] border-r border-r-stone-300 text-center')
+  else if (isPinned) cls.push('bg-background')
+  if (isLastPinnedLeftCell) cls.push('border-r-2 border-r-[#b0b0b0]')
+  if (isActive && !isRowNum) cls.push('grid-cell-active')
+  if (isSelected && !isActive && !isRowNum) cls.push('bg-[#cce4f7]')
+  if (edgeTop) cls.push('border-t-2 border-t-[#005a9e]')
+  if (edgeBottom) cls.push('border-b-2 border-b-[#005a9e]')
+  if (edgeLeft) cls.push('border-l-2 border-l-[#005a9e]')
+  if (edgeRight) cls.push('border-r-2 border-r-[#005a9e]')
+  if (inCopy) cls.push('copy-range-cell')
+  if (cpTop) cls.push('copy-edge-top')
+  if (cpBottom) cls.push('copy-edge-bottom')
+  if (cpLeft) cls.push('copy-edge-left')
+  if (cpRight) cls.push('copy-edge-right')
+  if (inFillPreview) cls.push('fill-preview-bg')
+  if (fpTop) cls.push('fill-preview-top')
+  if (fpBottom) cls.push('fill-preview-bottom')
+  if (fpLeft) cls.push('fill-preview-left')
+  if (fpRight) cls.push('fill-preview-right')
+  if (inDragGhost) {
+    cls.push('drag-ghost-bg')
+    if (dgTop) cls.push(`${dgPrefix}-top`)
+    if (dgBottom) cls.push(`${dgPrefix}-bottom`)
+    if (dgLeft) cls.push(`${dgPrefix}-left`)
+    if (dgRight) cls.push(`${dgPrefix}-right`)
+  }
+  if (cellError) cls.push('cell-error')
+  return cls.join(' ')
+}
 
 /** Convert a 0-based column index to Excel-style letter (0→A, 25→Z, 26→AA). */
 function colIndexToLetter(idx: number): string {
@@ -445,7 +506,7 @@ export function DataTable<T>({
       size: 40,
       header: () => null,
       cell: ({ row }) => {
-        const idx = data.indexOf(row.original)
+        const idx = row.index
         const num = (page - 1) * limit + idx + 1
         return (
           <div
@@ -643,6 +704,52 @@ export function DataTable<T>({
 
   // Copied range state for marching ants feedback.
   const [copiedRange, setCopiedRange] = useState<SelectionRange | null>(null)
+
+  // Pre-compute normalized ranges once per render (not per cell).
+  const selNorm = useMemo(() => {
+    const sel = grid.selection
+    return sel ? {
+      r1: Math.min(sel.startRow, sel.endRow),
+      r2: Math.max(sel.startRow, sel.endRow),
+      c1: Math.min(sel.startCol, sel.endCol),
+      c2: Math.max(sel.startCol, sel.endCol),
+    } : null
+  }, [grid.selection])
+
+  const cpNorm = useMemo(() => {
+    return copiedRange ? {
+      r1: Math.min(copiedRange.startRow, copiedRange.endRow),
+      r2: Math.max(copiedRange.startRow, copiedRange.endRow),
+      c1: Math.min(copiedRange.startCol, copiedRange.endCol),
+      c2: Math.max(copiedRange.startCol, copiedRange.endCol),
+    } : null
+  }, [copiedRange])
+
+  const fillHandlePos = useMemo(() => {
+    if (!editable || !onFill) return null
+    if (grid.selection) {
+      return {
+        r2: Math.max(grid.selection.startRow, grid.selection.endRow),
+        c2: Math.max(grid.selection.startCol, grid.selection.endCol),
+      }
+    }
+    return grid.activeCell ? { r2: grid.activeCell.row, c2: grid.activeCell.col } : null
+  }, [editable, onFill, grid.selection, grid.activeCell])
+
+  // Pre-compute base style per column (shared across all rows → avoids per-cell object creation).
+  const colBaseStyles = useMemo(() => {
+    return visibleCols.map((col) => {
+      const isPinned = col.getIsPinned()
+      return {
+        width: col.getSize(),
+        position: isPinned ? 'sticky' as const : undefined,
+        left: isPinned === 'left' ? col.getStart('left') : undefined,
+        right: isPinned === 'right' ? col.getAfter('right') : undefined,
+        zIndex: isPinned ? 1 : undefined,
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleCols, columnSizing, columnPinning])
 
   // Notify parent of active cell / selection changes (for formatting toolbar).
   useEffect(() => {
@@ -1159,7 +1266,7 @@ export function DataTable<T>({
                         const isRowNum = col.id === '_rowNum'
                         const isSystem = col.id === '_select' || col.id === '_actions' || col.id === '_status' || col.id === 'created_at'
                         const isActive = grid.activeCell?.row === rowIdx && grid.activeCell?.col === colIdx
-                        const isSelected = isCellInRange(rowIdx, colIdx, grid.selection)
+                        const isSelected = selNorm != null && rowIdx >= selNorm.r1 && rowIdx <= selNorm.r2 && colIdx >= selNorm.c1 && colIdx <= selNorm.c2
                         const isPinned = col.getIsPinned()
 
                         // Fill preview edge flags for empty rows
@@ -1170,19 +1277,12 @@ export function DataTable<T>({
                         const fpLeft = inFillPreview && colIdx === fp.startCol
                         const fpRight = inFillPreview && colIdx === fp.endCol
 
-                        // Selection edge flags
-                        const sel = grid.selection
-                        const selNorm = sel ? {
-                          r1: Math.min(sel.startRow, sel.endRow),
-                          r2: Math.max(sel.startRow, sel.endRow),
-                          c1: Math.min(sel.startCol, sel.endCol),
-                          c2: Math.max(sel.startCol, sel.endCol),
-                        } : null
+                        // Selection edge flags (use hoisted selNorm)
                         const inSel = isSelected && selNorm
-                        const edgeTop = inSel && rowIdx === selNorm.r1
-                        const edgeBottom = inSel && rowIdx === selNorm.r2
-                        const edgeLeft = inSel && colIdx === selNorm.c1
-                        const edgeRight = inSel && colIdx === selNorm.c2
+                        const edgeTop = inSel && rowIdx === selNorm!.r1
+                        const edgeBottom = inSel && rowIdx === selNorm!.r2
+                        const edgeLeft = inSel && colIdx === selNorm!.c1
+                        const edgeRight = inSel && colIdx === selNorm!.c2
 
                         return (
                           <TableCell
@@ -1190,14 +1290,15 @@ export function DataTable<T>({
                             role="gridcell"
                             data-row={rowIdx}
                             data-col={colIdx}
-                            className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''}`}
-                            style={{
-                              width: col.getSize(),
-                              position: isPinned ? 'sticky' : undefined,
-                              left: isPinned === 'left' ? col.getStart('left') : undefined,
-                              right: isPinned === 'right' ? col.getAfter('right') : undefined,
-                              zIndex: isPinned ? 1 : undefined,
-                            }}
+                            className={getCellClassName(
+                              isRowNum, isPinned, false, isActive, isSelected,
+                              edgeTop, edgeBottom, edgeLeft, edgeRight,
+                              null, null, null, null, null,
+                              inFillPreview, fpTop, fpBottom, fpLeft, fpRight,
+                              null, '', null, null, null, null,
+                              null,
+                            )}
+                            style={colBaseStyles[colIdx]}
                             onClick={(e) => {
                               e.stopPropagation()
                               grid.handleCellClick(rowIdx, colIdx, e)
@@ -1255,23 +1356,16 @@ export function DataTable<T>({
                   {row.getVisibleCells().map((cell, colIdx) => {
                     const isPinned = cell.column.getIsPinned()
                     const isActive = grid.activeCell?.row === rowIdx && grid.activeCell?.col === colIdx
-                    const isSelected = isCellInRange(rowIdx, colIdx, grid.selection)
+                    const isSelected = selNorm != null && rowIdx >= selNorm.r1 && rowIdx <= selNorm.r2 && colIdx >= selNorm.c1 && colIdx <= selNorm.c2
                     const pinnedLeftCols = columnPinning.left ?? []
                     const isLastPinnedLeftCell = isPinned === 'left' && colIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
 
-                    // Compute selection edge flags for border outline.
-                    const sel = grid.selection
-                    const selNorm = sel ? {
-                      r1: Math.min(sel.startRow, sel.endRow),
-                      r2: Math.max(sel.startRow, sel.endRow),
-                      c1: Math.min(sel.startCol, sel.endCol),
-                      c2: Math.max(sel.startCol, sel.endCol),
-                    } : null
+                    // Selection edge flags (use hoisted selNorm)
                     const inSel = isSelected && selNorm
-                    const edgeTop = inSel && rowIdx === selNorm.r1
-                    const edgeBottom = inSel && rowIdx === selNorm.r2
-                    const edgeLeft = inSel && colIdx === selNorm.c1
-                    const edgeRight = inSel && colIdx === selNorm.c2
+                    const edgeTop = inSel && rowIdx === selNorm!.r1
+                    const edgeBottom = inSel && rowIdx === selNorm!.r2
+                    const edgeLeft = inSel && colIdx === selNorm!.c1
+                    const edgeRight = inSel && colIdx === selNorm!.c2
 
                     const isRowNum = cell.column.id === '_rowNum'
 
@@ -1283,18 +1377,12 @@ export function DataTable<T>({
                     const fpLeft = inFillPreview && colIdx === fp.startCol
                     const fpRight = inFillPreview && colIdx === fp.endCol
 
-                    // Copy range edge flags (marching ants)
-                    const cpNorm = copiedRange ? {
-                      r1: Math.min(copiedRange.startRow, copiedRange.endRow),
-                      r2: Math.max(copiedRange.startRow, copiedRange.endRow),
-                      c1: Math.min(copiedRange.startCol, copiedRange.endCol),
-                      c2: Math.max(copiedRange.startCol, copiedRange.endCol),
-                    } : null
+                    // Copy range edge flags (use hoisted cpNorm)
                     const inCopy = cpNorm && rowIdx >= cpNorm.r1 && rowIdx <= cpNorm.r2 && colIdx >= cpNorm.c1 && colIdx <= cpNorm.c2
-                    const cpTop = inCopy && rowIdx === cpNorm.r1
-                    const cpBottom = inCopy && rowIdx === cpNorm.r2
-                    const cpLeft = inCopy && colIdx === cpNorm.c1
-                    const cpRight = inCopy && colIdx === cpNorm.c2
+                    const cpTop = inCopy && rowIdx === cpNorm!.r1
+                    const cpBottom = inCopy && rowIdx === cpNorm!.r2
+                    const cpLeft = inCopy && colIdx === cpNorm!.c1
+                    const cpRight = inCopy && colIdx === cpNorm!.c2
 
                     // Drag ghost edge flags
                     const dg = cellDrag.dragGhost
@@ -1310,17 +1398,9 @@ export function DataTable<T>({
                     const isCellDirty = freeGridMode && cellDirtyFn && !isRowNum && cellDirtyFn(rowId, cell.column.id)
                     const cellError = freeGridMode && cellErrorFn && !isRowNum ? cellErrorFn(rowId, cell.column.id) : null
 
-                    // Is this cell the bottom-right corner of the active cell/selection? (fill handle position)
-                    const isFillHandleCell = editable && onFill && !isRowNum && (() => {
-                      if (grid.selection) {
-                        const sn = {
-                          r2: Math.max(grid.selection.startRow, grid.selection.endRow),
-                          c2: Math.max(grid.selection.startCol, grid.selection.endCol),
-                        }
-                        return rowIdx === sn.r2 && colIdx === sn.c2
-                      }
-                      return isActive
-                    })()
+                    // Fill handle position (use hoisted fillHandlePos)
+                    const isFillHandleCell = !isRowNum && fillHandlePos != null
+                      && rowIdx === fillHandlePos.r2 && colIdx === fillHandlePos.c2
 
                     // Cell formatting from _cell_formats.
                     const cellFmt: CellFormat | undefined = !isRowNum
@@ -1333,20 +1413,25 @@ export function DataTable<T>({
                         role="gridcell"
                         data-row={rowIdx}
                         data-col={colIdx}
-                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inCopy ? 'copy-range-cell' : ''} ${cpTop ? 'copy-edge-top' : ''} ${cpBottom ? 'copy-edge-bottom' : ''} ${cpLeft ? 'copy-edge-left' : ''} ${cpRight ? 'copy-edge-right' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''} ${cellError ? 'cell-error' : ''}`}
+                        className={getCellClassName(
+                          isRowNum, isPinned, isLastPinnedLeftCell, isActive, isSelected,
+                          edgeTop, edgeBottom, edgeLeft, edgeRight,
+                          inCopy, cpTop, cpBottom, cpLeft, cpRight,
+                          inFillPreview, fpTop, fpBottom, fpLeft, fpRight,
+                          inDragGhost, dgPrefix, dgTop, dgBottom, dgLeft, dgRight,
+                          cellError,
+                        )}
                         title={cellError ?? undefined}
-                        style={{
-                          width: cell.column.getSize(),
-                          position: isPinned ? 'sticky' : undefined,
-                          left: isPinned === 'left' ? cell.column.getStart('left') : undefined,
-                          right: isPinned === 'right' ? cell.column.getAfter('right') : undefined,
-                          zIndex: isPinned ? 1 : undefined,
-                          ...(cellFmt?.bg && !isSelected ? { backgroundColor: cellFmt.bg } : {}),
-                          ...(cellFmt?.color ? { color: cellFmt.color } : {}),
-                          ...(cellFmt?.fontSize ? { fontSize: `${cellFmt.fontSize}px` } : {}),
-                          ...(cellFmt?.bold ? { fontWeight: 600 } : {}),
-                          ...(cellFmt?.italic ? { fontStyle: 'italic' as const } : {}),
-                        }}
+                        style={cellFmt && (cellFmt.bg || cellFmt.color || cellFmt.fontSize || cellFmt.bold || cellFmt.italic)
+                          ? {
+                            ...colBaseStyles[colIdx],
+                            ...(cellFmt.bg && !isSelected ? { backgroundColor: cellFmt.bg } : undefined),
+                            ...(cellFmt.color ? { color: cellFmt.color } : undefined),
+                            ...(cellFmt.fontSize ? { fontSize: `${cellFmt.fontSize}px` } : undefined),
+                            ...(cellFmt.bold ? { fontWeight: 600 } : undefined),
+                            ...(cellFmt.italic ? { fontStyle: 'italic' as const } : undefined),
+                          }
+                          : colBaseStyles[colIdx]}
                         onMouseMove={editable && onCellMove ? (e) => cellDrag.handleCellMouseMove(e, rowIdx, colIdx) : undefined}
                         onMouseDown={(e) => {
                           if (e.button !== 0) return

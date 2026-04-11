@@ -245,6 +245,15 @@ export default function SpreadsheetView({
   const EMPTY_ROW_BUFFER = 100
   const emptyRowCount = EMPTY_ROW_BUFFER
 
+  // O(1) row lookup by id (avoids data.find() per cell edit)
+  const dataById = useMemo(() => {
+    const map = new Map<string, Record<string, unknown>>()
+    for (const row of data) {
+      map.set(String(row.id), row)
+    }
+    return map
+  }, [data])
+
   // Inline editing
   const inlineEditing = useInlineEditing({
     data,
@@ -264,7 +273,7 @@ export default function SpreadsheetView({
         // Formula values are included in the optimistic update body so they
         // appear immediately in the React Query cache. The server ignores
         // formula keys (no DB column).
-        const row = data.find((r) => String(r.id) === rowId)
+        const row = dataById.get(rowId)
         const patchedRow = row ? { ...row, [fieldSlug]: value } : undefined
         const formulaOverrides = patchedRow ? recomputeRow(patchedRow, fieldSlug) : {}
         await updateEntry({ id: rowId, body: { [fieldSlug]: value, ...formulaOverrides } })
@@ -275,7 +284,7 @@ export default function SpreadsheetView({
     },
     onCellClear: async (rowId, fieldSlug) => {
       try {
-        const row = data.find((r) => String(r.id) === rowId)
+        const row = dataById.get(rowId)
         const patchedRow = row ? { ...row, [fieldSlug]: null } : undefined
         const formulaOverrides = patchedRow ? recomputeRow(patchedRow, fieldSlug) : {}
         await updateEntry({ id: rowId, body: { [fieldSlug]: null, ...formulaOverrides } })
@@ -293,7 +302,7 @@ export default function SpreadsheetView({
     (updates: { id: string; fields: Record<string, unknown> }[]) => {
       // Recompute formula fields for each filled row
       const enriched = updates.map((u) => {
-        const row = data.find((r) => String(r.id) === u.id)
+        const row = dataById.get(u.id)
         if (!row) return u
         const patchedRow = { ...row, ...u.fields }
         let formulaOverrides: Record<string, unknown> = {}
