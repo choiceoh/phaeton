@@ -13,6 +13,7 @@ import {
   ArrowDownUp,
   Download,
   Ellipsis,
+  FileSpreadsheet,
   FileText,
   Filter,
   LayoutGrid,
@@ -51,7 +52,7 @@ import LoadingState from '@/components/common/LoadingState'
 import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import BulkEditPanel from '@/components/works/BulkEditPanel'
-import CSVImportPreview from '@/components/works/CSVImportPreview'
+import ImportPreview from '@/components/works/CSVImportPreview'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
 import AutomationsPanel from '@/components/works/AutomationsPanel'
@@ -395,6 +396,13 @@ export default function AppViewPage() {
     window.open(`/api/data/${collection.slug}/export.pdf${qs ? `?${qs}` : ''}`, '_blank')
   }
 
+  // Excel export.
+  function handleXlsxExport() {
+    if (!collection) return
+    const qs = buildExportQS()
+    window.open(`/api/data/${collection.slug}/export.xlsx${qs ? `?${qs}` : ''}`, '_blank')
+  }
+
   // Email report.
   const [emailDialogOpen, setEmailDialogOpen] = useState(false)
   const [emailTo, setEmailTo] = useState('')
@@ -438,7 +446,7 @@ export default function AppViewPage() {
     if (!collection) return
     setCsvPreviewOpen(false)
     setImportingCSV(true)
-    const toastId = toast.loading('CSV 가져오는 중...')
+    const toastId = toast.loading('파일 가져오는 중...')
 
     try {
       const formData = new FormData()
@@ -894,6 +902,10 @@ export default function AppViewPage() {
             더보기
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={handleXlsxExport}>
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />
+              Excel 내보내기
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleCsvExport}>
               <Download className="h-3.5 w-3.5 mr-2" />
               CSV 내보내기
@@ -923,7 +935,7 @@ export default function AppViewPage() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv"
+          accept=".csv,.xlsx,.xls"
           className="hidden"
           onChange={handleImportCSV}
         />
@@ -1036,11 +1048,12 @@ export default function AppViewPage() {
       )}
 
 
-      <CSVImportPreview
+      <ImportPreview
         open={csvPreviewOpen}
         onOpenChange={setCsvPreviewOpen}
         file={csvPreviewFile}
         fields={collection.fields ?? []}
+        slug={collection.slug}
         onConfirm={handleCSVConfirm}
       />
 
