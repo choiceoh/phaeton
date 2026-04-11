@@ -1033,19 +1033,28 @@ export function DataTable<T>({
                         e.preventDefault()
                         document.body.style.userSelect = 'none'
 
-                        // Support drag across headers with auto-scroll
+                        // Support drag across headers with auto-scroll (RAF-batched)
+                        let headerDragRaf = 0
+                        let lastHeaderDragMouse = { x: 0, y: 0 }
                         const handleHeaderDragMove = (ev: MouseEvent) => {
+                          lastHeaderDragMouse = { x: ev.clientX, y: ev.clientY }
                           autoScroll.update(ev.clientX, ev.clientY)
-                          const el = document.elementFromPoint(ev.clientX, ev.clientY)
-                          if (!el) return
-                          const th = (el as HTMLElement).closest('[data-col-idx]') as HTMLElement | null
-                          if (!th) return
-                          const idx = parseInt(th.dataset.colIdx ?? '', 10)
-                          if (!isNaN(idx)) grid.selectColumn(idx, true)
+                          if (!headerDragRaf) {
+                            headerDragRaf = requestAnimationFrame(() => {
+                              headerDragRaf = 0
+                              const el = document.elementFromPoint(lastHeaderDragMouse.x, lastHeaderDragMouse.y)
+                              if (!el) return
+                              const th = (el as HTMLElement).closest('[data-col-idx]') as HTMLElement | null
+                              if (!th) return
+                              const idx = parseInt(th.dataset.colIdx ?? '', 10)
+                              if (!isNaN(idx)) grid.selectColumn(idx, true)
+                            })
+                          }
                         }
                         const handleHeaderDragUp = () => {
                           document.removeEventListener('mousemove', handleHeaderDragMove)
                           document.removeEventListener('mouseup', handleHeaderDragUp)
+                          cancelAnimationFrame(headerDragRaf)
                           document.body.style.userSelect = ''
                           autoScroll.stop()
                         }
@@ -1338,19 +1347,28 @@ export function DataTable<T>({
                             grid.selectRow(rowIdx, e.shiftKey)
                             e.preventDefault()
                             document.body.style.userSelect = 'none'
-                            // Support drag across row numbers with auto-scroll
+                            // Support drag across row numbers with auto-scroll (RAF-batched)
+                            let rowDragRaf = 0
+                            let lastRowDragMouse = { x: 0, y: 0 }
                             const handleRowDragMove = (ev: MouseEvent) => {
+                              lastRowDragMouse = { x: ev.clientX, y: ev.clientY }
                               autoScroll.update(ev.clientX, ev.clientY)
-                              const el = document.elementFromPoint(ev.clientX, ev.clientY)
-                              if (!el) return
-                              const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
-                              if (!cell) return
-                              const r = parseInt(cell.dataset.row ?? '', 10)
-                              if (!isNaN(r)) grid.selectRow(r, true)
+                              if (!rowDragRaf) {
+                                rowDragRaf = requestAnimationFrame(() => {
+                                  rowDragRaf = 0
+                                  const el = document.elementFromPoint(lastRowDragMouse.x, lastRowDragMouse.y)
+                                  if (!el) return
+                                  const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
+                                  if (!cell) return
+                                  const r = parseInt(cell.dataset.row ?? '', 10)
+                                  if (!isNaN(r)) grid.selectRow(r, true)
+                                })
+                              }
                             }
                             const handleRowDragUp = () => {
                               document.removeEventListener('mousemove', handleRowDragMove)
                               document.removeEventListener('mouseup', handleRowDragUp)
+                              cancelAnimationFrame(rowDragRaf)
                               document.body.style.userSelect = ''
                               autoScroll.stop()
                             }

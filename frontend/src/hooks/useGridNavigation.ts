@@ -137,6 +137,10 @@ export function useGridNavigation({
   } | null>(null)
   const didDragSelectRef = useRef(false)
 
+  // RAF batching for drag selection (prevents jank on high-refresh displays).
+  const dragRafRef = useRef(0)
+  const lastDragMouseRef = useRef({ x: 0, y: 0 })
+
   const clampRow = useCallback((r: number) => Math.max(0, Math.min(r, rowCount - 1)), [rowCount])
   const clampCol = useCallback((c: number) => Math.max(0, Math.min(c, colCount - 1)), [colCount])
 
@@ -338,20 +342,30 @@ export function useGridNavigation({
         if (!dragSelectRef.current.started) {
           const dx = ev.clientX - dragSelectRef.current.startClientX
           const dy = ev.clientY - dragSelectRef.current.startClientY
-          if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+          if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return
           dragSelectRef.current.started = true
           didDragSelectRef.current = true
           document.body.style.userSelect = 'none'
           document.body.style.cursor = 'cell'
         }
 
+        // Store latest mouse position and batch via RAF (one update per frame).
+        lastDragMouseRef.current = { x: ev.clientX, y: ev.clientY }
         onAutoScroll?.(ev.clientX, ev.clientY)
-        updateDragSelection(ev.clientX, ev.clientY)
+        if (!dragRafRef.current) {
+          dragRafRef.current = requestAnimationFrame(() => {
+            dragRafRef.current = 0
+            const { x, y } = lastDragMouseRef.current
+            updateDragSelection(x, y)
+          })
+        }
       }
 
       const handleMouseUp = () => {
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
+        cancelAnimationFrame(dragRafRef.current)
+        dragRafRef.current = 0
         document.body.style.userSelect = ''
         document.body.style.cursor = ''
         onAutoScrollStop?.()
