@@ -128,6 +128,15 @@ export function useGridNavigation({
   // Anchor for shift-extend selection.
   const anchorRef = useRef<CellPosition | null>(null)
 
+  // Drag-to-select state.
+  const dragSelectRef = useRef<{
+    anchor: CellPosition
+    startClientX: number
+    startClientY: number
+    started: boolean
+  } | null>(null)
+  const didDragSelectRef = useRef(false)
+
   const clampRow = useCallback((r: number) => Math.max(0, Math.min(r, rowCount - 1)), [rowCount])
   const clampCol = useCallback((c: number) => Math.max(0, Math.min(c, colCount - 1)), [colCount])
 
@@ -255,6 +264,11 @@ export function useGridNavigation({
 
   const handleCellClick = useCallback(
     (row: number, col: number, e: React.MouseEvent) => {
+      // Suppress click after drag-select
+      if (didDragSelectRef.current) {
+        didDragSelectRef.current = false
+        return
+      }
       if (e.shiftKey && activeCell) {
         const anchor = anchorRef.current ?? activeCell
         setSelection({ startRow: anchor.row, startCol: anchor.col, endRow: row, endCol: col })
@@ -266,6 +280,113 @@ export function useGridNavigation({
       }
     },
     [activeCell],
+  )
+
+  /**
+   * Drag-to-select: mousedown on a cell starts potential range selection.
+   * After 5px movement threshold, begins extending selection via mousemove.
+   * onAutoScroll is called during drag to enable edge-triggered auto-scroll.
+   */
+  const handleCellMouseDown = useCallback(
+    (row: number, col: number, e: React.MouseEvent, onAutoScroll?: (x: number, y: number) => void, onAutoScrollStop?: () => void) => {
+      if (e.button !== 0 || e.shiftKey) return
+
+      dragSelectRef.current = {
+        anchor: { row, col },
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        started: false,
+      }
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        if (!dragSelectRef.current) return
+
+        if (!dragSelectRef.current.started) {
+          const dx = ev.clientX - dragSelectRef.current.startClientX
+          const dy = ev.clientY - dragSelectRef.current.startClientY
+          if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+          dragSelectRef.current.started = true
+          didDragSelectRef.current = true
+          document.body.style.userSelect = 'none'
+          // Set anchor cell on drag start
+          const anchor = dragSelectRef.current.anchor
+          anchorRef.current = anchor
+          setActiveCell(anchor)
+        }
+
+        onAutoScroll?.(ev.clientX, ev.clientY)
+
+        const el = document.elementFromPoint(ev.clientX, ev.clientY)
+        if (!el) return
+        const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
+        if (!cell) return
+
+        const targetRow = parseInt(cell.dataset.row ?? '', 10)
+        const targetCol = parseInt(cell.dataset.col ?? '', 10)
+        if (isNaN(targetRow) || isNaN(targetCol)) return
+
+        const anchor = dragSelectRef.current.anchor
+        setSelection({
+          startRow: anchor.row,
+          startCol: anchor.col,
+          endRow: clampRow(targetRow),
+          endCol: clampCol(targetCol),
+        })
+        setActiveCell({ row: clampRow(targetRow), col: clampCol(targetCol) })
+      }
+
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mouseup', handleMouseUp)
+        document.body.style.userSelect = ''
+        onAutoScrollStop?.()
+        dragSelectRef.current = null
+      }
+
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+    },
+    [clampRow, clampCol],
+  )
+
+  /** Select an entire column (click on column header). */
+  const selectColumn = useCallback(
+    (col: number, extend: boolean) => {
+      if (extend && anchorRef.current) {
+        const anchorCol = anchorRef.current.col
+        setSelection({
+          startRow: 0,
+          startCol: Math.min(anchorCol, col),
+          endRow: rowCount - 1,
+          endCol: Math.max(anchorCol, col),
+        })
+      } else {
+        anchorRef.current = { row: 0, col }
+        setSelection({ startRow: 0, startCol: col, endRow: rowCount - 1, endCol: col })
+      }
+      setActiveCell({ row: 0, col })
+    },
+    [rowCount],
+  )
+
+  /** Select an entire row (click on row number). */
+  const selectRow = useCallback(
+    (row: number, extend: boolean) => {
+      if (extend && anchorRef.current) {
+        const anchorRow = anchorRef.current.row
+        setSelection({
+          startRow: Math.min(anchorRow, row),
+          startCol: 0,
+          endRow: Math.max(anchorRow, row),
+          endCol: colCount - 1,
+        })
+      } else {
+        anchorRef.current = { row, col: 0 }
+        setSelection({ startRow: row, startCol: 0, endRow: row, endCol: colCount - 1 })
+      }
+      setActiveCell({ row, col: 0 })
+    },
+    [colCount],
   )
 
   // Select all (Ctrl+A).
@@ -290,6 +411,10 @@ export function useGridNavigation({
     containerRef,
     handleKeyDown,
     handleCellClick,
+    handleCellMouseDown,
+    didDragSelectRef,
+    selectColumn,
+    selectRow,
     moveTo,
   }
 }

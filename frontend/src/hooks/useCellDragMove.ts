@@ -20,6 +20,8 @@ interface UseCellDragMoveOptions {
   fields: Field[]
   readOnlyColumns: Set<string>
   onMove: (updates: { id: string; fields: Record<string, unknown> }[]) => void
+  onAutoScroll?: (x: number, y: number) => void
+  onAutoScrollStop?: () => void
 }
 
 export interface DragGhostRange {
@@ -79,6 +81,8 @@ export function useCellDragMove({
   fields,
   readOnlyColumns,
   onMove,
+  onAutoScroll,
+  onAutoScrollStop,
 }: UseCellDragMoveOptions) {
   const [dragGhost, setDragGhost] = useState<DragGhostRange | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -151,6 +155,7 @@ export function useCellDragMove({
 
         setIsDragging(true)
         didDragRef.current = true
+        onAutoScroll?.(ev.clientX, ev.clientY)
 
         // Find the cell under cursor
         const el = document.elementFromPoint(ev.clientX, ev.clientY)
@@ -179,6 +184,7 @@ export function useCellDragMove({
       const handleMouseUp = () => {
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
+        onAutoScrollStop?.()
 
         setIsDragging(false)
 
