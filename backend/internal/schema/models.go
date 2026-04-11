@@ -371,7 +371,7 @@ type View struct {
 	ID           string          `json:"id"`
 	CollectionID string          `json:"collection_id"`
 	Name         string          `json:"name"`
-	ViewType     string          `json:"view_type"` // list, kanban, calendar, gallery
+	ViewType     string          `json:"view_type"` // spreadsheet
 	Config       json.RawMessage `json:"config"`
 	SortOrder    int             `json:"sort_order"`
 	IsDefault    bool            `json:"is_default"`

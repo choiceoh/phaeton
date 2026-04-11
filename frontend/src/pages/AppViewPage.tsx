@@ -11,12 +11,12 @@
 import type { SortingState } from '@tanstack/react-table'
 import {
   ArrowDownUp,
+  Copy,
   Download,
   Ellipsis,
   FileSpreadsheet,
   FileText,
   Filter,
-  LayoutGrid,
   Loader2,
   Lock,
   Mail,
@@ -24,6 +24,7 @@ import {
   Plus,
   Power,
   PowerOff,
+  Printer,
   Search,
   Trash2,
   Upload,
@@ -31,7 +32,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { NavLink, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -53,6 +54,9 @@ import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import BulkEditPanel from '@/components/works/BulkEditPanel'
 import ImportPreview from '@/components/works/CSVImportPreview'
+import EntryComments from '@/components/works/EntryComments'
+import EntryForm from '@/components/works/EntryForm'
+import EntryHistory from '@/components/works/EntryHistory'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
 import AutomationsPanel from '@/components/works/AutomationsPanel'
@@ -80,17 +84,18 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { useHotkeys } from '@/hooks/useHotkeys'
-import { useCollection, useCollectionCounts, useUpdateField } from '@/hooks/useCollections'
+import { useCollection, useCollections, useCreateCollection } from '@/hooks/useCollections'
 import {
+  CLIENT_MODE_THRESHOLD,
   useBatchUpdateEntry,
   useBulkDeleteEntries,
   useCreateEntry,
+  useDeleteEntry,
   useEntries,
+  useEntry,
   useTotals,
   useUpdateEntry,
 } from '@/hooks/useEntries'
-import { useLocalEntries } from '@/hooks/useLocalEntries'
-import { useDebouncedBatchSave } from '@/hooks/useDebouncedBatchSave'
 import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
@@ -100,10 +105,63 @@ import { useWorkbookLock } from '@/hooks/useLock'
 import { useRetryToast } from '@/hooks/useRetryToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { TERM } from '@/lib/constants'
-import type { FilterCondition, FilterGroup, SavedView } from '@/lib/types'
+import type { Collection, EntryRow, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
 import { emptyFilterGroup, isFilterGroupEmpty, flattenFilterGroup, serializeFilterGroup } from '@/lib/types'
 
 const DEFAULT_LIMIT = 20
+
+// ---------------------------------------------------------------------------
+// Client-side filter helpers (used when dataset ≤ CLIENT_MODE_THRESHOLD)
+// ---------------------------------------------------------------------------
+
+/** Test a single FilterCondition against a row value. */
+function matchCondition(row: Record<string, unknown>, cond: FilterCondition): boolean {
+  const raw = row[cond.field]
+  const v = raw == null ? '' : String(raw)
+  const cv = cond.value ?? ''
+  switch (cond.operator) {
+    case 'eq': return v === cv
+    case 'neq': return v !== cv
+    case 'gt': return Number(v) > Number(cv)
+    case 'gte': return Number(v) >= Number(cv)
+    case 'lt': return Number(v) < Number(cv)
+    case 'lte': return Number(v) <= Number(cv)
+    case 'like': return v.toLowerCase().includes(cv.toLowerCase())
+    case 'contains': return v.toLowerCase().includes(cv.toLowerCase())
+    case 'in': return cv.split(',').map((s) => s.trim()).includes(v)
+    case 'not_in': return !cv.split(',').map((s) => s.trim()).includes(v)
+    case 'is_null': return raw == null || v === ''
+    case 'is_not_null': return raw != null && v !== ''
+    default: return true
+  }
+}
+
+/** Recursively evaluate a FilterGroup against a row. */
+function matchFilterGroup(row: Record<string, unknown>, group: FilterGroup): boolean {
+  const combine = group.logic === 'or'
+    ? (a: boolean, b: boolean) => a || b
+    : (a: boolean, b: boolean) => a && b
+  const identity = group.logic === 'or' ? false : true
+
+  let result = identity
+  for (const cond of group.conditions) {
+    result = combine(result, matchCondition(row, cond))
+  }
+  for (const sub of group.groups ?? []) {
+    result = combine(result, matchFilterGroup(row, sub))
+  }
+  return result
+}
+
+/** Client-side text search across all string-like values in a row. */
+function matchSearch(row: Record<string, unknown>, text: string): boolean {
+  if (!text) return true
+  const lower = text.toLowerCase()
+  for (const v of Object.values(row)) {
+    if (v != null && String(v).toLowerCase().includes(lower)) return true
+  }
+  return false
+}
 
 /** Recursively remove a condition by ID from a FilterGroup */
 function removeCondFromGroup(group: FilterGroup, condId: string): FilterGroup {
@@ -164,7 +222,6 @@ export default function AppViewPage() {
   const { data: process } = useProcess(appId)
   const { data: currentUser } = useCurrentUser()
   const canManage = canManageCollection(currentUser, collection?.created_by)
-  const updateField = useUpdateField()
 
   // Workbook lock — one user edits at a time.
   const { isLockedByOther } = useWorkbookLock(collection?.workbook_id)
@@ -227,36 +284,57 @@ export default function AppViewPage() {
     return Object.keys(f).length > 0 ? f : undefined
   }, [filterGroup, filterConditions, searchText])
 
-  // Determine local vs server mode based on row count.
-  const { data: collectionCounts } = useCollectionCounts()
-  const rowCount = collectionCounts?.[collection?.slug ?? ''] ?? Infinity
-  const isLocalMode = rowCount <= 5000
+  // --- Client-side mode detection ---
+  // First fetch: normal server-side to discover the total.
+  // If total ≤ CLIENT_MODE_THRESHOLD we switch to client-side filtering/sorting
+  // by fetching ALL rows once and letting tanstack/react-table handle the rest.
+  const [isClientMode, setIsClientMode] = useState(false)
 
-  // Local mode: all data fetched once, filter/sort/paginate client-side.
-  const localResult = useLocalEntries(
-    isLocalMode ? collection?.slug : undefined,
-    {
-      page,
-      limit,
-      filterGroup,
-      sortItems,
-      sorting,
-      searchText,
-      fields: collection?.fields ?? [],
-    },
-  )
+  const serverParams = useMemo(() => {
+    if (isClientMode) {
+      // In client mode, fetch all data without server-side filter/sort/pagination.
+      return { limit: CLIENT_MODE_THRESHOLD, expand }
+    }
+    return { page, limit, sort: sortParam, expand, filters }
+  }, [isClientMode, page, limit, sortParam, expand, filters])
 
-  // Server mode: existing paginated approach.
-  const serverResult = useEntries(
-    !isLocalMode ? collection?.slug : undefined,
-    { page, limit, sort: sortParam, expand, filters, reverse: 'true' },
-  )
+  const {
+    data: list,
+    isLoading: entriesLoading,
+    isError: entriesError,
+    error: entriesErr,
+    refetch,
+  } = useEntries(collection?.slug, serverParams)
 
-  const list = isLocalMode ? localResult.data : serverResult.data
-  const entriesLoading = isLocalMode ? localResult.isLoading : serverResult.isLoading
-  const entriesError = isLocalMode ? localResult.isError : serverResult.isError
-  const entriesErr = isLocalMode ? localResult.error : serverResult.error
-  const refetch = isLocalMode ? localResult.refetch : serverResult.refetch
+  // Switch to client mode once we know the total is small enough.
+  useEffect(() => {
+    if (list && !isClientMode && list.total <= CLIENT_MODE_THRESHOLD) {
+      setIsClientMode(true)
+    }
+    // If a mutation pushed total above the threshold, switch back.
+    if (list && isClientMode && list.total > CLIENT_MODE_THRESHOLD) {
+      setIsClientMode(false)
+    }
+  }, [list?.total]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // In client mode, apply filters and search locally.
+  const clientFilteredData = useMemo(() => {
+    if (!isClientMode || !list?.data) return list?.data ?? []
+    let rows = list.data
+    // Apply structured filters.
+    if (hasActiveFilters) {
+      rows = rows.filter((row) => matchFilterGroup(row, filterGroup))
+    }
+    // Apply text search.
+    if (searchText) {
+      rows = rows.filter((row) => matchSearch(row, searchText))
+    }
+    return rows
+  }, [isClientMode, list?.data, hasActiveFilters, filterGroup, searchText])
+
+  // Effective data and total for the view.
+  const viewData = isClientMode ? clientFilteredData : (list?.data ?? [])
+  const viewTotal = isClientMode ? clientFilteredData.length : (list?.total ?? 0)
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
@@ -266,18 +344,36 @@ export default function AppViewPage() {
   const retryToast = useRetryToast()
   const onConflictError = useConflictAwareUpdate(refetch)
 
-  // Debounced batch save for cell edits.
-  const { queueEdit } = useDebouncedBatchSave(
-    collection?.slug ?? '',
-    { isLocalMode },
-  )
-
   // Multi-select state for bulk operations.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
   const [selectAllFilteredMode] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
 
+  // --- Feature A5: Entry slide-over panel ---
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
+  const entryPanelSlug = collection?.slug
+  const { data: panelEntryData, refetch: refetchPanelEntry } = useEntry(
+    selectedEntryId ? entryPanelSlug : undefined,
+    selectedEntryId ?? undefined,
+    'auto',
+  )
+  const panelUpdateEntry = useUpdateEntry(entryPanelSlug ?? '')
+  const panelDeleteEntry = useDeleteEntry(entryPanelSlug ?? '')
+  const panelOnConflictError = useConflictAwareUpdate(refetchPanelEntry)
+  const [panelAutosaveStatus, setPanelAutosaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const panelAutosaveTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const [panelDeleteOpen, setPanelDeleteOpen] = useState(false)
+
+  // --- Feature A4: Sibling sheet (bottom tabs) ---
+  const { data: allCollections } = useCollections()
+  const createCollectionMut = useCreateCollection()
+  const siblingSheets = useMemo(() => {
+    if (!collection?.workbook_id || !allCollections) return []
+    return allCollections
+      .filter((c: Collection) => c.workbook_id === collection.workbook_id)
+      .sort((a: Collection, b: Collection) => a.sort_order - b.sort_order)
+  }, [collection?.workbook_id, allCollections])
 
   // Keyboard shortcuts
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -506,17 +602,65 @@ export default function AppViewPage() {
   if (!collection) return null
 
   function handleEntryClick(entry: Record<string, unknown>) {
-    navigate(`/apps/${appId}/entries/${entry.id}`)
+    setSelectedEntryId(String(entry.id))
   }
 
-  /** Navigate to the source collection filtered by the reverse-relation FK. */
-  function handleReverseCellClick(sourceCollectionId: string, sourceFieldSlug: string, recordId: string) {
-    const filter = JSON.stringify({
-      logic: 'and',
-      conditions: [{ field: sourceFieldSlug, operator: 'eq', value: recordId }],
-      groups: [],
+  // --- Entry panel handlers ---
+  function handlePanelSubmit(data: Record<string, unknown>) {
+    if (!selectedEntryId) return
+    const version = (panelEntryData as EntryRow | undefined)?._version
+    if (version != null) data._version = version
+    setPanelAutosaveStatus('saving')
+    panelUpdateEntry.mutate(
+      { id: selectedEntryId, body: data },
+      {
+        onSuccess: () => {
+          toast.success('수정되었습니다')
+          if (panelAutosaveTimerRef.current) clearTimeout(panelAutosaveTimerRef.current)
+          panelAutosaveTimerRef.current = setTimeout(() => {
+            setPanelAutosaveStatus('saved')
+            panelAutosaveTimerRef.current = setTimeout(() => setPanelAutosaveStatus('idle'), 2000)
+          }, 500)
+        },
+        onError: (err) => {
+          setPanelAutosaveStatus('idle')
+          panelOnConflictError(err, () => retryToast(err, () => handlePanelSubmit(data)))
+        },
+      },
+    )
+  }
+
+  function handlePanelDelete() {
+    if (!selectedEntryId) return
+    panelDeleteEntry.mutate(selectedEntryId, {
+      onSuccess: () => {
+        toast.success('삭제되었습니다')
+        setSelectedEntryId(null)
+        setPanelDeleteOpen(false)
+      },
+      onError: (err) => toast.error(formatError(err)),
     })
-    navigate(`/apps/${sourceCollectionId}?_filter=${encodeURIComponent(filter)}`)
+  }
+
+  function handlePanelDuplicate() {
+    if (!selectedEntryId) return
+    navigate(`/apps/${appId}/entries/new?duplicate=${selectedEntryId}`)
+    setSelectedEntryId(null)
+  }
+
+  function handleAddSiblingSheet() {
+    if (!collection?.workbook_id) return
+    const label = `시트 ${siblingSheets.length + 1}`
+    const slug = `sheet_${Date.now()}`
+    createCollectionMut.mutate(
+      { slug, label, workbook_id: collection.workbook_id } as { slug: string; label: string; workbook_id: string },
+      {
+        onSuccess: (created) => {
+          navigate(`/apps/${created.id}`)
+        },
+        onError: (err) => toast.error(formatError(err)),
+      },
+    )
   }
 
   function handleBulkStatusChange(status: string) {
@@ -834,7 +978,7 @@ export default function AppViewPage() {
       </div>
       {searchText && list && (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {list.total}건 검색됨
+          {viewTotal}건 검색됨
         </span>
       )}
 
@@ -1014,12 +1158,6 @@ export default function AppViewPage() {
         description={collection.description}
         actions={
           <>
-            <Link to={`/apps/${collection.id}/interface`}>
-              <Button variant="outline" className="gap-1">
-                <LayoutGrid className="h-4 w-4" />
-                인터페이스
-              </Button>
-            </Link>
             {canManage && (
               <Button variant="outline" onClick={() => setSettingsOpen(true)}>설정</Button>
             )}
@@ -1044,25 +1182,15 @@ export default function AppViewPage() {
         <ErrorBoundary key="spreadsheet">
           <SpreadsheetView
             collection={collection}
-            data={list.data}
-            total={list.total}
+            data={viewData}
+            total={viewTotal}
             page={page}
             limit={limit}
             onPageChange={setPage}
             onLimitChange={setLimit}
             onSortChange={handleHeaderSortChange}
             onRowClick={handleEntryClick}
-            updateEntry={async (params) => {
-              if (isLocalMode) {
-                // Debounced batch save: queue the edit for batching.
-                // Extract field edits (exclude system fields).
-                for (const [key, val] of Object.entries(params.body)) {
-                  queueEdit(params.id, key, val)
-                }
-              } else {
-                await updateEntry.mutateAsync(params)
-              }
-            }}
+            updateEntry={async (params) => { await updateEntry.mutateAsync(params) }}
             createEntry={async (body) => { await createEntry.mutateAsync(body) }}
             deleteEntry={(id) => bulkDelete.mutate([id])}
             batchUpdateEntry={(updates) => batchUpdateEntry.mutate(updates)}
@@ -1072,9 +1200,6 @@ export default function AppViewPage() {
             summaryRow={summaryRow}
             summaryFn={columnAggFn}
             onSummaryFnChange={handleAggFnChange}
-            onUpdateFieldOptions={async (fieldId, options) => {
-              await updateField.mutateAsync({ fieldId, body: { options } })
-            }}
             emptyTitle={searchText || hasActiveFilters ? '검색 결과가 없습니다' : TERM.noRecords}
             emptyDescription={searchText || hasActiveFilters ? '검색어 또는 필터 조건을 변경해 보세요.' : TERM.noRecordsDesc}
             emptyAction={
@@ -1092,7 +1217,7 @@ export default function AppViewPage() {
                 </Button>
               ) : undefined
             }
-            onReverseCellClick={handleReverseCellClick}
+            clientMode={isClientMode}
           />
         </ErrorBoundary>
       )}
@@ -1200,6 +1325,124 @@ export default function AppViewPage() {
           </div>
         </SheetContent>
       </SheetPanel>
+
+      {/* Feature A4: Bottom sheet tabs (sibling sheets in same workbook) */}
+      {siblingSheets.length > 1 && (
+        <div className="sticky bottom-0 z-20 flex items-center gap-0.5 overflow-x-auto border-t border-border/60 bg-white px-2 py-1 scrollbar-none">
+          {siblingSheets.map((s) => (
+            <NavLink
+              key={s.id}
+              to={`/apps/${s.id}`}
+              className={({ isActive }) =>
+                `inline-flex items-center h-7 px-3 text-xs rounded-md border transition-colors whitespace-nowrap ${
+                  isActive || s.id === appId
+                    ? 'bg-primary text-primary-foreground border-primary font-medium'
+                    : 'bg-background border-input hover:bg-accent text-muted-foreground'
+                }`
+              }
+              viewTransition
+            >
+              <FileSpreadsheet className="mr-1.5 h-3 w-3" />
+              {s.label}
+            </NavLink>
+          ))}
+          {canManage && (
+            <button
+              type="button"
+              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-dashed border-input hover:bg-accent text-muted-foreground"
+              aria-label="새 시트 추가"
+              onClick={handleAddSiblingSheet}
+              disabled={createCollectionMut.isPending}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Feature A5: Entry slide-over panel */}
+      <SheetPanel open={!!selectedEntryId} onOpenChange={(open) => { if (!open) setSelectedEntryId(null) }}>
+        <SheetContent side="right" className="w-[600px] sm:max-w-[600px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{collection.label} - {TERM.record} 편집</SheetTitle>
+          </SheetHeader>
+          {selectedEntryId && panelEntryData && (
+            <div className="mt-4 space-y-6">
+              {/* Actions */}
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => window.print()}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  인쇄
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={handlePanelDuplicate}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  복제
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                  onClick={() => setPanelDeleteOpen(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  삭제
+                </Button>
+              </div>
+
+              {/* Form */}
+              <EntryForm
+                key={selectedEntryId}
+                fields={collection.fields ?? []}
+                initialData={panelEntryData as Record<string, unknown>}
+                slug={entryPanelSlug}
+                collectionId={collection.id}
+                autosave
+                autosaveStatus={panelAutosaveStatus}
+                onSubmit={handlePanelSubmit}
+                onCancel={() => setSelectedEntryId(null)}
+                submitting={panelUpdateEntry.isPending}
+              />
+
+              {/* Comments & History */}
+              {entryPanelSlug && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="mb-3 text-sm font-medium">댓글</h3>
+                    <EntryComments slug={entryPanelSlug} recordId={selectedEntryId} />
+                  </div>
+                  <div>
+                    <h3 className="mb-3 text-sm font-medium">이력</h3>
+                    <EntryHistory slug={entryPanelSlug} recordId={selectedEntryId} fields={collection.fields ?? []} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {selectedEntryId && !panelEntryData && <LoadingState />}
+        </SheetContent>
+      </SheetPanel>
+
+      {/* Entry panel delete confirmation */}
+      <ConfirmDialog
+        open={panelDeleteOpen}
+        onOpenChange={setPanelDeleteOpen}
+        title="데이터를 삭제하시겠습니까?"
+        description="삭제된 데이터는 복구할 수 없습니다."
+        variant="destructive"
+        confirmLabel="삭제"
+        loading={panelDeleteEntry.isPending}
+        onConfirm={handlePanelDelete}
+      />
     </div>
   )
 }

@@ -13,7 +13,6 @@ import {
 import {
   BarChart3,
   Clipboard,
-  GitBranch,
   LayoutGrid,
   Plus,
   Settings,
@@ -75,10 +74,6 @@ export default function CommandPalette() {
           <CommandItem value="대시보드" onSelect={() => go('/dashboard')}>
             <BarChart3 className="mr-2 h-4 w-4" />
             대시보드
-          </CommandItem>
-          <CommandItem value="조직도" onSelect={() => go('/admin/org')}>
-            <GitBranch className="mr-2 h-4 w-4" />
-            조직도
           </CommandItem>
           <CommandItem value="자동화" onSelect={() => go('/automations')}>
             <Zap className="mr-2 h-4 w-4" />
