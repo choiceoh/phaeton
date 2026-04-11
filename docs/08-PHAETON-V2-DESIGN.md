@@ -1,14 +1,15 @@
-# Phaeton v2 — 노코드 업무앱 플랫폼
+# Phaeton v2 — 스프레드시트 중심 업무 플랫폼
 
 ## Context
 
-기존 Payload CMS 기반 Phaeton을 폐기하고,
-노코드 업무앱 빌더를 핵심으로 하는 플랫폼을 처음부터 만든다.
+스프레드시트 중심 업무 플랫폼. 동기화·시트간 연동이 가능한 스프레드시트 모임.
 
-핵심 원칙: **"앱을 만드는 것이 곧 ERP를 만드는 것"**
-- 프로젝트 관리, 인허가, 자재, 현장 일보 전부 "앱"으로 정의
-- 사용자(PM/디렉터)가 코드 없이 직접 앱을 생성·수정
-- 각 앱 = 진짜 PostgreSQL 테이블 (JSON blob 아님)
+핵심 원칙: **"엑셀처럼 쉽고, 데이터베이스처럼 강력하다"**
+- 앱 = 엑셀 파일(워크북), 그 안에 여러 시트
+- 폴더 = 유사 앱들의 그룹
+- 시트 간 크로스시트 수식 + 자동 동기화 + 양방향 링크
+- 각 시트 = 진짜 PostgreSQL 테이블 (JSON blob 아님)
+- 한 앱은 동시 편집 차단 (잠금), 셀 편집·필터·정렬·수식은 로컬 처리
 
 ---
 
@@ -548,133 +549,90 @@ Go 미들웨어에서: JWT 디코드 → user.role 확인 → 앱별 access_conf
 
 ## 프론트엔드 핵심 컴포넌트
 
-### 앱 빌더 (AppBuilder)
+### SpreadsheetView (유일한 뷰 타입)
 
-```
-┌─────────────────────────────────────────────────────┐
-│ [앱 이름]  [카테고리 ▼]  [아이콘 ▼]         [저장] │
-├──────────┬──────────────────────┬───────────────────┤
-│ 필드 추가 │   폼 미리보기        │  필드 속성        │
-│          │                      │                   │
-│ Aa 텍스트 │  ┌──────────────┐   │ 라벨: [인허가번호] │
-│ # 숫자    │  │ 인허가번호 *  │   │ 이름: permitNo   │
-│ 📅 날짜   │  │ [          ] │   │ 타입: 텍스트      │
-│ ☐ 체크    │  ├──────────────┤   │ ☑ 필수           │
-│ ▼ 선택    │  │ 기한         │   │                   │
-│ ¶ 메모    │  │ [2026-04-09] │   │                   │
-│ 📎 파일   │  ├──────────────┤   │                   │
-│ 🔗 앱참조 │  │ 상태 ▼       │   │                   │
-│ 👤 사용자 │  │ [높음|보통|낮]│   │                   │
-└──────────┴──────────────────────┴───────────────────┘
-```
+- `@tanstack/react-table` 기반 엑셀 스타일 그리드
+- 가상 스크롤 (`@tanstack/react-virtual`), 컬럼 고정/리사이즈/재정렬
+- 인라인 셀 편집 (더블클릭, F2, 직접 타이핑)
+- TSV 복사/붙여넣기 (Excel/Google Sheets 호환)
+- 하단 빈 행으로 즉시 레코드 추가
+- SavedView = 시트 탭 (필터/정렬 프리셋)
+- 요약 행 (SUM/AVG/MIN/MAX/COUNT)
 
-- FieldPalette: 필드 타입을 드래그앤드롭으로 FieldPreview에 추가
-- FieldPreview: @dnd-kit SortableContext로 드래그 정렬 + 리사이즈
-- FieldProperties: 선택된 필드의 라벨/필수/옵션 편집
-- 저장: POST /apps (앱+필드 한 번에) → Go가 CREATE TABLE 실행
-- AI 빌드: AIBuildDialog에서 자연어로 앱 구조 생성 가능
+### DataTable (공통 그리드 엔진)
 
-### 동적 폼 (EntryForm)
+- `components/common/DataTable.tsx`
+- SpreadsheetView가 래핑하는 핵심 컴포넌트
+- 키보드 네비게이션 (화살표, Tab, Enter, Home/End, Ctrl+A)
+- 행 선택 (체크박스), 범위 선택 (Shift+클릭)
+- 우클릭 컨텍스트 메뉴 (복사, 붙여넣기, 셀 지우기, 행 삭제)
+- 컬럼별 집계 함수 드롭다운
 
-works_fields → shadcn 컴포넌트 매핑:
+### GridCell (타입별 셀 에디터)
 
-| field_type | shadcn 컴포넌트 |
-|-----------|----------------|
-| text | `<Input>` |
-| number | `<Input type="number">` |
-| date | `<DatePicker>` (popover + calendar) |
-| select | `<Select>` |
-| checkbox | `<Checkbox>` |
-| textarea | `<Textarea>` |
-| file | `<Input type="file">` + POST /upload |
-| app-ref | `<Combobox>` (GET /apps/:refId/entries로 검색) |
-| user-ref | `<Combobox>` (GET /users로 검색) |
+- `components/common/GridCell.tsx`
+- text → 단일행 입력, textarea → Ctrl+Enter 커밋
+- number/integer → 숫자 입력, boolean → 체크박스 토글
+- date/datetime/time → HTML5 피커
+- select → 드롭다운 자동 커밋, multiselect → 체크박스 리스트
+- relation → RelationCombobox, user → UserCombobox
+- formula/lookup/rollup → 읽기 전용 (계산 필드)
+- 저장 상태 피드백 (스피너 → 체크마크, 1.5초)
 
-### 뷰 엔진
+### EntryForm (행 상세 폼)
 
-**List View** — @tanstack/react-table
-- 컬럼 = works_fields, 행 = entries
-- 서버 사이드 정렬/필터/페이지네이션 (Go API의 QueryParams)
-- 컬럼 리사이즈, 행 클릭 → shadcn Sheet로 상세
-
-**Kanban View** — @dnd-kit
-- select 필드 기준 컬럼 그룹핑
-- 카드 드래그 → PATCH /entries/:id (optimistic update)
-
-**Calendar View** — date 필드 기준 월간 그리드
-**Gallery View** — 카드 레이아웃
-**Gantt View** — 간트 차트 (시작일/종료일 기반 타임라인)
-**Chart Panel** — 앱 데이터 집계 차트 (Recharts)
+- `components/works/EntryForm.tsx`
+- 동적 스키마 기반 폼 (useState, react-hook-form 아님)
+- 자동저장 모드 (1.5초 디바운스)
+- 프로세스 워크플로 전이 버튼
+- 유사 레코드 감지
 
 ---
 
-## 기존 ERP → 프리셋 앱
+## 데이터 모델 계층
 
-기존 Phaeton의 ERP 기능을 시드 데이터로 제공:
-
-| 기존 | 프리셋 앱 | 필드 |
-|------|----------|------|
-| 프로젝트 | "프로젝트 관리" | 이름(text), 유형(select:solar/wind/ess/hybrid), 용량kW(number), 지역(text), 상태(select), PM(user-ref), COD목표(date) |
-| 마일스톤 | "마일스톤" | 프로젝트(app-ref), 이름(text), 순서(number), 상태(select:pending/active/done/blocked/skipped), 담당(user-ref), 기한(date) |
-| 인력 배치 | "인력 배치" | 인력(user-ref), 프로젝트(app-ref), 역할(text), 시작일(date), 종료일(date), 배정률(number) |
-| 문서 | "프로젝트 문서" | 프로젝트(app-ref), 유형(select), 제목(text), 파일(file), 발급일(date), 만료일(date) |
-
-프리셋 앱 = 일반 앱과 동일. 사용자가 필드 추가/삭제/뷰 변경 자유.
+```
+Workbook (앱 = 워크북)              → _meta.workbooks
+  ├─ group_label (폴더 그룹핑)
+  └─ Collection (시트)              → _meta.collections + data.wd_{slug}
+       ├─ Field (열)                → _meta.fields
+       ├─ Relation (시트 간 연결)    → _meta.relations
+       ├─ SavedView (시트 탭)       → _meta.saved_views
+       └─ Process (워크플로)         → _meta.processes
+```
 
 ---
 
 ## 구현 현황
 
-### Phase 1: MVP — 완료
+### 완료
 
-- 인증 (JWT + httpOnly 쿠키, SAML SSO)
-- Schema Engine (앱/필드 DDL, 트랜잭션)
-- Data Engine (CRUD + 필터/정렬/페이지네이션)
-- 앱 빌더 (3-패널, 드래그앤드롭 필드 추가 + 리사이즈)
-- 뷰: List, Kanban
-- 시드 스크립트 (프리셋 앱)
-
-### Phase 2: 확장 — 완료
-
-- 뷰: Calendar, Gallery, Gantt, Chart
-- 자동화 엔진 (트리거 기반 규칙, AI 자동화)
-- 커스텀 대시보드 (앱/전체 대시보드, Recharts)
-- 파일 업로드
-- CSV 가져오기/내보내기
+- 인증 (JWT + httpOnly 쿠키, SAML SSO, 비밀번호 변경, 로그인 잠금)
+- Schema Engine (Workbook/시트/필드 DDL, 원자적 트랜잭션, 마이그레이션 기록)
+- Data Engine (CRUD + 필터/정렬/페이지네이션 + RLS + soft delete)
+- SpreadsheetView (엑셀 스타일 인라인 편집, TSV 복사/붙여넣기, 키보드 네비게이션)
+- 크로스시트 수식 (LOOKUP, SUMREL, AVGREL, MINREL, MAXREL, COUNTREL)
+- 계산 필드 (formula, lookup, rollup)
+- 관계 시스템 (1:1, 1:N, M:N + junction table + batch expansion)
+- SSE 실시간 동기화 (자기 이벤트 필터링, 대상 쿼리 무효화)
+- 자동화 엔진 (트리거/조건/액션, AI 자동화, 무한루프 방지)
+- 프로세스 관리 (상태 머신 + 전이 규칙)
+- 대시보드/차트 (앱별 + 전체, Recharts, AI 차트 생성)
+- CSV 가져오기/내보내기, PDF 내보내기
 - 댓글, 변경 이력, 알림
-- 수식 필드 (FormulaEditor)
-- 고급 필터/정렬 (FilterBuilder, SortPanel)
-- 앱 템플릿 (TemplateGallery)
-- SSE 실시간 이벤트
-- 웹훅
+- 일괄 편집 (BulkEditPanel, 배치 API 최대 1000건)
+- AI 전체: 앱 생성, 챗, 자동화, 차트, 필터, 수식, CSV, 사전입력
+- 앱 템플릿, 커맨드 팔레트, 단축키
+- 부서/자회사 관리, RBAC, 컬렉션 접근 제어
 
-### Phase 3: 고급 — 완료
+### 향후 (스프레드시트 전환)
 
-- AI: 자연어 앱 생성 (AIBuildDialog)
-- AI: 챗 어시스턴트 (AIChatPanel)
-- AI: 자동화 생성 (AIAutomationDialog)
-- AI: 차트/필터/수식/CSV/사전입력 자동 생성
-- 프로세스 관리 (상태 머신 + 트랜지션 + ProcessFlowDiagram)
-- 조직도 (OrgChartPage)
-- 인터페이스 디자이너 (InterfaceDesignerPage)
-- 앱 간 관계 시각화 (RelationshipPage + RelationshipGraph)
-- RBAC + 컬렉션 접근 제어
-- 오프라인 감지 (OfflineBanner)
-- 폼 뷰 (FormView)
-- 일괄 편집 (BulkEditPanel)
-- 스프레드시트 입력 (SpreadsheetInput)
-- PDF 내보내기
-- 부서/자회사 관리
-- 커맨드 팔레트 + 단축키 (CommandPalette, HotkeyHelpDialog)
-- 코치마크 온보딩 (CoachMark, SetupChecklist, ViewGuide)
-- 계산 필드 (computed)
+> 상세: `docs/11-SPREADSHEET-PIVOT.md`
 
-### 향후 과제
-
-- CI/CD 파이프라인
-- 앱 헬스체크 엔드포인트
-- 이메일/웹 푸시 알림
-
+1. **로컬 처리 전환** — 셀 편집 로컬화, 클라이언트 필터/정렬, JS 수식 엔진, 앱 잠금
+2. **양방향 링크** — 역참조 가상 필드 자동 생성
+3. **크로스시트 동기화** — SSE 의존성 전파
+4. **네비게이션 재구성** — 좌측 사이드바(시트 트리), 하단 시트 탭, EntryPage→슬라이드오버
 
 ---
 
@@ -682,30 +640,9 @@ works_fields → shadcn 컴포넌트 매핑:
 
 1. `cd backend && go build ./...` — 컴파일 성공
 2. `cd frontend && npm run build` — Vite 빌드 성공
-3. `docker compose up` → 시드 실행 후:
-   - 로그인 → 앱 목록에 프리셋 4개 표시
-   - 앱 클릭 → 리스트 뷰 + 칸반 뷰 전환
-   - "새 앱 만들기" → 빌더에서 필드 추가 → 저장 → DB 테이블 생성 확인
-   - 항목 입력 → 목록에 표시
-   - `psql -c "\dt wd_*"` → 동적 테이블 확인
-4. 역할 테스트: viewer → 앱 생성 불가, 허용된 앱만 열람
-
----
-
-## 재활용 / 폐기
-
-| 재활용 | 내용 |
-|--------|------|
-| 색상 체계 | 의미 기반 (green=완료, blue=진행, amber=경고, red=위험) → constants.ts |
-| 상태 라벨 | 한국어 고정 (완료/진행중/대기/차단/건너뜀) → constants.ts |
-| 도메인 지식 | 태양광 인허가 절차, 공사 단계 → 프리셋 앱 시드 |
-| AI 연동 패턴 | vLLM runPrompt → Go HTTP 클라이언트로 재구현 |
-
-| 폐기 | 전부 |
-|------|------|
-| Payload CMS | payload.config.ts, collections/*, hooks/* |
-| Next.js | Vite + React SPA로 교체 |
-| Tremor | shadcn/ui로 교체 |
-| react-grid-layout | @dnd-kit로 교체 |
-| Drizzle ORM | pgx로 교체 (Go) |
-| Auth.js | Go JWT로 교체 |
+3. `make dev-api && make dev-ui` → 개발 서버 기동
+   - 로그인 → 앱 목록 → 워크북 그룹핑 확인
+   - 시트 클릭 → SpreadsheetView 표시
+   - 인라인 셀 편집 → 저장 확인
+   - 시트 간 관계 열 생성 → Lookup/Rollup 동작 확인
+4. 역할 테스트: viewer → 앱 생성 불가, RLS 적용 확인
