@@ -52,7 +52,7 @@ export default function SheetTabBar() {
               <button
                 key={col.id}
                 type="button"
-                className={`inline-flex items-center px-4 text-[12px] border-r border-[#d4d4d4] h-full transition-colors whitespace-nowrap ${
+                className={`inline-flex items-center px-4 text-[12px] border-r border-[#d4d4d4] h-full transition-all duration-150 whitespace-nowrap ${
                   isActive
                     ? 'bg-white text-[#333] font-medium border-t-2 border-t-[#005a9e]'
                     : 'bg-[#e6e6e6] text-[#666] hover:bg-[#d8d8d8]'

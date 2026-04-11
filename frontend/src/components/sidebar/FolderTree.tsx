@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
-  ChevronDown,
   ChevronRight,
   Folder,
   FolderOpen,
@@ -180,29 +180,43 @@ function TreeItem({
         }}
       >
         {hasChildren ? (
-          isOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <motion.span
+            animate={{ rotate: isOpen ? 90 : 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            className="inline-flex shrink-0"
+          >
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          </motion.span>
         ) : (
           <span className="w-3.5 shrink-0" />
         )}
         <NodeIcon node={node} isOpen={isOpen} />
         <span className="truncate">{node.label}</span>
       </button>
-      {hasChildren && isOpen && (
-        <div>
-          {node.children.map(child => (
-            <TreeItem
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              activeId={activeId}
-              activeWorkbookId={activeWorkbookId}
-              collapsed={collapsed}
-              onToggle={onToggle}
-              onNavigate={onNavigate}
-            />
-          ))}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {hasChildren && isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            {node.children.map(child => (
+              <TreeItem
+                key={child.id}
+                node={child}
+                depth={depth + 1}
+                activeId={activeId}
+                activeWorkbookId={activeWorkbookId}
+                collapsed={collapsed}
+                onToggle={onToggle}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -6,6 +6,7 @@
  * Save state feedback (spinner/checkmark) is shown after edits.
  */
 import { Check, Loader2 } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 
 import { Checkbox } from '@/components/ui/checkbox'
@@ -52,12 +53,32 @@ export default function GridCell({
     return (
       <div className="flex items-center gap-1 min-h-[24px] w-full">
         <span className="flex-1 truncate">{displayContent}</span>
-        {saveState === 'saving' && (
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
-        )}
-        {saveState === 'saved' && (
-          <Check className="h-3 w-3 text-green-500 shrink-0" />
-        )}
+        <AnimatePresence mode="wait">
+          {saveState === 'saving' && (
+            <motion.span
+              key="saving"
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5 }}
+              transition={{ duration: 0.12, ease: 'easeOut' }}
+              className="shrink-0 inline-flex"
+            >
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+            </motion.span>
+          )}
+          {saveState === 'saved' && (
+            <motion.span
+              key="saved"
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="shrink-0 inline-flex"
+            >
+              <Check className="h-3 w-3 text-green-500" />
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
     )
   }

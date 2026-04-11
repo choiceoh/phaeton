@@ -10,7 +10,7 @@ import {
 import type { User } from '@/lib/types'
 
 const navCls = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
+  `flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-all duration-150 ${
     isActive
       ? 'bg-accent font-medium text-foreground'
       : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'

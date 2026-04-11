@@ -12,6 +12,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { useEffect } from 'react'
 
 interface GridContextMenuProps {
@@ -97,7 +98,10 @@ export default function GridContextMenu({
     : null
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.1, ease: 'easeOut' }}
       className="fixed z-50 min-w-[160px] border border-[#d4d4d4] bg-white p-0.5 text-[11px] shadow-sm"
       style={{ left: position.x, top: position.y }}
       onClick={(e) => e.stopPropagation()}
@@ -157,6 +161,6 @@ export default function GridContextMenu({
           <MenuItem icon={Trash2} label="행 삭제" onClick={() => { onDeleteRow(); onClose() }} destructive />
         </>
       )}
-    </div>
+    </motion.div>
   )
 }

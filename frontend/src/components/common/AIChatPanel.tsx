@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Loader2, MessageCircle, Send, X } from 'lucide-react'
 import Markdown from 'react-markdown'
 
@@ -98,19 +99,34 @@ export default function AIChatPanel() {
   return (
     <>
       {/* Floating trigger button */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="AI 채팅 열기"
-          className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full border border-stone-200 bg-white shadow-lg transition-transform hover:scale-105 active:scale-95"
-        >
-          <MessageCircle className="h-5 w-5 text-stone-700" />
-        </button>
-      )}
+      <AnimatePresence>
+        {!open && (
+          <motion.button
+            key="ai-trigger"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            onClick={() => setOpen(true)}
+            aria-label="AI 채팅 열기"
+            className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full border border-stone-200 bg-white shadow-lg transition-transform hover:scale-105 active:scale-95"
+          >
+            <MessageCircle className="h-5 w-5 text-stone-700" />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Chat panel */}
-      {open && (
-        <div className="fixed bottom-6 right-6 z-50 flex h-[520px] w-[380px] flex-col rounded-xl border border-stone-200 bg-white shadow-2xl">
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="ai-panel"
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+            className="fixed bottom-6 right-6 z-50 flex h-[520px] w-[380px] flex-col rounded-xl border border-stone-200 bg-white shadow-2xl"
+          >
           {/* Header */}
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-2">
@@ -208,8 +224,9 @@ export default function AIChatPanel() {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   )
 }

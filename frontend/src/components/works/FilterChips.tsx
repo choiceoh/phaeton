@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, X } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -53,48 +54,64 @@ export default function FilterChips({
           {groupLogic === 'and' ? 'AND' : 'OR'}
         </span>
       )}
-      {conditions.map((c) => (
-        <Badge
-          key={c.id}
-          variant="secondary"
-          className="gap-1 pr-1 font-normal"
-        >
-          <span className="font-medium">{fieldLabel(fields, c.field)}</span>
-          <span className="text-muted-foreground">{operatorLabel(c.operator)}</span>
-          {c.operator !== 'is_null' && c.value && (
-            <span className="max-w-[120px] truncate">{c.value}</span>
-          )}
-          <button
-            type="button"
-            className="ml-0.5 rounded-sm hover:text-destructive"
-            onClick={() => onRemoveFilter(c.id)}
+      <AnimatePresence initial={false}>
+        {conditions.map((c) => (
+          <motion.div
+            key={c.id}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
           >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
-      ))}
+            <Badge
+              variant="secondary"
+              className="gap-1 pr-1 font-normal"
+            >
+              <span className="font-medium">{fieldLabel(fields, c.field)}</span>
+              <span className="text-muted-foreground">{operatorLabel(c.operator)}</span>
+              {c.operator !== 'is_null' && c.value && (
+                <span className="max-w-[120px] truncate">{c.value}</span>
+              )}
+              <button
+                type="button"
+                className="ml-0.5 rounded-sm hover:text-destructive"
+                onClick={() => onRemoveFilter(c.id)}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          </motion.div>
+        ))}
 
-      {sortItems.map((s, i) => (
-        <Badge
-          key={`sort-${i}`}
-          variant="secondary"
-          className="gap-1 pr-1 font-normal"
-        >
-          {s.desc ? (
-            <ArrowDown className="h-3 w-3" />
-          ) : (
-            <ArrowUp className="h-3 w-3" />
-          )}
-          <span className="font-medium">{fieldLabel(fields, s.field)}</span>
-          <button
-            type="button"
-            className="ml-0.5 rounded-sm hover:text-destructive"
-            onClick={() => onRemoveSort(i)}
+        {sortItems.map((s, i) => (
+          <motion.div
+            key={`sort-${i}`}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
           >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
-      ))}
+            <Badge
+              variant="secondary"
+              className="gap-1 pr-1 font-normal"
+            >
+              {s.desc ? (
+                <ArrowDown className="h-3 w-3" />
+              ) : (
+                <ArrowUp className="h-3 w-3" />
+              )}
+              <span className="font-medium">{fieldLabel(fields, s.field)}</span>
+              <button
+                type="button"
+                className="ml-0.5 rounded-sm hover:text-destructive"
+                onClick={() => onRemoveSort(i)}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          </motion.div>
+        ))}
+      </AnimatePresence>
 
       {total > 1 && (
         <Button

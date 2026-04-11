@@ -26,7 +26,7 @@ export function FormattingToolbar({ currentFormat, onFormatChange, disabled }: F
 
       {/* Bold */}
       <button
-        className={`flex items-center justify-center w-6 h-6 rounded hover:bg-stone-100 ${disabled ? 'opacity-40 pointer-events-none' : ''} ${fmt.bold ? 'bg-stone-200' : ''}`}
+        className={`flex items-center justify-center w-6 h-6 rounded transition-colors duration-100 hover:bg-stone-100 ${disabled ? 'opacity-40 pointer-events-none' : ''} ${fmt.bold ? 'bg-stone-200' : ''}`}
         title="굵게 (Ctrl+B)"
         disabled={disabled}
         onClick={() => onFormatChange({ bold: !fmt.bold })}
@@ -36,7 +36,7 @@ export function FormattingToolbar({ currentFormat, onFormatChange, disabled }: F
 
       {/* Italic */}
       <button
-        className={`flex items-center justify-center w-6 h-6 rounded hover:bg-stone-100 ${disabled ? 'opacity-40 pointer-events-none' : ''} ${fmt.italic ? 'bg-stone-200' : ''}`}
+        className={`flex items-center justify-center w-6 h-6 rounded transition-colors duration-100 hover:bg-stone-100 ${disabled ? 'opacity-40 pointer-events-none' : ''} ${fmt.italic ? 'bg-stone-200' : ''}`}
         title="기울임 (Ctrl+I)"
         disabled={disabled}
         onClick={() => onFormatChange({ italic: !fmt.italic })}
