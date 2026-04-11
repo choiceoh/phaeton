@@ -35,6 +35,12 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.departments.all, 'detail', id] as const,
   },
 
+  /** Folder keys for sidebar tree navigation. */
+  folders: {
+    all: ['folders'] as const,
+    list: () => [...queryKeys.folders.all, 'list'] as const,
+  },
+
   /** Workbook (app) keys. Invalidate `.all` after create/delete. */
   workbooks: {
     all: ['workbooks'] as const,

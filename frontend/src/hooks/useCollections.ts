@@ -40,7 +40,7 @@ export function useSheetCounts() {
 export function useCreateWorkbook() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { label: string; icon?: string }) =>
+    mutationFn: (input: { label: string; icon?: string; folder_id?: string }) =>
       api.post<Workbook>('/schema/workbooks', input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.workbooks.all })
@@ -52,7 +52,7 @@ export function useCreateWorkbook() {
 export function useUpdateWorkbook() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string; label?: string; icon?: string; sort_order?: number }) =>
+    mutationFn: ({ id, ...input }: { id: string; label?: string; icon?: string; sort_order?: number; folder_id?: string }) =>
       api.patch<Workbook>(`/schema/workbooks/${id}`, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.workbooks.all })
@@ -200,24 +200,23 @@ export function useAddField(collectionId: string) {
 }
 
 /**
- * Update a field's metadata (label, options, etc.) via PATCH.
- * Used by FormatToolbar to change display_type, decimal_places, etc.
+ * Update a field's metadata (label, options, display_type, etc.) via PATCH.
+ * When collectionId is provided, also invalidates that collection's detail cache.
  */
-export function useUpdateField() {
+export function useUpdateField(collectionId?: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ fieldId, body }: { fieldId: string; body: Record<string, unknown> }) =>
-      api.patch(`/schema/fields/${fieldId}`, body),
+      api.patch<Field>(`/schema/fields/${fieldId}`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.collections.all })
+      if (collectionId) {
+        qc.invalidateQueries({ queryKey: queryKeys.collections.detail(collectionId) })
+      }
     },
   })
 }
 
-/**
- * Delete a field (ALTER TABLE DROP COLUMN). Same two-step preview/confirm
- * pattern as useDeleteCollection — preview shows affected data before commit.
- */
 export function useDeleteField() {
   const qc = useQueryClient()
   return useMutation({

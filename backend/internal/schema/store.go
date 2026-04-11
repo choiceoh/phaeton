@@ -274,7 +274,7 @@ func (s *Store) DeleteCollectionTx(ctx context.Context, tx pgx.Tx, id string) er
 
 func (s *Store) ListWorkbooks(ctx context.Context) ([]Workbook, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, label, icon, group_label, sort_order, created_at, updated_at, created_by, locked_by, locked_at
+		`SELECT id, label, icon, group_label, folder_id, sort_order, created_at, updated_at, created_by, locked_by, locked_at
 		 FROM _meta.workbooks ORDER BY sort_order, label`)
 	if err != nil {
 		return nil, fmt.Errorf("list workbooks: %w", err)
@@ -301,11 +301,15 @@ func (s *Store) CreateWorkbook(ctx context.Context, req *CreateWorkbookReq, crea
 	if createdBy != "" {
 		cbUUID, _ = parseUUID(createdBy)
 	}
+	var folderID pgtype.UUID
+	if req.FolderID != "" {
+		folderID, _ = parseUUID(req.FolderID)
+	}
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO _meta.workbooks (label, icon, group_label, created_by)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO _meta.workbooks (label, icon, group_label, folder_id, created_by)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, sort_order, created_at, updated_at`,
-		req.Label, nilIfEmpty(req.Icon), nilIfEmpty(req.GroupLabel), cbUUID,
+		req.Label, nilIfEmpty(req.Icon), nilIfEmpty(req.GroupLabel), folderID, cbUUID,
 	).Scan(&id, &wb.SortOrder, &wb.CreatedAt, &wb.UpdatedAt)
 	if err != nil {
 		return Workbook{}, fmt.Errorf("insert workbook: %w", err)
@@ -314,6 +318,7 @@ func (s *Store) CreateWorkbook(ctx context.Context, req *CreateWorkbookReq, crea
 	wb.Label = req.Label
 	wb.Icon = req.Icon
 	wb.GroupLabel = req.GroupLabel
+	wb.FolderID = req.FolderID
 	wb.CreatedBy = createdBy
 	return wb, nil
 }
@@ -348,13 +353,24 @@ func (s *Store) UpdateWorkbook(ctx context.Context, id string, req *UpdateWorkbo
 		args = append(args, nilIfEmpty(*req.GroupLabel))
 		argIdx++
 	}
+	if req.FolderID != nil {
+		if *req.FolderID == "" {
+			sets = append(sets, fmt.Sprintf("folder_id = $%d", argIdx))
+			args = append(args, nil)
+		} else {
+			fid, _ := parseUUID(*req.FolderID)
+			sets = append(sets, fmt.Sprintf("folder_id = $%d", argIdx))
+			args = append(args, fid)
+		}
+		argIdx++
+	}
 
 	if len(sets) == 0 {
 		return s.getWorkbook(ctx, id)
 	}
 
 	query := fmt.Sprintf(
-		"UPDATE _meta.workbooks SET %s, updated_at = now() WHERE id = $%d RETURNING id, label, icon, group_label, sort_order, created_at, updated_at, created_by, locked_by, locked_at",
+		"UPDATE _meta.workbooks SET %s, updated_at = now() WHERE id = $%d RETURNING id, label, icon, group_label, folder_id, sort_order, created_at, updated_at, created_by, locked_by, locked_at",
 		joinStrings(sets, ", "), argIdx,
 	)
 	args = append(args, uid)
@@ -391,7 +407,7 @@ func (s *Store) getWorkbook(ctx context.Context, id string) (Workbook, error) {
 		return Workbook{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 	row := s.pool.QueryRow(ctx,
-		`SELECT id, label, icon, group_label, sort_order, created_at, updated_at, created_by, locked_by, locked_at FROM _meta.workbooks WHERE id = $1`, uid)
+		`SELECT id, label, icon, group_label, folder_id, sort_order, created_at, updated_at, created_by, locked_by, locked_at FROM _meta.workbooks WHERE id = $1`, uid)
 	wb, err := scanWorkbook(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Workbook{}, fmt.Errorf("workbook %s: %w", id, ErrNotFound)
@@ -408,15 +424,17 @@ func scanWorkbook(row pgx.Row) (Workbook, error) {
 		id         pgtype.UUID
 		icon       *string
 		groupLabel *string
+		folderID   pgtype.UUID
 		createdBy  pgtype.UUID
 		lockedBy   pgtype.UUID
 		lockedAt   pgtype.Timestamptz
 	)
-	err := row.Scan(&id, &wb.Label, &icon, &groupLabel, &wb.SortOrder, &wb.CreatedAt, &wb.UpdatedAt, &createdBy, &lockedBy, &lockedAt)
+	err := row.Scan(&id, &wb.Label, &icon, &groupLabel, &folderID, &wb.SortOrder, &wb.CreatedAt, &wb.UpdatedAt, &createdBy, &lockedBy, &lockedAt)
 	if err != nil {
 		return Workbook{}, err
 	}
 	wb.ID = uuidStr(id)
+	wb.FolderID = uuidStr(folderID)
 	wb.CreatedBy = uuidStr(createdBy)
 	wb.LockedBy = uuidStr(lockedBy)
 	if lockedAt.Valid {

@@ -416,6 +416,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		// Workbook edit lock — only one user edits at a time.
 		`ALTER TABLE _meta.workbooks ADD COLUMN IF NOT EXISTS locked_by UUID`,
 		`ALTER TABLE _meta.workbooks ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ`,
+		// Workbook → Folder linkage for sidebar tree navigation.
+		`ALTER TABLE _meta.workbooks ADD COLUMN IF NOT EXISTS folder_id UUID REFERENCES _meta.folders(id) ON DELETE SET NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_meta_workbooks_folder ON _meta.workbooks(folder_id)`,
 	}
 
 	for _, stmt := range append(stmts, alters...) {

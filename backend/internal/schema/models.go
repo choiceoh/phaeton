@@ -184,6 +184,7 @@ type Workbook struct {
 	Label      string    `json:"label"`
 	Icon       string    `json:"icon,omitempty"`
 	GroupLabel string    `json:"group_label,omitempty"` // Optional workbook grouping.
+	FolderID   string    `json:"folder_id,omitempty"`   // Parent folder for sidebar tree navigation.
 	SortOrder  int       `json:"sort_order"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
@@ -343,6 +344,7 @@ type CreateWorkbookReq struct {
 	Label      string `json:"label"`
 	Icon       string `json:"icon,omitempty"`
 	GroupLabel string `json:"group_label,omitempty"`
+	FolderID   string `json:"folder_id,omitempty"`
 }
 
 type UpdateWorkbookReq struct {
@@ -350,6 +352,7 @@ type UpdateWorkbookReq struct {
 	Icon       *string `json:"icon,omitempty"`
 	SortOrder  *int    `json:"sort_order,omitempty"`
 	GroupLabel *string `json:"group_label,omitempty"`
+	FolderID   *string `json:"folder_id,omitempty"`
 }
 
 type UpdateFieldReq struct {

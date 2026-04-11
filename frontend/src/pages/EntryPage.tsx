@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Loader2, Printer, Trash2 } from 'lucide-react'
+import { Copy, Loader2, Printer, Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -11,6 +11,12 @@ import EntryForm from '@/components/works/EntryForm'
 import EntryHistory from '@/components/works/EntryHistory'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { useAIPrefill } from '@/hooks/useAI'
 import { useCollection } from '@/hooks/useCollections'
@@ -75,8 +81,28 @@ export default function EntryPage() {
 
   const goBack = () => navigate(`/apps/${appId}`)
 
-  if (colLoading || (isEdit && entryLoading)) return <LoadingState />
-  if (colErr) return <ErrorState error={colErr} />
+  function handleClose(open: boolean) {
+    if (!open) goBack()
+  }
+
+  if (colLoading || (isEdit && entryLoading)) {
+    return (
+      <Sheet open onOpenChange={handleClose}>
+        <SheetContent side="right" className="sm:max-w-2xl overflow-y-auto">
+          <LoadingState />
+        </SheetContent>
+      </Sheet>
+    )
+  }
+  if (colErr) {
+    return (
+      <Sheet open onOpenChange={handleClose}>
+        <SheetContent side="right" className="sm:max-w-2xl overflow-y-auto">
+          <ErrorState error={colErr} />
+        </SheetContent>
+      </Sheet>
+    )
+  }
   if (!collection) return null
 
   const fields = collection.fields ?? []
@@ -86,7 +112,6 @@ export default function EntryPage() {
   if (isEdit) {
     initialData = entryData
   } else if (duplicateSource) {
-    // Strip identity/system fields for duplicate
     const { id: _id, _version, created_at: _ca, updated_at: _ua, _created_by, _optimistic, _updated_at, _created_at, ...rest } = duplicateSource as EntryRow
     initialData = rest
   } else if (entryDefaults && Object.keys(entryDefaults).length > 0) {
@@ -160,56 +185,46 @@ export default function EntryPage() {
       : TERM.newRecord
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={goBack} className="gap-1">
-            <ArrowLeft className="h-4 w-4" />
-            목록
-          </Button>
-          <div className="text-muted-foreground">/</div>
-          <h1 className="text-lg font-semibold">{collection.label}</h1>
-          <div className="text-muted-foreground">/</div>
-          <span className="text-lg text-muted-foreground">{pageTitle}</span>
-        </div>
-        {isEdit && (
-          <div className="flex items-center gap-1" data-print-hide>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1 text-xs"
-              onClick={() => window.print()}
-            >
-              <Printer className="h-3.5 w-3.5" />
-              인쇄
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1 text-xs"
-              onClick={handleDuplicate}
-            >
-              <Copy className="h-3.5 w-3.5" />
-              복제
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
-              onClick={() => setDeleteOpen(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              삭제
-            </Button>
+    <Sheet open onOpenChange={handleClose}>
+      <SheetContent side="right" className="sm:max-w-2xl overflow-y-auto p-0">
+        <SheetHeader className="border-b border-border/40 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <SheetTitle className="text-base">{pageTitle}</SheetTitle>
+            {isEdit && (
+              <div className="flex items-center gap-1" data-print-hide>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => window.print()}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  인쇄
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={handleDuplicate}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  복제
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  삭제
+                </Button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </SheetHeader>
 
-      {/* Content */}
-      <div className={isEdit ? 'flex gap-8 lg:flex-row flex-col' : ''}>
-        {/* Form column */}
-        <div className={isEdit ? 'min-w-0 flex-1' : 'mx-auto max-w-2xl'}>
+        <div className="p-4">
           {/* AI Prefill (create mode) */}
           {isNew && aiAvailable && slug && (
             <div className="mb-4 flex gap-1">
@@ -248,34 +263,33 @@ export default function EntryPage() {
             submitting={createEntry.isPending || updateEntry.isPending}
             process={process}
           />
+
+          {/* Comments & History (edit mode only) */}
+          {isEdit && entryId && slug && (
+            <div className="mt-6 space-y-6 border-t border-border/40 pt-6">
+              <div>
+                <h3 className="mb-3 text-sm font-medium">댓글</h3>
+                <EntryComments slug={slug} recordId={entryId} />
+              </div>
+              <div>
+                <h3 className="mb-3 text-sm font-medium">이력</h3>
+                <EntryHistory slug={slug} recordId={entryId} fields={fields} />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Sidebar (edit mode only) */}
-        {isEdit && entryId && slug && (
-          <div className="w-full shrink-0 space-y-6 lg:w-80">
-            <div>
-              <h3 className="mb-3 text-sm font-medium">댓글</h3>
-              <EntryComments slug={slug} recordId={entryId} />
-            </div>
-            <div>
-              <h3 className="mb-3 text-sm font-medium">이력</h3>
-              <EntryHistory slug={slug} recordId={entryId} fields={fields} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Delete confirmation */}
-      <ConfirmDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        title="데이터를 삭제하시겠습니까?"
-        description="삭제된 데이터는 복구할 수 없습니다."
-        variant="destructive"
-        confirmLabel="삭제"
-        loading={deleteEntry.isPending}
-        onConfirm={handleDelete}
-      />
-    </div>
+        <ConfirmDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          title="데이터를 삭제하시겠습니까?"
+          description="삭제된 데이터는 복구할 수 없습니다."
+          variant="destructive"
+          confirmLabel="삭제"
+          loading={deleteEntry.isPending}
+          onConfirm={handleDelete}
+        />
+      </SheetContent>
+    </Sheet>
   )
 }
