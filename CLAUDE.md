@@ -519,16 +519,21 @@ queryKeys
 > 상세 플랜: `docs/11-SPREADSHEET-PIVOT.md`
 
 ### 완료된 전환
+- Folder 모델 (`_meta.folders`, 1단계 중첩) + CRUD API ✅
 - Workbook 모델 (1앱=N시트, `_meta.workbooks`, `group_label`) ✅
 - 뷰 단일화 — SpreadsheetView만 남김, Kanban/Calendar/Gallery/Gantt/Form 삭제 ✅
 - SavedView → 시트 탭 (필터/정렬 프리셋) ✅
-- 크로스시트 수식 함수 (LOOKUP, SUMREL, AVGREL, MINREL, MAXREL, COUNTREL) ✅
+- 크로스시트 수식 함수 (LOOKUP, SUMREL 등) + 구문 파서 (`SheetSlug!col`) ✅
+- 역참조 메타데이터 (`ReverseRelField`, 캐시 `reverseRels` 인덱스) ✅
+- SSE 크로스시트 무효화 (`cross_sheet_invalidation` 이벤트) ✅
+- 캐시 의존성 그래프 (`SheetsInWorkbook`, `SiblingSheets`, `ReverseRelations`) ✅
+- 자동화/대시보드/설정/프로세스 → 시트 통합 ✅
 - 용어 변경 (collection → 시트) ✅
 
 ### 진행 중 / 예정 GAP
 1. **로컬 처리 전환** — 셀 편집 로컬화, 클라이언트 필터/정렬, JS 수식 엔진, 앱 잠금
-2. **양방향 링크** — 시트 A→B 참조 시 B에 자동 역참조 열
-3. **크로스시트 동기화** — 시트 A 변경 → 시트 B Lookup/Rollup 자동 갱신 (SSE 의존성 전파)
+2. **양방향 링크** — 백엔드 인프라 완료, 핸들러 역참조 데이터 조회 + 프론트 렌더링 남음
+3. **크로스시트 동기화** — 백엔드 완료, 프론트 `useSSE`에서 `cross_sheet_invalidation` 수신 남음
 4. **네비게이션 재구성** — 좌측 사이드바(폴더→워크북→시트 트리), 하단 시트 탭, EntryPage→슬라이드오버
 
 ### 아키텍처 판단: Local-First Processing

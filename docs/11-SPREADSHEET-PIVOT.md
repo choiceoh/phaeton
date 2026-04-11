@@ -11,9 +11,9 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 **컨셉 매핑:**
 | 엑셀 개념 | Topworks 개념 | 내부 코드 (변경 없음) |
 |----------|-------------|-------------------|
-| 폴더 | 유사 앱들의 그룹 | `Workbook.group_label` |
-| 엑셀 파일(워크북) | 앱 | `Workbook` (`_meta.workbooks`) |
-| 시트 | 시트 | `Collection` (`_meta.collections`) |
+| 폴더 | 유사 앱들의 그룹 | `Folder` (`_meta.folders`, 1단계 중첩 지원) |
+| 엑셀 파일(워크북) | 앱 | `Workbook` (`_meta.workbooks`, `group_label`) |
+| 시트 | 시트 | `Collection` (`_meta.collections`, `workbook_id` FK) |
 | 열 | 항목/컬럼 | `Field` (`_meta.fields`) |
 | 행 | 데이터/레코드 | `EntryRow` (동적 테이블 row) |
 
@@ -78,22 +78,28 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 
 | 커밋 | 내용 |
 |------|------|
-| #280 | Workbook 모델 (`_meta.workbooks`, `group_label`), Collection에 `workbook_id` FK, 워크북 API |
+| #283 | Folder 모델, Workbook 확장, 역참조 메타(ReverseRelField), 크로스시트 수식 구문(`SheetSlug!col`), SSE 크로스시트 무효화, 캐시 의존성 그래프 |
+| #282 | 관계 리브랜딩, 자동화/대시보드/설정/프로세스 시트 통합 |
 | #281 | 뷰 타입 제거 — SpreadsheetView 단일 + SavedView 시트 탭, Kanban/Calendar/Gallery/Gantt/Form 삭제 |
-| #277 | SpreadsheetView 추가 (인라인 셀 편집, TSV 붙여넣기, 하단 새 행) |
-| #278 | 뷰 탭을 툴바에 통합 |
-| #279 | 상단 여백 축소로 데이터 표시 영역 확대 |
+| #280 | Workbook 모델 (`_meta.workbooks`, `group_label`), Collection에 `workbook_id` FK, 워크북 API |
+| #277-279 | SpreadsheetView 추가, 뷰 탭 툴바 통합, 여백 축소 |
 
 **이미 구현된 인프라:**
+- Folder 모델 (`_meta.folders`, 1단계 중첩) + CRUD API ✅
 - Workbook 모델 + API + 프론트 훅 ✅
 - SpreadsheetView (인라인 편집, 클립보드, 새 행) ✅
 - 크로스시트 수식 함수 (LOOKUP, SUMREL, AVGREL, MINREL, MAXREL, COUNTREL) ✅
+- 크로스시트 수식 구문 파서 (`SheetSlug!column` 토큰화 + SheetResolver 콜백) ✅
+- 역참조 메타데이터 (`ReverseRelField` 구조체 + 캐시 `reverseRels` 인덱스) ✅
+- SSE 크로스시트 무효화 (`cross_sheet_invalidation` 이벤트, `hasCrossRef` 감지) ✅
+- 캐시 의존성 그래프 (`SheetsInWorkbook`, `SiblingSheets`, `ReverseRelations`, `WorkbookForCollection`) ✅
 - 관계 시스템 (1:1, 1:N, M:N + junction table) ✅
 - Lookup/Rollup computed fields ✅
 - SSE 실시간 동기화 ✅
 - 용어 변경 (collection → 시트) ✅
 - DataTable (@tanstack/react-table + virtual scroll) ✅
 - 인라인 셀 편집 + 키보드 네비게이션 ✅
+- 자동화/대시보드/설정/프로세스 → 시트 통합 ✅
 
 ---
 
@@ -136,46 +142,37 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 
 ### GAP 2: 양방향 링크 (Bidirectional Links)
 
-**현재**: 시트 A→B 단방향. 시트 B에서 "누가 나를 참조하는지" 자동 표시 안 됨.
-**목표**: 시트 A가 시트 B를 참조하면, 시트 B에도 자동 역참조 열 표시.
+**백엔드 인프라 완료** (#283): `ReverseRelField` 구조체 + 캐시 `reverseRels` 인덱스 + `cache.ReverseRelations(collectionID)` 메서드.
+**남은 작업**: 핸들러에서 역참조 데이터를 실제로 조회·주입하는 부분 + 프론트 렌더링.
 
 **작업 항목:**
 
-1. **백엔드: 역참조 가상 필드**
-   - 관계 필드 생성 시 대상 컬렉션에 "역참조" 메타 필드 자동 생성
-   - 또는 조회 시 동적으로 역참조 필드 주입 (DB 컬럼 없음, 계산 필드 방식)
-   - 파일: `backend/internal/migration/engine.go`, `backend/internal/handler/computed.go`
+1. **백엔드: 역참조 데이터 조회 API** ← 핵심 남은 작업
+   - `DynHandler.List()`에서 `cache.ReverseRelations(collectionID)`로 역참조 메타 획득
+   - 각 역참조에 대해 "이 레코드를 참조하는 원본 시트 레코드들" 배치 쿼리
+   - 응답에 역참조 필드 데이터 주입 (별도 키, 예: `_reverse_relations`)
+   - 파일: `backend/internal/handler/dynamic.go`, `backend/internal/handler/computed.go`
 
-2. **백엔드: 역참조 데이터 확장**
-   - `expandRelations()`에서 역방향도 포함: "이 레코드를 참조하는 다른 시트의 레코드들"
-   - 배치 쿼리로 N+1 방지
-   - 파일: `backend/internal/handler/dynamic.go`
-
-3. **프론트: 역참조 열 렌더링**
+2. **프론트: 역참조 열 렌더링**
    - 역참조 필드를 그리드에 read-only 열로 표시
    - 클릭 시 원본 시트/행으로 이동
    - 파일: `frontend/src/components/common/GridCell.tsx`, `frontend/src/components/common/DataTable.tsx`
 
 ### GAP 3: 크로스시트 자동 동기화
 
-**현재**: SSE 이벤트는 변경된 시트 내에서만 전파. 시트 A 변경 → 시트 B의 Lookup/Rollup 미갱신.
-**목표**: 시트 A 변경 → 시트 A를 참조하는 모든 시트 자동 새로고침.
+**백엔드 인프라 완료** (#283): 
+- `Event.WorkbookID` 필드 추가 ✅
+- `cache.SheetsInWorkbook()`, `cache.SiblingSheets()` 메서드 ✅
+- `cross_sheet_invalidation` SSE 이벤트 타입 + `hasCrossRef()` 감지 로직 (main.go) ✅
+- 레코드 변경 → 같은 워크북 형제 시트 중 참조하는 시트에 SSE 브로드캐스트 ✅
+
+**남은 작업**: 프론트에서 `cross_sheet_invalidation` 이벤트를 수신하여 캐시 무효화.
 
 **작업 항목:**
 
-1. **백엔드: 의존성 그래프**
-   - `_meta.relations`에서 컬렉션 간 참조 관계 추출 → 역방향 맵 캐시
-   - "시트 A 변경 시 영향받는 시트 목록" 빠르게 조회
-   - 파일: `backend/internal/schema/cache.go`
-
-2. **백엔드: SSE 이벤트 확장**
-   - `events.Event` 구조체에 `DependentSlugs []string` 추가
-   - 레코드 변경 시 의존 컬렉션 slug 목록 포함하여 이벤트 발행
-   - 파일: `backend/internal/events/bus.go`, `backend/internal/handler/dynamic.go`
-
-3. **프론트: 크로스시트 캐시 무효화**
-   - `useSSE`에서 `DependentSlugs` 수신 → 해당 컬렉션 entries 캐시 무효화
-   - 현재 보고 있는 시트가 의존 목록에 포함되면 데이터 리프레시
+1. **프론트: 크로스시트 캐시 무효화** ← 핵심 남은 작업
+   - `useSSE`에서 `cross_sheet_invalidation` 이벤트 수신 → 해당 컬렉션 entries 캐시 무효화
+   - 현재 보고 있는 시트가 무효화 대상이면 데이터 리프레시
    - 파일: `frontend/src/hooks/useSSE.ts`
 
 ### GAP 4: 네비게이션 / UX 재구성
@@ -186,7 +183,9 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 **작업 항목:**
 
 1. **좌측 사이드바 (시트 트리)**
-   - `group_label`별 폴더 → 워크북(앱) → 시트 3단 트리
+   - 폴더(`_meta.folders`) → 워크북(앱) → 시트 3단 트리
+   - 백엔드 Folder API 완료: `GET/POST/PATCH/DELETE /api/schema/folders` ✅
+   - 프론트 사이드바 컴포넌트 구현 필요
    - 접기/펼치기, 드래그 재정렬
    - 파일: `frontend/src/layouts/RootLayout.tsx`, 새 컴포넌트 `SheetSidebar.tsx`
 
@@ -291,17 +290,19 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 ### 백엔드
 | 파일 | 역할 |
 |------|------|
-| `backend/internal/schema/models.go` | Workbook, Collection, Field, Relation 모델 |
-| `backend/internal/schema/store.go` | 메타 CRUD + 워크북 CRUD |
-| `backend/internal/schema/cache.go` | 스키마 인메모리 캐시 |
+| `backend/internal/schema/models.go` | Workbook, Folder, Collection, Field, Relation, ReverseRelField 모델 |
+| `backend/internal/schema/store.go` | 메타 CRUD |
+| `backend/internal/schema/workbook_store.go` | 워크북 + 폴더 CRUD |
+| `backend/internal/schema/cache.go` | 스키마 캐시 + 역참조 인덱스 + 워크북/폴더 캐시 + 의존성 그래프 |
 | `backend/internal/migration/engine.go` | DDL 마이그레이션 (AddField, DropField 등) |
 | `backend/internal/migration/ddl.go` | SQL DDL 생성 |
 | `backend/internal/handler/dynamic.go` | 데이터 CRUD API |
 | `backend/internal/handler/computed.go` | formula/lookup/rollup 계산 |
-| `backend/internal/handler/schema.go` | 스키마 + 워크북 API |
-| `backend/internal/formula/parser.go` | 수식 파서 (Lexer→Parser→SQL) |
-| `backend/internal/events/bus.go` | 이벤트 버스 |
-| `backend/internal/events/broker.go` | SSE 브로커 |
+| `backend/internal/handler/schema.go` | 스키마 API |
+| `backend/internal/handler/workbook.go` | 워크북 + 폴더 + 시트 이동 API |
+| `backend/internal/formula/parser.go` | 수식 파서 (Lexer→Parser→SQL + SheetSlug!col 구문) |
+| `backend/internal/events/bus.go` | 이벤트 버스 (WorkbookID 포함) |
+| `backend/internal/events/broker.go` | SSE 브로커 (cross_sheet_invalidation) |
 
 ---
 
