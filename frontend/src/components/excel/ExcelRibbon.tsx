@@ -145,7 +145,7 @@ export default function ExcelRibbon() {
       </div>
 
       {/* Tab content */}
-      <div className="flex items-center gap-1 px-2 py-1 min-h-[32px]">
+      <div className="flex items-center gap-1 px-2 py-1 h-[32px]">
         <AnimatePresence mode="wait" initial={false}>
           {activeTab === '홈' && (
             <motion.div
