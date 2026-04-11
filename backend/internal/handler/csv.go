@@ -294,16 +294,13 @@ func coerceCSVValue(val string, f schema.Field) (any, error) {
 	switch f.FieldType {
 	case schema.FieldText, schema.FieldTextarea:
 		return val, nil
-	case schema.FieldNumber:
+	case schema.FieldNumber, schema.FieldInteger:
 		var n float64
 		if _, err := fmt.Sscanf(val, "%f", &n); err != nil {
 			return nil, fmt.Errorf("expected number, got %q", val)
 		}
-		return n, nil
-	case schema.FieldInteger:
-		var n int64
-		if _, err := fmt.Sscanf(val, "%d", &n); err != nil {
-			return nil, fmt.Errorf("expected integer, got %q", val)
+		if dp := schema.EffectiveDecimalPlaces(f); dp != nil && *dp == 0 {
+			return int64(n), nil
 		}
 		return n, nil
 	case schema.FieldBoolean:

@@ -210,6 +210,36 @@ func ExtractNumberRange(raw json.RawMessage) *NumberRange {
 	return &opts
 }
 
+// ExtractDecimalPlaces parses the decimal_places option from a number field's
+// Options JSON (e.g. {"decimal_places": 2}). Returns nil if not set. For fields
+// with FieldType "integer" and no explicit decimal_places, callers should default to 0.
+func ExtractDecimalPlaces(raw json.RawMessage) *int {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var opts struct {
+		DecimalPlaces *int `json:"decimal_places"`
+	}
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		return nil
+	}
+	return opts.DecimalPlaces
+}
+
+// EffectiveDecimalPlaces returns the decimal places for a field, taking into
+// account the field type (integer defaults to 0).
+func EffectiveDecimalPlaces(f Field) *int {
+	dp := ExtractDecimalPlaces(f.Options)
+	if dp != nil {
+		return dp
+	}
+	if f.FieldType == FieldInteger {
+		zero := 0
+		return &zero
+	}
+	return nil
+}
+
 // ExtractMaxLength parses the max_length constraint from a text or textarea
 // field's Options JSON (e.g. {"max_length": 255}). Returns 0 if not set or unparseable.
 func ExtractMaxLength(raw json.RawMessage) int {

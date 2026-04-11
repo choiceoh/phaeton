@@ -9,10 +9,13 @@ import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/common/DataTable'
+import type { CellPosition } from '@/hooks/useGridNavigation'
 import { useInlineEditing } from '@/hooks/useInlineEditing'
 import { isLayoutType, isComputedType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import type { Collection, Field } from '@/lib/types'
+
+import FormatToolbar from '../FormatToolbar'
 
 interface SpreadsheetViewProps {
   collection: Collection
@@ -37,6 +40,7 @@ interface SpreadsheetViewProps {
   emptyTitle?: string
   emptyDescription?: string
   emptyAction?: React.ReactNode
+  onUpdateFieldOptions?: (fieldId: string, options: Record<string, unknown>) => Promise<void>
 }
 
 /** Coerce a pasted string value to the appropriate type for a field. */
@@ -44,9 +48,12 @@ function coerceValue(raw: string, field: Field): unknown {
   if (raw === '') return null
   switch (field.field_type) {
     case 'number':
+    case 'integer': {
+      const dp = (field.options as Record<string, unknown> | undefined)?.decimal_places
+      const effectiveDp = typeof dp === 'number' ? dp : (field.field_type === 'integer' ? 0 : undefined)
+      if (effectiveDp === 0) return parseInt(raw, 10) || null
       return parseFloat(raw) || null
-    case 'integer':
-      return parseInt(raw, 10) || null
+    }
     case 'boolean':
       return raw.toLowerCase() === 'true' || raw === '1' || raw === '✓'
     case 'date':
@@ -81,8 +88,24 @@ export default function SpreadsheetView({
   emptyTitle,
   emptyDescription,
   emptyAction,
+  onUpdateFieldOptions,
 }: SpreadsheetViewProps) {
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
+  const [activeColumnField, setActiveColumnField] = useState<Field | null>(null)
+
+  // Track active cell column to show format toolbar
+  const dataFields = useMemo(
+    () => collection?.fields?.filter((f) => !isLayoutType(f.field_type)) ?? [],
+    [collection],
+  )
+  const handleActiveCellChange = useCallback(
+    (cell: CellPosition | null) => {
+      if (!cell) { setActiveColumnField(null); return }
+      const field = dataFields[cell.col] ?? null
+      setActiveColumnField(field)
+    },
+    [dataFields],
+  )
 
   // Column visibility/pinning persistence
   const colVisStorageKey = collection.id ? `phaeton:colvis:${collection.id}:spreadsheet` : null
@@ -254,7 +277,18 @@ export default function SpreadsheetView({
       summaryRow={summaryRow}
       summaryFn={summaryFn}
       onSummaryFnChange={onSummaryFnChange}
-      toolbar={toolbar}
+      toolbar={
+        <>
+          {toolbar}
+          {canManage && onUpdateFieldOptions && activeColumnField && (
+            <FormatToolbar
+              field={activeColumnField}
+              collectionId={collection.id}
+              onUpdateOptions={onUpdateFieldOptions}
+            />
+          )}
+        </>
+      }
       toolbarRight={toolbarRight}
       initialColumnVisibility={initialColumnVisibility}
       onColumnVisibilityChange={handleColumnVisibilityChange}
@@ -276,6 +310,7 @@ export default function SpreadsheetView({
       onClearCell={inlineEditing.clearCell}
       onPaste={handlePaste}
       onDeleteRow={canManage ? deleteEntry : undefined}
+      onActiveCellChange={handleActiveCellChange}
       showNewRow={canManage}
       newRowValues={newRowValues}
       onNewRowChange={(slug, v) => setNewRowValues((prev) => ({ ...prev, [slug]: v }))}

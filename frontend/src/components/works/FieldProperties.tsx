@@ -27,6 +27,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  DECIMAL_PLACES_OPTIONS,
   FIELD_TYPE_LABELS,
   HEIGHT_OPTIONS,
   isComputedType,
@@ -136,7 +137,6 @@ export default function FieldProperties({ field, collections, siblingFields, onC
   ]
   const NUMBER_VARIANTS: VariantOption[] = [
     { value: 'number', label: '숫자' },
-    { value: 'integer', label: '정수' },
   ]
   const DATE_VARIANTS: VariantOption[] = [
     { value: 'date', label: '날짜' },
@@ -785,6 +785,26 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                   maxLength={3}
                 />
               )}
+            </section>
+          )}
+
+          {/* 소수 자릿수 (number) */}
+          {isNumeric && (
+            <section className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">소수 자릿수</Label>
+              <Select
+                value={opts.decimal_places !== undefined && opts.decimal_places !== null ? String(opts.decimal_places) : (field.field_type === 'integer' ? '0' : '')}
+                onValueChange={(v) => updateOption('decimal_places', v === '' ? undefined : Number(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DECIMAL_PLACES_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </section>
           )}
 
