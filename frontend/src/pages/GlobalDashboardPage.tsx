@@ -38,7 +38,7 @@ export default function GlobalDashboardPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {apps.map((app) => (
-            <Link key={app.id} to={`/apps/${app.id}/dashboard`}>
+            <Link key={app.id} to={`/apps/${app.id}?tab=chart`}>
               <Card className="p-4 hover:bg-accent/50 transition-colors">
                 <div className="mb-1 font-medium">{app.label}</div>
                 <div className="text-xs text-muted-foreground">

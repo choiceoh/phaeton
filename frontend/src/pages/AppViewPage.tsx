@@ -2,7 +2,7 @@
  * AppViewPage — Primary data viewer for a collection (app).
  *
  * This is the most complex page in the application. It manages:
- * - Multi-view rendering: list (default), kanban, calendar, form, gallery, gantt, chart
+ * - Multi-view rendering: list (default), status-kanban, calendar, form, gantt, chart
  * - Data fetching with pagination, sorting, filtering
  * - Inline cell editing with optimistic updates
  * - Bulk operations (delete, edit selected)
@@ -68,6 +68,7 @@ import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import CalendarView from '@/components/works/views/CalendarView'
 import FormView from '@/components/works/views/FormView'
 import GanttView from '@/components/works/views/GanttView'
+import ChartTabContent from '@/components/works/views/ChartTabContent'
 import KanbanView from '@/components/works/views/KanbanView'
 import ViewGuide from '@/components/works/views/ViewGuide'
 import { Badge } from '@/components/ui/badge'
@@ -289,19 +290,10 @@ export default function AppViewPage() {
   }, [collection?.slug, list?.total, searchText])
 
   // Detect views.
-  const selectField = useMemo(
-    () => collection?.fields?.find((f) => f.field_type === 'select'),
-    [collection],
-  )
   const dateField = useMemo(
     () => collection?.fields?.find((f) => f.field_type === 'date' || f.field_type === 'datetime'),
     [collection],
   )
-  const fileField = useMemo(
-    () => collection?.fields?.find((f) => f.field_type === 'file'),
-    [collection],
-  )
-
   // Keyboard shortcuts
   const searchInputRef = useRef<HTMLInputElement>(null)
   useHotkeys([
@@ -685,7 +677,6 @@ export default function AppViewPage() {
   if (colError) return <ErrorState error={colErr} />
   if (!collection) return null
 
-  const hasKanban = !!selectField
   const hasCalendar = !!dateField
   const hasGantt = dateFields.length >= 1
   const hasProcessKanban = process?.is_enabled && (process.statuses?.length ?? 0) > 0
@@ -728,26 +719,6 @@ export default function AppViewPage() {
         onError: (err) => retryToast(err, () => handleFormViewSubmit(data)),
       })
     }
-  }
-
-  function handleCardMove(entryId: string, newValue: string, oldValue: string) {
-    if (!selectField) return
-    const body: Record<string, unknown> = { [selectField.slug]: newValue }
-    const version = getRowVersion(entryId)
-    if (version != null) body._version = version
-    updateEntry.mutate(
-      { id: entryId, body },
-      {
-        onSuccess: () => {
-          undoToast.push(
-            '이동되었습니다',
-            () => updateEntry.mutate({ id: entryId, body: { [selectField.slug]: oldValue } }),
-            () => updateEntry.mutate({ id: entryId, body: { [selectField.slug]: newValue } }),
-          )
-        },
-        onError: (err) => onConflictError(err, () => retryToast(err, () => handleCardMove(entryId, newValue, oldValue))),
-      },
-    )
   }
 
   function handleProcessCardMove(entryId: string, newValue: string, oldValue: string) {
@@ -1284,12 +1255,6 @@ export default function AppViewPage() {
         description={collection.description}
         actions={
           <>
-            <Link to={`/apps/${collection.id}/dashboard`}>
-              <Button variant="outline" className="gap-1">
-                <BarChart3 className="h-4 w-4" />
-                대시보드
-              </Button>
-            </Link>
             <Link to={`/apps/${collection.id}/interface`}>
               <Button variant="outline" className="gap-1">
                 <LayoutGrid className="h-4 w-4" />
@@ -1316,7 +1281,10 @@ export default function AppViewPage() {
           <TabsList className="mb-4 max-w-full overflow-x-auto scrollbar-none">
             <TabsTrigger value="list">목록</TabsTrigger>
             {hasProcessKanban && <TabsTrigger value="status-kanban">상태별</TabsTrigger>}
-            {hasKanban && <TabsTrigger value="kanban">보드</TabsTrigger>}
+            <TabsTrigger value="chart" className="gap-1">
+              <BarChart3 className="h-3.5 w-3.5" />
+              차트
+            </TabsTrigger>
             {hasCalendar && (
               <TabsTrigger value="calendar" className="gap-1">
                 <Calendar className="h-3.5 w-3.5" />
@@ -1408,21 +1376,11 @@ export default function AppViewPage() {
             </TabsContent>
           )}
 
-          {hasKanban && selectField && (
-            <TabsContent value="kanban" className="mt-0">
-              <ErrorBoundary key="kanban">
-              <KanbanView
-                slug={collection.slug}
-                groupField={selectField}
-                fields={collection.fields ?? []}
-                filters={filters}
-                onCardClick={handleEntryClick}
-                onCardMove={handleCardMove}
-                onAddEntry={() => navigate(`/apps/${appId}/entries/new`)}
-              />
-              </ErrorBoundary>
-            </TabsContent>
-          )}
+          <TabsContent value="chart" className="mt-0">
+            <ErrorBoundary key="chart">
+              <ChartTabContent appId={appId!} collection={collection} />
+            </ErrorBoundary>
+          </TabsContent>
 
           {hasCalendar && dateField && (
             <TabsContent value="calendar" className="mt-0">
