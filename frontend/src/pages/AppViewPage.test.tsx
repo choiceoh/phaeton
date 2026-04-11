@@ -8,20 +8,6 @@ import type { Collection, Field } from '@/lib/types'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-// Mock the heavy sub-views to simplify.
-vi.mock('@/components/works/views/CalendarView', () => ({
-  default: () => <div data-testid="calendar-view" />,
-}))
-vi.mock('@/components/works/views/GalleryView', () => ({
-  default: () => <div data-testid="gallery-view" />,
-}))
-vi.mock('@/components/works/views/GanttView', () => ({
-  default: () => <div data-testid="gantt-view" />,
-}))
-vi.mock('@/components/works/views/KanbanView', () => ({
-  default: () => <div data-testid="kanban-view" />,
-}))
-
 const mockFetch = vi.fn()
 
 beforeEach(() => {
@@ -114,14 +100,12 @@ describe('AppViewPage', () => {
       })
     })
 
-    it('shows view tabs when select/date fields exist', async () => {
+    it('shows "전체" sheet tab by default', async () => {
       setupDefaultMocks()
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('목록')).toBeInTheDocument()
-        expect(screen.getByText('보드')).toBeInTheDocument()
-        expect(screen.getByText('캘린더')).toBeInTheDocument()
+        expect(screen.getByText('전체')).toBeInTheDocument()
       })
     })
   })

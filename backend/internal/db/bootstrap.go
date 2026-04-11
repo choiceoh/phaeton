@@ -192,7 +192,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			collection_id   UUID NOT NULL REFERENCES _meta.collections(id) ON DELETE CASCADE,
 			name            VARCHAR(255) NOT NULL,
-			view_type       VARCHAR(31) NOT NULL DEFAULT 'list',
+			view_type       VARCHAR(31) NOT NULL DEFAULT 'spreadsheet',
 			config          JSONB DEFAULT '{}',
 			sort_order      INTEGER NOT NULL DEFAULT 0,
 			is_default      BOOLEAN NOT NULL DEFAULT FALSE,
