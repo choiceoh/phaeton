@@ -72,7 +72,7 @@ import {
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { CellPosition } from '@/hooks/useGridNavigation'
-import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
+import { isCellInRange, normalize, useGridNavigation } from '@/hooks/useGridNavigation'
 import type { CellSaveState } from '@/hooks/useInlineEditing'
 import { copyToClipboard, pasteFromClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
@@ -168,6 +168,12 @@ interface Props<T> {
   onClearCell?: (row: number, col: number) => void
   /** Called when pasting data from clipboard. */
   onPaste?: (startRow: number, startCol: number, matrix: string[][]) => void
+  /** Called when Ctrl+X cuts the selection (copy + clear). */
+  onCut?: (startRow: number, startCol: number, endRow: number, endCol: number) => void
+  /** Called when Ctrl+D fills selection down from first row. */
+  onFillDown?: (startRow: number, startCol: number, endRow: number, endCol: number) => void
+  /** Called when Ctrl+R fills selection right from first column. */
+  onFillRight?: (startRow: number, startCol: number, endRow: number, endCol: number) => void
   /** Cell context menu actions. */
   onDeleteRow?: (rowId: string) => void
   /** Show the bottom empty row for new entries. */
@@ -228,6 +234,9 @@ export function DataTable<T>({
   getFieldForCol,
   onClearCell,
   onPaste,
+  onCut,
+  onFillDown,
+  onFillRight,
   onDeleteRow,
   showNewRow,
   newRowValues,
@@ -385,6 +394,21 @@ export function DataTable<T>({
     return skip
   }, [colIds])
 
+  const getGridData = useCallback(
+    (row: number, col: number) => {
+      const colId = colIds[col]
+      return (data[row] as Record<string, unknown> | undefined)?.[colId]
+    },
+    [data, colIds],
+  )
+
+  const gridPageSize = useMemo(() => {
+    const el = scrollRef.current
+    if (!el) return 20
+    return Math.max(1, Math.floor(el.clientHeight / ROW_HEIGHT) - 1)
+  }, // eslint-disable-next-line react-hooks/exhaustive-deps
+  [scrollRef.current, visibleRows.length])
+
   const grid = useGridNavigation({
     rowCount: visibleRows.length,
     colCount: colIds.length,
@@ -392,6 +416,8 @@ export function DataTable<T>({
     isEditing: isEditingCell,
     onStartEditing: editable ? onStartEditing : undefined,
     onClearCell: editable ? onClearCell : undefined,
+    getData: editable ? getGridData : undefined,
+    pageSize: gridPageSize,
   })
 
   // Clipboard: copy & paste.
@@ -422,8 +448,52 @@ export function DataTable<T>({
           // Clipboard read may fail if permission denied
         }
       }
+
+      // Ctrl+X: cut (copy + clear)
+      if (isCtrl && e.key === 'x' && editable && onCut) {
+        const range = grid.selection ?? {
+          startRow: grid.activeCell.row,
+          startCol: grid.activeCell.col,
+          endRow: grid.activeCell.row,
+          endCol: grid.activeCell.col,
+        }
+        e.preventDefault()
+        await copyToClipboard(data as EntryRow[], colIds, range)
+        const n = normalize(range)
+        onCut(n.startRow, n.startCol, n.endRow, n.endCol)
+      }
+
+      // Ctrl+D: fill down
+      if (isCtrl && e.key === 'd' && editable && onFillDown) {
+        e.preventDefault()
+        if (grid.selection) {
+          const n = normalize(grid.selection)
+          if (n.endRow > n.startRow) onFillDown(n.startRow, n.startCol, n.endRow, n.endCol)
+        } else if (grid.activeCell.row > 0) {
+          // No selection: copy cell above into active cell
+          onFillDown(grid.activeCell.row - 1, grid.activeCell.col, grid.activeCell.row, grid.activeCell.col)
+        }
+      }
+
+      // Ctrl+R: fill right
+      if (isCtrl && e.key === 'r' && editable && onFillRight) {
+        e.preventDefault()
+        if (grid.selection) {
+          const n = normalize(grid.selection)
+          if (n.endCol > n.startCol) onFillRight(n.startRow, n.startCol, n.endRow, n.endCol)
+        } else if (grid.activeCell.col > 0) {
+          onFillRight(grid.activeCell.row, grid.activeCell.col - 1, grid.activeCell.row, grid.activeCell.col)
+        }
+      }
+
+      // Ctrl+;: insert today's date
+      if (isCtrl && e.key === ';' && editable && onPaste) {
+        e.preventDefault()
+        const today = new Date().toISOString().split('T')[0]
+        onPaste(grid.activeCell.row, grid.activeCell.col, [[today]])
+      }
     },
-    [grid.activeCell, grid.selection, data, colIds, editable, onPaste],
+    [grid.activeCell, grid.selection, data, colIds, editable, onPaste, onCut, onFillDown, onFillRight],
   )
 
   // Cell right-click context menu state (for editable mode).
