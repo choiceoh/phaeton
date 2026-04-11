@@ -50,6 +50,8 @@ interface SpreadsheetViewProps {
   onRenameColumn?: (columnId: string, newLabel: string) => void
   onDeleteColumn?: (columnId: string) => void
   onAddColumn?: () => void
+  onActiveCellChange?: (cell: import('@/hooks/useGridNavigation').CellPosition | null, selection: import('@/hooks/useGridNavigation').SelectionRange | null) => void
+  onFormatShortcut?: (key: 'bold' | 'italic') => void
   /** Free grid mode: edits are local-only, no server calls */
   freeGridMode?: boolean
   /** Returns true if a cell has been locally modified but not saved */
@@ -91,6 +93,8 @@ export default function SpreadsheetView({
   onRenameColumn,
   onDeleteColumn,
   onAddColumn,
+  onActiveCellChange,
+  onFormatShortcut,
   freeGridMode,
   cellDirtyFn,
   cellErrorFn,
@@ -424,6 +428,8 @@ export default function SpreadsheetView({
       onRenameColumn={onRenameColumn}
       onDeleteColumn={onDeleteColumn}
       onAddColumn={onAddColumn}
+      onActiveCellChange={onActiveCellChange}
+      onFormatShortcut={onFormatShortcut}
       freeGridMode={freeGridMode}
       cellDirtyFn={cellDirtyFn}
       cellErrorFn={cellErrorFn}

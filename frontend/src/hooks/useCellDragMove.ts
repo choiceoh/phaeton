@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { CellPosition, SelectionRange } from './useGridNavigation'
-import type { Field } from '@/lib/types'
+import type { CellFormats, EntryRow, Field } from '@/lib/types'
 import { isComputedType, isLayoutType } from '@/lib/constants'
 
 interface UseCellDragMoveOptions {
@@ -285,7 +285,56 @@ export function useCellDragMove({
               }
             }
 
+            // Move/copy cell formats along with values.
             if (updates.length > 0) {
+              // Clear source formats on move.
+              if (!isCopy) {
+                for (let r = src.startRow; r <= src.endRow; r++) {
+                  const srcRow = data[r] as EntryRow | undefined
+                  if (!srcRow?._cell_formats) continue
+                  const update = updates.find((u) => u.id === String(srcRow.id))
+                  if (!update) continue
+                  const existing: CellFormats = { ...(srcRow._cell_formats ?? {}) }
+                  let changed = false
+                  for (let c = src.startCol; c <= src.endCol; c++) {
+                    const colId = columnIds[c]
+                    if (colId && existing[colId]) {
+                      delete existing[colId]
+                      changed = true
+                    }
+                  }
+                  if (changed) update.fields._cell_formats = existing
+                }
+              }
+              // Copy source formats to target.
+              const rowOffset = currentGhost.startRow - src.startRow
+              const colOffset = currentGhost.startCol - src.startCol
+              for (let r = src.startRow; r <= src.endRow; r++) {
+                const srcRow = data[r] as EntryRow | undefined
+                const targetRowIdx = r + rowOffset
+                const targetRow = data[targetRowIdx] as EntryRow | undefined
+                if (!targetRow) continue
+                const update = updates.find((u) => u.id === String(targetRow.id))
+                if (!update) continue
+                const existing: CellFormats = update.fields._cell_formats
+                  ? (update.fields._cell_formats as CellFormats)
+                  : { ...(targetRow._cell_formats ?? {}) }
+                let changed = false
+                for (let c = src.startCol; c <= src.endCol; c++) {
+                  const srcColId = columnIds[c]
+                  const targetColId = columnIds[c + colOffset]
+                  if (!srcColId || !targetColId) continue
+                  const srcFmt = srcRow?._cell_formats?.[srcColId]
+                  if (srcFmt) {
+                    existing[targetColId] = { ...srcFmt }
+                    changed = true
+                  } else if (existing[targetColId]) {
+                    delete existing[targetColId]
+                    changed = true
+                  }
+                }
+                if (changed) update.fields._cell_formats = existing
+              }
               onMove(updates)
             }
 
