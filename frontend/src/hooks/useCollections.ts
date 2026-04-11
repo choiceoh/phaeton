@@ -200,6 +200,21 @@ export function useAddField(collectionId: string) {
 }
 
 /**
+ * Update a field's metadata (label, options, etc.) via PATCH.
+ * Used by FormatToolbar to change display_type, decimal_places, etc.
+ */
+export function useUpdateField() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ fieldId, body }: { fieldId: string; body: Record<string, unknown> }) =>
+      api.patch(`/schema/fields/${fieldId}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.collections.all })
+    },
+  })
+}
+
+/**
  * Delete a field (ALTER TABLE DROP COLUMN). Same two-step preview/confirm
  * pattern as useDeleteCollection — preview shows affected data before commit.
  */

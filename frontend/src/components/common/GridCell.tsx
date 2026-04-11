@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select'
 import RelationCombobox from '@/components/common/RelationCombobox'
 import UserCombobox from '@/components/common/UserCombobox'
-import { getChoices } from '@/lib/fieldGuards'
+import { getChoices, getDecimalPlaces } from '@/lib/fieldGuards'
 import type { Field } from '@/lib/types'
 
 import type { CellSaveState } from '@/hooks/useInlineEditing'
@@ -93,7 +93,7 @@ export default function GridCell({
           onChange={onEditValueChange}
           onKeyDown={onKeyDown}
           onCommit={onCommit}
-          isInteger={field.field_type === 'integer'}
+          isInteger={getDecimalPlaces(field) === 0}
         />
       )
 

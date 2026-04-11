@@ -338,7 +338,7 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 		colNames = append(colNames, pgutil.QuoteIdent(f.Slug))
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
-		args = append(args, coerceValue(v, f.FieldType))
+		args = append(args, coerceValue(v, f))
 		idx++
 	}
 
@@ -551,7 +551,7 @@ func (h *DynHandler) Update(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		sets = append(sets, fmt.Sprintf("%s = $%d", pgutil.QuoteIdent(f.Slug), idx))
-		args = append(args, coerceValue(v, f.FieldType))
+		args = append(args, coerceValue(v, f))
 		idx++
 	}
 
@@ -739,7 +739,7 @@ func (h *DynHandler) Totals(w http.ResponseWriter, r *http.Request) {
 	// Collect numeric fields.
 	var numFields []schema.Field
 	for _, f := range fields {
-		if f.FieldType == schema.FieldNumber || f.FieldType == schema.FieldInteger || f.FieldType == schema.FieldAutonumber {
+		if f.FieldType.IsNumeric() || f.FieldType == schema.FieldAutonumber {
 			numFields = append(numFields, f)
 		}
 	}
@@ -1003,7 +1003,7 @@ func runAggregate(ctx context.Context, pool *pgxpool.Pool, col schema.Collection
 			if !exists {
 				return nil, fmt.Errorf("%w: field %q not found", schema.ErrInvalidInput, fieldSlug)
 			}
-			if f.FieldType != schema.FieldNumber && f.FieldType != schema.FieldInteger && f.FieldType != schema.FieldAutonumber {
+			if !f.FieldType.IsNumeric() && f.FieldType != schema.FieldAutonumber {
 				return nil, fmt.Errorf("%w: %s requires numeric field, %s is %s",
 					schema.ErrInvalidInput, fn, fieldSlug, f.FieldType)
 			}
@@ -1261,7 +1261,7 @@ func buildInsertColumns(body map[string]any, fields []schema.Field, userID strin
 		}
 		cols = append(cols, pgutil.QuoteIdent(f.Slug))
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
-		args = append(args, coerceValue(v, f.FieldType))
+		args = append(args, coerceValue(v, f))
 		idx++
 	}
 	// Auto-set created_by from authenticated user.
@@ -1432,7 +1432,7 @@ func (h *DynHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			sets = append(sets, fmt.Sprintf("%s = $%d", pgutil.QuoteIdent(f.Slug), idx))
-			args = append(args, coerceValue(v, f.FieldType))
+			args = append(args, coerceValue(v, f))
 			idx++
 		}
 
@@ -2185,11 +2185,11 @@ func (h *DynHandler) fetchRow(ctx context.Context, col schema.Collection, fields
 }
 
 // coerceValue ensures the Go value matches what pgx expects for the column type.
-func coerceValue(v any, ft schema.FieldType) any {
+func coerceValue(v any, f schema.Field) any {
 	if v == nil {
 		return nil
 	}
-	switch ft {
+	switch f.FieldType {
 	case schema.FieldMultiselect:
 		// JSON array → []string
 		switch arr := v.(type) {
@@ -2204,9 +2204,11 @@ func coerceValue(v any, ft schema.FieldType) any {
 		// Keep as JSONB.
 		b, _ := json.Marshal(v)
 		return b
-	case schema.FieldInteger:
-		if f, ok := v.(float64); ok {
-			return int64(f)
+	case schema.FieldNumber, schema.FieldInteger:
+		if fv, ok := v.(float64); ok {
+			if dp := schema.EffectiveDecimalPlaces(f); dp != nil && *dp == 0 {
+				return int64(fv)
+			}
 		}
 	}
 	return v

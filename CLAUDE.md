@@ -7,7 +7,7 @@
 
 ### 핵심 컨셉
 - **앱 = 엑셀 파일(워크북)**, 그 안에 여러 시트 — `Workbook` (`_meta.workbooks`)
-- **폴더 = 유사 앱들의 그룹** — `Workbook.group_label`
+- **폴더 = 유사 앱들의 그룹** — `Folder` (`_meta.folders`, 1단계 중첩 지원)
 - **시트 = 개별 데이터 테이블** — `Collection` (`_meta.collections`, 동적 PostgreSQL 테이블 `data.wd_*`)
 - 시트 간 **크로스시트 수식** (LOOKUP, SUMREL 등) + **자동 동기화** + **양방향 링크**
 - 내부 코드 용어(Collection, Field, Entry)는 유지, **UI 표시만 변경** (앱→앱, 시트→시트, 항목→열, 데이터→행)
@@ -528,25 +528,27 @@ queryKeys
 > 상세 플랜: `docs/11-SPREADSHEET-PIVOT.md`
 
 ### 완료된 전환
-- Folder 모델 (`_meta.folders`, 1단계 중첩) + CRUD API ✅
-- Workbook 모델 (1앱=N시트, `_meta.workbooks`, `group_label`) ✅
-- 뷰 단일화 — SpreadsheetView만 남김, Kanban/Calendar/Gallery/Gantt/Form 삭제 ✅
-- SavedView → 시트 탭 (필터/정렬 프리셋) ✅
+- **워크북 잠금 시스템** — 동시 편집 차단, 잠금 API, WorkbookLock 미들웨어, 만료 정리 ✅
+- **JS 수식 엔진** — 같은 시트 수식 로컬 연산, 셀 편집 즉각 반영 ✅
+- **크로스시트 동기화** — 백엔드 의존성 그래프 + SSE `cross_sheet_invalidation` + 프론트 캐시 무효화 ✅
+- **엑셀 UI** — 행번호, 수식입력줄, 상태바, 그리드선, 활성셀 하이라이트 ✅
+- **Excel(XLSX) 가져오기/내보내기** + 붙여넣기 호환성 ✅
+- Folder 모델 + CRUD API ✅
+- Workbook 모델 (1앱=N시트) + API + 프론트 훅 ✅
+- 뷰 단일화 — SpreadsheetView만 남김 ✅
+- SavedView → 시트 탭 ✅
 - 크로스시트 수식 함수 (LOOKUP, SUMREL 등) + 구문 파서 (`SheetSlug!col`) ✅
-- 역참조 메타데이터 (`ReverseRelField`, 캐시 `reverseRels` 인덱스) ✅
-- SSE 크로스시트 무효화 (`cross_sheet_invalidation` 이벤트) ✅
-- 캐시 의존성 그래프 (`SheetsInWorkbook`, `SiblingSheets`, `ReverseRelations`) ✅
+- 역참조 메타데이터 (`ReverseRelField`, 캐시 인덱스) ✅
 - 자동화/대시보드/설정/프로세스 → 시트 통합 ✅
 - 용어 변경 (collection → 시트) ✅
 
-### 진행 중 / 예정 GAP
-1. **로컬 처리 전환** — 셀 편집 로컬화, 클라이언트 필터/정렬, JS 수식 엔진, 앱 잠금
-2. **양방향 링크** — 백엔드 인프라 완료, 핸들러 역참조 데이터 조회 + 프론트 렌더링 남음
-3. **크로스시트 동기화** — 백엔드 완료, 프론트 `useSSE`에서 `cross_sheet_invalidation` 수신 남음
-4. **네비게이션 재구성** — 좌측 사이드바(폴더→워크북→시트 트리), 하단 시트 탭, EntryPage→슬라이드오버
+### 남은 GAP
+1. **클라이언트 필터/정렬** — 전체 데이터 로드 + tanstack 클라이언트 모드 (5,000행 이하)
+2. **양방향 링크** — 핸들러 역참조 데이터 조회 + 프론트 렌더링
+3. **네비게이션 재구성** — 좌측 사이드바(폴더→워크북→시트 트리), 하단 시트 탭, EntryPage→슬라이드오버
 
 ### 아키텍처 판단: Local-First Processing
-- **동시 편집 차단**: 한 앱을 한 사용자만 편집 → `_version` 충돌 처리 불필요, 아키텍처 단순화
-- **로컬 처리 범위**: 셀 편집 + 필터/정렬 + 같은 시트 수식 → 네트워크 왕복 제거, 엑셀급 반응
-- **서버 유지 범위**: 크로스시트 수식 + 검색 + 페이지네이션 + 관계 확장 → 메모리 효율, SQL 최적화 활용
-- **JS 수식 엔진**: Go formula/parser.go의 로직을 TS로 포팅, 같은 시트 필드만 처리, 크로스시트 함수는 서버 위임
+- **동시 편집 차단**: 워크북 단위 잠금 → 충돌 처리 불필요, 아키텍처 단순화
+- **로컬 처리 범위**: 셀 편집 + 같은 시트 수식 → JS 엔진으로 즉각 반영 (구현 완료)
+- **서버 처리 유지**: 크로스시트 수식 + 검색 + 페이지네이션 + 관계 확장
+- **크로스시트 수식**: 시트 전환 시 한 번만 서버 연산 → 이후 같은 시트 내 작업은 로컬
