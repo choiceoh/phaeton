@@ -297,10 +297,6 @@ export default function AppViewPage() {
     () => collection?.fields?.find((f) => f.field_type === 'date' || f.field_type === 'datetime'),
     [collection],
   )
-  const fileField = useMemo(
-    () => collection?.fields?.find((f) => f.field_type === 'file'),
-    [collection],
-  )
 
   // Keyboard shortcuts
   const searchInputRef = useRef<HTMLInputElement>(null)
