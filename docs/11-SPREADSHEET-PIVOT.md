@@ -131,12 +131,19 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 
 - 백엔드 + 프론트 모두 완료 ✅ (#283, #292)
 
-### GAP 4: 네비게이션 / UX 재구성 — 별도 세션에서 병렬 진행 중
+### GAP 4: 네비게이션 / UX 재구성 — 대부분 완료
 
-1. **좌측 사이드바 (시트 트리)** — 별도 세션에서 구현 중
-2. **하단 시트 탭** — 별도 세션에서 구현 중
-3. **EntryPage → 슬라이드오버 패널** — 별도 세션에서 구현 중
-4. **인라인 열 관리** — 별도 세션에서 구현 중
+1. **좌측 사이드바 (시트 트리)** — SheetSidebar 컴포넌트 RootLayout에 통합 ✅
+2. **하단 시트 탭** — SavedView 기반 시트 탭 AppViewPage에 구현 ✅
+3. **EntryPage → 슬라이드오버 패널** — ❌ 미완료. EntryPage가 아직 전체 페이지. AppViewPage에 인프라(selectedEntryId, panelEntryData)는 있으나 시각적 슬라이드오버 미연결
+4. **인라인 열 관리** — ❌ 미완료. DataTable에 `onRenameColumn`/`onDeleteColumn`/`extraHeaderColumn` props 있으나 SpreadsheetView에서 미연결. FormatToolbar 컴포넌트도 미통합
+
+### 추가 완료 작업 (#295-#299)
+
+- 엑셀 단축키 (Ctrl+Arrow 점프, Fill Down/Right, Cut, PageUp/Down) ✅ (#295)
+- number/integer 필드 통합 + FormatToolbar 컴포넌트 ✅ (#296)
+- 클라이언트 필터/정렬 (5,000행 이하 자동 전환) + 디바운스 배치 저장 ✅ (#297)
+- 양방향 링크 — 역참조 데이터 로딩 + 스프레드시트 가상 열 ✅ (#298)
 
 ### 정리 작업 — 완료 ✅
 
@@ -148,6 +155,7 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 - ViewType 스키마 comment 수정 (spreadsheet만) ✅
 - 한국어 용어 갱신 (앱 빌더→시트 빌더 등) ✅
 - _version 낙관적 잠금 유지 (안전망, comment 추가) ✅
+- 스프레드시트 전환 무효 프론트 테스트 삭제 ✅ (#291)
 
 ---
 
@@ -159,45 +167,31 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 
 ---
 
-## 6. 폐기 대상
+## 6. 폐기 대상 — 모두 처리 완료 ✅
 
-### 이미 삭제됨 (#281)
-- KanbanView, CalendarView, CalendarDayView, CalendarWeekView
-- GalleryView, GanttView, FormView, ViewGuide
-- GlobalCalendarPage
-
-### 삭제 필요
-| 대상 | 파일 | 이유 |
-|------|------|------|
-| MyTasksPage | `pages/MyTasksPage.tsx` | 프로젝트 관리 개념, 시트에서 필터로 대체 |
-| InterfaceDesignerPage | `pages/InterfaceDesignerPage.tsx` | 노코드 인터페이스 빌더, 스프레드시트와 무관 |
-| OrgChartPage | `pages/OrgChartPage.tsx` | 조직도, 핵심 기능 아님 |
-| FormPreview | `components/works/FormPreview.tsx` | 폼 레이아웃 미리보기, 그리드에서 불필요 |
-| Layout 필드 | label, line, spacer 타입 | 폼 전용, 그리드에서 의미 없음 → UI에서 숨김 |
+- KanbanView, CalendarView, GalleryView, GanttView, FormView, ViewGuide 삭제 ✅ (#281)
+- GlobalCalendarPage 삭제 ✅ (#281)
+- MyTasksPage, InterfaceDesignerPage, OrgChartPage 삭제 ✅ (#299)
+- FormPreview 삭제 ✅ (#299)
+- Layout 필드 (label/line/spacer) FieldPalette에서 숨김 ✅ (#299)
+- 백엔드 calendar/gantt/kanban 라우트 + dynamic_views.go 핸들러 삭제 ✅ (#299)
 
 ---
 
-## 7. 구현 우선순위
+## 7. 남은 MVP 작업 (2개)
 
-### ~~Phase 1: 로컬 처리 전환~~ — 대부분 완료
-- ~~JS 수식 엔진~~ ✅ (#288)
-- ~~앱 잠금 시스템~~ ✅ (#292)
-- 남은 것: 클라이언트 필터/정렬 (전체 데이터 로드 + tanstack 클라이언트 모드)
+### 1. EntryPage → 슬라이드오버 패널
+- AppViewPage에 인프라(selectedEntryId, panelEntryData) 존재
+- EntryForm/EntryComments/EntryHistory를 shadcn Sheet(side panel)로 렌더링
+- 행 클릭 시 navigate 대신 패널 열기
+- 파일: `frontend/src/pages/AppViewPage.tsx`
 
-### ~~Phase 4: 크로스시트 동기화~~ — 완료 ✅
-- ~~백엔드 의존성 그래프 + SSE~~ ✅ (#283)
-- ~~프론트 캐시 무효화~~ ✅ (#292)
-
-### Phase 2: 네비게이션 재구성 (GAP 4) — 다음 우선
-1. 좌측 사이드바 (시트 트리)
-2. 하단 시트 탭
-3. EntryPage → 슬라이드오버
-4. 인라인 열 관리
-5. 불필요 페이지 삭제
-
-### Phase 3: 양방향 링크 (GAP 2)
-1. 역참조 데이터 조회 API (핸들러)
-2. 역참조 열 렌더링 (프론트)
+### 2. 인라인 열 관리 + FormatToolbar 통합
+- DataTable에 `onRenameColumn`/`onDeleteColumn`/`extraHeaderColumn` props 존재
+- SpreadsheetView에서 이 props를 연결하여 열 헤더 우클릭 메뉴 구현
+- "+" 버튼으로 새 열 추가 (useAddField 훅 사용)
+- FormatToolbar를 열 헤더 컨텍스트 메뉴에 통합
+- 파일: `frontend/src/components/works/views/SpreadsheetView.tsx`
 
 ---
 

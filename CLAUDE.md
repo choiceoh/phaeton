@@ -530,23 +530,23 @@ queryKeys
 ### 완료된 전환
 - **워크북 잠금 시스템** — 동시 편집 차단, 잠금 API, WorkbookLock 미들웨어, 만료 정리 ✅
 - **JS 수식 엔진** — 같은 시트 수식 로컬 연산, 셀 편집 즉각 반영 ✅
-- **크로스시트 동기화** — 백엔드 의존성 그래프 + SSE `cross_sheet_invalidation` + 프론트 캐시 무효화 ✅
-- **엑셀 UI** — 행번호, 수식입력줄, 상태바, 그리드선, 활성셀 하이라이트 ✅
+- **크로스시트 동기화** — 백엔드 의존성 그래프 + SSE + 프론트 캐시 무효화 ✅
+- **엑셀 UI** — 행번호, 수식입력줄, 상태바, 그리드선, 활성셀, 엑셀 단축키 ✅
 - **Excel(XLSX) 가져오기/내보내기** + 붙여넣기 호환성 ✅
-- Folder 모델 + CRUD API ✅
-- Workbook 모델 (1앱=N시트) + API + 프론트 훅 ✅
-- 뷰 단일화 — SpreadsheetView만 남김 ✅
-- SavedView → 시트 탭 ✅
-- 크로스시트 수식 함수 (LOOKUP, SUMREL 등) + 구문 파서 (`SheetSlug!col`) ✅
-- **클라이언트 필터/정렬** — 5,000행 이하 자동 전환, tanstack 클라이언트 모드 ✅
-- **양방향 링크** — `loadReverseRelations()` 배치 쿼리 + 프론트 역참조 열(건수 배지) ✅
-- **죽은 코드 정리** — calendar/gantt/kanban 라우트·핸들러, 불필요 페이지(3개), FormPreview, Layout 필드 숨김 ✅
-- 역참조 메타데이터 (`ReverseRelField`, 캐시 인덱스) ✅
+- **클라이언트 필터/정렬** — 5,000행 이하 자동 전환 + 디바운스 배치 저장 ✅
+- **양방향 링크** — 역참조 데이터 로딩 + 스프레드시트 가상 열 ✅
+- **좌측 사이드바** — SheetSidebar (폴더→워크북→시트 트리) RootLayout 통합 ✅
+- **시트 탭** — SavedView 기반 시트 탭 ✅
+- **number/integer 필드 통합** + FormatToolbar 컴포넌트 ✅
+- **죽은 코드 정리** — 라우트·핸들러·페이지·컴포넌트 대규모 삭제 ✅
+- Folder/Workbook 모델 + API ✅
+- 크로스시트 수식 함수 + 구문 파서 (`SheetSlug!col`) ✅
 - 자동화/대시보드/설정/프로세스 → 시트 통합 ✅
-- 용어 변경 (collection → 시트, 앱 빌더 → 시트 빌더) ✅
+- 용어 변경 (앱 빌더 → 시트 빌더) ✅
 
-### 남은 GAP
-1. **네비게이션 재구성** — 좌측 사이드바(폴더→워크북→시트 트리), 하단 시트 탭, EntryPage→슬라이드오버, 인라인 열 관리 (별도 세션에서 병렬 진행 중)
+### 남은 MVP 작업 (2개)
+1. **EntryPage → 슬라이드오버** — 행 상세를 전체 페이지 대신 우측 패널로 (인프라 존재, 시각 연결 필요)
+2. **인라인 열 관리** — SpreadsheetView에서 열 추가/이름변경/삭제 + FormatToolbar 헤더 통합 (DataTable props 존재, SpreadsheetView 연결 필요)
 
 ### 아키텍처 판단: Local-First Processing
 - **동시 편집 차단**: 워크북 단위 잠금 → 충돌 처리 불필요, 아키텍처 단순화
