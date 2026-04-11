@@ -297,11 +297,12 @@ export interface Collection {
   fields?: Field[]
 }
 
-/** Workbook groups related collections (sheets) together. */
+/** Workbook is the "앱" (app) entity — a container for related sheets (collections). */
 export interface Workbook {
   id: string
   label: string
   icon?: string
+  group_label?: string
   sort_order: number
   created_at: string
   updated_at: string

@@ -395,6 +395,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE _meta.process_transitions ADD COLUMN IF NOT EXISTS allowed_user_ids UUID[] NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE _meta.webhook_events ADD COLUMN IF NOT EXISTS error_message TEXT`,
 		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS workbook_id UUID REFERENCES _meta.workbooks(id) ON DELETE SET NULL`,
+		`ALTER TABLE _meta.workbooks ADD COLUMN IF NOT EXISTS group_label VARCHAR(255)`,
 	}
 
 	for _, stmt := range append(stmts, alters...) {
@@ -437,6 +438,27 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		if _, err := tx.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("bootstrap: add _version to %s: %w", slug, err)
 		}
+	}
+
+	// Migrate orphan collections: create a single-sheet app for each collection
+	// that does not yet belong to an app (workbook_id IS NULL).
+	if _, err := tx.Exec(ctx, `
+		WITH orphans AS (
+			SELECT id, label, icon, created_by
+			FROM _meta.collections
+			WHERE workbook_id IS NULL
+		),
+		new_apps AS (
+			INSERT INTO _meta.workbooks (label, icon, created_by)
+			SELECT label, icon, created_by FROM orphans
+			RETURNING id, label
+		)
+		UPDATE _meta.collections c
+		SET workbook_id = na.id
+		FROM new_apps na
+		WHERE c.label = na.label AND c.workbook_id IS NULL
+	`); err != nil {
+		return fmt.Errorf("bootstrap: migrate orphan collections: %w", err)
 	}
 
 	return tx.Commit(ctx)

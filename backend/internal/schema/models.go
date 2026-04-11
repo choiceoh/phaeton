@@ -172,15 +172,17 @@ type Collection struct {
 	Fields         []Field      `json:"fields,omitempty"` // Populated by GetCollection / cache; empty for list queries.
 }
 
-// Workbook groups related collections (sheets) together.
+// Workbook is the "앱" (app) entity — a container for related sheets (collections).
+// The group_label field provides optional "워크북" (workbook) grouping of apps.
 type Workbook struct {
-	ID        string    `json:"id"`
-	Label     string    `json:"label"`
-	Icon      string    `json:"icon,omitempty"`
-	SortOrder int       `json:"sort_order"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	CreatedBy string    `json:"created_by,omitempty"`
+	ID         string    `json:"id"`
+	Label      string    `json:"label"`
+	Icon       string    `json:"icon,omitempty"`
+	GroupLabel string    `json:"group_label,omitempty"` // Optional workbook grouping.
+	SortOrder  int       `json:"sort_order"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	CreatedBy  string    `json:"created_by,omitempty"`
 }
 
 // Field defines a single column inside a collection.
@@ -302,14 +304,16 @@ type UpdateCollectionReq struct {
 // --- Workbook DTOs ---
 
 type CreateWorkbookReq struct {
-	Label string `json:"label"`
-	Icon  string `json:"icon,omitempty"`
+	Label      string `json:"label"`
+	Icon       string `json:"icon,omitempty"`
+	GroupLabel string `json:"group_label,omitempty"`
 }
 
 type UpdateWorkbookReq struct {
-	Label     *string `json:"label,omitempty"`
-	Icon      *string `json:"icon,omitempty"`
-	SortOrder *int    `json:"sort_order,omitempty"`
+	Label      *string `json:"label,omitempty"`
+	Icon       *string `json:"icon,omitempty"`
+	SortOrder  *int    `json:"sort_order,omitempty"`
+	GroupLabel *string `json:"group_label,omitempty"`
 }
 
 type UpdateFieldReq struct {

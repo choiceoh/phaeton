@@ -27,7 +27,16 @@ export function useWorkbooks() {
   })
 }
 
-/** Create a new workbook. */
+/** Fetch sheet counts per app (workbook). */
+export function useSheetCounts() {
+  return useQuery({
+    queryKey: queryKeys.workbooks.sheetCounts(),
+    queryFn: () => api.get<Record<string, number>>('/schema/workbooks/sheet-counts'),
+    staleTime: 60_000,
+  })
+}
+
+/** Create a new app (workbook). */
 export function useCreateWorkbook() {
   const qc = useQueryClient()
   return useMutation({
