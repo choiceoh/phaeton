@@ -40,6 +40,7 @@ export const queryKeys = {
     all: ['workbooks'] as const,
     list: () => [...queryKeys.workbooks.all, 'list'] as const,
     sheetCounts: () => [...queryKeys.workbooks.all, 'sheetCounts'] as const,
+    lock: (id: string) => [...queryKeys.workbooks.all, 'lock', id] as const,
   },
 
   /** Collection (sheet) keys. Invalidate `.all` after create/delete. */

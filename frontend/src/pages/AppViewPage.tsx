@@ -17,6 +17,7 @@ import {
   Filter,
   LayoutGrid,
   Loader2,
+  Lock,
   Mail,
   Pencil,
   Plus,
@@ -92,6 +93,7 @@ import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/u
 import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
 import { useConflictAwareUpdate } from '@/hooks/useConflictAwareUpdate'
+import { useWorkbookLock } from '@/hooks/useLock'
 import { useRetryToast } from '@/hooks/useRetryToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { TERM } from '@/lib/constants'
@@ -159,6 +161,10 @@ export default function AppViewPage() {
   const { data: process } = useProcess(appId)
   const { data: currentUser } = useCurrentUser()
   const canManage = canManageCollection(currentUser, collection?.created_by)
+
+  // Workbook lock — one user edits at a time.
+  const { isLockedByOther } = useWorkbookLock(collection?.workbook_id)
+  const isReadOnly = isLockedByOther
 
   // Show toast when automation runs are detected.
   useAutomationRunToasts(collection?.id)
@@ -976,6 +982,13 @@ export default function AppViewPage() {
         }
       />
 
+      {isReadOnly && (
+        <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <Lock className="h-4 w-4 shrink-0" />
+          다른 사용자가 편집 중입니다. 읽기 전용으로 표시됩니다.
+        </div>
+      )}
+
       {entriesLoading && !list && <LoadingState variant="table" />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
 
@@ -995,7 +1008,7 @@ export default function AppViewPage() {
             createEntry={async (body) => { await createEntry.mutateAsync(body) }}
             deleteEntry={(id) => bulkDelete.mutate([id])}
             batchUpdateEntry={(updates) => batchUpdateEntry.mutate(updates)}
-            canManage={canManage}
+            canManage={canManage && !isReadOnly}
             toolbar={tableToolbar}
             toolbarRight={sheetTabs}
             summaryRow={summaryRow}
