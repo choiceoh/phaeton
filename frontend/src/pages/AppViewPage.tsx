@@ -93,7 +93,6 @@ import {
   useBatchUpdateEntry,
   useBulkDeleteEntries,
   useCreateEntry,
-  useDeleteEntry,
   useEntries,
   useTotals,
   useUpdateEntry,
@@ -109,7 +108,7 @@ import { api, ApiError, formatError } from '@/lib/api'
 import { isLayoutType, TERM } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
 import { highlightText } from '@/lib/highlightText'
-import type { EntryRow, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
+import type { FilterCondition, FilterGroup, SavedView } from '@/lib/types'
 import { emptyFilterGroup, isFilterGroupEmpty, flattenFilterGroup, serializeFilterGroup } from '@/lib/types'
 import { getDisplayType } from '@/lib/fieldGuards'
 
@@ -144,7 +143,6 @@ export default function AppViewPage() {
   /** Column-header sorting state consumed by @tanstack/react-table. */
   const [sorting, setSorting] = useState<SortingState>([])
   /** ID of the entry pending deletion (drives the ConfirmDialog). */
-  const [deleteId, setDeleteId] = useState<string | null>(null)
   /** Hidden file input ref for CSV import trigger. */
   const fileInputRef = useRef<HTMLInputElement>(null)
   /** Count of rows imported in the last CSV upload (shown in toast). */
@@ -260,7 +258,6 @@ export default function AppViewPage() {
   const updateEntry = useUpdateEntry(collection?.slug ?? '')
 
   const batchUpdateEntry = useBatchUpdateEntry(collection?.slug ?? '')
-  const deleteEntry = useDeleteEntry(collection?.slug ?? '')
   const bulkDelete = useBulkDeleteEntries(collection?.slug ?? '')
   const undoToast = useUndoToast()
   const retryToast = useRetryToast()
@@ -481,25 +478,6 @@ export default function AppViewPage() {
         if (!v) return '-'
         return new Date(v as string).toLocaleDateString('ko')
       },
-    })
-    cols.push({
-      id: '_actions',
-      header: '',
-      enableSorting: false,
-      enableHiding: false,
-      size: 60,
-      cell: ({ row }) => canManage ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              setDeleteId(String(row.original.id))
-            }}
-          >
-            삭제
-          </Button>
-      ) : null,
     })
     return cols
   }, [collection, process, processVisible, searchText])
@@ -795,33 +773,6 @@ export default function AppViewPage() {
   }
 
 
-  function handleDelete() {
-    if (!deleteId) return
-    const capturedDeleteId = deleteId
-    // Capture entry data for undo (recreate).
-    const deletedRow = list?.data?.find((r) => String(r.id) === capturedDeleteId)
-    deleteEntry.mutate(capturedDeleteId, {
-      onSuccess: () => {
-        setDeleteId(null)
-        if (deletedRow) {
-          const row = deletedRow as EntryRow
-          const rest = Object.fromEntries(
-            Object.entries(row).filter(([k]) => !['id', '_version', 'created_at', 'updated_at', '_optimistic'].includes(k)),
-          )
-          undoToast.push(
-            '삭제되었습니다',
-            () => { createEntry.mutate(rest) },
-            () => { deleteEntry.mutate(String(deletedRow.id)) },
-          )
-        } else {
-          toast.success('삭제되었습니다')
-        }
-      },
-      onError: (err) => retryToast(err, () => {
-        setDeleteId(capturedDeleteId)
-      }),
-    })
-  }
 
   function handleBulkStatusChange(status: string) {
     const ids = Array.from(selectedRowIds)
@@ -1556,7 +1507,6 @@ export default function AppViewPage() {
               entries={list.data}
               onEntryClick={handleEntryClick}
               onEntrySubmit={handleFormViewSubmit}
-              onEntryDelete={(id) => setDeleteId(id)}
               submitting={createEntry.isPending || updateEntry.isPending}
               process={process}
               slug={collection.slug}
@@ -1587,16 +1537,6 @@ export default function AppViewPage() {
         loading={batchUpdateEntry.isPending}
       />
 
-      <ConfirmDialog
-        open={!!deleteId}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-        title={`${TERM.record}를 삭제하시겠습니까?`}
-        description="삭제된 데이터는 휴지통에서 복구할 수 있습니다."
-        variant="destructive"
-        confirmLabel="삭제"
-        onConfirm={handleDelete}
-        loading={deleteEntry.isPending}
-      />
 
       <ConfirmDialog
         open={bulkDeleteOpen}
