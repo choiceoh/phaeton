@@ -2,16 +2,29 @@
 
 ## 프로젝트
 
-노코드 업무앱 플랫폼 **Topworks**. 사용자가 코드 없이 앱(폼+데이터+뷰)을 만들고 ERP 기능을 직접 구성.
+**스프레드시트 중심 업무 플랫폼 Topworks**. 동기화·시트간 연동이 가능한 스프레드시트 모임.
 외부 정식 이름은 **Topworks**, 내부 개발명/코드명은 **Phaeton**. 폴더명·모듈 경로·DB 자격증명·도커 볼륨·localStorage 키 등 내부 식별자는 `phaeton`을 그대로 사용. 엔드유저에게 보이는 UI 텍스트·이메일 제목·AI 프롬프트·User-Agent 등은 모두 **Topworks**로 표기.
-각 앱 = 진짜 PostgreSQL 테이블 (동적 DDL). Go 백엔드 + Vite React SPA.
-사용자 300명, DGX Spark 구동.
+
+### 핵심 컨셉
+- **앱 = 엑셀 파일(워크북)**, 그 안에 여러 시트 — `Workbook` (`_meta.workbooks`)
+- **폴더 = 유사 앱들의 그룹** — `Workbook.group_label`
+- **시트 = 개별 데이터 테이블** — `Collection` (`_meta.collections`, 동적 PostgreSQL 테이블 `data.wd_*`)
+- 시트 간 **크로스시트 수식** (LOOKUP, SUMREL 등) + **자동 동기화** + **양방향 링크**
+- 내부 코드 용어(Collection, Field, Entry)는 유지, **UI 표시만 변경** (앱→앱, 시트→시트, 항목→열, 데이터→행)
+- Go 백엔드 + Vite React SPA. 사용자 300명, DGX Spark 구동.
+
+### 데이터 처리 전략 (Local-First)
+- **한 앱은 동시 편집 차단** (잠금 모드) — 한 사용자가 앱을 열면 다른 사용자는 읽기 전용
+- **로컬 처리**: 셀 편집(즉시 UI 반영 → 디바운스 배치 저장), 필터/정렬(클라이언트 메모리), 같은 시트 수식(JS 엔진)
+- **서버 처리 유지**: 크로스시트 수식(LOOKUP/SUMREL), 검색(`_tsv` GIN), 페이지네이션(대량 데이터), 관계 확장
+- **대용량 폴백**: 5,000행 이하 → 전체 로드+로컬 처리, 5,000행 초과 → 서버 쿼리 폴백
 
 ## 필독 문서
 
+- `docs/11-SPREADSHEET-PIVOT.md` — **스프레드시트 전환 마스터 플랜** (로컬 처리 전략, GAP 분석, 구현 우선순위)
 - `docs/08-PHAETON-V2-DESIGN.md` — 전체 설계, 아키텍처, 데이터 모델
 - `docs/09-DATA-ENGINE-GUIDE.md` — Data Engine CRUD/쿼리 구현 가이드
-- `docs/10-COMPETITIVE-ANALYSIS.md` — 경쟁 분석 및 구현 로드맵 (다우오피스 Works + Airtable/NocoDB/AppSheet/Monday/ClickUp)
+- `docs/10-COMPETITIVE-ANALYSIS.md` — 경쟁 분석 및 구현 로드맵
 
 ### 참고 문서
 
@@ -62,19 +75,18 @@ frontend/
     contexts/                  AIAvailabilityContext, UndoContext
     pages/                     AIChatPage, AppBuilderPage, AppListPage, AppSettingsPage,
                                AppViewPage, AutomationsPage, DashboardPage, EntryPage,
-                               GlobalAutomationsPage, GlobalCalendarPage, GlobalDashboardPage,
-                               InterfaceDesignerPage, LoginPage, MigrationHistoryPage,
-                               MyTasksPage, NotFoundPage, OrgChartPage, ProcessPage,
+                               GlobalAutomationsPage, GlobalDashboardPage,
+                               LoginPage, MigrationHistoryPage,
+                               NotFoundPage, ProcessPage,
                                ProfilePage, RelationshipPage, SettingsPage, UsersPage
     components/works/          AIAutomationDialog, AIBuildDialog, AppBuilder, AppCard,
                                BulkEditPanel, CSVImportPreview, EntryComments, EntryForm,
                                EntryHistory, FieldPalette, FieldPreview, FieldProperties,
-                               FilterBuilder, FilterChips, FormPreview, FormulaEditor,
+                               FilterBuilder, FilterChips, FormulaEditor,
                                IconPicker, PreviewDialog, ProcessFlowDiagram,
-                               RelationshipGraph, SchedulePicker, SetupChecklist,
+                               RelationshipGraph, SchedulePicker,
                                SortPanel, SpreadsheetInput, TemplateGallery
-    components/works/views/    CalendarDayView, CalendarView, CalendarWeekView, ChartPanel,
-                               FormView, GalleryView, GanttView, KanbanView, ViewGuide
+    components/works/views/    SpreadsheetView (엑셀뷰, 유일한 뷰 타입), ChartPanel
     components/common/         AIChatPanel, CoachMark, CommandPalette, ConfirmDialog, DataTable,
                                EmptyState, ErrorBoundary, ErrorState, Form,
                                HotkeyHelpDialog, LoadingState, NotificationBell, OfflineBanner,
@@ -117,9 +129,10 @@ frontend/
 
 ### 이면: 파워유저도 한계 없이
 - **점진적 복잡도 노출** — 기본은 단순하게, 고급 기능은 필요할 때만 드러냄. 초보자를 압도하지 않되, 꺼내 쓸 수 있는 깊이는 충분히
-- **프로급 기능 완비** — 고급 필터·정렬·그룹핑, 다중 뷰(리스트·캘린더·칸반·갤러리), 조건부 서식, 수식 필드, 관계형 연결 등 전문 도구 수준의 기능을 빠짐없이 제공
+- **프로급 기능 완비** — 고급 필터·정렬, 크로스시트 수식·관계형 연결, 자동화 등 전문 도구 수준의 기능을 빠짐없이 제공
 - **자동화와 확장** — 반복 업무는 자동화 규칙으로, 외부 연동은 웹훅/API로. 사용자가 성장할수록 플랫폼도 함께 확장
-- **대량 데이터 대응** — 수만 건 데이터도 느려지지 않는 성능. 페이지네이션, 가상 스크롤, 서버사이드 연산으로 규모에 관계없이 쾌적
+- **대량 데이터 대응** — 수만 건 데이터도 느려지지 않는 성능. 로컬 처리 우선, 대용량은 서버사이드 연산으로 규모에 관계없이 쾌적
+- **엑셀급 반응 속도** — 셀 편집·필터·정렬·수식은 로컬 처리, 서버 왕복 없이 즉각 반응
 
 ## 코드 스타일
 
@@ -498,3 +511,28 @@ queryKeys
 ?expand=true              → 관계 필드의 대상 레코드 전체 정보 포함
 ?format=display           → 날짜 등을 한국어 포맷으로 변환
 ```
+
+---
+
+## 스프레드시트 전환 현황
+
+> 상세 플랜: `docs/11-SPREADSHEET-PIVOT.md`
+
+### 완료된 전환
+- Workbook 모델 (1앱=N시트, `_meta.workbooks`, `group_label`) ✅
+- 뷰 단일화 — SpreadsheetView만 남김, Kanban/Calendar/Gallery/Gantt/Form 삭제 ✅
+- SavedView → 시트 탭 (필터/정렬 프리셋) ✅
+- 크로스시트 수식 함수 (LOOKUP, SUMREL, AVGREL, MINREL, MAXREL, COUNTREL) ✅
+- 용어 변경 (collection → 시트) ✅
+
+### 진행 중 / 예정 GAP
+1. **로컬 처리 전환** — 셀 편집 로컬화, 클라이언트 필터/정렬, JS 수식 엔진, 앱 잠금
+2. **양방향 링크** — 시트 A→B 참조 시 B에 자동 역참조 열
+3. **크로스시트 동기화** — 시트 A 변경 → 시트 B Lookup/Rollup 자동 갱신 (SSE 의존성 전파)
+4. **네비게이션 재구성** — 좌측 사이드바(폴더→워크북→시트 트리), 하단 시트 탭, EntryPage→슬라이드오버
+
+### 아키텍처 판단: Local-First Processing
+- **동시 편집 차단**: 한 앱을 한 사용자만 편집 → `_version` 충돌 처리 불필요, 아키텍처 단순화
+- **로컬 처리 범위**: 셀 편집 + 필터/정렬 + 같은 시트 수식 → 네트워크 왕복 제거, 엑셀급 반응
+- **서버 유지 범위**: 크로스시트 수식 + 검색 + 페이지네이션 + 관계 확장 → 메모리 효율, SQL 최적화 활용
+- **JS 수식 엔진**: Go formula/parser.go의 로직을 TS로 포팅, 같은 시트 필드만 처리, 크로스시트 함수는 서버 위임
