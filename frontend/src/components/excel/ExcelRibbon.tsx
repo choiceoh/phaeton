@@ -19,18 +19,18 @@ import { useCurrentUser, useLogout } from '@/hooks/useAuth'
 import { ROLE_LABELS } from '@/lib/constants'
 import { useExcelToolbar } from '@/contexts/ExcelToolbarContext'
 
-type RibbonTab = '홈' | '보기'
+type RibbonTab = '홈' | '보기' | '데이터'
 
 export default function ExcelRibbon() {
   const [activeTab, setActiveTab] = useState<RibbonTab>('홈')
-  const { toolbarContent, pageActions, sheetTabs } = useExcelToolbar()
+  const { toolbarContent, pageActions, sheetTabs, dataTabContent } = useExcelToolbar()
   const { data: user } = useCurrentUser()
   const logout = useLogout()
   const navigate = useNavigate()
 
   const isAdmin = user?.role === 'director' || user?.role === 'pm'
 
-  const tabs: RibbonTab[] = ['홈', '보기']
+  const tabs: RibbonTab[] = ['홈', '보기', '데이터']
 
   return (
     <div className="border-b border-[#d4d4d4] bg-[#f3f3f3]">
@@ -175,6 +175,18 @@ export default function ExcelRibbon() {
                   {sheetTabs}
                 </div>
               )}
+            </motion.div>
+          )}
+          {activeTab === '데이터' && (
+            <motion.div
+              key="데이터"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={MICRO}
+              className="flex items-center gap-2 flex-1"
+            >
+              {dataTabContent}
             </motion.div>
           )}
         </AnimatePresence>
