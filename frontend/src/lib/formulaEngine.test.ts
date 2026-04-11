@@ -546,6 +546,146 @@ describe('getAffectedFormulas', () => {
   })
 })
 
+// ── New functions ───────────────────────────────────────────────────────────
+
+describe('evaluate — IFS', () => {
+  it('returns first matching branch', () => {
+    expect(ev('IFS(price > 100, discount, price > 50, tax, price > 0, amount)',
+      { price: 120, discount: 0.2, tax: 0.1, amount: 999 })).toBe(0.2)
+  })
+
+  it('returns second matching branch', () => {
+    expect(ev('IFS(price > 100, discount, price > 50, tax, price > 0, amount)',
+      { price: 80, discount: 0.2, tax: 0.1, amount: 999 })).toBe(0.1)
+  })
+
+  it('returns null if no match', () => {
+    expect(ev('IFS(price > 100, discount, price > 50, tax)',
+      { price: 10, discount: 0.2, tax: 0.1 })).toBeNull()
+  })
+})
+
+describe('evaluate — IFERROR', () => {
+  it('returns value when no error', () => {
+    expect(ev('IFERROR(price, 0)', { price: 42 })).toBe(42)
+  })
+
+  it('returns fallback when null', () => {
+    expect(ev('IFERROR(price, 0)', { price: null })).toBe(0)
+  })
+
+  it('returns fallback on division by zero', () => {
+    expect(ev('IFERROR(price / quantity, 0)', { price: 10, quantity: 0 })).toBe(0)
+  })
+})
+
+describe('evaluate — CONCATENATE', () => {
+  it('concatenates strings', () => {
+    expect(ev("CONCATENATE(name, ' ', status)", { name: 'Hello', status: 'World' })).toBe('Hello World')
+  })
+
+  it('handles nulls as empty strings', () => {
+    expect(ev('CONCATENATE(name, status)', { name: 'Hello', status: null })).toBe('Hello')
+  })
+
+  it('empty args returns empty string', () => {
+    expect(ev('CONCATENATE()', {})).toBe('')
+  })
+})
+
+describe('evaluate — date functions', () => {
+  it('TODAY returns date string', () => {
+    const result = ev('TODAY()', {})
+    expect(typeof result).toBe('string')
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('NOW returns ISO datetime', () => {
+    const result = ev('NOW()', {})
+    expect(typeof result).toBe('string')
+    expect((result as string).length).toBeGreaterThan(10)
+  })
+
+  it('YEAR extracts year', () => {
+    expect(ev('YEAR(name)', { name: '2024-06-15' })).toBe(2024)
+  })
+
+  it('MONTH extracts month', () => {
+    expect(ev('MONTH(name)', { name: '2024-06-15' })).toBe(6)
+  })
+
+  it('YEAR/MONTH null returns null', () => {
+    expect(ev('YEAR(name)', { name: null })).toBeNull()
+    expect(ev('MONTH(name)', { name: null })).toBeNull()
+  })
+
+  it('DATEDIFF days', () => {
+    const s = new Set(['start_date', 'end_date'])
+    const result = parse("DATEDIFF(start_date, end_date, 'day')", s)
+    expect(evaluate(result.ast, { start_date: '2024-01-01', end_date: '2024-01-31' })).toBe(30)
+  })
+
+  it('DATEDIFF months', () => {
+    const s = new Set(['start_date', 'end_date'])
+    const result = parse("DATEDIFF(start_date, end_date, 'month')", s)
+    expect(evaluate(result.ast, { start_date: '2024-01-15', end_date: '2024-06-15' })).toBe(5)
+  })
+
+  it('DATEDIFF years', () => {
+    const s = new Set(['start_date', 'end_date'])
+    const result = parse("DATEDIFF(start_date, end_date, 'year')", s)
+    expect(evaluate(result.ast, { start_date: '2020-01-01', end_date: '2024-01-01' })).toBe(4)
+  })
+
+  it('WORKDAY adds business days', () => {
+    const s = new Set(['start_date', 'days'])
+    const result = parse('WORKDAY(start_date, days)', s)
+    // 2024-01-01 (Mon) + 5 business days = 2024-01-08 (Mon)
+    expect(evaluate(result.ast, { start_date: '2024-01-01', days: 5 })).toBe('2024-01-08')
+  })
+
+  it('WORKDAY skips weekends', () => {
+    const s = new Set(['start_date', 'days'])
+    const result = parse('WORKDAY(start_date, days)', s)
+    // 2024-01-05 (Fri) + 1 business day = 2024-01-08 (Mon)
+    expect(evaluate(result.ast, { start_date: '2024-01-05', days: 1 })).toBe('2024-01-08')
+  })
+})
+
+describe('evaluate — CEILING', () => {
+  it('rounds up to integer', () => {
+    expect(ev('CEILING(price)', { price: 3.2 })).toBe(4)
+  })
+
+  it('rounds up to significance', () => {
+    expect(ev('CEILING(price, quantity)', { price: 23, quantity: 10 })).toBe(30)
+  })
+
+  it('null returns null', () => {
+    expect(ev('CEILING(price)', { price: null })).toBeNull()
+  })
+})
+
+describe('cross-ref detection — new functions', () => {
+  it('VLOOKUP sets hasCrossRefs', () => {
+    const s = new Set(['search_val', 'customer'])
+    const result = parse('VLOOKUP(search_val, customer, match_col, return_col)', s)
+    expect(result.hasCrossRefs).toBe(true)
+  })
+
+  it('COUNTIF sets hasCrossRefs', () => {
+    const s = new Set(['customer'])
+    const result = parse("COUNTIF(customer, status, 'active')", s)
+    expect(result.hasCrossRefs).toBe(true)
+  })
+
+  it('SUMIF sets hasCrossRefs', () => {
+    const s = new Set(['customer'])
+    const result = parse("SUMIF(customer, amount, status, 'active')", s)
+    expect(result.hasCrossRefs).toBe(true)
+  })
+})
+
 // ── Complex expressions (matching Go parser_test.go cases) ───────────────────
 
 describe('evaluate — complex expressions', () => {

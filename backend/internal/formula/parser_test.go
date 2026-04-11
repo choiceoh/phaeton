@@ -90,6 +90,67 @@ func TestParse(t *testing.T) {
 			input:   "",
 			wantErr: true,
 		},
+		// ── New functions ────────────────────────────────────────────────
+		{
+			name:    "IFS",
+			input:   "IFS(price > 100, discount, price > 50, tax, price > 0, quantity)",
+			wantSQL: `CASE WHEN ("price" > 100) THEN "discount" WHEN ("price" > 50) THEN "tax" WHEN ("price" > 0) THEN "quantity" END`,
+		},
+		{
+			name:    "IFERROR",
+			input:   "IFERROR(price / quantity, 0)",
+			wantSQL: `COALESCE(("price" / "quantity"), 0)`,
+		},
+		{
+			name:    "CONCATENATE",
+			input:   "CONCATENATE(name, ' - ', price)",
+			wantSQL: `CONCAT("name", ' - ', "price")`,
+		},
+		{
+			name:    "TODAY",
+			input:   "TODAY()",
+			wantSQL: `CURRENT_DATE`,
+		},
+		{
+			name:    "NOW",
+			input:   "NOW()",
+			wantSQL: `NOW()`,
+		},
+		{
+			name:    "YEAR",
+			input:   "YEAR(name)",
+			wantSQL: `EXTRACT(YEAR FROM ("name")::timestamp)::INTEGER`,
+		},
+		{
+			name:    "MONTH",
+			input:   "MONTH(name)",
+			wantSQL: `EXTRACT(MONTH FROM ("name")::timestamp)::INTEGER`,
+		},
+		{
+			name:    "DATEDIFF day",
+			input:   "DATEDIFF(name, name, 'day')",
+			wantSQL: `(("name")::date - ("name")::date)`,
+		},
+		{
+			name:    "DATEDIFF month",
+			input:   "DATEDIFF(name, name, 'month')",
+			wantSQL: `((EXTRACT(YEAR FROM AGE(("name")::timestamp, ("name")::timestamp)) * 12 + EXTRACT(MONTH FROM AGE(("name")::timestamp, ("name")::timestamp)))::INTEGER)`,
+		},
+		{
+			name:    "CEILING single arg",
+			input:   "CEILING(price)",
+			wantSQL: `CEIL("price")`,
+		},
+		{
+			name:    "CEILING with significance",
+			input:   "CEILING(price, 10)",
+			wantSQL: `(CEIL(("price")::numeric / (10)::numeric) * (10)::numeric)`,
+		},
+		{
+			name:    "WORKDAY",
+			input:   "WORKDAY(name, quantity)",
+			wantSQL: `(("name")::date + (("quantity") + (("quantity") / 5) * 2)::integer)`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -173,6 +234,22 @@ func TestParseCrossCollection(t *testing.T) {
 			name:    "no resolver",
 			input:   "LOOKUP(customer, name)",
 			wantErr: true, // tested without resolver below
+		},
+		// ── New cross-collection functions ───────────────────────────────
+		{
+			name:    "VLOOKUP",
+			input:   "VLOOKUP(price, customer, name, amount)",
+			wantSQL: `(SELECT "amount" FROM "data"."customers" WHERE "name" = "price" LIMIT 1)`,
+		},
+		{
+			name:    "COUNTIF",
+			input:   "COUNTIF(customer, name, 'active')",
+			wantSQL: `(SELECT COUNT(*) FROM "data"."customers" WHERE "order_id" = id AND "name" = 'active')`,
+		},
+		{
+			name:    "SUMIF",
+			input:   "SUMIF(customer, amount, name, 'active')",
+			wantSQL: `(SELECT COALESCE(SUM("amount"), 0) FROM "data"."customers" WHERE "order_id" = id AND "name" = 'active')`,
 		},
 	}
 
