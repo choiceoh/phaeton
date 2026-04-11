@@ -361,7 +361,7 @@ function ListSettingsSection({
             value={collection.title_field_id || '_auto'}
             onValueChange={(v) => {
               updateCollection.mutate(
-                { title_field_id: v === '_auto' ? '' : v },
+                { title_field_id: v === '_auto' || v === null ? '' : v },
                 {
                   onSuccess: () => toast.success('제목열이 변경되었습니다'),
                   onError: (err) => toast.error(formatError(err)),
@@ -388,7 +388,7 @@ function ListSettingsSection({
             value={collection.default_sort_field || '_default'}
             onValueChange={(v) => {
               updateCollection.mutate(
-                { default_sort_field: v === '_default' ? '' : v },
+                { default_sort_field: v === '_default' || v === null ? '' : v },
                 {
                   onSuccess: () => toast.success('기본 정렬이 변경되었습니다'),
                   onError: (err) => toast.error(formatError(err)),
