@@ -48,6 +48,16 @@ var allowedFunctions = map[string]bool{
 	"ROUND": true, "CEIL": true, "FLOOR": true, "ABS": true,
 	"COALESCE": true, "NULLIF": true,
 	"IF": true,
+	// New functions
+	"IFERROR":     true,
+	"CONCATENATE": true,
+	"TODAY":       true,
+	"NOW":         true,
+	"YEAR":        true,
+	"MONTH":       true,
+	"DATEDIFF":    true,
+	"WORKDAY":     true,
+	"CEILING":     true,
 }
 
 // Cross-collection functions.
@@ -58,6 +68,10 @@ var crossCollectionFunctions = map[string]bool{
 	"MINREL":   true,
 	"MAXREL":   true,
 	"COUNTREL": true,
+	// New cross-collection functions
+	"VLOOKUP": true,
+	"COUNTIF": true,
+	"SUMIF":   true,
 }
 
 // RelationInfo describes a resolved relation for cross-collection formulas.
@@ -421,6 +435,11 @@ func (p *Parser) parsePrimary() (string, error) {
 			return p.parseIF()
 		}
 
+		// IFS function → CASE WHEN c1 THEN v1 WHEN c2 THEN v2 ... END
+		if upper == "IFS" {
+			return p.parseIFS()
+		}
+
 		// Cross-collection functions.
 		if crossCollectionFunctions[upper] {
 			return p.parseCrossCollectionFunc(upper)
@@ -482,7 +501,75 @@ func (p *Parser) parseFunctionCall(name string) (string, error) {
 		return "", fmt.Errorf("expected ')' after function arguments")
 	}
 
-	return fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), nil
+	// Custom SQL generation for specific functions.
+	switch name {
+	case "IFERROR":
+		if len(args) < 2 {
+			return "", fmt.Errorf("IFERROR requires 2 arguments")
+		}
+		return fmt.Sprintf("COALESCE(%s, %s)", args[0], args[1]), nil
+
+	case "CONCATENATE":
+		if len(args) == 0 {
+			return "''", nil
+		}
+		return fmt.Sprintf("CONCAT(%s)", strings.Join(args, ", ")), nil
+
+	case "TODAY":
+		return "CURRENT_DATE", nil
+
+	case "NOW":
+		return "NOW()", nil
+
+	case "YEAR":
+		if len(args) != 1 {
+			return "", fmt.Errorf("YEAR requires 1 argument")
+		}
+		return fmt.Sprintf("EXTRACT(YEAR FROM (%s)::timestamp)::INTEGER", args[0]), nil
+
+	case "MONTH":
+		if len(args) != 1 {
+			return "", fmt.Errorf("MONTH requires 1 argument")
+		}
+		return fmt.Sprintf("EXTRACT(MONTH FROM (%s)::timestamp)::INTEGER", args[0]), nil
+
+	case "DATEDIFF":
+		if len(args) != 3 {
+			return "", fmt.Errorf("DATEDIFF requires 3 arguments: start, end, unit")
+		}
+		unit := strings.Trim(args[2], "'")
+		switch strings.ToLower(unit) {
+		case "day", "d":
+			return fmt.Sprintf("((%s)::date - (%s)::date)", args[1], args[0]), nil
+		case "month", "m":
+			return fmt.Sprintf("((EXTRACT(YEAR FROM AGE((%s)::timestamp, (%s)::timestamp)) * 12 + EXTRACT(MONTH FROM AGE((%s)::timestamp, (%s)::timestamp)))::INTEGER)",
+				args[1], args[0], args[1], args[0]), nil
+		case "year", "y":
+			return fmt.Sprintf("(EXTRACT(YEAR FROM AGE((%s)::timestamp, (%s)::timestamp))::INTEGER)", args[1], args[0]), nil
+		default:
+			return "", fmt.Errorf("DATEDIFF: unsupported unit %q (use 'day', 'month', or 'year')", unit)
+		}
+
+	case "WORKDAY":
+		if len(args) != 2 {
+			return "", fmt.Errorf("WORKDAY requires 2 arguments: start_date, num_days")
+		}
+		// Approximate business day calculation: add weekends proportional to 5-day weeks.
+		return fmt.Sprintf("((%s)::date + ((%s) + ((%s) / 5) * 2)::integer)", args[0], args[1], args[1]), nil
+
+	case "CEILING":
+		if len(args) == 0 {
+			return "", fmt.Errorf("CEILING requires at least 1 argument")
+		}
+		if len(args) == 1 {
+			return fmt.Sprintf("CEIL(%s)", args[0]), nil
+		}
+		// CEILING(number, significance) = CEIL(number / significance) * significance
+		return fmt.Sprintf("(CEIL((%s)::numeric / (%s)::numeric) * (%s)::numeric)", args[0], args[1], args[1]), nil
+
+	default:
+		return fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), nil
+	}
 }
 
 // parseIF converts IF(cond, then, else) → CASE WHEN cond THEN then ELSE else END.
@@ -521,6 +608,44 @@ func (p *Parser) parseIF() (string, error) {
 	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", cond, thenExpr, elseExpr), nil
 }
 
+// parseIFS converts IFS(cond1, val1, cond2, val2, ...) → CASE WHEN cond1 THEN val1 WHEN cond2 THEN val2 ... END.
+func (p *Parser) parseIFS() (string, error) {
+	if _, err := p.expect(tokLParen); err != nil {
+		return "", fmt.Errorf("expected '(' after IFS")
+	}
+
+	var cases []string
+	for {
+		cond, err := p.parseExpr()
+		if err != nil {
+			return "", fmt.Errorf("IFS condition: %w", err)
+		}
+		if p.peek().typ != tokComma {
+			return "", fmt.Errorf("expected ',' after IFS condition")
+		}
+		p.advance()
+
+		val, err := p.parseExpr()
+		if err != nil {
+			return "", fmt.Errorf("IFS value: %w", err)
+		}
+		cases = append(cases, fmt.Sprintf("WHEN %s THEN %s", cond, val))
+
+		if p.peek().typ != tokComma {
+			break
+		}
+		p.advance()
+	}
+
+	if _, err := p.expect(tokRParen); err != nil {
+		return "", fmt.Errorf("expected ')' after IFS arguments")
+	}
+	if len(cases) == 0 {
+		return "", fmt.Errorf("IFS requires at least one condition-value pair")
+	}
+	return fmt.Sprintf("CASE %s END", strings.Join(cases, " ")), nil
+}
+
 // parseCrossCollectionFunc handles LOOKUP, SUMREL, AVGREL, MINREL, MAXREL, COUNTREL.
 //
 // Syntax:
@@ -539,6 +664,17 @@ func (p *Parser) parseCrossCollectionFunc(name string) (string, error) {
 		return "", fmt.Errorf("expected '(' after %s", name)
 	}
 
+	// Dispatch to specialized parsers for new cross-collection functions.
+	switch name {
+	case "VLOOKUP":
+		return p.parseVLookupArgs()
+	case "COUNTIF":
+		return p.parseCountIfArgs()
+	case "SUMIF":
+		return p.parseSumIfArgs()
+	}
+
+	// Original 2-arg parsing for LOOKUP and *REL functions.
 	// First argument: relation field slug.
 	relTok := p.advance()
 	if relTok.typ != tokIdent {
@@ -603,6 +739,180 @@ func (p *Parser) parseCrossCollectionFunc(name string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown cross-collection function %q", name)
 	}
+}
+
+// parseVLookupArgs parses VLOOKUP(lookup_expr, relation_field, match_field, return_field).
+// Finds a row in the target table where match_field = lookup_expr and returns return_field.
+func (p *Parser) parseVLookupArgs() (string, error) {
+	// First arg: expression to search for.
+	lookupExpr, err := p.parseExpr()
+	if err != nil {
+		return "", fmt.Errorf("VLOOKUP lookup value: %w", err)
+	}
+	if p.peek().typ != tokComma {
+		return "", fmt.Errorf("expected ',' after VLOOKUP lookup value")
+	}
+	p.advance()
+
+	// Second arg: relation field slug.
+	relTok := p.advance()
+	if relTok.typ != tokIdent {
+		return "", fmt.Errorf("VLOOKUP: second argument must be a relation field slug")
+	}
+	if p.peek().typ != tokComma {
+		return "", fmt.Errorf("expected ',' after relation field in VLOOKUP")
+	}
+	p.advance()
+
+	// Third arg: match field slug (on target table).
+	matchTok := p.advance()
+	if matchTok.typ != tokIdent {
+		return "", fmt.Errorf("VLOOKUP: third argument must be a match field slug")
+	}
+	if p.peek().typ != tokComma {
+		return "", fmt.Errorf("expected ',' after match field in VLOOKUP")
+	}
+	p.advance()
+
+	// Fourth arg: return field slug (on target table).
+	retTok := p.advance()
+	if retTok.typ != tokIdent {
+		return "", fmt.Errorf("VLOOKUP: fourth argument must be a return field slug")
+	}
+
+	if _, err := p.expect(tokRParen); err != nil {
+		return "", fmt.Errorf("expected ')' after VLOOKUP arguments")
+	}
+
+	info, err := p.resolver(relTok.val)
+	if err != nil {
+		return "", fmt.Errorf("VLOOKUP: %w", err)
+	}
+	p.crossRefs = append(p.crossRefs, relTok.val)
+
+	if !isValidIdent(matchTok.val) || !isValidIdent(retTok.val) {
+		return "", fmt.Errorf("VLOOKUP: invalid field name")
+	}
+
+	return fmt.Sprintf(
+		`(SELECT %s FROM %s WHERE %s = %s LIMIT 1)`,
+		pgutil.QuoteIdent(retTok.val), info.TargetTable, pgutil.QuoteIdent(matchTok.val), lookupExpr,
+	), nil
+}
+
+// parseCountIfArgs parses COUNTIF(relation_field, condition_field, condition_value).
+// Counts related records where condition_field = condition_value.
+func (p *Parser) parseCountIfArgs() (string, error) {
+	// First arg: relation field slug.
+	relTok := p.advance()
+	if relTok.typ != tokIdent {
+		return "", fmt.Errorf("COUNTIF: first argument must be a relation field slug")
+	}
+	if p.peek().typ != tokComma {
+		return "", fmt.Errorf("expected ',' after relation field in COUNTIF")
+	}
+	p.advance()
+
+	// Second arg: condition field slug (on target table).
+	condFieldTok := p.advance()
+	if condFieldTok.typ != tokIdent {
+		return "", fmt.Errorf("COUNTIF: second argument must be a condition field slug")
+	}
+	if p.peek().typ != tokComma {
+		return "", fmt.Errorf("expected ',' after condition field in COUNTIF")
+	}
+	p.advance()
+
+	// Third arg: condition value (expression).
+	condValue, err := p.parseExpr()
+	if err != nil {
+		return "", fmt.Errorf("COUNTIF condition value: %w", err)
+	}
+
+	if _, err := p.expect(tokRParen); err != nil {
+		return "", fmt.Errorf("expected ')' after COUNTIF arguments")
+	}
+
+	info, err := p.resolver(relTok.val)
+	if err != nil {
+		return "", fmt.Errorf("COUNTIF: %w", err)
+	}
+	if info.ReverseColumn == "" {
+		return "", fmt.Errorf("COUNTIF: no reverse relation found for %q", relTok.val)
+	}
+	p.crossRefs = append(p.crossRefs, relTok.val)
+
+	if !isValidIdent(condFieldTok.val) {
+		return "", fmt.Errorf("COUNTIF: invalid condition field name")
+	}
+
+	return fmt.Sprintf(
+		`(SELECT COUNT(*) FROM %s WHERE %q = id AND %s = %s)`,
+		info.TargetTable, info.ReverseColumn, pgutil.QuoteIdent(condFieldTok.val), condValue,
+	), nil
+}
+
+// parseSumIfArgs parses SUMIF(relation_field, sum_field, condition_field, condition_value).
+// Sums sum_field of related records where condition_field = condition_value.
+func (p *Parser) parseSumIfArgs() (string, error) {
+	// First arg: relation field slug.
+	relTok := p.advance()
+	if relTok.typ != tokIdent {
+		return "", fmt.Errorf("SUMIF: first argument must be a relation field slug")
+	}
+	if p.peek().typ != tokComma {
+		return "", fmt.Errorf("expected ',' after relation field in SUMIF")
+	}
+	p.advance()
+
+	// Second arg: sum field slug (on target table).
+	sumFieldTok := p.advance()
+	if sumFieldTok.typ != tokIdent {
+		return "", fmt.Errorf("SUMIF: second argument must be a sum field slug")
+	}
+	if p.peek().typ != tokComma {
+		return "", fmt.Errorf("expected ',' after sum field in SUMIF")
+	}
+	p.advance()
+
+	// Third arg: condition field slug (on target table).
+	condFieldTok := p.advance()
+	if condFieldTok.typ != tokIdent {
+		return "", fmt.Errorf("SUMIF: third argument must be a condition field slug")
+	}
+	if p.peek().typ != tokComma {
+		return "", fmt.Errorf("expected ',' after condition field in SUMIF")
+	}
+	p.advance()
+
+	// Fourth arg: condition value (expression).
+	condValue, err := p.parseExpr()
+	if err != nil {
+		return "", fmt.Errorf("SUMIF condition value: %w", err)
+	}
+
+	if _, err := p.expect(tokRParen); err != nil {
+		return "", fmt.Errorf("expected ')' after SUMIF arguments")
+	}
+
+	info, err := p.resolver(relTok.val)
+	if err != nil {
+		return "", fmt.Errorf("SUMIF: %w", err)
+	}
+	if info.ReverseColumn == "" {
+		return "", fmt.Errorf("SUMIF: no reverse relation found for %q", relTok.val)
+	}
+	p.crossRefs = append(p.crossRefs, relTok.val)
+
+	if !isValidIdent(sumFieldTok.val) || !isValidIdent(condFieldTok.val) {
+		return "", fmt.Errorf("SUMIF: invalid field name")
+	}
+
+	return fmt.Sprintf(
+		`(SELECT COALESCE(SUM(%s), 0) FROM %s WHERE %q = id AND %s = %s)`,
+		pgutil.QuoteIdent(sumFieldTok.val), info.TargetTable, info.ReverseColumn,
+		pgutil.QuoteIdent(condFieldTok.val), condValue,
+	), nil
 }
 
 func isValidIdent(s string) bool {

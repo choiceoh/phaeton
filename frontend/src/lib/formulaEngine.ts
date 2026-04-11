@@ -57,10 +57,16 @@ const ALLOWED_FUNCTIONS = new Set([
   'SUM', 'AVG', 'MIN', 'MAX', 'COUNT',
   'ROUND', 'CEIL', 'FLOOR', 'ABS',
   'COALESCE', 'NULLIF',
+  // New functions
+  'IFERROR', 'CONCATENATE',
+  'TODAY', 'NOW', 'YEAR', 'MONTH',
+  'DATEDIFF', 'WORKDAY', 'CEILING',
 ])
 
 const CROSS_COLLECTION_FUNCTIONS = new Set([
   'LOOKUP', 'SUMREL', 'AVGREL', 'MINREL', 'MAXREL', 'COUNTREL',
+  // New cross-collection functions
+  'VLOOKUP', 'COUNTIF', 'SUMIF',
 ])
 
 // ── Lexer ────────────────────────────────────────────────────────────────────
@@ -324,8 +330,9 @@ class Parser {
           return { type: 'crossRef', fn: 'SHEET_REF', args: [t.value, colTok.value] }
         }
 
-        // IF → special handling
+        // IF / IFS → special handling
         if (upper === 'IF') return this.parseIF()
+        if (upper === 'IFS') return this.parseIFS()
 
         // Cross-collection functions
         if (CROSS_COLLECTION_FUNCTIONS.has(upper)) {
@@ -391,7 +398,33 @@ class Parser {
     return { type: 'if', cond, then: thenExpr, else: elseExpr }
   }
 
+  private parseIFS(): ASTNode {
+    this.expect(TokenType.LParen)
+    const args: ASTNode[] = []
+    while (true) {
+      const cond = this.parseExpr()
+      if (this.peek().type !== TokenType.Comma) {
+        throw new FormulaError("expected ',' after IFS condition")
+      }
+      this.advance()
+      const val = this.parseExpr()
+      args.push(cond, val)
+      if (this.peek().type !== TokenType.Comma) break
+      this.advance()
+    }
+    this.expect(TokenType.RParen)
+    if (args.length < 2) {
+      throw new FormulaError('IFS requires at least one condition-value pair')
+    }
+    return { type: 'call', fn: 'IFS', args }
+  }
+
   private parseCrossCollectionFunc(name: string): ASTNode {
+    // VLOOKUP, COUNTIF, SUMIF have flexible argument patterns
+    if (name === 'VLOOKUP' || name === 'COUNTIF' || name === 'SUMIF') {
+      return this.parseFlexCrossFunc(name)
+    }
+
     this.expect(TokenType.LParen)
     const relTok = this.advance()
     if (relTok.type !== TokenType.Ident) {
@@ -409,6 +442,42 @@ class Parser {
 
     this.hasCrossRefs = true
     return { type: 'crossRef', fn: name, args: [relTok.value, targetTok.value] }
+  }
+
+  /** Parse cross-collection functions with mixed arg types (idents + expressions). */
+  private parseFlexCrossFunc(name: string): ASTNode {
+    this.expect(TokenType.LParen)
+    const args: string[] = []
+
+    while (this.peek().type !== TokenType.RParen) {
+      const tok = this.peek()
+      // Check if next token is a simple ident (not followed by '(' for function call)
+      if (tok.type === TokenType.Ident) {
+        const nextIdx = this.pos + 1
+        const nextTok = nextIdx < this.tokens.length ? this.tokens[nextIdx] : { type: TokenType.EOF, value: '' }
+        if (nextTok.type === TokenType.Comma || nextTok.type === TokenType.RParen) {
+          this.advance()
+          args.push(tok.value)
+        } else {
+          // Expression argument — parse it (we won't evaluate client-side)
+          this.parseExpr()
+          args.push('_expr_')
+        }
+      } else {
+        // Expression argument
+        this.parseExpr()
+        args.push('_expr_')
+      }
+      if (this.peek().type === TokenType.Comma) {
+        this.advance()
+      } else {
+        break
+      }
+    }
+    this.expect(TokenType.RParen)
+
+    this.hasCrossRefs = true
+    return { type: 'crossRef', fn: name, args }
   }
 }
 
@@ -533,6 +602,24 @@ function evaluateComparison(op: string, left: unknown, right: unknown): boolean 
 }
 
 function evaluateCall(fn: string, argNodes: ASTNode[], row: Record<string, unknown>): unknown {
+  // Lazy-evaluation functions (must not pre-evaluate all args).
+  if (fn === 'IFERROR') {
+    try {
+      const result = evaluate(argNodes[0], row)
+      if (result != null) return result
+    } catch { /* error → fall through to fallback */ }
+    return argNodes.length > 1 ? evaluate(argNodes[1], row) : null
+  }
+
+  if (fn === 'IFS') {
+    // args come in pairs: cond1, val1, cond2, val2, ...
+    for (let i = 0; i + 1 < argNodes.length; i += 2) {
+      const cond = evaluate(argNodes[i], row)
+      if (cond) return evaluate(argNodes[i + 1], row)
+    }
+    return null
+  }
+
   const args = argNodes.map((a) => evaluate(a, row))
 
   switch (fn) {
@@ -631,6 +718,79 @@ function evaluateCall(fn: string, argNodes: ASTNode[], row: Record<string, unkno
       return a
     }
 
+    case 'CONCATENATE': {
+      if (args.length === 0) return ''
+      return args.map((a) => (a == null ? '' : String(a))).join('')
+    }
+
+    case 'TODAY': {
+      return new Date().toISOString().slice(0, 10)
+    }
+
+    case 'NOW': {
+      return new Date().toISOString()
+    }
+
+    case 'YEAR': {
+      if (args[0] == null) return null
+      const d = toDate(args[0])
+      return d ? d.getFullYear() : null
+    }
+
+    case 'MONTH': {
+      if (args[0] == null) return null
+      const d = toDate(args[0])
+      return d ? d.getMonth() + 1 : null
+    }
+
+    case 'DATEDIFF': {
+      if (args[0] == null || args[1] == null) return null
+      const start = toDate(args[0])
+      const end = toDate(args[1])
+      if (!start || !end) return null
+      const unit = typeof args[2] === 'string' ? args[2].toLowerCase() : 'day'
+      switch (unit) {
+        case 'day': case 'd': {
+          const msPerDay = 86400000
+          const startUTC = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
+          const endUTC = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate())
+          return Math.round((endUTC - startUTC) / msPerDay)
+        }
+        case 'month': case 'm':
+          return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
+        case 'year': case 'y':
+          return end.getFullYear() - start.getFullYear()
+        default:
+          return null
+      }
+    }
+
+    case 'WORKDAY': {
+      if (args[0] == null || args[1] == null) return null
+      const startD = toDate(args[0])
+      const days = toNumber(args[1])
+      if (!startD || days == null) return null
+      let current = new Date(startD)
+      let remaining = Math.abs(Math.round(days))
+      const direction = days >= 0 ? 1 : -1
+      while (remaining > 0) {
+        current.setDate(current.getDate() + direction)
+        const dow = current.getDay()
+        if (dow !== 0 && dow !== 6) remaining--
+      }
+      return current.toISOString().slice(0, 10)
+    }
+
+    case 'CEILING': {
+      if (args[0] == null) return null
+      const n = toNumber(args[0])
+      if (n == null) return null
+      if (args.length < 2 || args[1] == null) return Math.ceil(n)
+      const sig = toNumber(args[1])
+      if (sig == null || sig === 0) return null
+      return Math.ceil(n / sig) * sig
+    }
+
     default:
       return null
   }
@@ -644,6 +804,21 @@ function toNumber(v: unknown): number | null {
     if (v === '') return null
     const n = Number(v)
     return isNaN(n) ? null : n
+  }
+  return null
+}
+
+/** Coerce a value to a Date. Returns null for invalid dates. */
+function toDate(v: unknown): Date | null {
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v
+  if (typeof v === 'string') {
+    if (v === '') return null
+    const d = new Date(v)
+    return isNaN(d.getTime()) ? null : d
+  }
+  if (typeof v === 'number') {
+    const d = new Date(v)
+    return isNaN(d.getTime()) ? null : d
   }
   return null
 }
