@@ -26,6 +26,8 @@ interface UseFillHandleOptions {
   readOnlyColumns: Set<string>
   containerRef: React.RefObject<HTMLDivElement | null>
   onFill: (updates: { id: string; fields: Record<string, unknown> }[]) => void
+  /** Called when fill extends into empty rows (free grid mode). */
+  onFillIntoEmptyRows?: (rows: Record<string, unknown>[]) => void
   onAutoScroll?: (x: number, y: number) => void
   onAutoScrollStop?: () => void
 }
@@ -110,6 +112,7 @@ export function useFillHandle({
   readOnlyColumns,
   containerRef,
   onFill,
+  onFillIntoEmptyRows,
   onAutoScroll,
   onAutoScrollStop,
 }: UseFillHandleOptions) {
@@ -252,6 +255,7 @@ export function useFillHandle({
       const src = dragStateRef.current.sourceRange
       const direction = dragStateRef.current.direction
       const updates: { id: string; fields: Record<string, unknown> }[] = []
+      const emptyRowEntries: Map<number, Record<string, unknown>> = new Map()
 
       if (direction === 'vertical') {
         // Vertical fill: for each column, fill rows
@@ -273,6 +277,13 @@ export function useFillHandle({
 
           for (let i = 0; i < fillCount; i++) {
             const targetRowIdx = currentPreview.startRow + i
+            if (targetRowIdx >= data.length) {
+              // Empty row — collect for batch creation
+              const entry = emptyRowEntries.get(targetRowIdx) ?? {}
+              entry[colId] = fillVals[i]
+              emptyRowEntries.set(targetRowIdx, entry)
+              continue
+            }
             const row = data[targetRowIdx]
             if (!row) continue
 
@@ -296,13 +307,10 @@ export function useFillHandle({
 
           // Collect source values across columns for this row
           const sourceVals: unknown[] = []
-          const sourceFieldTypes: string[] = []
           for (let c = src.startCol; c <= src.endCol; c++) {
             const colId = columnIds[c]
             if (colId) {
               sourceVals.push(rowData[colId])
-              const field = fields.find((f) => f.slug === colId)
-              sourceFieldTypes.push(field?.field_type ?? 'text')
             }
           }
 
@@ -330,11 +338,18 @@ export function useFillHandle({
       if (updates.length > 0) {
         onFill(updates)
       }
+      if (emptyRowEntries.size > 0 && onFillIntoEmptyRows) {
+        // Sort by row index to maintain order
+        const sorted = Array.from(emptyRowEntries.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([, fields]) => fields)
+        onFillIntoEmptyRows(sorted)
+      }
 
       dragStateRef.current = null
       return null
     })
-  }, [columnIds, readOnlyColumns, fields, data, onFill])
+  }, [columnIds, readOnlyColumns, fields, data, onFill, onFillIntoEmptyRows])
 
   /**
    * Double-click on fill handle: auto-fill downward to match adjacent column's

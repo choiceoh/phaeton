@@ -284,11 +284,22 @@ export default function SpreadsheetView({
     [columns],
   )
 
+  const EMPTY_ROW_BUFFER = 30
+  const emptyRowCount = clientMode && canManage ? EMPTY_ROW_BUFFER : 0
+
   // Inline editing
   const inlineEditing = useInlineEditing({
     data,
     fields: editableFields,
     columnIds: visibleColumnIds,
+    emptyRowCount,
+    onEmptyRowSave: async (fieldSlug, value) => {
+      try {
+        await createEntry({ [fieldSlug]: value })
+      } catch {
+        toast.error('행 생성 실패')
+      }
+    },
     onCellSave: async (rowId, fieldSlug, value) => {
       try {
         // Recompute formula fields locally for instant feedback.
@@ -340,13 +351,24 @@ export default function SpreadsheetView({
     [data, recomputeRow, batchUpdateEntry],
   )
 
+  // Fill into empty rows handler (free grid mode)
+  const handleFillIntoEmptyRows = useCallback(
+    (rows: Record<string, unknown>[]) => {
+      rows.reduce(
+        (chain, fields) => chain.then(() => createEntry(fields)).then(() => {}),
+        Promise.resolve(),
+      ).catch(() => toast.error('행 생성 실패'))
+    },
+    [createEntry],
+  )
+
   // Paste handler
   const handlePaste = useCallback(
     (startRow: number, startCol: number, matrix: string[][]) => {
       const updates: { id: string; fields: Record<string, unknown> }[] = []
+      const newEntries: Record<string, unknown>[] = []
       for (let r = 0; r < matrix.length; r++) {
-        const dataRow = data[startRow + r]
-        if (!dataRow) continue
+        const rowIdx = startRow + r
         const fields: Record<string, unknown> = {}
         for (let c = 0; c < matrix[r].length; c++) {
           const colId = visibleColumnIds[startCol + c]
@@ -355,7 +377,14 @@ export default function SpreadsheetView({
           if (!field || isComputedType(field.field_type)) continue
           fields[colId] = coerceValue(matrix[r][c], field)
         }
-        if (Object.keys(fields).length > 0) {
+        if (Object.keys(fields).length === 0) continue
+
+        if (rowIdx >= data.length) {
+          // Paste into empty row — create new entry
+          newEntries.push(fields)
+        } else {
+          const dataRow = data[rowIdx]
+          if (!dataRow) continue
           // Recompute formula fields for each pasted row
           const patchedRow = { ...dataRow, ...fields }
           const changedSlugs = Object.keys(fields)
@@ -368,10 +397,19 @@ export default function SpreadsheetView({
       }
       if (updates.length > 0) {
         batchUpdateEntry(updates)
-        toast.success(`${updates.length}행 붙여넣기 완료`)
+      }
+      if (newEntries.length > 0) {
+        newEntries.reduce(
+          (chain, entry) => chain.then(() => createEntry(entry)).then(() => {}),
+          Promise.resolve(),
+        ).catch(() => toast.error('행 생성 실패'))
+      }
+      const totalAffected = updates.length + newEntries.length
+      if (totalAffected > 0) {
+        toast.success(`${totalAffected}행 붙여넣기 완료`)
       }
     },
-    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry, recomputeRow],
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry, recomputeRow, createEntry],
   )
 
   return (
@@ -420,6 +458,8 @@ export default function SpreadsheetView({
       clientMode={clientMode}
       globalFilter={globalFilter}
       columnFilters={columnFilters}
+      emptyRowCount={emptyRowCount}
+      onFillIntoEmptyRows={canManage ? handleFillIntoEmptyRows : undefined}
       showNewRow={canManage}
       newRowValues={newRowValues}
       onNewRowChange={(slug, v) => setNewRowValues((prev) => ({ ...prev, [slug]: v }))}
