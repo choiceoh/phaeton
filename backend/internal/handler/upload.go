@@ -63,6 +63,8 @@ func Upload(w http.ResponseWriter, r *http.Request) {
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, file); err != nil {
+		dst.Close()
+		os.Remove(destPath)
 		handleErr(w, r, fmt.Errorf("write file: %w", err))
 		return
 	}
