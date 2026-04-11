@@ -35,6 +35,24 @@ interface TreeNode {
   children: TreeNode[]
 }
 
+/** Map workbook id → first collection id (by sort_order) */
+function buildFirstSheetMap(collections: Collection[]): Map<string, string> {
+  const map = new Map<string, Collection[]>()
+  for (const col of collections) {
+    if (col.workbook_id) {
+      const list = map.get(col.workbook_id) || []
+      list.push(col)
+      map.set(col.workbook_id, list)
+    }
+  }
+  const result = new Map<string, string>()
+  for (const [wbId, cols] of map) {
+    cols.sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label))
+    if (cols.length > 0) result.set(wbId, cols[0].id)
+  }
+  return result
+}
+
 function buildTree(
   folders: FolderType[],
   workbooks: Workbook[],
@@ -55,30 +73,10 @@ function buildTree(
     }
   }
 
-  // Group collections by workbook_id
-  const colsByWb = new Map<string, Collection[]>()
-  const orphanCols: Collection[] = []
-  for (const col of collections) {
-    if (col.workbook_id) {
-      const list = colsByWb.get(col.workbook_id) || []
-      list.push(col)
-      colsByWb.set(col.workbook_id, list)
-    } else {
-      orphanCols.push(col)
-    }
-  }
-
-  function makeSheetNodes(wbId: string): TreeNode[] {
-    return (colsByWb.get(wbId) || [])
-      .sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label))
-      .map(col => ({
-        type: 'sheet' as const,
-        id: col.id,
-        label: col.label,
-        icon: col.icon,
-        children: [],
-      }))
-  }
+  // Orphan collections (no workbook) — shown at root level
+  const orphanCols = collections
+    .filter(c => !c.workbook_id)
+    .sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label))
 
   function makeWbNode(wb: Workbook): TreeNode {
     return {
@@ -86,7 +84,7 @@ function buildTree(
       id: wb.id,
       label: wb.label,
       icon: wb.icon,
-      children: makeSheetNodes(wb.id),
+      children: [], // sheets only in bottom tabs
     }
   }
 
@@ -114,7 +112,7 @@ function buildTree(
   }
 
   // Orphan collections (no workbook)
-  for (const col of orphanCols.sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label))) {
+  for (const col of orphanCols) {
     tree.push({
       type: 'sheet',
       id: col.id,
@@ -143,6 +141,7 @@ function TreeItem({
   node,
   depth,
   activeId,
+  activeWorkbookId,
   collapsed,
   onToggle,
   onNavigate,
@@ -150,13 +149,16 @@ function TreeItem({
   node: TreeNode
   depth: number
   activeId?: string
+  activeWorkbookId?: string
   collapsed: Record<string, boolean>
   onToggle: (id: string) => void
-  onNavigate: (id: string) => void
+  onNavigate: (id: string, type: TreeNode['type']) => void
 }) {
   const isOpen = !collapsed[node.id]
   const hasChildren = node.children.length > 0
-  const isActive = node.type === 'sheet' && node.id === activeId
+  const isActive =
+    (node.type === 'sheet' && node.id === activeId) ||
+    (node.type === 'workbook' && node.id === activeWorkbookId)
   const pl = 8 + depth * 16
 
   return (
@@ -170,10 +172,10 @@ function TreeItem({
         }`}
         style={{ paddingLeft: `${pl}px` }}
         onClick={() => {
-          if (node.type === 'sheet') {
-            onNavigate(node.id)
-          } else {
+          if (node.type === 'folder') {
             onToggle(node.id)
+          } else {
+            onNavigate(node.id, node.type)
           }
         }}
       >
@@ -193,6 +195,7 @@ function TreeItem({
               node={child}
               depth={depth + 1}
               activeId={activeId}
+              activeWorkbookId={activeWorkbookId}
               collapsed={collapsed}
               onToggle={onToggle}
               onNavigate={onNavigate}
@@ -218,6 +221,19 @@ export default function FolderTree() {
     [folders, workbooks, collections],
   )
 
+  // Map workbook id → first sheet id (for navigation on workbook click)
+  const firstSheetMap = useMemo(
+    () => buildFirstSheetMap(collections),
+    [collections],
+  )
+
+  // Determine which workbook owns the current collection (for highlight)
+  const activeWorkbookId = useMemo(() => {
+    if (!appId) return undefined
+    const col = collections.find(c => c.id === appId)
+    return col?.workbook_id ?? undefined
+  }, [appId, collections])
+
   function handleToggle(id: string) {
     setCollapsed(prev => {
       const next = { ...prev, [id]: !prev[id] }
@@ -226,8 +242,13 @@ export default function FolderTree() {
     })
   }
 
-  function handleNavigate(collectionId: string) {
-    navigate(`/apps/${collectionId}`)
+  function handleNavigate(id: string, nodeType: TreeNode['type']) {
+    if (nodeType === 'workbook') {
+      const firstSheet = firstSheetMap.get(id)
+      if (firstSheet) navigate(`/apps/${firstSheet}`)
+    } else {
+      navigate(`/apps/${id}`)
+    }
   }
 
   if (!tree.length) {
@@ -246,6 +267,7 @@ export default function FolderTree() {
           node={node}
           depth={0}
           activeId={appId}
+          activeWorkbookId={activeWorkbookId}
           collapsed={collapsed}
           onToggle={handleToggle}
           onNavigate={handleNavigate}
