@@ -70,7 +70,6 @@ import GalleryView from '@/components/works/views/GalleryView'
 import FormView from '@/components/works/views/FormView'
 import GanttView from '@/components/works/views/GanttView'
 import KanbanView from '@/components/works/views/KanbanView'
-import SetupChecklist from '@/components/works/SetupChecklist'
 import ViewGuide from '@/components/works/views/ViewGuide'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -1310,32 +1309,6 @@ export default function AppViewPage() {
           </>
         }
       />
-
-      {list && (list.total ?? 0) < 5 && (
-        <SetupChecklist
-          collectionId={collection.id}
-          items={[
-            {
-              label: '항목(필드) 추가하기',
-              done: (collection.fields?.filter((f) => !isLayoutType(f.field_type)).length ?? 0) >= 2,
-              href: `/apps/${collection.id}/settings`,
-            },
-            {
-              label: '첫 데이터 입력하기',
-              done: (list.total ?? 0) > 0,
-            },
-            {
-              label: '보기(뷰) 저장하기',
-              done: (savedViews?.length ?? 0) > 0,
-            },
-            {
-              label: '프로세스 설정하기',
-              done: !!process?.is_enabled,
-              href: `/apps/${collection.id}/process`,
-            },
-          ]}
-        />
-      )}
 
       {entriesLoading && !list && <LoadingState variant="table" />}
       {entriesError && <ErrorState error={entriesErr} onRetry={() => refetch()} />}
