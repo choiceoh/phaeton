@@ -11,7 +11,6 @@
 import type { SortingState } from '@tanstack/react-table'
 import {
   ArrowDownUp,
-  Copy,
   Download,
   Ellipsis,
   FileSpreadsheet,
@@ -24,7 +23,6 @@ import {
   Plus,
   Power,
   PowerOff,
-  Printer,
   Search,
   Trash2,
   Upload,
@@ -32,7 +30,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { NavLink, useNavigate, useParams } from 'react-router'
+import { Outlet, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -50,17 +48,14 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
-import PageHeader from '@/components/common/PageHeader'
 import RoleGate from '@/components/common/RoleGate'
 import BulkEditPanel from '@/components/works/BulkEditPanel'
 import ImportPreview from '@/components/works/CSVImportPreview'
-import EntryComments from '@/components/works/EntryComments'
-import EntryForm from '@/components/works/EntryForm'
-import EntryHistory from '@/components/works/EntryHistory'
 import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
 import AutomationsPanel from '@/components/works/AutomationsPanel'
 import SettingsPanel from '@/components/works/SettingsPanel'
+import SheetTabs from '@/components/works/SheetTabs'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import SpreadsheetView from '@/components/works/views/SpreadsheetView'
 import { Badge } from '@/components/ui/badge'
@@ -84,15 +79,13 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { useHotkeys } from '@/hooks/useHotkeys'
-import { useCollection, useCollections, useCreateCollection } from '@/hooks/useCollections'
+import { useAddField, useCollection, useDeleteField, useUpdateField } from '@/hooks/useCollections'
 import {
   CLIENT_MODE_THRESHOLD,
   useBatchUpdateEntry,
   useBulkDeleteEntries,
   useCreateEntry,
-  useDeleteEntry,
   useEntries,
-  useEntry,
   useTotals,
   useUpdateEntry,
 } from '@/hooks/useEntries'
@@ -105,7 +98,7 @@ import { useWorkbookLock } from '@/hooks/useLock'
 import { useRetryToast } from '@/hooks/useRetryToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { TERM } from '@/lib/constants'
-import type { Collection, EntryRow, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
+import type { FieldType, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
 import { emptyFilterGroup, isFilterGroupEmpty, flattenFilterGroup, serializeFilterGroup } from '@/lib/types'
 
 const DEFAULT_LIMIT = 20
@@ -213,6 +206,11 @@ export default function AppViewPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [automationsOpen, setAutomationsOpen] = useState(false)
 
+  // Add column dialog
+  const [addColumnOpen, setAddColumnOpen] = useState(false)
+  const [newColName, setNewColName] = useState('')
+  const [newColType, setNewColType] = useState<FieldType>('text')
+
   // Saved views state
   const [activeView, setActiveView] = useState<SavedView | null>(null)
   const [newViewName, setNewViewName] = useState('')
@@ -236,6 +234,11 @@ export default function AppViewPage() {
   const { data: savedViews } = useSavedViews(collection?.id)
   const createSavedView = useCreateSavedView(collection?.id ?? '')
   const deleteSavedView = useDeleteSavedView(collection?.id ?? '')
+
+  // Column management
+  const addField = useAddField(collection?.id ?? '')
+  const updateField = useUpdateField(collection?.id ?? '')
+  const deleteField = useDeleteField()
 
   // Build sort param — only one source is active at a time.
   const sortParam = useMemo(() => {
@@ -349,31 +352,6 @@ export default function AppViewPage() {
   const [selectAllFilteredMode] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
-
-  // --- Feature A5: Entry slide-over panel ---
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
-  const entryPanelSlug = collection?.slug
-  const { data: panelEntryData, refetch: refetchPanelEntry } = useEntry(
-    selectedEntryId ? entryPanelSlug : undefined,
-    selectedEntryId ?? undefined,
-    'auto',
-  )
-  const panelUpdateEntry = useUpdateEntry(entryPanelSlug ?? '')
-  const panelDeleteEntry = useDeleteEntry(entryPanelSlug ?? '')
-  const panelOnConflictError = useConflictAwareUpdate(refetchPanelEntry)
-  const [panelAutosaveStatus, setPanelAutosaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const panelAutosaveTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
-  const [panelDeleteOpen, setPanelDeleteOpen] = useState(false)
-
-  // --- Feature A4: Sibling sheet (bottom tabs) ---
-  const { data: allCollections } = useCollections()
-  const createCollectionMut = useCreateCollection()
-  const siblingSheets = useMemo(() => {
-    if (!collection?.workbook_id || !allCollections) return []
-    return allCollections
-      .filter((c: Collection) => c.workbook_id === collection.workbook_id)
-      .sort((a: Collection, b: Collection) => a.sort_order - b.sort_order)
-  }, [collection?.workbook_id, allCollections])
 
   // Keyboard shortcuts
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -602,61 +580,57 @@ export default function AppViewPage() {
   if (!collection) return null
 
   function handleEntryClick(entry: Record<string, unknown>) {
-    setSelectedEntryId(String(entry.id))
+    navigate(`/apps/${appId}/entries/${entry.id}`)
   }
 
   // --- Entry panel handlers ---
-  function handlePanelSubmit(data: Record<string, unknown>) {
-    if (!selectedEntryId) return
-    const version = (panelEntryData as EntryRow | undefined)?._version
-    if (version != null) data._version = version
-    setPanelAutosaveStatus('saving')
-    panelUpdateEntry.mutate(
-      { id: selectedEntryId, body: data },
+  function handleRenameColumn(columnSlug: string, newLabel: string) {
+    const field = collection?.fields?.find(f => f.slug === columnSlug)
+    if (!field) return
+    updateField.mutate(
+      { fieldId: field.id, body: { label: newLabel } },
       {
-        onSuccess: () => {
-          toast.success('수정되었습니다')
-          if (panelAutosaveTimerRef.current) clearTimeout(panelAutosaveTimerRef.current)
-          panelAutosaveTimerRef.current = setTimeout(() => {
-            setPanelAutosaveStatus('saved')
-            panelAutosaveTimerRef.current = setTimeout(() => setPanelAutosaveStatus('idle'), 2000)
-          }, 500)
-        },
-        onError: (err) => {
-          setPanelAutosaveStatus('idle')
-          panelOnConflictError(err, () => retryToast(err, () => handlePanelSubmit(data)))
-        },
+        onSuccess: () => toast.success('열 이름이 변경되었습니다'),
+        onError: (err) => toast.error(formatError(err)),
       },
     )
   }
 
-  function handlePanelDelete() {
-    if (!selectedEntryId) return
-    panelDeleteEntry.mutate(selectedEntryId, {
-      onSuccess: () => {
-        toast.success('삭제되었습니다')
-        setSelectedEntryId(null)
-        setPanelDeleteOpen(false)
-      },
-      onError: (err) => toast.error(formatError(err)),
-    })
-  }
-
-  function handlePanelDuplicate() {
-    if (!selectedEntryId) return
-    navigate(`/apps/${appId}/entries/new?duplicate=${selectedEntryId}`)
-    setSelectedEntryId(null)
-  }
-
-  function handleAddSiblingSheet() {
-    if (!collection?.workbook_id) return
-    const label = `시트 ${siblingSheets.length + 1}`
-    const slug = `sheet_${Date.now()}`
-    createCollectionMut.mutate(
-      { slug, label, workbook_id: collection.workbook_id } as { slug: string; label: string; workbook_id: string },
+  function handleDeleteColumn(columnSlug: string) {
+    const field = collection?.fields?.find(f => f.slug === columnSlug)
+    if (!field) return
+    if (!confirm(`"${field.label}" 열을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return
+    deleteField.mutate(
+      { fieldId: field.id, confirm: true },
       {
-        onSuccess: (created) => {
-          navigate(`/apps/${created.id}`)
+        onSuccess: () => toast.success('열이 삭제되었습니다'),
+        onError: (err) => toast.error(formatError(err)),
+      },
+    )
+  }
+
+  function handleAddColumn() {
+    setNewColName('')
+    setNewColType('text')
+    setAddColumnOpen(true)
+  }
+
+  function handleAddColumnSubmit() {
+    if (!newColName.trim()) return
+    const slug = newColName.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_')
+    addField.mutate(
+      {
+        input: {
+          slug,
+          label: newColName.trim(),
+          field_type: newColType,
+        },
+        confirm: true,
+      },
+      {
+        onSuccess: () => {
+          toast.success('열이 추가되었습니다')
+          setAddColumnOpen(false)
         },
         onError: (err) => toast.error(formatError(err)),
       },
@@ -799,7 +773,7 @@ export default function AppViewPage() {
       },
       {
         onSuccess: () => {
-          toast.success('시트가 저장되었습니다')
+          toast.success('뷰가 저장되었습니다')
           setNewViewName('')
         },
         onError: (err) => toast.error(formatError(err)),
@@ -841,7 +815,7 @@ export default function AppViewPage() {
                 e.stopPropagation()
                 deleteSavedView.mutate(v.id, {
                   onSuccess: () => {
-                    toast.success('시트가 삭제되었습니다')
+                    toast.success('뷰가 삭제되었습니다')
                     clearView()
                   },
                   onError: (err) => toast.error(formatError(err)),
@@ -857,16 +831,16 @@ export default function AppViewPage() {
         <Popover>
           <PopoverTrigger
             className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-dashed border-input hover:bg-accent"
-            aria-label="시트 추가"
+            aria-label="뷰 추가"
           >
             <Plus className="h-3.5 w-3.5" />
           </PopoverTrigger>
           <PopoverContent align="end" className="w-64 p-3">
             <div className="space-y-2">
-              <div className="text-sm font-medium">현재 필터/정렬을 시트로 저장</div>
+              <div className="text-sm font-medium">현재 필터/정렬을 뷰로 저장</div>
               <Input
                 className="h-8"
-                placeholder="시트 이름"
+                placeholder="뷰 이름"
                 value={newViewName}
                 onChange={(e) => setNewViewName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSaveView()}
@@ -1147,26 +1121,23 @@ export default function AppViewPage() {
   )
 
   return (
-    <div>
-      <PageHeader
-        compact
-        breadcrumb={[
-          { label: '앱 목록', href: '/apps' },
-          { label: collection.label },
-        ]}
-        title={collection.label}
-        description={collection.description}
-        actions={
-          <>
-            {canManage && (
-              <Button variant="outline" onClick={() => setSettingsOpen(true)}>설정</Button>
-            )}
-            <Button onClick={() => navigate(`/apps/${appId}/entries/new`)}>
-              {TERM.newRecord}
-            </Button>
-          </>
-        }
-      />
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/40">
+        <div className="min-w-0">
+          <h1 className="text-base font-semibold truncate">{collection.label}</h1>
+          {collection.description && (
+            <p className="text-xs text-muted-foreground truncate">{collection.description}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {canManage && (
+            <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>설정</Button>
+          )}
+          <Button size="sm" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
+            {TERM.newRecord}
+          </Button>
+        </div>
+      </div>
 
       {isReadOnly && (
         <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -1180,6 +1151,7 @@ export default function AppViewPage() {
 
       {list && (
         <ErrorBoundary key="spreadsheet">
+          <div className="flex-1 min-h-0">
           <SpreadsheetView
             collection={collection}
             data={viewData}
@@ -1233,11 +1205,15 @@ export default function AppViewPage() {
                 </Button>
               ) : undefined
             }
-            clientMode={isClientMode}
+            onRenameColumn={canManage && !isReadOnly ? handleRenameColumn : undefined}
+            onDeleteColumn={canManage && !isReadOnly ? handleDeleteColumn : undefined}
+            onAddColumn={canManage && !isReadOnly ? handleAddColumn : undefined}
           />
+          </div>
         </ErrorBoundary>
       )}
 
+      <SheetTabs workbookId={collection.workbook_id} currentCollectionId={collection.id} />
 
       <ImportPreview
         open={csvPreviewOpen}
@@ -1314,6 +1290,56 @@ export default function AppViewPage() {
       </Dialog>
       <HotkeyHelpDialog open={hotkeyHelpOpen} onOpenChange={setHotkeyHelpOpen} />
 
+      {/* Add column dialog */}
+      <Dialog open={addColumnOpen} onOpenChange={setAddColumnOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>열 추가</DialogTitle>
+            <DialogDescription>새 열의 이름과 타입을 지정하세요.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="col-name">열 이름</Label>
+              <Input
+                id="col-name"
+                value={newColName}
+                onChange={(e) => setNewColName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddColumnSubmit()}
+                placeholder="예: 담당자"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="col-type">타입</Label>
+              <select
+                id="col-type"
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={newColType}
+                onChange={(e) => setNewColType(e.target.value as FieldType)}
+              >
+                <option value="text">텍스트</option>
+                <option value="textarea">긴 텍스트</option>
+                <option value="number">숫자</option>
+                <option value="integer">정수</option>
+                <option value="boolean">체크박스</option>
+                <option value="date">날짜</option>
+                <option value="datetime">날짜시간</option>
+                <option value="select">선택</option>
+                <option value="multiselect">다중선택</option>
+                <option value="user">사용자</option>
+                <option value="relation">관계</option>
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddColumnOpen(false)}>취소</Button>
+            <Button onClick={handleAddColumnSubmit} disabled={!newColName.trim() || addField.isPending}>
+              {addField.isPending ? '추가 중...' : '추가'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <SheetPanel open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent className="sm:max-w-2xl overflow-y-auto">
           <SheetHeader>
@@ -1342,123 +1368,8 @@ export default function AppViewPage() {
         </SheetContent>
       </SheetPanel>
 
-      {/* Feature A4: Bottom sheet tabs (sibling sheets in same workbook) */}
-      {siblingSheets.length > 1 && (
-        <div className="sticky bottom-0 z-20 flex items-center gap-0.5 overflow-x-auto border-t border-border/60 bg-white px-2 py-1 scrollbar-none">
-          {siblingSheets.map((s) => (
-            <NavLink
-              key={s.id}
-              to={`/apps/${s.id}`}
-              className={({ isActive }) =>
-                `inline-flex items-center h-7 px-3 text-xs rounded-md border transition-colors whitespace-nowrap ${
-                  isActive || s.id === appId
-                    ? 'bg-primary text-primary-foreground border-primary font-medium'
-                    : 'bg-background border-input hover:bg-accent text-muted-foreground'
-                }`
-              }
-              viewTransition
-            >
-              <FileSpreadsheet className="mr-1.5 h-3 w-3" />
-              {s.label}
-            </NavLink>
-          ))}
-          {canManage && (
-            <button
-              type="button"
-              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-dashed border-input hover:bg-accent text-muted-foreground"
-              aria-label="새 시트 추가"
-              onClick={handleAddSiblingSheet}
-              disabled={createCollectionMut.isPending}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Feature A5: Entry slide-over panel */}
-      <SheetPanel open={!!selectedEntryId} onOpenChange={(open) => { if (!open) setSelectedEntryId(null) }}>
-        <SheetContent side="right" className="w-[600px] sm:max-w-[600px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{collection.label} - {TERM.record} 편집</SheetTitle>
-          </SheetHeader>
-          {selectedEntryId && panelEntryData && (
-            <div className="mt-4 space-y-6">
-              {/* Actions */}
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
-                  onClick={() => window.print()}
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                  인쇄
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
-                  onClick={handlePanelDuplicate}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                  복제
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
-                  onClick={() => setPanelDeleteOpen(true)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  삭제
-                </Button>
-              </div>
-
-              {/* Form */}
-              <EntryForm
-                key={selectedEntryId}
-                fields={collection.fields ?? []}
-                initialData={panelEntryData as Record<string, unknown>}
-                slug={entryPanelSlug}
-                collectionId={collection.id}
-                autosave
-                autosaveStatus={panelAutosaveStatus}
-                onSubmit={handlePanelSubmit}
-                onCancel={() => setSelectedEntryId(null)}
-                submitting={panelUpdateEntry.isPending}
-              />
-
-              {/* Comments & History */}
-              {entryPanelSlug && (
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="mb-3 text-sm font-medium">댓글</h3>
-                    <EntryComments slug={entryPanelSlug} recordId={selectedEntryId} />
-                  </div>
-                  <div>
-                    <h3 className="mb-3 text-sm font-medium">이력</h3>
-                    <EntryHistory slug={entryPanelSlug} recordId={selectedEntryId} fields={collection.fields ?? []} />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          {selectedEntryId && !panelEntryData && <LoadingState />}
-        </SheetContent>
-      </SheetPanel>
-
-      {/* Entry panel delete confirmation */}
-      <ConfirmDialog
-        open={panelDeleteOpen}
-        onOpenChange={setPanelDeleteOpen}
-        title="데이터를 삭제하시겠습니까?"
-        description="삭제된 데이터는 복구할 수 없습니다."
-        variant="destructive"
-        confirmLabel="삭제"
-        loading={panelDeleteEntry.isPending}
-        onConfirm={handlePanelDelete}
-      />
+      {/* Nested entry route (slide-over) */}
+      <Outlet />
     </div>
   )
 }

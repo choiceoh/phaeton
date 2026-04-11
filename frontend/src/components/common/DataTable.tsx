@@ -53,6 +53,7 @@ import {
   Pencil,
   PinIcon,
   PinOffIcon,
+  Plus,
   Settings2,
   Trash2,
 } from 'lucide-react'
@@ -199,12 +200,16 @@ interface Props<T> {
   globalFilter?: string
   /** Per-column filters for client-side filtering. */
   columnFilters?: { id: string; value: unknown }[]
-  /** Called when the user requests to rename a column (via header context menu). */
-  onRenameColumn?: (columnId: string) => void
-  /** Called when the user requests to delete a column (via header context menu). */
+
+  // --- Column management (optional, used by SpreadsheetView) ---
+  /** Called to rename a column. */
+  onRenameColumn?: (columnId: string, newLabel: string) => void
+  /** Called to delete a column. */
   onDeleteColumn?: (columnId: string) => void
-  /** Extra column appended at the end (e.g. "+" add column). Header-only, no data cells. */
-  extraHeaderColumn?: React.ReactNode
+  /** Called to add a new column. */
+  onAddColumn?: () => void
+  /** Whether column management is enabled. */
+  columnManagement?: boolean
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -269,7 +274,8 @@ export function DataTable<T>({
   columnFilters: columnFiltersProp,
   onRenameColumn,
   onDeleteColumn,
-  extraHeaderColumn,
+  onAddColumn,
+  columnManagement,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
@@ -516,6 +522,10 @@ export function DataTable<T>({
     rowIdx: number
     colIdx: number
   } | null>(null)
+
+  // Column rename dialog state.
+  const [renameCol, setRenameCol] = useState<{ id: string; label: string } | null>(null)
+  const [renameValue, setRenameValue] = useState('')
 
   // Header right-click context menu state.
   const [headerMenu, setHeaderMenu] = useState<{
@@ -802,9 +812,18 @@ export function DataTable<T>({
                   )
                 })}
                 </SortableContext>
-                {extraHeaderColumn && (
-                  <TableHead className="w-10 text-center">
-                    {extraHeaderColumn}
+                {columnManagement && onAddColumn && (
+                  <TableHead
+                    className="w-10 min-w-[40px] border-b px-0 text-center"
+                  >
+                    <button
+                      type="button"
+                      className="flex h-full w-full items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                      onClick={onAddColumn}
+                      title="열 추가"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
                   </TableHead>
                 )}
               </TableRow>
@@ -1159,35 +1178,81 @@ export function DataTable<T>({
               숨기기
             </button>
           )}
-          {onRenameColumn && headerMenu.column.id !== '_rowNum' && headerMenu.column.id !== '_select' && headerMenu.column.id !== 'created_at' && (
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
-              onClick={() => {
-                onRenameColumn(headerMenu.column.id)
-                setHeaderMenu(null)
-              }}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              이름 변경
-            </button>
-          )}
-          {onDeleteColumn && headerMenu.column.id !== '_rowNum' && headerMenu.column.id !== '_select' && headerMenu.column.id !== 'created_at' && (
+          {columnManagement && onRenameColumn && headerMenu.column.id !== '_rowNum' && headerMenu.column.id !== '_select' && (
             <>
               <div className="my-1 h-px bg-border" />
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-destructive hover:bg-destructive/10"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
                 onClick={() => {
-                  onDeleteColumn(headerMenu.column.id)
+                  const colId = headerMenu.column.id
+                  const label = String(headerMenu.column.columnDef.header ?? colId)
+                  setRenameCol({ id: colId, label })
+                  setRenameValue(label)
                   setHeaderMenu(null)
                 }}
               >
-                <Trash2 className="h-3.5 w-3.5" />
-                삭제
+                <Pencil className="h-3.5 w-3.5" />
+                이름 변경
               </button>
+              {onDeleteColumn && (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-destructive hover:bg-accent"
+                  onClick={() => {
+                    const colId = headerMenu.column.id
+                    setHeaderMenu(null)
+                    onDeleteColumn(colId)
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  삭제
+                </button>
+              )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Column rename inline dialog */}
+      {renameCol && onRenameColumn && (
+        <div
+          className="fixed inset-0 z-50"
+          onClick={() => setRenameCol(null)}
+        >
+          <div
+            className="absolute left-1/2 top-1/3 z-50 -translate-x-1/2 rounded-lg border bg-popover p-3 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 text-sm font-medium">열 이름 변경</div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className="h-8 rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && renameValue.trim()) {
+                    onRenameColumn(renameCol.id, renameValue.trim())
+                    setRenameCol(null)
+                  }
+                  if (e.key === 'Escape') setRenameCol(null)
+                }}
+                autoFocus
+              />
+              <Button
+                size="sm"
+                className="h-8"
+                disabled={!renameValue.trim() || renameValue.trim() === renameCol.label}
+                onClick={() => {
+                  onRenameColumn(renameCol.id, renameValue.trim())
+                  setRenameCol(null)
+                }}
+              >
+                변경
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

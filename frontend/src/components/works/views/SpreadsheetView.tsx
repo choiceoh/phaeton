@@ -46,6 +46,9 @@ interface SpreadsheetViewProps {
   globalFilter?: string
   /** Client-side filter function (used when clientMode is true). */
   columnFilters?: { id: string; value: unknown }[]
+  onRenameColumn?: (columnId: string, newLabel: string) => void
+  onDeleteColumn?: (columnId: string) => void
+  onAddColumn?: () => void
 }
 
 /**
@@ -139,6 +142,9 @@ export default function SpreadsheetView({
   clientMode,
   globalFilter,
   columnFilters,
+  onRenameColumn,
+  onDeleteColumn,
+  onAddColumn,
 }: SpreadsheetViewProps) {
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
 
@@ -422,6 +428,10 @@ export default function SpreadsheetView({
           createEntry(newRowValues).then(() => setNewRowValues({})).catch(() => {})
         }
       }}
+      columnManagement={canManage && !!(onRenameColumn || onDeleteColumn || onAddColumn)}
+      onRenameColumn={onRenameColumn}
+      onDeleteColumn={onDeleteColumn}
+      onAddColumn={onAddColumn}
     />
   )
 }

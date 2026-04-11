@@ -181,7 +181,7 @@ func (s *Store) AcquireLock(ctx context.Context, workbookID, userID string) (Wor
 		UPDATE _meta.workbooks
 		SET locked_by = $1, locked_at = now(), updated_at = now()
 		WHERE id = $2 AND (locked_by IS NULL OR locked_by = $1)
-		RETURNING id, label, icon, group_label, sort_order, created_at, updated_at, created_by, locked_by, locked_at`,
+		RETURNING id, label, icon, group_label, folder_id, sort_order, created_at, updated_at, created_by, locked_by, locked_at`,
 		uUID, wbUID)
 	wb, err := scanWorkbook(row)
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -377,6 +377,25 @@ func (c *Cache) Workbooks() []Workbook {
 	return out
 }
 
+// WorkbooksInFolder returns all workbooks belonging to the given folder.
+func (c *Cache) WorkbooksInFolder(folderID string) []Workbook {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var out []Workbook
+	for _, wb := range c.workbooks {
+		if wb.FolderID == folderID {
+			out = append(out, wb)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SortOrder != out[j].SortOrder {
+			return out[i].SortOrder < out[j].SortOrder
+		}
+		return out[i].Label < out[j].Label
+	})
+	return out
+}
+
 // ReloadWorkbook fetches a single workbook from the DB and updates the cache.
 func (c *Cache) ReloadWorkbook(ctx context.Context, id string) error {
 	wb, err := c.store.getWorkbook(ctx, id)
