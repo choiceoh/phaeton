@@ -58,7 +58,6 @@ import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
 import AutomationsPanel from '@/components/works/AutomationsPanel'
 import SettingsPanel from '@/components/works/SettingsPanel'
-import SheetTabs from '@/components/works/SheetTabs'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import { FormattingToolbar } from '@/components/excel/FormattingToolbar'
 import SpreadsheetView from '@/components/works/views/SpreadsheetView'
@@ -109,7 +108,7 @@ import type { CellPosition, SelectionRange } from '@/hooks/useGridNavigation'
 import type { EntryRow, FieldType, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
 import { emptyFilterGroup, isFilterGroupEmpty, flattenFilterGroup, serializeFilterGroup } from '@/lib/types'
 
-const DEFAULT_LIMIT = 20
+const DEFAULT_LIMIT = 100
 
 // ---------------------------------------------------------------------------
 // Client-side filter helpers (used when dataset ≤ CLIENT_MODE_THRESHOLD)
@@ -1360,7 +1359,6 @@ export default function AppViewPage() {
         </ErrorBoundary>
       )}
 
-      <SheetTabs workbookId={collection.workbook_id} currentCollectionId={collection.id} />
 
       <ImportPreview
         open={csvPreviewOpen}

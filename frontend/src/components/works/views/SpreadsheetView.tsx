@@ -237,7 +237,7 @@ export default function SpreadsheetView({
     [columns],
   )
 
-  const EMPTY_ROW_BUFFER = 30
+  const EMPTY_ROW_BUFFER = 100
   const emptyRowCount = clientMode && canManage ? EMPTY_ROW_BUFFER : 0
 
   // Inline editing
