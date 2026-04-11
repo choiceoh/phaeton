@@ -30,6 +30,7 @@ interface SpreadsheetViewProps {
   batchUpdateEntry: (updates: { id: string; fields: Record<string, unknown> }[]) => void
   canManage: boolean
   toolbar?: React.ReactNode
+  toolbarRight?: React.ReactNode
   summaryRow?: Record<string, { label: string; value: string | number }>
   summaryFn?: Record<string, string>
   onSummaryFnChange?: (columnId: string, fn: string) => void
@@ -73,6 +74,7 @@ export default function SpreadsheetView({
   batchUpdateEntry,
   canManage,
   toolbar,
+  toolbarRight,
   summaryRow,
   summaryFn,
   onSummaryFnChange,
@@ -253,6 +255,7 @@ export default function SpreadsheetView({
       summaryFn={summaryFn}
       onSummaryFnChange={onSummaryFnChange}
       toolbar={toolbar}
+      toolbarRight={toolbarRight}
       initialColumnVisibility={initialColumnVisibility}
       onColumnVisibilityChange={handleColumnVisibilityChange}
       initialColumnPinning={initialColumnPinning}
