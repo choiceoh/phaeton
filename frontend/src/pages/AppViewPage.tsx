@@ -991,6 +991,67 @@ export default function AppViewPage() {
   const tableToolbar = (
     <>
     <div className="flex items-center gap-2 flex-wrap w-full">
+      {selectedRowIds.size > 0 ? (
+        /* ── 일괄 액션 모드 ── */
+        <>
+          <span className="text-sm font-medium">{selectAllFilteredMode ? `전체 ${selectedRowIds.size}건 선택` : `${selectedRowIds.size}건 선택`}</span>
+          {process?.is_enabled && (process.statuses?.length ?? 0) > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-sm font-medium hover:bg-accent h-8"
+              >
+                상태 변경
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {process.statuses!.map((s) => (
+                  <DropdownMenuItem
+                    key={s.id}
+                    onClick={() => handleBulkStatusChange(s.name)}
+                  >
+                    <span
+                      className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: s.color }}
+                    />
+                    {s.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <RoleGate roles={['director', 'pm', 'engineer']}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1"
+              onClick={() => setBulkEditOpen(true)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              일괄 편집
+            </Button>
+          </RoleGate>
+          {canManage && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              일괄 삭제
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8"
+            onClick={() => setSelectedRowIds(new Set())}
+          >
+            선택 해제
+          </Button>
+        </>
+      ) : (
+        /* ── 기본 툴바 ── */
+        <>
       {/* ── Group 1: 데이터 조회 (검색·필터·정렬) ── */}
       <div className="relative w-full sm:w-auto order-first">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1239,7 +1300,10 @@ export default function AppViewPage() {
           )}
         </div>
       )}
+        </>
+      )}
     </div>
+    {selectedRowIds.size === 0 && (
     <FilterChips
       filterGroup={filterGroup}
       sortItems={sortItems}
@@ -1257,6 +1321,7 @@ export default function AppViewPage() {
         setPage(1)
       }}
     />
+    )}
     </>
   )
 
@@ -1356,64 +1421,6 @@ export default function AppViewPage() {
 
           <TabsContent value="list" className="mt-0">
             <ErrorBoundary key="list">
-            {selectedRowIds.size > 0 && (
-              <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-                <span className="font-medium">{selectAllFilteredMode ? `전체 ${selectedRowIds.size}건 선택` : `${selectedRowIds.size}건 선택`}</span>
-                {process?.is_enabled && (process.statuses?.length ?? 0) > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent h-7"
-                    >
-                      상태 변경
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      {process.statuses!.map((s) => (
-                        <DropdownMenuItem
-                          key={s.id}
-                          onClick={() => handleBulkStatusChange(s.name)}
-                        >
-                          <span
-                            className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: s.color }}
-                          />
-                          {s.name}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-                <RoleGate roles={['director', 'pm', 'engineer']}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1"
-                    onClick={() => setBulkEditOpen(true)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    일괄 편집
-                  </Button>
-                </RoleGate>
-                {canManage && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="h-7 gap-1"
-                    onClick={() => setBulkDeleteOpen(true)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    일괄 삭제
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7"
-                  onClick={() => setSelectedRowIds(new Set())}
-                >
-                  선택 해제
-                </Button>
-              </div>
-            )}
             <DataTable
               columns={columns}
               data={list.data}
