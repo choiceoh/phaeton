@@ -5,18 +5,12 @@ include .env
 export
 endif
 
-# 개발 (API + UI 병렬 실행)
+# 개발 (air + vite build --watch 통합 서버)
 dev:
 	@trap 'kill 0' EXIT; \
-	(cd backend && AUTH_DISABLED=true go run ./cmd/server) & \
-	(cd frontend && npm run dev) & \
+	(cd frontend && npx vite build --watch) & \
+	sleep 3 && (cd backend && air) & \
 	wait
-
-dev-api:
-	cd backend && AUTH_DISABLED=true go run ./cmd/server
-
-dev-ui:
-	cd frontend && npm run dev
 
 # 빌드
 build: build-ui build-api
