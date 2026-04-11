@@ -187,8 +187,9 @@ Topworks는 **엑셀 그 자체**다. 구조, 조작법, 단축키, 사고방식
 
 ```bash
 make db          # PostgreSQL 시작
-make dev-api     # Go 서버 (:8080)
-make dev-ui      # Vite dev (:5173, /api → :8080 프록시)
+make dev         # UI 자동 빌드(watch) + Go 서버 단일 포트(:8080)로 API+SPA 서빙
+make dev-api     # Go 서버만 (:8080)
+make dev-ui      # Vite dev 서버 (:5173, HMR)
 make build       # 프론트 빌드 → Go 서버 static/에 출력
 ```
 

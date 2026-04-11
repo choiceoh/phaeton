@@ -5,8 +5,13 @@ include .env
 export
 endif
 
-# 개발
-dev: dev-api dev-ui
+# 개발 — Vite watch(자동 리빌드) + Go 서버 단일 포트(:8080)
+dev:
+	@echo "▶ 초기 UI 빌드..."
+	cd frontend && npx vite build
+	@echo "▶ Vite watch + Go 서버 시작 (:8080)"
+	cd frontend && npx vite build --watch &
+	cd backend && DEV_STATIC_DIR=$$PWD/cmd/server/static AUTH_DISABLED=true go run ./cmd/server
 
 dev-api:
 	cd backend && AUTH_DISABLED=true go run ./cmd/server

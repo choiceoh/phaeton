@@ -660,30 +660,54 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 }
 
 func serveSPA(r *chi.Mux) {
-	sub, err := fs.Sub(staticFS, "static")
-	if err != nil {
-		slog.Warn("no embedded static files, SPA serving disabled")
-		return
+	var staticRoot fs.FS
+
+	// DEV_STATIC_DIR: 개발 시 디스크에서 직접 읽기 (Vite watch 모드와 연동)
+	if dir := os.Getenv("DEV_STATIC_DIR"); dir != "" {
+		slog.Info("serving SPA from disk", "dir", dir)
+		staticRoot = os.DirFS(dir)
+	} else {
+		sub, err := fs.Sub(staticFS, "static")
+		if err != nil {
+			slog.Warn("no embedded static files, SPA serving disabled")
+			return
+		}
+		staticRoot = sub
 	}
 
-	fileServer := http.FileServer(http.FS(sub))
+	fileServer := http.FileServer(http.FS(staticRoot))
 
-	indexHTML, err := fs.ReadFile(sub, "index.html")
+	indexHTML, err := fs.ReadFile(staticRoot, "index.html")
 	if err != nil {
-		slog.Warn("index.html not found in embedded static", "error", err)
+		slog.Warn("index.html not found in static files", "error", err)
 		indexHTML = []byte("<!DOCTYPE html><html><body>phaeton</body></html>")
 	}
 
+	devMode := os.Getenv("DEV_STATIC_DIR") != ""
+
 	r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
 		path := strings.TrimPrefix(req.URL.Path, "/")
-		if path == "" {
+
+		// dev 모드: index.html을 매 요청마다 디스크에서 읽기 (Vite 리빌드 반영)
+		serveIndex := func() {
+			if devMode {
+				fresh, err := fs.ReadFile(staticRoot, "index.html")
+				if err == nil {
+					writeIndex(w, fresh)
+					return
+				}
+			}
 			writeIndex(w, indexHTML)
+		}
+
+		if path == "" {
+			serveIndex()
 			return
 		}
 
-		info, err := fs.Stat(sub, path)
+		info, err := fs.Stat(staticRoot, path)
 		if err != nil || info.IsDir() {
-			writeIndex(w, indexHTML)
+			serveIndex()
 			return
 		}
 		// Service worker files must never be cached by the browser
