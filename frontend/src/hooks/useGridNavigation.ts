@@ -28,17 +28,32 @@ export function isCellInRange(row: number, col: number, range: SelectionRange | 
   return row >= n.startRow && row <= n.endRow && col >= n.startCol && col <= n.endCol
 }
 
+/** Check if a key represents a printable character (triggers edit mode). */
+function isPrintableKey(e: React.KeyboardEvent): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey) return false
+  return e.key.length === 1
+}
+
 interface UseGridNavigationOptions {
   rowCount: number
   colCount: number
   /** Column indices that should be skipped during navigation (e.g. _actions) */
   skipColumns?: number[]
+  /** When true, arrow/tab/enter keys are suppressed (editing mode). */
+  isEditing?: boolean
+  /** Called when a printable key is pressed on an active cell (to start editing). */
+  onStartEditing?: (row: number, col: number, key: string) => void
+  /** Called when Delete/Backspace is pressed on an active cell. */
+  onClearCell?: (row: number, col: number) => void
 }
 
 export function useGridNavigation({
   rowCount,
   colCount,
   skipColumns = [],
+  isEditing = false,
+  onStartEditing,
+  onClearCell,
 }: UseGridNavigationOptions) {
   const [activeCell, setActiveCell] = useState<CellPosition | null>(null)
   const [selection, setSelection] = useState<SelectionRange | null>(null)
@@ -80,6 +95,9 @@ export function useGridNavigation({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // When editing, suppress all navigation keys — editing hook handles them.
+      if (isEditing) return
+
       if (!activeCell) return
 
       const { row, col } = activeCell
@@ -127,9 +145,25 @@ export function useGridNavigation({
           e.preventDefault()
           moveTo(row, colCount - 1, shift)
           break
+        case 'Delete':
+        case 'Backspace':
+          e.preventDefault()
+          onClearCell?.(row, col)
+          break
+        case 'F2':
+          e.preventDefault()
+          onStartEditing?.(row, col, '')
+          break
+        default:
+          // Printable character → start editing with that character
+          if (isPrintableKey(e) && onStartEditing) {
+            e.preventDefault()
+            onStartEditing(row, col, e.key)
+          }
+          break
       }
     },
-    [activeCell, moveTo, nextCol, colCount],
+    [activeCell, moveTo, nextCol, colCount, isEditing, onStartEditing, onClearCell],
   )
 
   const handleCellClick = useCallback(
