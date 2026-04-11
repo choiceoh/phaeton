@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -161,6 +162,94 @@ func scanFolder(row pgx.Row) (Folder, error) {
 		f.Icon = *icon
 	}
 	return f, nil
+}
+
+// ---------- Workbook Lock ----------
+
+// AcquireLock atomically acquires an edit lock on the workbook.
+// Returns ErrConflict if another user already holds the lock.
+func (s *Store) AcquireLock(ctx context.Context, workbookID, userID string) (Workbook, error) {
+	wbUID, err := parseUUID(workbookID)
+	if err != nil {
+		return Workbook{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	uUID, err := parseUUID(userID)
+	if err != nil {
+		return Workbook{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	row := s.pool.QueryRow(ctx, `
+		UPDATE _meta.workbooks
+		SET locked_by = $1, locked_at = now(), updated_at = now()
+		WHERE id = $2 AND (locked_by IS NULL OR locked_by = $1)
+		RETURNING id, label, icon, group_label, sort_order, created_at, updated_at, created_by, locked_by, locked_at`,
+		uUID, wbUID)
+	wb, err := scanWorkbook(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Lock held by someone else — return current lock owner.
+		existing, err2 := s.getWorkbook(ctx, workbookID)
+		if err2 != nil {
+			return Workbook{}, fmt.Errorf("acquire lock: %w", err2)
+		}
+		return existing, ErrConflict
+	}
+	if err != nil {
+		return Workbook{}, fmt.Errorf("acquire lock: %w", err)
+	}
+	return wb, nil
+}
+
+// ReleaseLock releases a lock held by the given user.
+// Returns ErrConflict if the lock is held by a different user.
+func (s *Store) ReleaseLock(ctx context.Context, workbookID, userID string) error {
+	wbUID, err := parseUUID(workbookID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	uUID, err := parseUUID(userID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE _meta.workbooks
+		SET locked_by = NULL, locked_at = NULL, updated_at = now()
+		WHERE id = $1 AND locked_by = $2`,
+		wbUID, uUID)
+	if err != nil {
+		return fmt.Errorf("release lock: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
+	}
+	return nil
+}
+
+// ForceReleaseLock releases any lock regardless of owner (director use).
+func (s *Store) ForceReleaseLock(ctx context.Context, workbookID string) error {
+	wbUID, err := parseUUID(workbookID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	_, err = s.pool.Exec(ctx, `
+		UPDATE _meta.workbooks
+		SET locked_by = NULL, locked_at = NULL, updated_at = now()
+		WHERE id = $1`, wbUID)
+	if err != nil {
+		return fmt.Errorf("force release lock: %w", err)
+	}
+	return nil
+}
+
+// ReleaseExpiredLocks clears locks older than the given timeout. Returns count released.
+func (s *Store) ReleaseExpiredLocks(ctx context.Context, timeout time.Duration) (int, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE _meta.workbooks
+		SET locked_by = NULL, locked_at = NULL, updated_at = now()
+		WHERE locked_by IS NOT NULL AND locked_at < now() - $1::interval`,
+		fmt.Sprintf("%d seconds", int(timeout.Seconds())))
+	if err != nil {
+		return 0, fmt.Errorf("release expired locks: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 // ---------- Extra workbook helpers (not in main store.go) ----------

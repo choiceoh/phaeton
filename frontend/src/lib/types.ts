@@ -307,6 +307,8 @@ export interface Workbook {
   created_at: string
   updated_at: string
   created_by?: string
+  locked_by?: string
+  locked_at?: string
 }
 
 /**

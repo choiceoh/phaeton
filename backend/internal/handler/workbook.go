@@ -5,21 +5,23 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/choiceoh/phaeton/backend/internal/events"
 	"github.com/choiceoh/phaeton/backend/internal/middleware"
 	"github.com/choiceoh/phaeton/backend/internal/migration"
 	"github.com/choiceoh/phaeton/backend/internal/schema"
 )
 
-// WorkbookHandler serves folder CRUD and sheet-within-workbook management.
+// WorkbookHandler serves folder CRUD, sheet-within-workbook management, and workbook locking.
 // Core workbook CRUD (list/create/update/delete) lives in SchemaHandler.
 type WorkbookHandler struct {
 	store  *schema.Store
 	cache  *schema.Cache
 	engine *migration.Engine
+	broker *events.Broker
 }
 
-func NewWorkbookHandler(store *schema.Store, cache *schema.Cache, engine *migration.Engine) *WorkbookHandler {
-	return &WorkbookHandler{store: store, cache: cache, engine: engine}
+func NewWorkbookHandler(store *schema.Store, cache *schema.Cache, engine *migration.Engine, broker *events.Broker) *WorkbookHandler {
+	return &WorkbookHandler{store: store, cache: cache, engine: engine, broker: broker}
 }
 
 // ---------- Folders ----------
@@ -135,4 +137,94 @@ func (h *WorkbookHandler) MoveSheet(w http.ResponseWriter, r *http.Request) {
 	_ = h.cache.ReloadCollection(r.Context(), sheetID)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "moved"})
+}
+
+// ---------- Workbook Lock ----------
+
+// AcquireLock acquires an edit lock on a workbook. Returns 409 if another user holds it.
+func (h *WorkbookHandler) AcquireLock(w http.ResponseWriter, r *http.Request) {
+	wbID := chi.URLParam(r, "workbookId")
+	user, ok := middleware.GetUser(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	wb, err := h.store.AcquireLock(r.Context(), wbID, user.UserID)
+	if err != nil {
+		if err == schema.ErrConflict {
+			// Return 423 Locked with lock holder info.
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusLocked)
+			writeJSON(w, http.StatusLocked, map[string]any{
+				"locked_by": wb.LockedBy,
+				"locked_at": wb.LockedAt,
+			})
+			return
+		}
+		handleErr(w, r, err)
+		return
+	}
+
+	// Broadcast lock event.
+	h.broker.Broadcast(events.SSEMessage{
+		Type:        string(events.EventWorkbookLocked),
+		WorkbookID:  wbID,
+		ActorUserID: user.UserID,
+		ActorName:   user.Name,
+	})
+	_ = h.cache.ReloadWorkbook(r.Context(), wbID)
+
+	writeJSON(w, http.StatusOK, wb)
+}
+
+// ReleaseLock releases the edit lock on a workbook.
+func (h *WorkbookHandler) ReleaseLock(w http.ResponseWriter, r *http.Request) {
+	wbID := chi.URLParam(r, "workbookId")
+	user, ok := middleware.GetUser(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	// Directors can force-release any lock.
+	if user.Role == "director" {
+		if err := h.store.ForceReleaseLock(r.Context(), wbID); err != nil {
+			handleErr(w, r, err)
+			return
+		}
+	} else {
+		if err := h.store.ReleaseLock(r.Context(), wbID, user.UserID); err != nil {
+			if err == schema.ErrConflict {
+				writeError(w, http.StatusForbidden, "lock held by another user")
+				return
+			}
+			handleErr(w, r, err)
+			return
+		}
+	}
+
+	h.broker.Broadcast(events.SSEMessage{
+		Type:        string(events.EventWorkbookUnlocked),
+		WorkbookID:  wbID,
+		ActorUserID: user.UserID,
+		ActorName:   user.Name,
+	})
+	_ = h.cache.ReloadWorkbook(r.Context(), wbID)
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "unlocked"})
+}
+
+// GetLock returns the current lock status of a workbook.
+func (h *WorkbookHandler) GetLock(w http.ResponseWriter, r *http.Request) {
+	wbID := chi.URLParam(r, "workbookId")
+	wb, ok := h.cache.WorkbookByID(wbID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "workbook not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"locked_by": wb.LockedBy,
+		"locked_at": wb.LockedAt,
+	})
 }

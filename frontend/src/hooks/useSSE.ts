@@ -24,6 +24,7 @@ interface SSEMessage {
   record_id?: string
   actor_user_id?: string
   actor_name?: string
+  workbook_id?: string
 }
 
 const EVENT_LABELS: Record<string, string> = {
@@ -101,6 +102,29 @@ export function useSSE() {
           qc.invalidateQueries({
             queryKey: queryKeys.comments.list(slug, msg.record_id),
           })
+        }
+
+        // Workbook lock/unlock events — refresh workbook queries.
+        if (msg.type === 'workbook_locked' || msg.type === 'workbook_unlocked') {
+          qc.invalidateQueries({ queryKey: queryKeys.workbooks.all })
+          if (msg.workbook_id) {
+            qc.invalidateQueries({ queryKey: queryKeys.workbooks.lock(msg.workbook_id) })
+          }
+          if (!isSelf && msg.type === 'workbook_locked' && msg.actor_name) {
+            toast(`${msg.actor_name}님이 앱을 편집 중입니다`, { duration: 4000 })
+          }
+          if (msg.type === 'workbook_unlocked' && !isSelf) {
+            toast('앱 잠금이 해제되었습니다', { duration: 3000 })
+          }
+          return
+        }
+
+        // Cross-sheet invalidation — refresh affected sibling sheet.
+        if (msg.type === 'cross_sheet_invalidation' && slug) {
+          qc.invalidateQueries({
+            queryKey: [...queryKeys.entries.all, slug],
+          })
+          return
         }
 
         // Toast for other users' changes.
