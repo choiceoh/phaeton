@@ -239,51 +239,31 @@ func seedViews(ctx context.Context, store *schema.Store, cache *schema.Cache, pr
 		{
 			slug: "projects",
 			views: []schema.CreateViewReq{
-				{Name: "목록", ViewType: "list", SortOrder: 0, IsDefault: true},
-				{Name: "상태별 칸반", ViewType: "kanban", SortOrder: 1, Config: jsonRaw(map[string]any{
-					"groupBy": "status",
-				})},
-				{Name: "COD 캘린더", ViewType: "calendar", SortOrder: 2, Config: jsonRaw(map[string]any{
-					"dateField": "cod_target",
-				})},
-				{Name: "갤러리", ViewType: "gallery", SortOrder: 3},
+				{Name: "전체", ViewType: "spreadsheet", SortOrder: 0, IsDefault: true},
 			},
 		},
 		{
 			slug: "requests",
 			views: []schema.CreateViewReq{
-				{Name: "전체 목록", ViewType: "list", SortOrder: 0, IsDefault: true},
-				{Name: "상태별 보드", ViewType: "kanban", SortOrder: 1, Config: jsonRaw(map[string]any{
-					"groupBy": "status",
-				})},
-				{Name: "기한 캘린더", ViewType: "calendar", SortOrder: 2, Config: jsonRaw(map[string]any{
-					"dateField": "due_date",
-				})},
+				{Name: "전체", ViewType: "spreadsheet", SortOrder: 0, IsDefault: true},
 			},
 		},
 		{
 			slug: "expenses",
 			views: []schema.CreateViewReq{
-				{Name: "전체 내역", ViewType: "list", SortOrder: 0, IsDefault: true},
-				{Name: "상태별 보드", ViewType: "kanban", SortOrder: 1, Config: jsonRaw(map[string]any{
-					"groupBy": "status",
-				})},
+				{Name: "전체", ViewType: "spreadsheet", SortOrder: 0, IsDefault: true},
 			},
 		},
 		{
 			slug: "milestones",
 			views: []schema.CreateViewReq{
-				{Name: "전체 목록", ViewType: "list", SortOrder: 0, IsDefault: true},
-				{Name: "진행 상태 보드", ViewType: "kanban", SortOrder: 1, Config: jsonRaw(map[string]any{
-					"groupBy": "status",
-				})},
+				{Name: "전체", ViewType: "spreadsheet", SortOrder: 0, IsDefault: true},
 			},
 		},
 		{
 			slug: "inventory",
 			views: []schema.CreateViewReq{
-				{Name: "재고 목록", ViewType: "list", SortOrder: 0, IsDefault: true},
-				{Name: "분류별 갤러리", ViewType: "gallery", SortOrder: 1},
+				{Name: "전체", ViewType: "spreadsheet", SortOrder: 0, IsDefault: true},
 			},
 		},
 	}

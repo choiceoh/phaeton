@@ -463,12 +463,15 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Patch("/folders/{id}", cfg.workbookH.UpdateFolder)
 			r.Delete("/folders/{id}", cfg.workbookH.DeleteFolder)
 
-			// Workbooks: all authenticated users.
-			r.Get("/workbooks", cfg.workbookH.ListWorkbooks)
-			r.Get("/workbooks/{id}", cfg.workbookH.GetWorkbook)
-			r.Post("/workbooks", cfg.workbookH.CreateWorkbook)
-			r.Patch("/workbooks/{id}", cfg.workbookH.UpdateWorkbook)
-			r.Delete("/workbooks/{id}", cfg.workbookH.DeleteWorkbook)
+			// Workbooks (apps): read for all, write for director/pm.
+			r.Get("/workbooks", cfg.schemaH.ListWorkbooks)
+			r.Get("/workbooks/sheet-counts", cfg.schemaH.SheetCounts)
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("director", "pm"))
+				r.Post("/workbooks", cfg.schemaH.CreateWorkbook)
+				r.Patch("/workbooks/{workbookId}", cfg.schemaH.UpdateWorkbook)
+				r.Delete("/workbooks/{workbookId}", cfg.schemaH.DeleteWorkbook)
+			})
 
 			// Sheets within workbook.
 			r.Get("/workbooks/{id}/sheets", cfg.workbookH.ListSheets)

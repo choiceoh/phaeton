@@ -588,33 +588,6 @@ export function useMyTasks() {
 }
 
 // ---------------------------------------------------------------------------
-// Global Calendar (cross-collection)
-// ---------------------------------------------------------------------------
-
-export interface GlobalCalendarEvent {
-  id: string
-  label: string
-  date: string
-  endDate?: string
-  collectionId: string
-  collectionLabel: string
-  collectionSlug: string
-  collectionIcon?: string
-}
-
-/** Fetch calendar events across all collections for the global calendar dashboard. */
-export function useGlobalCalendarEvents(year: number, month: number) {
-  return useQuery({
-    queryKey: ['globalCalendar', year, month],
-    queryFn: () =>
-      api.get<GlobalCalendarEvent[]>(
-        `/calendar/events?year=${year}&month=${month}`,
-      ),
-    staleTime: 30_000,
-  })
-}
-
-// ---------------------------------------------------------------------------
 // Relationship Graph
 // ---------------------------------------------------------------------------
 

@@ -17,7 +17,6 @@ import AutomationsPage from './pages/AutomationsPage'
 import DashboardPage from './pages/DashboardPage'
 import EntryPage from './pages/EntryPage'
 import GlobalAutomationsPage from './pages/GlobalAutomationsPage'
-import GlobalCalendarPage from './pages/GlobalCalendarPage'
 import GlobalDashboardPage from './pages/GlobalDashboardPage'
 import InterfaceDesignerPage from './pages/InterfaceDesignerPage'
 import LoginPage from './pages/LoginPage'
@@ -56,7 +55,6 @@ const router = createBrowserRouter([
       { path: 'apps/:appId/automations', element: <EB><AutomationsPage /></EB> },
       { path: 'my-tasks', element: <EB><MyTasksPage /></EB> },
       { path: 'dashboard', element: <EB><GlobalDashboardPage /></EB> },
-      { path: 'calendar', element: <EB><GlobalCalendarPage /></EB> },
       { path: 'automations', element: <EB><GlobalAutomationsPage /></EB> },
       { path: 'settings', element: <EB><SettingsPage /></EB> },
       { path: 'history', element: <EB><MigrationHistoryPage /></EB> },

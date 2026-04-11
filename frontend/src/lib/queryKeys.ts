@@ -35,7 +35,14 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.departments.all, 'detail', id] as const,
   },
 
-  /** Collection (app) keys. Invalidate `.all` after create/delete. */
+  /** Workbook (app) keys. Invalidate `.all` after create/delete. */
+  workbooks: {
+    all: ['workbooks'] as const,
+    list: () => [...queryKeys.workbooks.all, 'list'] as const,
+    sheetCounts: () => [...queryKeys.workbooks.all, 'sheetCounts'] as const,
+  },
+
+  /** Collection (sheet) keys. Invalidate `.all` after create/delete. */
   collections: {
     all: ['collections'] as const,
     list: () => [...queryKeys.collections.all, 'list'] as const,

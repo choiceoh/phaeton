@@ -290,10 +290,23 @@ export interface Collection {
   process_enabled: boolean
   sort_order: number
   access_config: AccessConfig
+  workbook_id?: string
   created_at: string
   updated_at: string
   created_by?: string
   fields?: Field[]
+}
+
+/** Workbook is the "앱" (app) entity — a container for related sheets (collections). */
+export interface Workbook {
+  id: string
+  label: string
+  icon?: string
+  group_label?: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+  created_by?: string
 }
 
 /**
@@ -532,9 +545,8 @@ export interface TotalsResult {
  * - `calendar` — entries plotted on a date/datetime field.
  * - `gallery`  — card grid with image thumbnails.
  * - `gantt`    — timeline bar chart for date-range fields.
- * - `form`     — public or internal data-entry form.
  */
-export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery' | 'gantt' | 'form'
+export type ViewType = 'spreadsheet'
 
 /** A saved view configuration for a collection. */
 export interface View {

@@ -172,6 +172,19 @@ type Collection struct {
 	Fields         []Field      `json:"fields,omitempty"` // Populated by GetCollection / cache; empty for list queries.
 }
 
+// Workbook is the "앱" (app) entity — a container for related sheets (collections).
+// The group_label field provides optional "워크북" (workbook) grouping of apps.
+type Workbook struct {
+	ID         string    `json:"id"`
+	Label      string    `json:"label"`
+	Icon       string    `json:"icon,omitempty"`
+	GroupLabel string    `json:"group_label,omitempty"` // Optional workbook grouping.
+	SortOrder  int       `json:"sort_order"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	CreatedBy  string    `json:"created_by,omitempty"`
+}
+
 // Field defines a single column inside a collection.
 // For layout and computed fields, no physical DB column exists — see NoColumn().
 type Field struct {
@@ -253,24 +266,6 @@ type Folder struct {
 	CreatedBy string    `json:"created_by,omitempty"`
 }
 
-// --- Workbook ---
-
-// Workbook is a container for related sheets (collections), analogous to an Excel workbook.
-type Workbook struct {
-	ID           string       `json:"id"`
-	Slug         string       `json:"slug"`
-	Label        string       `json:"label"`
-	Description  string       `json:"description,omitempty"`
-	Icon         string       `json:"icon,omitempty"`
-	FolderID     string       `json:"folder_id,omitempty"`
-	SortOrder    int          `json:"sort_order"`
-	AccessConfig AccessConfig `json:"access_config"`
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
-	CreatedBy    string       `json:"created_by,omitempty"`
-	Sheets       []Collection `json:"sheets,omitempty"` // Populated by GetWorkbook / cache; empty for list queries.
-}
-
 // --- ReverseRelField ---
 
 // ReverseRelField describes a relation field in another collection that points TO
@@ -291,17 +286,17 @@ type ReverseRelField struct {
 // in partial-update requests. The CreatedBy field uses `json:"-"` because it is set
 // server-side by the handler from the JWT claims, never from client JSON.
 
-// CreateCollectionReq is the input for creating a new collection (app/sheet).
+// CreateCollectionReq is the input for creating a new collection (sheet).
 type CreateCollectionReq struct {
 	Slug         string          `json:"slug"`
 	Label        string          `json:"label"`
 	Description  string          `json:"description,omitempty"`
 	Icon         string          `json:"icon,omitempty"`
 	IsSystem     bool            `json:"is_system,omitempty"`
+	WorkbookID   string          `json:"workbook_id,omitempty"` // Parent workbook.
 	AccessConfig *AccessConfig   `json:"access_config,omitempty"`
 	Fields       []CreateFieldIn `json:"fields,omitempty"`
-	WorkbookID   string          `json:"workbook_id,omitempty"` // Parent workbook.
-	CreatedBy    string          `json:"-"`                     // set by handler, not from JSON
+	CreatedBy    string          `json:"-"` // set by handler, not from JSON
 }
 
 type CreateFieldIn struct {
@@ -332,6 +327,22 @@ type UpdateCollectionReq struct {
 	SortOrder      *int          `json:"sort_order,omitempty"`
 	ProcessEnabled *bool         `json:"process_enabled,omitempty"`
 	AccessConfig   *AccessConfig `json:"access_config,omitempty"`
+	WorkbookID     *string       `json:"workbook_id"` // nullable — empty string clears the workbook
+}
+
+// --- Workbook DTOs ---
+
+type CreateWorkbookReq struct {
+	Label      string `json:"label"`
+	Icon       string `json:"icon,omitempty"`
+	GroupLabel string `json:"group_label,omitempty"`
+}
+
+type UpdateWorkbookReq struct {
+	Label      *string `json:"label,omitempty"`
+	Icon       *string `json:"icon,omitempty"`
+	SortOrder  *int    `json:"sort_order,omitempty"`
+	GroupLabel *string `json:"group_label,omitempty"`
 }
 
 type UpdateFieldReq struct {
@@ -425,25 +436,4 @@ type UpdateFolderReq struct {
 	Label     *string `json:"label,omitempty"`
 	Icon      *string `json:"icon,omitempty"`
 	SortOrder *int    `json:"sort_order,omitempty"`
-}
-
-// --- Workbook DTOs ---
-
-type CreateWorkbookReq struct {
-	Slug         string       `json:"slug"`
-	Label        string       `json:"label"`
-	Description  string       `json:"description,omitempty"`
-	Icon         string       `json:"icon,omitempty"`
-	FolderID     string       `json:"folder_id,omitempty"`
-	AccessConfig *AccessConfig `json:"access_config,omitempty"`
-	CreatedBy    string       `json:"-"` // set by handler
-}
-
-type UpdateWorkbookReq struct {
-	Label        *string      `json:"label,omitempty"`
-	Description  *string      `json:"description,omitempty"`
-	Icon         *string      `json:"icon,omitempty"`
-	FolderID     *string      `json:"folder_id,omitempty"`
-	SortOrder    *int         `json:"sort_order,omitempty"`
-	AccessConfig *AccessConfig `json:"access_config,omitempty"`
 }

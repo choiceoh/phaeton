@@ -23,8 +23,7 @@ type Cache struct {
 	processes map[string]Process // keyed by collection_id
 
 	// Workbook model.
-	workbooks   map[string]Workbook          // id → Workbook (without Sheets populated)
-	wbBySlug    map[string]Workbook          // slug → Workbook
+	workbooks   map[string]Workbook          // id → Workbook
 	folders     map[string]Folder            // id → Folder
 	colToWB     map[string]string            // collection_id → workbook_id
 	reverseRels map[string][]ReverseRelField // target_collection_id → source fields
@@ -37,7 +36,6 @@ func NewCache(store *Store) *Cache {
 		bySlug:      make(map[string]Collection),
 		processes:   make(map[string]Process),
 		workbooks:   make(map[string]Workbook),
-		wbBySlug:    make(map[string]Workbook),
 		folders:     make(map[string]Folder),
 		colToWB:     make(map[string]string),
 		reverseRels: make(map[string][]ReverseRelField),
@@ -94,10 +92,8 @@ func (c *Cache) Load(ctx context.Context) error {
 		return fmt.Errorf("cache load workbooks: %w", err)
 	}
 	wbMap := make(map[string]Workbook, len(wbList))
-	wbSlugMap := make(map[string]Workbook, len(wbList))
 	for _, wb := range wbList {
 		wbMap[wb.ID] = wb
-		wbSlugMap[wb.Slug] = wb
 	}
 
 	// Build collection → workbook index.
@@ -117,7 +113,6 @@ func (c *Cache) Load(ctx context.Context) error {
 	c.processes = procs
 	c.folders = foldersMap
 	c.workbooks = wbMap
-	c.wbBySlug = wbSlugMap
 	c.colToWB = colToWB
 	c.reverseRels = reverseRels
 	c.mu.Unlock()
@@ -289,14 +284,6 @@ func (c *Cache) WorkbookByID(id string) (Workbook, bool) {
 	return wb, ok
 }
 
-// WorkbookBySlug returns a workbook by slug.
-func (c *Cache) WorkbookBySlug(slug string) (Workbook, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	wb, ok := c.wbBySlug[slug]
-	return wb, ok
-}
-
 // SheetsInWorkbook returns all collections belonging to the given workbook.
 func (c *Cache) SheetsInWorkbook(workbookID string) []Collection {
 	c.mu.RLock()
@@ -390,22 +377,15 @@ func (c *Cache) Workbooks() []Workbook {
 	return out
 }
 
-// ReloadWorkbook fetches a single workbook from the DB and updates the cache maps.
+// ReloadWorkbook fetches a single workbook from the DB and updates the cache.
 func (c *Cache) ReloadWorkbook(ctx context.Context, id string) error {
-	wb, err := c.store.GetWorkbook(ctx, id)
+	wb, err := c.store.getWorkbook(ctx, id)
 	if err != nil {
 		return fmt.Errorf("reload workbook %s: %w", id, err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Remove stale slug mapping.
-	if old, ok := c.workbooks[id]; ok && old.Slug != wb.Slug {
-		delete(c.wbBySlug, old.Slug)
-	}
-	// Store without sheets to keep cache lightweight.
-	wb.Sheets = nil
 	c.workbooks[id] = wb
-	c.wbBySlug[wb.Slug] = wb
 	return nil
 }
 
@@ -413,12 +393,10 @@ func (c *Cache) ReloadWorkbook(ctx context.Context, id string) error {
 func (c *Cache) RemoveWorkbook(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	wb, ok := c.workbooks[id]
-	if !ok {
+	if _, ok := c.workbooks[id]; !ok {
 		return
 	}
 	delete(c.workbooks, id)
-	delete(c.wbBySlug, wb.Slug)
 	for colID, wbID := range c.colToWB {
 		if wbID == id {
 			delete(c.colToWB, colID)

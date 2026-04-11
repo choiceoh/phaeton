@@ -168,6 +168,93 @@ func (h *SchemaHandler) DeleteCollection(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// --- Workbooks ---
+
+func (h *SchemaHandler) ListWorkbooks(w http.ResponseWriter, r *http.Request) {
+	wbs, err := h.store.ListWorkbooks(r.Context())
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	if wbs == nil {
+		wbs = []schema.Workbook{}
+	}
+	writeJSON(w, http.StatusOK, wbs)
+}
+
+func (h *SchemaHandler) CreateWorkbook(w http.ResponseWriter, r *http.Request) {
+	var req schema.CreateWorkbookReq
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Label == "" {
+		writeError(w, http.StatusBadRequest, "label is required")
+		return
+	}
+	var createdBy string
+	if user, ok := middleware.GetUser(r.Context()); ok {
+		createdBy = user.UserID
+	}
+	wb, err := h.store.CreateWorkbook(r.Context(), &req, createdBy)
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, wb)
+}
+
+func (h *SchemaHandler) UpdateWorkbook(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "workbookId")
+	var req schema.UpdateWorkbookReq
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	wb, err := h.store.UpdateWorkbook(r.Context(), id, &req)
+	if err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, wb)
+}
+
+// SheetCounts returns a map of workbook_id → number of sheets (collections) in each app.
+func (h *SchemaHandler) SheetCounts(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.pool.Query(r.Context(),
+		`SELECT workbook_id::text, COUNT(*) FROM _meta.collections WHERE workbook_id IS NOT NULL GROUP BY workbook_id`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rows.Close()
+
+	result := make(map[string]int64)
+	for rows.Next() {
+		var wbID string
+		var cnt int64
+		if err := rows.Scan(&wbID, &cnt); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		result[wbID] = cnt
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *SchemaHandler) DeleteWorkbook(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "workbookId")
+	if err := h.store.DeleteWorkbook(r.Context(), id); err != nil {
+		handleErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 // --- Fields ---
 
 func (h *SchemaHandler) AddField(w http.ResponseWriter, r *http.Request) {
