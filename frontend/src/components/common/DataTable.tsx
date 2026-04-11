@@ -52,7 +52,7 @@ import {
   Plus,
   Settings2,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -79,6 +79,7 @@ import { useAutoScroll } from '@/hooks/useAutoScroll'
 import { useCellDragMove } from '@/hooks/useCellDragMove'
 import { useFillHandle } from '@/hooks/useFillHandle'
 import type { CellSaveState } from '@/hooks/useInlineEditing'
+import { createGridStore, GridStoreContext } from '@/stores/grid'
 import { copyToClipboard, pasteFromClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
 
@@ -573,6 +574,12 @@ export function DataTable<T>({
   const showingFrom = effectiveTotal ? (page - 1) * limit + 1 : 0
   const showingTo = Math.min(page * limit, effectiveTotal)
 
+  // ── Grid store (per-instance Zustand store for all grid UI state) ─────
+  const parentStore = useContext(GridStoreContext)
+  const ownStore = useMemo(() => parentStore ? null : createGridStore(), [parentStore])
+  const gridStore = parentStore ?? ownStore!
+  useEffect(() => () => { gridStore.getState().reset() }, [gridStore])
+
   // Grid navigation state.
   const visibleRows = table.getRowModel().rows
   const visibleCols = table.getVisibleFlatColumns()
@@ -859,6 +866,7 @@ export function DataTable<T>({
   }, [editable, grid.activeCell, colIds, data, page, limit])
 
   return (
+    <GridStoreContext.Provider value={gridStore}>
     <div className="flex flex-col h-full gap-1">
       {/* Toolbar — hidden when content is piped to ExcelRibbon */}
       {(toolbar || toolbarRight) && <div className="flex items-center justify-between gap-2">
@@ -1796,6 +1804,7 @@ export function DataTable<T>({
         </div>
       )}
     </div>
+    </GridStoreContext.Provider>
   )
 }
 

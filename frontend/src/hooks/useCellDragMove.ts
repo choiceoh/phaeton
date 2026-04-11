@@ -8,7 +8,13 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { CellPosition, SelectionRange } from './useGridNavigation'
+import type { CellPosition, SelectionRange } from '@/stores/grid'
+import {
+  useOptionalGridStore,
+  useOptionalGridStoreApi,
+  selectDragGhost,
+  selectDragMoveDragging,
+} from '@/stores/grid'
 import type { CellFormats, EntryRow, Field } from '@/lib/types'
 import { isComputedType, isLayoutType } from '@/lib/constants'
 
@@ -84,8 +90,18 @@ export function useCellDragMove({
   onAutoScroll,
   onAutoScrollStop,
 }: UseCellDragMoveOptions) {
-  const [dragGhost, setDragGhost] = useState<DragGhostRange | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
+  // ── State: prefer Zustand store when inside GridStoreContext.Provider ──
+  const store = useOptionalGridStoreApi()
+  const storeDragGhost = useOptionalGridStore(selectDragGhost)
+  const storeDragMoveDragging = useOptionalGridStore(selectDragMoveDragging)
+  const [localDragGhost, setLocalDragGhost] = useState<DragGhostRange | null>(null)
+  const [localIsDragging, setLocalIsDragging] = useState(false)
+
+  const dragGhost = store ? storeDragGhost : localDragGhost
+  const setDragGhost = store ? store.getState().setDragGhost : setLocalDragGhost
+  const isDragging = store ? storeDragMoveDragging : localIsDragging
+  const setIsDragging = store ? store.getState().setDragMoveDragging : setLocalIsDragging
+
   const didDragRef = useRef(false)
   const dragStateRef = useRef<{
     sourceRange: ReturnType<typeof getSourceRange>
@@ -153,7 +169,7 @@ export function useCellDragMove({
         mode,
       })
     },
-    [],
+    [setDragGhost],
   )
 
   // Keep a ref for the latest updateDragGhost for auto-scroll onTick
@@ -209,145 +225,135 @@ export function useCellDragMove({
 
         // Execute the move/copy using the latest ghost state
         setTimeout(() => {
-          setDragGhost((currentGhost) => {
-            if (!currentGhost || !dragStateRef.current?.sourceRange) {
-              dragStateRef.current = null
-              return null
-            }
+          // Read current ghost from store (if available) or local state
+          const currentGhost = store ? store.getState().dragGhost : localDragGhost
+          if (!currentGhost || !dragStateRef.current?.sourceRange) {
+            dragStateRef.current = null
+            setDragGhost(null)
+            return
+          }
 
-            const src = dragStateRef.current.sourceRange
-            const isCopy = currentGhost.mode === 'copy'
-            const updates: { id: string; fields: Record<string, unknown> }[] = []
+          const src = dragStateRef.current.sourceRange
+          const isCopy = currentGhost.mode === 'copy'
+          const updates: { id: string; fields: Record<string, unknown> }[] = []
 
-            // Read all source values first
-            const sourceValues: Record<string, unknown>[][] = []
+          // Clear source cells (for move, not copy)
+          if (!isCopy) {
             for (let r = src.startRow; r <= src.endRow; r++) {
-              const rowVals: Record<string, unknown> = {}
+              const row = data[r]
+              if (!row) continue
+              const rowId = String(row.id)
+              const clearFields: Record<string, unknown> = {}
               for (let c = src.startCol; c <= src.endCol; c++) {
                 const colId = columnIds[c]
-                if (colId && data[r]) rowVals[colId] = data[r][colId]
-              }
-              sourceValues.push([rowVals])
-            }
-
-            // Clear source cells (for move, not copy)
-            if (!isCopy) {
-              for (let r = src.startRow; r <= src.endRow; r++) {
-                const row = data[r]
-                if (!row) continue
-                const rowId = String(row.id)
-                const clearFields: Record<string, unknown> = {}
-                for (let c = src.startCol; c <= src.endCol; c++) {
-                  const colId = columnIds[c]
-                  if (!colId || readOnlyColumns.has(colId)) continue
-                  const field = fields.find((f) => f.slug === colId)
-                  if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
-                  clearFields[colId] = null
-                }
-                if (Object.keys(clearFields).length > 0) {
-                  let update = updates.find((u) => u.id === rowId)
-                  if (!update) {
-                    update = { id: rowId, fields: {} }
-                    updates.push(update)
-                  }
-                  Object.assign(update.fields, clearFields)
-                }
-              }
-            }
-
-            // Write to target cells
-            const rowOffset = currentGhost.startRow - src.startRow
-            const colOffset = currentGhost.startCol - src.startCol
-            for (let r = src.startRow; r <= src.endRow; r++) {
-              const targetRowIdx = r + rowOffset
-              const targetRow = data[targetRowIdx]
-              if (!targetRow) continue
-              const rowId = String(targetRow.id)
-              const writeFields: Record<string, unknown> = {}
-
-              for (let c = src.startCol; c <= src.endCol; c++) {
-                const srcColId = columnIds[c]
-                const targetColIdx = c + colOffset
-                const targetColId = columnIds[targetColIdx]
-                if (!srcColId || !targetColId || readOnlyColumns.has(targetColId)) continue
-                const field = fields.find((f) => f.slug === targetColId)
+                if (!colId || readOnlyColumns.has(colId)) continue
+                const field = fields.find((f) => f.slug === colId)
                 if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
-                writeFields[targetColId] = data[r]?.[srcColId]
+                clearFields[colId] = null
               }
-
-              if (Object.keys(writeFields).length > 0) {
+              if (Object.keys(clearFields).length > 0) {
                 let update = updates.find((u) => u.id === rowId)
                 if (!update) {
                   update = { id: rowId, fields: {} }
                   updates.push(update)
                 }
-                Object.assign(update.fields, writeFields)
+                Object.assign(update.fields, clearFields)
               }
             }
+          }
 
-            // Move/copy cell formats along with values.
-            if (updates.length > 0) {
-              // Clear source formats on move.
-              if (!isCopy) {
-                for (let r = src.startRow; r <= src.endRow; r++) {
-                  const srcRow = data[r] as EntryRow | undefined
-                  if (!srcRow?._cell_formats) continue
-                  const update = updates.find((u) => u.id === String(srcRow.id))
-                  if (!update) continue
-                  const existing: CellFormats = { ...(srcRow._cell_formats ?? {}) }
-                  let changed = false
-                  for (let c = src.startCol; c <= src.endCol; c++) {
-                    const colId = columnIds[c]
-                    if (colId && existing[colId]) {
-                      delete existing[colId]
-                      changed = true
-                    }
-                  }
-                  if (changed) update.fields._cell_formats = existing
-                }
+          // Write to target cells
+          const rowOffset = currentGhost.startRow - src.startRow
+          const colOffset = currentGhost.startCol - src.startCol
+          for (let r = src.startRow; r <= src.endRow; r++) {
+            const targetRowIdx = r + rowOffset
+            const targetRow = data[targetRowIdx]
+            if (!targetRow) continue
+            const rowId = String(targetRow.id)
+            const writeFields: Record<string, unknown> = {}
+
+            for (let c = src.startCol; c <= src.endCol; c++) {
+              const srcColId = columnIds[c]
+              const targetColIdx = c + colOffset
+              const targetColId = columnIds[targetColIdx]
+              if (!srcColId || !targetColId || readOnlyColumns.has(targetColId)) continue
+              const field = fields.find((f) => f.slug === targetColId)
+              if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
+              writeFields[targetColId] = data[r]?.[srcColId]
+            }
+
+            if (Object.keys(writeFields).length > 0) {
+              let update = updates.find((u) => u.id === rowId)
+              if (!update) {
+                update = { id: rowId, fields: {} }
+                updates.push(update)
               }
-              // Copy source formats to target.
-              const rowOffset = currentGhost.startRow - src.startRow
-              const colOffset = currentGhost.startCol - src.startCol
+              Object.assign(update.fields, writeFields)
+            }
+          }
+
+          // Move/copy cell formats along with values.
+          if (updates.length > 0) {
+            // Clear source formats on move.
+            if (!isCopy) {
               for (let r = src.startRow; r <= src.endRow; r++) {
                 const srcRow = data[r] as EntryRow | undefined
-                const targetRowIdx = r + rowOffset
-                const targetRow = data[targetRowIdx] as EntryRow | undefined
-                if (!targetRow) continue
-                const update = updates.find((u) => u.id === String(targetRow.id))
+                if (!srcRow?._cell_formats) continue
+                const update = updates.find((u) => u.id === String(srcRow.id))
                 if (!update) continue
-                const existing: CellFormats = update.fields._cell_formats
-                  ? (update.fields._cell_formats as CellFormats)
-                  : { ...(targetRow._cell_formats ?? {}) }
+                const existing: CellFormats = { ...(srcRow._cell_formats ?? {}) }
                 let changed = false
                 for (let c = src.startCol; c <= src.endCol; c++) {
-                  const srcColId = columnIds[c]
-                  const targetColId = columnIds[c + colOffset]
-                  if (!srcColId || !targetColId) continue
-                  const srcFmt = srcRow?._cell_formats?.[srcColId]
-                  if (srcFmt) {
-                    existing[targetColId] = { ...srcFmt }
-                    changed = true
-                  } else if (existing[targetColId]) {
-                    delete existing[targetColId]
+                  const colId = columnIds[c]
+                  if (colId && existing[colId]) {
+                    delete existing[colId]
                     changed = true
                   }
                 }
                 if (changed) update.fields._cell_formats = existing
               }
-              onMove(updates)
             }
+            // Copy source formats to target.
+            const rowOff = currentGhost.startRow - src.startRow
+            const colOff = currentGhost.startCol - src.startCol
+            for (let r = src.startRow; r <= src.endRow; r++) {
+              const srcRow = data[r] as EntryRow | undefined
+              const targetRowIdx = r + rowOff
+              const targetRow = data[targetRowIdx] as EntryRow | undefined
+              if (!targetRow) continue
+              const update = updates.find((u) => u.id === String(targetRow.id))
+              if (!update) continue
+              const existing: CellFormats = update.fields._cell_formats
+                ? (update.fields._cell_formats as CellFormats)
+                : { ...(targetRow._cell_formats ?? {}) }
+              let changed = false
+              for (let c = src.startCol; c <= src.endCol; c++) {
+                const srcColId = columnIds[c]
+                const targetColId = columnIds[c + colOff]
+                if (!srcColId || !targetColId) continue
+                const srcFmt = srcRow?._cell_formats?.[srcColId]
+                if (srcFmt) {
+                  existing[targetColId] = { ...srcFmt }
+                  changed = true
+                } else if (existing[targetColId]) {
+                  delete existing[targetColId]
+                  changed = true
+                }
+              }
+              if (changed) update.fields._cell_formats = existing
+            }
+            onMove(updates)
+          }
 
-            dragStateRef.current = null
-            return null
-          })
+          dragStateRef.current = null
+          setDragGhost(null)
         }, 0)
       }
 
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [sourceRange, isCellInSource, columnIds, readOnlyColumns, fields, data, onMove],
+    [sourceRange, isCellInSource, columnIds, readOnlyColumns, fields, data, onMove, isDragging, setIsDragging, store, localDragGhost, setDragGhost],
   )
 
   // Reset on active cell change
@@ -355,7 +361,7 @@ export function useCellDragMove({
     setDragGhost(null)
     setIsDragging(false)
     didDragRef.current = false
-  }, [activeCell?.row, activeCell?.col])
+  }, [activeCell?.row, activeCell?.col, setDragGhost, setIsDragging])
 
   return {
     dragGhost,

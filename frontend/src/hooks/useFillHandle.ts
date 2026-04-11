@@ -13,7 +13,13 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { CellPosition, SelectionRange } from './useGridNavigation'
+import type { CellPosition, SelectionRange } from '@/stores/grid'
+import {
+  useOptionalGridStore,
+  useOptionalGridStoreApi,
+  selectFillPreview,
+  selectFillDragging,
+} from '@/stores/grid'
 import type { CellFormats, EntryRow, Field } from '@/lib/types'
 import { isComputedType, isLayoutType } from '@/lib/constants'
 
@@ -116,8 +122,18 @@ export function useFillHandle({
   onAutoScroll,
   onAutoScrollStop,
 }: UseFillHandleOptions) {
-  const [fillPreview, setFillPreview] = useState<FillPreviewRange | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
+  // ── State: prefer Zustand store when inside GridStoreContext.Provider ──
+  const store = useOptionalGridStoreApi()
+  const storeFillPreview = useOptionalGridStore(selectFillPreview)
+  const storeFillDragging = useOptionalGridStore(selectFillDragging)
+  const [localFillPreview, setLocalFillPreview] = useState<FillPreviewRange | null>(null)
+  const [localIsDragging, setLocalIsDragging] = useState(false)
+
+  const fillPreview = store ? storeFillPreview : localFillPreview
+  const setFillPreview = store ? store.getState().setFillPreview : setLocalFillPreview
+  const isDragging = store ? storeFillDragging : localIsDragging
+  const setIsDragging = store ? store.getState().setFillDragging : setLocalIsDragging
+
   const dragStateRef = useRef<{
     sourceRange: { startRow: number; endRow: number; startCol: number; endCol: number }
     direction: FillDirection
@@ -213,7 +229,7 @@ export function useFillHandle({
         }
       }
     },
-    [containerRef],
+    [containerRef, setFillPreview],
   )
 
   // Expose updateFillPreview via ref so DataTable can wire it to autoScroll onTick
@@ -257,143 +273,146 @@ export function useFillHandle({
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [sourceRange, onAutoScroll, onAutoScrollStop],
+    [sourceRange, onAutoScroll, onAutoScrollStop, setIsDragging],
   )
 
   /** Execute fill: apply values from source range to preview range. */
   const executeFill = useCallback(() => {
-    setFillPreview((currentPreview) => {
-      if (!currentPreview || !dragStateRef.current) return null
+    // Read current preview from store (if available) or local state
+    const currentPreview = store ? store.getState().fillPreview : localFillPreview
+    if (!currentPreview || !dragStateRef.current) {
+      setFillPreview(null)
+      return
+    }
 
-      const src = dragStateRef.current.sourceRange
-      const direction = dragStateRef.current.direction
-      const updates: { id: string; fields: Record<string, unknown> }[] = []
-      const emptyRowEntries: Map<number, Record<string, unknown>> = new Map()
+    const src = dragStateRef.current.sourceRange
+    const direction = dragStateRef.current.direction
+    const updates: { id: string; fields: Record<string, unknown> }[] = []
+    const emptyRowEntries: Map<number, Record<string, unknown>> = new Map()
 
-      if (direction === 'vertical') {
-        // Vertical fill: for each column, fill rows
-        const fillCount = currentPreview.endRow - currentPreview.startRow + 1
+    if (direction === 'vertical') {
+      // Vertical fill: for each column, fill rows
+      const fillCount = currentPreview.endRow - currentPreview.startRow + 1
 
-        for (let col = src.startCol; col <= src.endCol; col++) {
-          const colId = columnIds[col]
-          if (!colId || readOnlyColumns.has(colId)) continue
+      for (let col = src.startCol; col <= src.endCol; col++) {
+        const colId = columnIds[col]
+        if (!colId || readOnlyColumns.has(colId)) continue
 
-          const field = fields.find((f) => f.slug === colId)
-          if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
+        const field = fields.find((f) => f.slug === colId)
+        if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
 
-          const sourceVals: unknown[] = []
-          for (let r = src.startRow; r <= src.endRow; r++) {
-            sourceVals.push(data[r]?.[colId])
-          }
-
-          const fillVals = generateFillValues(sourceVals, fillCount, field.field_type)
-
-          for (let i = 0; i < fillCount; i++) {
-            const targetRowIdx = currentPreview.startRow + i
-            if (targetRowIdx >= data.length) {
-              // Empty row — collect for batch creation
-              const entry = emptyRowEntries.get(targetRowIdx) ?? {}
-              entry[colId] = fillVals[i]
-              emptyRowEntries.set(targetRowIdx, entry)
-              continue
-            }
-            const row = data[targetRowIdx]
-            if (!row) continue
-
-            const rowId = String(row.id)
-            let update = updates.find((u) => u.id === rowId)
-            if (!update) {
-              update = { id: rowId, fields: {} }
-              updates.push(update)
-            }
-            update.fields[colId] = fillVals[i]
-          }
+        const sourceVals: unknown[] = []
+        for (let r = src.startRow; r <= src.endRow; r++) {
+          sourceVals.push(data[r]?.[colId])
         }
-      } else if (direction === 'horizontal') {
-        // Horizontal fill: for each row, fill columns
-        const fillColCount = currentPreview.endCol - currentPreview.startCol + 1
 
-        for (let row = src.startRow; row <= src.endRow; row++) {
-          const rowData = data[row]
-          if (!rowData) continue
-          const rowId = String(rowData.id)
+        const fillVals = generateFillValues(sourceVals, fillCount, field.field_type)
 
-          // Collect source values across columns for this row
-          const sourceVals: unknown[] = []
-          for (let c = src.startCol; c <= src.endCol; c++) {
-            const colId = columnIds[c]
-            if (colId) {
-              sourceVals.push(rowData[colId])
-            }
+        for (let i = 0; i < fillCount; i++) {
+          const targetRowIdx = currentPreview.startRow + i
+          if (targetRowIdx >= data.length) {
+            // Empty row — collect for batch creation
+            const entry = emptyRowEntries.get(targetRowIdx) ?? {}
+            entry[colId] = fillVals[i]
+            emptyRowEntries.set(targetRowIdx, entry)
+            continue
           }
+          const row = data[targetRowIdx]
+          if (!row) continue
 
-          for (let i = 0; i < fillColCount; i++) {
-            const targetCol = currentPreview.startCol + i
-            const targetColId = columnIds[targetCol]
-            if (!targetColId || readOnlyColumns.has(targetColId)) continue
-
-            const targetField = fields.find((f) => f.slug === targetColId)
-            if (!targetField || isComputedType(targetField.field_type) || isLayoutType(targetField.field_type)) continue
-
-            // Repeat pattern from source values
-            const val = sourceVals[i % sourceVals.length]
-
-            let update = updates.find((u) => u.id === rowId)
-            if (!update) {
-              update = { id: rowId, fields: {} }
-              updates.push(update)
-            }
-            update.fields[targetColId] = val
+          const rowId = String(row.id)
+          let update = updates.find((u) => u.id === rowId)
+          if (!update) {
+            update = { id: rowId, fields: {} }
+            updates.push(update)
           }
+          update.fields[colId] = fillVals[i]
         }
       }
+    } else if (direction === 'horizontal') {
+      // Horizontal fill: for each row, fill columns
+      const fillColCount = currentPreview.endCol - currentPreview.startCol + 1
 
-      // Copy cell formats from source rows to target rows.
-      if (updates.length > 0) {
-        const srcRowCount = src.endRow - src.startRow + 1
-        for (const update of updates) {
-          const targetRow = data.find((r) => String(r.id) === update.id) as EntryRow | undefined
-          if (!targetRow) continue
-          const existing: CellFormats = { ...(targetRow._cell_formats ?? {}) }
-          let changed = false
-          for (const colId of Object.keys(update.fields)) {
-            if (colId === '_cell_formats') continue
-            // Find the source cell that corresponds to this target cell.
-            const targetRowIdx = data.indexOf(targetRow as Record<string, unknown>)
-            let srcRowIdx: number
-            if (direction === 'vertical') {
-              srcRowIdx = src.startRow + ((targetRowIdx - currentPreview.startRow) % srcRowCount)
-            } else {
-              srcRowIdx = src.startRow + (targetRowIdx - src.startRow)
-            }
-            const srcRow = data[srcRowIdx] as EntryRow | undefined
-            const srcFmt = srcRow?._cell_formats?.[colId]
-            if (srcFmt) {
-              existing[colId] = { ...srcFmt }
-              changed = true
-            } else if (existing[colId]) {
-              delete existing[colId]
-              changed = true
-            }
-          }
-          if (changed) {
-            update.fields._cell_formats = existing
+      for (let row = src.startRow; row <= src.endRow; row++) {
+        const rowData = data[row]
+        if (!rowData) continue
+        const rowId = String(rowData.id)
+
+        // Collect source values across columns for this row
+        const sourceVals: unknown[] = []
+        for (let c = src.startCol; c <= src.endCol; c++) {
+          const colId = columnIds[c]
+          if (colId) {
+            sourceVals.push(rowData[colId])
           }
         }
-        onFill(updates)
-      }
-      if (emptyRowEntries.size > 0 && onFillIntoEmptyRows) {
-        // Sort by row index to maintain order
-        const sorted = Array.from(emptyRowEntries.entries())
-          .sort(([a], [b]) => a - b)
-          .map(([, fields]) => fields)
-        onFillIntoEmptyRows(sorted)
-      }
 
-      dragStateRef.current = null
-      return null
-    })
-  }, [columnIds, readOnlyColumns, fields, data, onFill, onFillIntoEmptyRows])
+        for (let i = 0; i < fillColCount; i++) {
+          const targetCol = currentPreview.startCol + i
+          const targetColId = columnIds[targetCol]
+          if (!targetColId || readOnlyColumns.has(targetColId)) continue
+
+          const targetField = fields.find((f) => f.slug === targetColId)
+          if (!targetField || isComputedType(targetField.field_type) || isLayoutType(targetField.field_type)) continue
+
+          // Repeat pattern from source values
+          const val = sourceVals[i % sourceVals.length]
+
+          let update = updates.find((u) => u.id === rowId)
+          if (!update) {
+            update = { id: rowId, fields: {} }
+            updates.push(update)
+          }
+          update.fields[targetColId] = val
+        }
+      }
+    }
+
+    // Copy cell formats from source rows to target rows.
+    if (updates.length > 0) {
+      const srcRowCount = src.endRow - src.startRow + 1
+      for (const update of updates) {
+        const targetRow = data.find((r) => String(r.id) === update.id) as EntryRow | undefined
+        if (!targetRow) continue
+        const existing: CellFormats = { ...(targetRow._cell_formats ?? {}) }
+        let changed = false
+        for (const colId of Object.keys(update.fields)) {
+          if (colId === '_cell_formats') continue
+          // Find the source cell that corresponds to this target cell.
+          const targetRowIdx = data.indexOf(targetRow as Record<string, unknown>)
+          let srcRowIdx: number
+          if (direction === 'vertical') {
+            srcRowIdx = src.startRow + ((targetRowIdx - currentPreview.startRow) % srcRowCount)
+          } else {
+            srcRowIdx = src.startRow + (targetRowIdx - src.startRow)
+          }
+          const srcRow = data[srcRowIdx] as EntryRow | undefined
+          const srcFmt = srcRow?._cell_formats?.[colId]
+          if (srcFmt) {
+            existing[colId] = { ...srcFmt }
+            changed = true
+          } else if (existing[colId]) {
+            delete existing[colId]
+            changed = true
+          }
+        }
+        if (changed) {
+          update.fields._cell_formats = existing
+        }
+      }
+      onFill(updates)
+    }
+    if (emptyRowEntries.size > 0 && onFillIntoEmptyRows) {
+      // Sort by row index to maintain order
+      const sorted = Array.from(emptyRowEntries.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([, fields]) => fields)
+      onFillIntoEmptyRows(sorted)
+    }
+
+    dragStateRef.current = null
+    setFillPreview(null)
+  }, [columnIds, readOnlyColumns, fields, data, onFill, onFillIntoEmptyRows, store, localFillPreview, setFillPreview])
 
   /**
    * Double-click on fill handle: auto-fill downward to match adjacent column's
@@ -506,7 +525,7 @@ export function useFillHandle({
   useEffect(() => {
     setFillPreview(null)
     setIsDragging(false)
-  }, [activeCell?.row, activeCell?.col])
+  }, [activeCell?.row, activeCell?.col, setFillPreview, setIsDragging])
 
   return {
     fillPreview,

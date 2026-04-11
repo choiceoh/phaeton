@@ -1,32 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-export interface CellPosition {
-  row: number
-  col: number
-}
+import {
+  useOptionalGridStore,
+  useOptionalGridStoreApi,
+  selectActiveCell,
+  selectSelection,
+} from '@/stores/grid'
 
-export interface SelectionRange {
-  startRow: number
-  startCol: number
-  endRow: number
-  endCol: number
-}
+export type { CellPosition, SelectionRange } from '@/stores/grid'
+export { normalize, isCellInRange } from '@/stores/grid'
 
-// Normalize selection range so start <= end.
-export function normalize(range: SelectionRange): SelectionRange {
-  return {
-    startRow: Math.min(range.startRow, range.endRow),
-    startCol: Math.min(range.startCol, range.endCol),
-    endRow: Math.max(range.startRow, range.endRow),
-    endCol: Math.max(range.startCol, range.endCol),
-  }
-}
-
-export function isCellInRange(row: number, col: number, range: SelectionRange | null): boolean {
-  if (!range) return false
-  const n = normalize(range)
-  return row >= n.startRow && row <= n.endRow && col >= n.startCol && col <= n.endCol
-}
+import type { CellPosition, SelectionRange } from '@/stores/grid'
 
 /** Check if a key represents a printable character (triggers edit mode). */
 function isPrintableKey(e: React.KeyboardEvent): boolean {
@@ -121,8 +105,18 @@ export function useGridNavigation({
   getData,
   pageSize = 20,
 }: UseGridNavigationOptions) {
-  const [activeCell, setActiveCell] = useState<CellPosition | null>(null)
-  const [selection, setSelection] = useState<SelectionRange | null>(null)
+  // ── State: prefer Zustand store when inside GridStoreContext.Provider ──
+  const store = useOptionalGridStoreApi()
+  const storeActiveCell = useOptionalGridStore(selectActiveCell)
+  const storeSelection = useOptionalGridStore(selectSelection)
+  const [localActiveCell, setLocalActiveCell] = useState<CellPosition | null>(null)
+  const [localSelection, setLocalSelection] = useState<SelectionRange | null>(null)
+
+  const activeCell = store ? storeActiveCell : localActiveCell
+  const setActiveCell = store ? store.getState().setActiveCell : setLocalActiveCell
+  const selection = store ? storeSelection : localSelection
+  const setSelection = store ? store.getState().setSelection : setLocalSelection
+
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Anchor for shift-extend selection.
@@ -169,7 +163,7 @@ export function useGridNavigation({
         setSelection(null)
       }
     },
-    [clampRow, clampCol],
+    [clampRow, clampCol, setActiveCell, setSelection],
   )
 
   const handleKeyDown = useCallback(
@@ -263,7 +257,7 @@ export function useGridNavigation({
           break
       }
     },
-    [activeCell, moveTo, nextCol, colCount, rowCount, isEditing, onStartEditing, onClearCell, getData, pageSize],
+    [activeCell, moveTo, nextCol, colCount, rowCount, isEditing, onStartEditing, onClearCell, getData, pageSize, setActiveCell, setSelection],
   )
 
   const handleCellClick = useCallback(
@@ -283,7 +277,7 @@ export function useGridNavigation({
         setSelection(null)
       }
     },
-    [activeCell],
+    [activeCell, setActiveCell, setSelection],
   )
 
   /**
@@ -312,7 +306,7 @@ export function useGridNavigation({
       })
       setActiveCell({ row: clampRow(targetRow), col: clampCol(targetCol) })
     },
-    [clampRow, clampCol],
+    [clampRow, clampCol, setActiveCell, setSelection],
   )
 
   /**
@@ -375,7 +369,7 @@ export function useGridNavigation({
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [clampRow, clampCol, updateDragSelection],
+    [clampRow, clampCol, updateDragSelection, setActiveCell, setSelection],
   )
 
   /** Select an entire column (click on column header). */
@@ -395,7 +389,7 @@ export function useGridNavigation({
       }
       setActiveCell({ row: 0, col })
     },
-    [rowCount],
+    [rowCount, setActiveCell, setSelection],
   )
 
   /** Select an entire row (click on row number). */
@@ -415,7 +409,7 @@ export function useGridNavigation({
       }
       setActiveCell({ row, col: 0 })
     },
-    [colCount],
+    [colCount, setActiveCell, setSelection],
   )
 
   // Select all (Ctrl+A).
@@ -430,7 +424,7 @@ export function useGridNavigation({
     }
     el.addEventListener('keydown', onSelectAll)
     return () => el.removeEventListener('keydown', onSelectAll)
-  }, [rowCount, colCount])
+  }, [rowCount, colCount, setSelection])
 
   return {
     activeCell,

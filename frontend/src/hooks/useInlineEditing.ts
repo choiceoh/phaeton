@@ -8,7 +8,14 @@
  */
 import { useCallback, useRef, useState } from 'react'
 
-import type { CellPosition } from '@/hooks/useGridNavigation'
+import type { CellPosition } from '@/stores/grid'
+import {
+  useOptionalGridStore,
+  useOptionalGridStoreApi,
+  selectEditingCell,
+  selectEditValue,
+  selectCellSaveState,
+} from '@/stores/grid'
 import type { Field, FieldType } from '@/lib/types'
 
 /** Field types that cannot be inline-edited. */
@@ -52,9 +59,28 @@ export function useInlineEditing({
   emptyRowCount = 0,
   onEmptyRowSave,
 }: UseInlineEditingOptions) {
-  const [editingCell, setEditingCell] = useState<CellPosition | null>(null)
-  const [editValue, setEditValue] = useState<unknown>(null)
-  const [cellSaveState, setCellSaveState] = useState<Map<string, CellSaveState>>(new Map())
+  // ── State: prefer Zustand store when inside GridStoreContext.Provider ──
+  const store = useOptionalGridStoreApi()
+  const storeEditingCell = useOptionalGridStore(selectEditingCell)
+  const storeEditValue = useOptionalGridStore(selectEditValue)
+  const storeCellSaveState = useOptionalGridStore(selectCellSaveState)
+  const [localEditingCell, setLocalEditingCell] = useState<CellPosition | null>(null)
+  const [localEditValue, setLocalEditValue] = useState<unknown>(null)
+  const [localCellSaveState, setLocalCellSaveState] = useState<Map<string, CellSaveState>>(new Map())
+
+  const editingCell = store ? storeEditingCell : localEditingCell
+  const setEditingCell = store ? store.getState().setEditingCell : setLocalEditingCell
+  const editValue = store ? storeEditValue : localEditValue
+  const setEditValue = store ? store.getState().setEditValue : setLocalEditValue
+  const cellSaveState = store ? storeCellSaveState : localCellSaveState
+  const setCellSaveState = store
+    ? (fn: (prev: Map<string, CellSaveState>) => Map<string, CellSaveState>) => {
+        store.getState().setCellSaveState(fn(store.getState().cellSaveState))
+      }
+    : (fn: Map<string, CellSaveState> | ((prev: Map<string, CellSaveState>) => Map<string, CellSaveState>)) => {
+        setLocalCellSaveState(fn as (prev: Map<string, CellSaveState>) => Map<string, CellSaveState>)
+      }
+
   const originalValueRef = useRef<unknown>(null)
 
   const isEditing = editingCell !== null
