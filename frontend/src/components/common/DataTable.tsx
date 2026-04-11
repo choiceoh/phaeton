@@ -45,11 +45,8 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   ArrowDownUp,
-  ChevronDown,
-  ChevronUp,
   ChevronsLeft,
   ChevronsRight,
-  GripVertical,
   Pencil,
   PinIcon,
   PinOffIcon,
@@ -609,7 +606,7 @@ export function DataTable<T>({
   )
 
   // Virtual scrolling — only activate when row count exceeds threshold.
-  const ROW_HEIGHT = 28
+  const ROW_HEIGHT = 20
   const VIRTUAL_THRESHOLD = 40
   const useVirtual = visibleRows.length > VIRTUAL_THRESHOLD
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
@@ -648,8 +645,8 @@ export function DataTable<T>({
 
   return (
     <div className="space-y-1">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2">
+      {/* Toolbar — hidden when content is piped to ExcelRibbon */}
+      {(toolbar || toolbarRight) && <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-1">{toolbar}</div>
         {toolbarRight}
         <DropdownMenu>
@@ -699,15 +696,18 @@ export function DataTable<T>({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+      </div>}
 
-      {/* Formula bar */}
+      {/* Formula bar (Excel-style: NameBox | fx | value) */}
       {editable && (
-        <div className="flex items-center border border-stone-300 bg-white h-7 text-sm">
-          <div className="w-14 px-2 border-r border-stone-300 bg-[#f0f0f0] text-center text-[11px] font-medium text-stone-600 flex items-center justify-center h-full select-none tabular-nums">
+        <div className="flex items-center border border-[#d4d4d4] bg-white h-[22px] text-[11px]">
+          <div className="w-16 px-1.5 border-r border-[#d4d4d4] bg-[#e6e6e6] text-center font-medium text-[#333] flex items-center justify-center h-full select-none tabular-nums">
             {formulaBarInfo?.ref ?? ''}
           </div>
-          <div className="flex-1 px-2 truncate text-stone-700 text-[13px]">
+          <div className="w-6 border-r border-[#d4d4d4] flex items-center justify-center text-[#666] italic select-none h-full">
+            fx
+          </div>
+          <div className="flex-1 px-1.5 truncate text-[#333] text-[12px]">
             {formulaBarInfo?.value ?? ''}
           </div>
         </div>
@@ -740,12 +740,12 @@ export function DataTable<T>({
           scrollRef.current = el
           ;(grid.containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
         }}
-        className={`border border-stone-300 bg-white overflow-auto focus:outline-none ${useVirtual ? 'max-h-[calc(100vh-340px)]' : ''}`}
+        className={`border border-[#d4d4d4] bg-white overflow-auto focus:outline-none ${useVirtual ? 'max-h-[calc(100vh-340px)]' : ''}`}
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
         <Table style={{ width: table.getCenterTotalSize() }} role="grid" aria-rowcount={total ?? data.length}>
-          <TableHeader role="rowgroup" className="bg-[#f0f0f0]">
+          <TableHeader role="rowgroup" className="bg-[#e6e6e6]">
             <DndContext
               sensors={dndSensors}
               collisionDetection={closestCenter}
@@ -769,7 +769,7 @@ export function DataTable<T>({
                       disabled={!!isPinned || isSystemCol}
                       role="columnheader"
                       aria-sort={sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : canSort ? 'none' : undefined}
-                      className={`relative group ${isPinned ? 'bg-[#f0f0f0]' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-stone-400' : ''}`}
+                      className={`relative group ${isPinned ? 'bg-[#e6e6e6]' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-[#b0b0b0]' : ''}`}
                       style={{
                         width: header.getSize(),
                         position: isPinned ? 'sticky' : undefined,
@@ -788,10 +788,10 @@ export function DataTable<T>({
                         >
                           {isPinned && <PinIcon className="h-3 w-3 text-muted-foreground shrink-0" />}
                           {flexRender(header.column.columnDef.header, header.getContext())}
-                          {sortDir === 'asc' && <ChevronUp className="h-3 w-3" />}
-                          {sortDir === 'desc' && <ChevronDown className="h-3 w-3" />}
+                          {sortDir === 'asc' && <span className="text-[8px] leading-none">▲</span>}
+                          {sortDir === 'desc' && <span className="text-[8px] leading-none">▼</span>}
                           {canSort && !sortDir && (
-                            <ArrowDownUp className="h-3 w-3 opacity-30 group-hover:opacity-70 transition-opacity" />
+                            <span className="text-[8px] leading-none opacity-0 group-hover:opacity-40 transition-opacity">▼</span>
                           )}
                         </button>
                       )}
@@ -852,7 +852,7 @@ export function DataTable<T>({
                   key={row.id}
                   role="row"
                   aria-rowindex={(page - 1) * limit + rowIdx + 2}
-                  className={`${onRowClick ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-blue-50/40`}
+                  className={`${onRowClick ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-[#d6e4f0]/30`}
                   style={useVirtual ? {
                     position: 'absolute',
                     top: 0,
@@ -921,7 +921,7 @@ export function DataTable<T>({
                         role="gridcell"
                         data-row={rowIdx}
                         data-col={colIdx}
-                        className={`${isRowNum ? 'bg-[#f0f0f0] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-stone-400' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#d4e5f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#2266cc]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#2266cc]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#2266cc]' : ''} ${edgeRight ? 'border-r-2 border-r-[#2266cc]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''}`}
+                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''}`}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
@@ -1010,7 +1010,7 @@ export function DataTable<T>({
                   return (
                     <TableCell
                       key={col.id}
-                      className={`text-muted-foreground ${isRowNum ? 'bg-[#f0f0f0]' : ''}`}
+                      className={`text-muted-foreground ${isRowNum ? 'bg-[#e6e6e6]' : ''}`}
                       style={{ width: col.getSize() }}
                       onClick={() => {
                         if (!isSystem && onNewRowChange) {
@@ -1043,7 +1043,7 @@ export function DataTable<T>({
                   const currentFn = summaryFn?.[col.id] || 'sum'
                   const isRowNum = col.id === '_rowNum'
                   return (
-                    <TableCell key={col.id} className={`text-xs py-1 ${isRowNum ? 'bg-[#f0f0f0]' : ''}`}>
+                    <TableCell key={col.id} className={`text-xs py-1 ${isRowNum ? 'bg-[#e6e6e6]' : ''}`}>
                       {summary ? (
                         <div className="flex items-center gap-1.5">
                           {onSummaryFnChange && (
@@ -1095,7 +1095,7 @@ export function DataTable<T>({
       {/* Header context menu (right-click) */}
       {headerMenu && (
         <div
-          className="fixed z-50 min-w-[160px] rounded-lg border bg-popover p-1 text-sm shadow-md"
+          className="fixed z-50 min-w-[160px] border border-[#d4d4d4] bg-white p-0.5 text-[11px] shadow-sm"
           style={{ left: headerMenu.x, top: headerMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -1103,7 +1103,7 @@ export function DataTable<T>({
             <>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
                 onClick={() => {
                   onSortChange?.([{ id: headerMenu.column.id, desc: false }])
                   setHeaderMenu(null)
@@ -1114,7 +1114,7 @@ export function DataTable<T>({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
                 onClick={() => {
                   onSortChange?.([{ id: headerMenu.column.id, desc: true }])
                   setHeaderMenu(null)
@@ -1123,13 +1123,13 @@ export function DataTable<T>({
                 <ArrowDownUp className="h-3.5 w-3.5 rotate-180" />
                 내림차순 정렬
               </button>
-              <div className="my-1 h-px bg-border" />
+              <div className="my-0.5 h-px bg-[#d4d4d4]" />
             </>
           )}
           {headerMenu.column.getIsPinned() ? (
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+              className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
               onClick={() => {
                 headerMenu.column.pin(false)
                 setHeaderMenu(null)
@@ -1142,7 +1142,7 @@ export function DataTable<T>({
             <>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
                 onClick={() => {
                   headerMenu.column.pin('left')
                   setHeaderMenu(null)
@@ -1153,7 +1153,7 @@ export function DataTable<T>({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
                 onClick={() => {
                   headerMenu.column.pin('right')
                   setHeaderMenu(null)
@@ -1164,11 +1164,11 @@ export function DataTable<T>({
               </button>
             </>
           )}
-          <div className="my-1 h-px bg-border" />
+          <div className="my-0.5 h-px bg-[#d4d4d4]" />
           {headerMenu.column.getCanHide() && (
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+              className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
               onClick={() => {
                 headerMenu.column.toggleVisibility(false)
                 setHeaderMenu(null)
@@ -1180,10 +1180,10 @@ export function DataTable<T>({
           )}
           {columnManagement && onRenameColumn && headerMenu.column.id !== '_rowNum' && headerMenu.column.id !== '_select' && (
             <>
-              <div className="my-1 h-px bg-border" />
+              <div className="my-0.5 h-px bg-[#d4d4d4]" />
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px]"
                 onClick={() => {
                   const colId = headerMenu.column.id
                   const label = String(headerMenu.column.columnDef.header ?? colId)
@@ -1198,7 +1198,7 @@ export function DataTable<T>({
               {onDeleteColumn && (
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-destructive hover:bg-accent"
+                  className="flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px] text-destructive"
                   onClick={() => {
                     const colId = headerMenu.column.id
                     setHeaderMenu(null)
@@ -1434,10 +1434,8 @@ function SortableTableHead({
         <span
           {...attributes}
           {...listeners}
-          className="absolute left-0 top-0 flex h-full w-4 cursor-grab items-center justify-center opacity-0 group-hover:opacity-60 transition-opacity active:cursor-grabbing"
-        >
-          <GripVertical className="h-3 w-3" />
-        </span>
+          className="absolute left-0 top-0 flex h-full w-2 cursor-grab items-center justify-center opacity-0 active:cursor-grabbing"
+        />
       )}
       {children}
     </TableHead>
@@ -1559,16 +1557,17 @@ function StatusBar({
   if (!selection && !activeCell) return null
 
   return (
-    <div className="flex items-center justify-end gap-4 text-[11px] text-stone-500 bg-[#f0f0f0] border border-stone-300 px-3 h-6">
+    <div className="flex items-center gap-4 text-[11px] text-[#333] bg-[#e6e6e6] border border-[#d4d4d4] px-3 h-[22px]">
+      <span className="text-[#666] mr-auto">준비</span>
       {stats && (
         <>
-          <span>{stats.rows}행 x {stats.cols}열</span>
+          <span className="text-[#666]">{stats.rows}행 x {stats.cols}열</span>
           {stats.nums.length > 0 && (
             <>
-              <span className="text-stone-300">|</span>
-              <span>합계: <strong className="text-stone-700 tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-              <span>평균: <strong className="text-stone-700 tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-              <span>개수: <strong className="text-stone-700 tabular-nums">{stats.nums.length}</strong></span>
+              <span className="text-[#c0c0c0]">|</span>
+              <span>합계: <strong className="text-[#333] tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+              <span>평균: <strong className="text-[#333] tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+              <span>개수: <strong className="text-[#333] tabular-nums">{stats.nums.length}</strong></span>
             </>
           )}
         </>

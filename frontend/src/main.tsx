@@ -6,6 +6,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { OfflineBanner } from './components/common/OfflineBanner'
 import { Toaster } from './components/ui/sonner'
+import ExcelLayout from './layouts/ExcelLayout'
 import RootLayout from './layouts/RootLayout'
 import { queryClient } from './lib/queryClient'
 import AIChatPage from './pages/AIChatPage'
@@ -31,12 +32,8 @@ const router = createBrowserRouter([
     element: <LoginPage />,
   },
   {
-    element: <RootLayout />,
+    element: <ExcelLayout />,
     children: [
-      { index: true, element: <EB><AppListPage /></EB> },
-      { path: 'apps', element: <EB><AppListPage /></EB> },
-      { path: 'apps/relationships', element: <EB><RelationshipPage /></EB> },
-      { path: 'apps/new', element: <EB><AppBuilderPage /></EB> },
       {
         path: 'apps/:appId',
         element: <EB><AppViewPage /></EB>,
@@ -45,6 +42,15 @@ const router = createBrowserRouter([
           { path: 'entries/:entryId', element: <EB><EntryPage /></EB> },
         ],
       },
+    ],
+  },
+  {
+    element: <RootLayout />,
+    children: [
+      { index: true, element: <EB><AppListPage /></EB> },
+      { path: 'apps', element: <EB><AppListPage /></EB> },
+      { path: 'apps/relationships', element: <EB><RelationshipPage /></EB> },
+      { path: 'apps/new', element: <EB><AppBuilderPage /></EB> },
       { path: 'automations', element: <EB><GlobalAutomationsPage /></EB> },
       { path: 'settings', element: <EB><SettingsPage /></EB> },
       { path: 'history', element: <EB><MigrationHistoryPage /></EB> },

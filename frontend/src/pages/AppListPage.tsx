@@ -1,5 +1,5 @@
 import {
-  ChevronDown, ChevronRight, ChevronUp, Edit2,
+  ChevronDown, ChevronRight, Edit2,
   Layers, MoreHorizontal, Plus, Search,
   Sparkles, Trash2,
 } from 'lucide-react'
@@ -7,14 +7,12 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
-import EmptyState from '@/components/common/EmptyState'
 import ErrorState from '@/components/common/ErrorState'
 import LoadingState from '@/components/common/LoadingState'
-import PageHeader from '@/components/common/PageHeader'
 import TemplateGallery from '@/components/works/TemplateGallery'
 import { AppIcon } from '@/components/works/AppCard'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+// Card removed — using list rows instead
 import {
   Dialog,
   DialogContent,
@@ -159,151 +157,148 @@ export default function AppListPage() {
   }
 
   return (
-    <div>
-      <PageHeader
-        title={TERM.apps}
-        description="앱을 만들고 시트로 데이터를 관리하세요"
-        actions={
-          <>
-            <Button
-              variant={showTemplates ? 'secondary' : 'outline'}
-              onClick={() => setShowTemplates(!showTemplates)}
-              className="gap-1"
-            >
-              템플릿
-              {showTemplates
-                ? <ChevronUp className="h-3.5 w-3.5" />
-                : <ChevronDown className="h-3.5 w-3.5" />}
-            </Button>
-            <Button onClick={openCreateApp}>
-              <Plus className="mr-1 h-4 w-4" />
-              {TERM.newApp}
-            </Button>
-          </>
-        }
-      />
-
-      {/* Template gallery */}
-      {showTemplates && (
-        <div className="mb-6 animate-slide-down">
-          <h3 className="mb-3 text-sm font-medium text-muted-foreground">
-            템플릿으로 빠르게 시작하세요
-          </h3>
-          <TemplateGallery />
-        </div>
-      )}
-
-      {isLoading && <LoadingState variant="card-grid" />}
-      {isError && <ErrorState error={error} onRetry={() => refetch()} />}
-
-      {workbooks && workbooks.length === 0 && !showTemplates && (
-        <div className="mx-auto max-w-lg mt-8 animate-fade-in-up">
-          <EmptyState
-            title={TERM.noApps}
-            description={TERM.noAppsDesc}
-            icon={<Layers className="h-10 w-10" />}
-            action={
-              <Button onClick={openCreateApp}>{TERM.newApp}</Button>
-            }
-          />
-          {aiAvailable && (
-            <div className="mt-6 flex items-center gap-4 rounded-lg border p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                <Sparkles className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium">AI로 첫 앱 만들기</h4>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  어떤 데이터를 관리하고 싶은지 설명하면 AI가 앱 구조를 제안합니다
-                </p>
-              </div>
-              <Link to="/apps/new">
-                <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  시작하기
-                </Button>
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-
-      {hasApps && (
-        <>
-          {/* Search bar */}
-          <div className="relative mb-5 max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="앱 검색…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8"
-            />
+    <>
+    <div className="flex h-[calc(100vh-60px)]">
+      {/* Left panel — Excel green sidebar */}
+      <div className="w-64 bg-[#217346] flex flex-col shrink-0">
+        <div className="px-6 pt-8 pb-6">
+          <div className="flex items-center gap-2 text-white">
+            <span className="flex h-7 w-7 items-center justify-center rounded bg-white/20 text-[11px] font-bold text-white">T</span>
+            <span className="text-lg font-semibold tracking-tight">Topworks</span>
           </div>
+        </div>
+        <nav className="flex-1 px-3 space-y-0.5">
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded px-3 py-2 text-sm text-white/90 hover:bg-white/10 transition-colors"
+            onClick={openCreateApp}
+          >
+            <Plus className="h-4 w-4" />
+            새 앱
+          </button>
+          <button
+            type="button"
+            className={`flex w-full items-center gap-3 rounded px-3 py-2 text-sm transition-colors ${
+              showTemplates ? 'bg-white/15 text-white' : 'text-white/90 hover:bg-white/10'
+            }`}
+            onClick={() => setShowTemplates(!showTemplates)}
+          >
+            <Sparkles className="h-4 w-4" />
+            템플릿
+          </button>
+        </nav>
+      </div>
 
-          {filteredApps.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              '{search}'에 해당하는 앱이 없습니다
-            </p>
-          ) : (
-            <div className="space-y-6">
-              {/* Grouped apps (워크북) */}
-              {groupLabels.map((label) => {
-                const apps = grouped.get(label) ?? []
-                const isOpen = isSearching || !collapsed.has(label)
-                // 폴더에 앱이 1개뿐이고 이름이 같으면 그룹 헤더 생략
-                const singleMatch = apps.length === 1 && apps[0].label === label
-                return (
-                  <div key={label}>
-                    {!singleMatch && (
-                      <button
-                        onClick={() => toggleCollapse(label)}
-                        className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors"
-                      >
-                        {isOpen
-                          ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                        {label}
-                        <span className="text-xs font-normal text-muted-foreground">({apps.length})</span>
-                      </button>
-                    )}
-                    {(singleMatch || isOpen) && (
-                      <AppGrid
-                        apps={apps}
-                        sheetCounts={sheetCounts}
-                        canManage={canManage}
-                        onEdit={openEditApp}
-                        onDelete={(id) => setDeleteConfirm(id)}
-                        onClick={handleAppClick}
-                      />
-                    )}
-                  </div>
-                )
-              })}
+      {/* Right panel — content */}
+      <div className="flex-1 bg-[#f3f3f3] overflow-y-auto">
+        {/* Template gallery */}
+        {showTemplates && (
+          <div className="p-6 border-b border-[#d4d4d4] bg-white">
+            <h3 className="mb-3 text-sm font-medium text-[#666]">
+              템플릿으로 빠르게 시작하세요
+            </h3>
+            <TemplateGallery />
+          </div>
+        )}
 
-              {/* Ungrouped apps */}
-              {ungrouped.length > 0 && (
-                <div>
-                  {groupLabels.length > 0 && (
-                    <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-                      <span className="font-medium">{TERM.uncategorized}</span>
-                      <span className="text-xs">({ungrouped.length})</span>
-                    </div>
-                  )}
-                  <AppGrid
-                    apps={ungrouped}
-                    sheetCounts={sheetCounts}
-                    canManage={canManage}
-                    onEdit={openEditApp}
-                    onDelete={(id) => setDeleteConfirm(id)}
-                    onClick={handleAppClick}
-                  />
-                </div>
-              )}
+        {isLoading && <LoadingState variant="card-grid" />}
+        {isError && <ErrorState error={error} onRetry={() => refetch()} />}
+
+        {workbooks && workbooks.length === 0 && !showTemplates && (
+          <div className="flex flex-col items-center justify-center h-full text-center px-6">
+            <Layers className="h-12 w-12 text-[#c0c0c0] mb-4" />
+            <h2 className="text-lg font-medium text-[#333] mb-1">{TERM.noApps}</h2>
+            <p className="text-sm text-[#666] mb-4">{TERM.noAppsDesc}</p>
+            <Button onClick={openCreateApp} className="bg-[#217346] hover:bg-[#1a5c38]">{TERM.newApp}</Button>
+            {aiAvailable && (
+              <Link to="/apps/new" className="mt-4 text-sm text-[#217346] hover:underline flex items-center gap-1">
+                <Sparkles className="h-3.5 w-3.5" />
+                AI로 첫 앱 만들기
+              </Link>
+            )}
+          </div>
+        )}
+
+        {hasApps && (
+          <div className="p-6">
+            <h2 className="text-xl font-semibold text-[#333] mb-1">최근</h2>
+            <p className="text-sm text-[#666] mb-4">최근 사용한 앱</p>
+
+            {/* Search bar */}
+            <div className="relative mb-4 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#999]" />
+              <Input
+                placeholder="앱 검색…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 h-8 bg-white border-[#d4d4d4] text-sm"
+              />
             </div>
-          )}
-        </>
-      )}
+
+            {filteredApps.length === 0 ? (
+              <p className="py-8 text-center text-sm text-[#666]">
+                '{search}'에 해당하는 앱이 없습니다
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {/* Grouped apps (워크북) */}
+                {groupLabels.map((label) => {
+                  const apps = grouped.get(label) ?? []
+                  const isOpen = isSearching || !collapsed.has(label)
+                  const singleMatch = apps.length === 1 && apps[0].label === label
+                  return (
+                    <div key={label}>
+                      {!singleMatch && (
+                        <button
+                          onClick={() => toggleCollapse(label)}
+                          className="mb-2 flex items-center gap-2 text-xs font-medium text-[#666] hover:text-[#333] transition-colors"
+                        >
+                          {isOpen
+                            ? <ChevronDown className="h-3.5 w-3.5" />
+                            : <ChevronRight className="h-3.5 w-3.5" />}
+                          {label}
+                          <span className="text-[10px] font-normal text-[#999]">({apps.length})</span>
+                        </button>
+                      )}
+                      {(singleMatch || isOpen) && (
+                        <AppList
+                          apps={apps}
+                          sheetCounts={sheetCounts}
+                          canManage={canManage}
+                          onEdit={openEditApp}
+                          onDelete={(id) => setDeleteConfirm(id)}
+                          onClick={handleAppClick}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+
+                {/* Ungrouped apps */}
+                {ungrouped.length > 0 && (
+                  <div>
+                    {groupLabels.length > 0 && (
+                      <div className="mb-2 flex items-center gap-2 text-xs text-[#666]">
+                        <span className="font-medium">{TERM.uncategorized}</span>
+                        <span className="text-[10px]">({ungrouped.length})</span>
+                      </div>
+                    )}
+                    <AppList
+                      apps={ungrouped}
+                      sheetCounts={sheetCounts}
+                      canManage={canManage}
+                      onEdit={openEditApp}
+                      onDelete={(id) => setDeleteConfirm(id)}
+                      onClick={handleAppClick}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
 
       {/* App create/edit dialog */}
       <Dialog open={appDialogOpen} onOpenChange={setAppDialogOpen}>
@@ -341,12 +336,12 @@ export default function AppListPage() {
         onConfirm={handleAppDelete}
         loading={deleteApp.isPending}
       />
-    </div>
+    </>
   )
 }
 
-// -- App Grid --
-function AppGrid({
+// -- App List (Excel Start Screen style) --
+function AppList({
   apps,
   sheetCounts,
   canManage,
@@ -362,87 +357,52 @@ function AppGrid({
   onClick: (app: Workbook) => void
 }) {
   return (
-    <div className="grid justify-center gap-4 grid-cols-[repeat(auto-fill,minmax(280px,340px))]">
-      {apps.map((app, i) => (
-        <div key={app.id} className={`animate-scale-in stagger-${Math.min(i + 1, 12)}`}>
-          <AppCardNew
-            app={app}
-            sheetCount={sheetCounts?.[app.id] ?? 0}
-            canManage={canManage}
-            onEdit={() => onEdit(app)}
-            onDelete={() => onDelete(app.id)}
+    <div className="space-y-0">
+      {apps.map((app) => {
+        const updatedAt = app.updated_at ? new Date(app.updated_at) : null
+        const timeSince = updatedAt ? formatTimeSince(updatedAt) : null
+        const sheets = sheetCounts?.[app.id] ?? 0
+
+        return (
+          <div
+            key={app.id}
+            className="group flex items-center gap-3 px-3 py-2.5 bg-white border-b border-[#e8e8e8] cursor-pointer hover:bg-[#e8f0fe] transition-colors"
             onClick={() => onClick(app)}
-          />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// -- App Card (shows app with sheet count) --
-function AppCardNew({
-  app,
-  sheetCount,
-  canManage,
-  onEdit,
-  onDelete,
-  onClick,
-}: {
-  app: Workbook
-  sheetCount: number
-  canManage: boolean
-  onEdit: () => void
-  onDelete: () => void
-  onClick: () => void
-}) {
-  const updatedAt = app.updated_at ? new Date(app.updated_at) : null
-  const timeSince = updatedAt ? formatTimeSince(updatedAt) : null
-
-  return (
-    <Card
-      className="group relative flex h-full cursor-pointer flex-col p-4 shadow-premium transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-premium-hover"
-      onClick={onClick}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-muted-foreground transition-colors duration-300 group-hover:bg-foreground group-hover:text-white">
-            <AppIcon name={app.icon} className="h-4.5 w-4.5" />
-          </div>
-          <h3 className="font-semibold tracking-tight text-foreground">{app.label}</h3>
-        </div>
-      </div>
-      <div className="mt-3.5 flex items-center gap-3 text-xs text-muted-foreground/80">
-        <span>{sheetCount}개 {TERM.collection}</span>
-        {timeSince && (
-          <>
-            <span className="h-0.5 w-0.5 rounded-full bg-current opacity-40" />
-            <span>최근 {timeSince}</span>
-          </>
-        )}
-      </div>
-
-      {/* Context menu */}
-      {canManage && (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="absolute right-2 top-2 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
-            onClick={(e) => e.stopPropagation()}
           >
-            <MoreHorizontal className="h-4 w-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit() }}>
-              <Edit2 className="mr-2 h-3.5 w-3.5" />
-              이름 변경
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete() }} className="text-destructive">
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              삭제
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </Card>
+            <div className="flex h-8 w-8 items-center justify-center rounded bg-[#217346] text-white shrink-0">
+              <AppIcon name={app.icon} className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-[#333] truncate">{app.label}</div>
+              <div className="text-[11px] text-[#999]">
+                {sheets}개 시트
+                {timeSince && <> &middot; {timeSince}</>}
+              </div>
+            </div>
+            {canManage && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="rounded p-1 text-[#999] opacity-0 group-hover:opacity-100 hover:bg-[#d4d4d4] transition-opacity"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(app) }}>
+                    <Edit2 className="mr-2 h-3.5 w-3.5" />
+                    이름 변경
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(app.id) }} className="text-destructive">
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    삭제
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

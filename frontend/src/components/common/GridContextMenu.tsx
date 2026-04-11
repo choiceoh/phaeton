@@ -47,7 +47,7 @@ function MenuItem({
   return (
     <button
       type="button"
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent text-left ${destructive ? 'text-destructive' : ''}`}
+      className={`flex w-full items-center gap-2 px-2 py-1 hover:bg-[#cce4f7] text-[11px] text-left ${destructive ? 'text-destructive' : ''}`}
       onClick={onClick}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -58,7 +58,7 @@ function MenuItem({
 }
 
 function Separator() {
-  return <div className="my-1 h-px bg-border" />
+  return <div className="my-0.5 h-px bg-[#d4d4d4]" />
 }
 
 export default function GridContextMenu({
@@ -98,7 +98,7 @@ export default function GridContextMenu({
 
   return (
     <div
-      className="fixed z-50 min-w-[180px] rounded-lg border bg-popover p-1 text-sm shadow-md"
+      className="fixed z-50 min-w-[160px] border border-[#d4d4d4] bg-white p-0.5 text-[11px] shadow-sm"
       style={{ left: position.x, top: position.y }}
       onClick={(e) => e.stopPropagation()}
     >

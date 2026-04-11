@@ -8,7 +8,7 @@
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Calibri', 'Segoe UI', 'Geist Variable', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,8 +50,8 @@
 }
 
 :root {
-    --background: oklch(0.993 0.002 80);
-    --foreground: oklch(0.16 0.01 260);
+    --background: #ffffff;
+    --foreground: #333333;
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.16 0.01 260);
     --popover: oklch(1 0 0);
@@ -60,13 +60,13 @@
     --primary-foreground: oklch(0.985 0 0);
     --secondary: oklch(0.965 0.003 80);
     --secondary-foreground: oklch(0.22 0.01 260);
-    --muted: oklch(0.945 0.004 80);
-    --muted-foreground: oklch(0.52 0.01 260);
-    --accent: oklch(0.945 0.004 80);
-    --accent-foreground: oklch(0.22 0.01 260);
+    --muted: #f3f3f3;
+    --muted-foreground: #666666;
+    --accent: #f3f3f3;
+    --accent-foreground: #333333;
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.915 0.005 80);
-    --input: oklch(0.915 0.005 80);
+    --border: #d4d4d4;
+    --input: #d4d4d4;
     --ring: oklch(0.65 0.01 260);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
@@ -130,8 +130,8 @@
     }
   html {
     @apply font-sans;
-    font-size: 17px;
-    letter-spacing: -0.011em;
+    font-size: 15px;
+    letter-spacing: -0.005em;
     }
 
   /* Ensure all interactive elements have visible focus indicators */
@@ -140,20 +140,24 @@
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background rounded-sm;
   }
 
-  /* Premium scrollbar */
+  /* Excel-like scrollbar */
   ::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 12px;
+    height: 12px;
   }
   ::-webkit-scrollbar-track {
-    background: transparent;
+    background: #f0f0f0;
   }
   ::-webkit-scrollbar-thumb {
-    background: oklch(0.82 0.005 80);
-    border-radius: 999px;
+    background: #c1c1c1;
+    border: 2px solid #f0f0f0;
+    border-radius: 6px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.65 0.01 260);
+    background: #a8a8a8;
+  }
+  ::-webkit-scrollbar-corner {
+    background: #f0f0f0;
   }
 
   /* Premium heading typography */
@@ -506,7 +510,7 @@
   content: '';
   position: absolute;
   inset: -1px;
-  border: 2px solid #1a73e8;
+  border: 2px solid #005a9e;
   pointer-events: none;
   z-index: 5;
 }
@@ -518,27 +522,27 @@
   bottom: -3px;
   width: 6px;
   height: 6px;
-  background: #1a73e8;
+  background: #005a9e;
   z-index: 10;
   cursor: crosshair;
 }
 
 /* Fill preview range (dotted border during drag) */
-.fill-preview-top { border-top: 2px dashed #1a73e8 !important; }
-.fill-preview-bottom { border-bottom: 2px dashed #1a73e8 !important; }
-.fill-preview-left { border-left: 2px dashed #1a73e8 !important; }
-.fill-preview-right { border-right: 2px dashed #1a73e8 !important; }
-.fill-preview-bg { background: #e8f0fe !important; }
+.fill-preview-top { border-top: 2px dashed #005a9e !important; }
+.fill-preview-bottom { border-bottom: 2px dashed #005a9e !important; }
+.fill-preview-left { border-left: 2px dashed #005a9e !important; }
+.fill-preview-right { border-right: 2px dashed #005a9e !important; }
+.fill-preview-bg { background: #cce4f7 !important; }
 
 /* Drag move/copy ghost outline */
 .drag-ghost-move-top { border-top: 2px dashed #666 !important; }
 .drag-ghost-move-bottom { border-bottom: 2px dashed #666 !important; }
 .drag-ghost-move-left { border-left: 2px dashed #666 !important; }
 .drag-ghost-move-right { border-right: 2px dashed #666 !important; }
-.drag-ghost-copy-top { border-top: 2px dashed #1a73e8 !important; }
-.drag-ghost-copy-bottom { border-bottom: 2px dashed #1a73e8 !important; }
-.drag-ghost-copy-left { border-left: 2px dashed #1a73e8 !important; }
-.drag-ghost-copy-right { border-right: 2px dashed #1a73e8 !important; }
+.drag-ghost-copy-top { border-top: 2px dashed #005a9e !important; }
+.drag-ghost-copy-bottom { border-bottom: 2px dashed #005a9e !important; }
+.drag-ghost-copy-left { border-left: 2px dashed #005a9e !important; }
+.drag-ghost-copy-right { border-right: 2px dashed #005a9e !important; }
 .drag-ghost-bg { background: rgba(0, 0, 0, 0.04) !important; }
 
 /* Hide scrollbar while allowing scroll (for mobile tabs) */
