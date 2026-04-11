@@ -9,6 +9,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/common/DataTable'
+import { useFormulaEngine } from '@/hooks/useFormulaEngine'
 import { useInlineEditing } from '@/hooks/useInlineEditing'
 import { isLayoutType, isComputedType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
@@ -138,6 +139,9 @@ export default function SpreadsheetView({
     [collection],
   )
 
+  // Formula engine for instant formula recomputation after cell edits
+  const { recomputeRow } = useFormulaEngine(editableFields)
+
   // System columns that should never be editable
   const readOnlyColumns = useMemo(
     () => new Set(['_select', '_actions', 'created_at', '_status']),
@@ -192,7 +196,14 @@ export default function SpreadsheetView({
     columnIds: visibleColumnIds,
     onCellSave: async (rowId, fieldSlug, value) => {
       try {
-        await updateEntry({ id: rowId, body: { [fieldSlug]: value } })
+        // Recompute formula fields locally for instant feedback.
+        // Formula values are included in the optimistic update body so they
+        // appear immediately in the React Query cache. The server ignores
+        // formula keys (no DB column).
+        const row = data.find((r) => String(r.id) === rowId)
+        const patchedRow = row ? { ...row, [fieldSlug]: value } : undefined
+        const formulaOverrides = patchedRow ? recomputeRow(patchedRow, fieldSlug) : {}
+        await updateEntry({ id: rowId, body: { [fieldSlug]: value, ...formulaOverrides } })
       } catch (err) {
         toast.error('저장 ��패')
         throw err
@@ -200,7 +211,10 @@ export default function SpreadsheetView({
     },
     onCellClear: async (rowId, fieldSlug) => {
       try {
-        await updateEntry({ id: rowId, body: { [fieldSlug]: null } })
+        const row = data.find((r) => String(r.id) === rowId)
+        const patchedRow = row ? { ...row, [fieldSlug]: null } : undefined
+        const formulaOverrides = patchedRow ? recomputeRow(patchedRow, fieldSlug) : {}
+        await updateEntry({ id: rowId, body: { [fieldSlug]: null, ...formulaOverrides } })
       } catch (err) {
         toast.error('삭제 실패')
         throw err
@@ -226,7 +240,14 @@ export default function SpreadsheetView({
           fields[colId] = coerceValue(matrix[r][c], field)
         }
         if (Object.keys(fields).length > 0) {
-          updates.push({ id: String(dataRow.id), fields })
+          // Recompute formula fields for each pasted row
+          const patchedRow = { ...dataRow, ...fields }
+          const changedSlugs = Object.keys(fields)
+          let formulaOverrides: Record<string, unknown> = {}
+          for (const slug of changedSlugs) {
+            formulaOverrides = { ...formulaOverrides, ...recomputeRow(patchedRow, slug) }
+          }
+          updates.push({ id: String(dataRow.id), fields: { ...fields, ...formulaOverrides } })
         }
       }
       if (updates.length > 0) {
@@ -234,7 +255,7 @@ export default function SpreadsheetView({
         toast.success(`${updates.length}행 붙여넣기 완료`)
       }
     },
-    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry, recomputeRow],
   )
 
   return (
