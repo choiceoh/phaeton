@@ -11,7 +11,6 @@
 
 - `docs/08-PHAETON-V2-DESIGN.md` — 전체 설계, 아키텍처, 데이터 모델
 - `docs/09-DATA-ENGINE-GUIDE.md` — Data Engine CRUD/쿼리 구현 가이드
-- `docs/10-COMPETITIVE-ANALYSIS.md` — 경쟁 분석 및 구현 로드맵 (다우오피스 Works + Airtable/NocoDB/AppSheet/Monday/ClickUp)
 
 ### 참고 문서
 
@@ -71,10 +70,10 @@ frontend/
                                EntryHistory, FieldPalette, FieldPreview, FieldProperties,
                                FilterBuilder, FilterChips, FormPreview, FormulaEditor,
                                IconPicker, PreviewDialog, ProcessFlowDiagram,
-                               RelationshipGraph, SchedulePicker, SetupChecklist,
+                               RelationshipGraph, SchedulePicker,
                                SortPanel, SpreadsheetInput, TemplateGallery
-    components/works/views/    CalendarDayView, CalendarView, CalendarWeekView, ChartPanel,
-                               FormView, GalleryView, GanttView, KanbanView, ViewGuide
+    components/works/views/    CalendarDayView, CalendarView, CalendarWeekView,
+                               FormView, GanttView, KanbanView, ViewGuide
     components/common/         AIChatPanel, CoachMark, CommandPalette, ConfirmDialog, DataTable,
                                EmptyState, ErrorBoundary, ErrorState, Form,
                                HotkeyHelpDialog, LoadingState, NotificationBell, OfflineBanner,
@@ -117,7 +116,7 @@ frontend/
 
 ### 이면: 파워유저도 한계 없이
 - **점진적 복잡도 노출** — 기본은 단순하게, 고급 기능은 필요할 때만 드러냄. 초보자를 압도하지 않되, 꺼내 쓸 수 있는 깊이는 충분히
-- **프로급 기능 완비** — 고급 필터·정렬·그룹핑, 다중 뷰(리스트·캘린더·칸반·갤러리), 조건부 서식, 수식 필드, 관계형 연결 등 전문 도구 수준의 기능을 빠짐없이 제공
+- **프로급 기능 완비** — 고급 필터·정렬·그룹핑, 다중 뷰(리스트·캘린더·칸반·간트), 조건부 서식, 수식 필드, 관계형 연결 등 전문 도구 수준의 기능을 빠짐없이 제공
 - **자동화와 확장** — 반복 업무는 자동화 규칙으로, 외부 연동은 웹훅/API로. 사용자가 성장할수록 플랫폼도 함께 확장
 - **대량 데이터 대응** — 수만 건 데이터도 느려지지 않는 성능. 페이지네이션, 가상 스크롤, 서버사이드 연산으로 규모에 관계없이 쾌적
 
@@ -154,8 +153,9 @@ frontend/
 
 ```bash
 make db          # PostgreSQL 시작
-make dev-api     # Go 서버 (:8080)
-make dev-ui      # Vite dev (:5173, /api → :8080 프록시)
+make dev         # Go 서버 + Vite dev 병렬 실행 (:8080 API, :5173 UI)
+make dev-api     # Go 서버만 (:8080)
+make dev-ui      # Vite dev만 (:5173)
 make build       # 프론트 빌드 → Go 서버 static/에 출력
 ```
 

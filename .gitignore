@@ -20,3 +20,4 @@ backend/cmd/server/static/assets/
 .DS_Store
 *.swp
 node_modules/
+.claude/worktrees
