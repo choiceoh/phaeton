@@ -71,14 +71,29 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
-import { copyToClipboard } from '@/lib/clipboard'
+import type { CellPosition } from '@/hooks/useGridNavigation'
+import { isCellInRange, normalize, useGridNavigation } from '@/hooks/useGridNavigation'
+import type { CellSaveState } from '@/hooks/useInlineEditing'
+import { copyToClipboard, pasteFromClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
 
 import { Checkbox } from '@/components/ui/checkbox'
 
 import EmptyState from './EmptyState'
-import type { EntryRow } from '@/lib/types'
+import GridCell from './GridCell'
+import GridContextMenu from './GridContextMenu'
+import type { EntryRow, Field } from '@/lib/types'
+
+/** Convert a 0-based column index to Excel-style letter (0→A, 25→Z, 26→AA). */
+function colIndexToLetter(idx: number): string {
+  let result = ''
+  let n = idx
+  while (n >= 0) {
+    result = String.fromCharCode(65 + (n % 26)) + result
+    n = Math.floor(n / 26) - 1
+  }
+  return result
+}
 
 interface Props<T> {
   columns: ColumnDef<T, unknown>[]
@@ -100,6 +115,8 @@ interface Props<T> {
   /** Called when user changes the aggregate function for a column. */
   onSummaryFnChange?: (columnId: string, fn: string) => void
   toolbar?: React.ReactNode
+  /** Extra content rendered between toolbar and column toggle (e.g. view tabs). */
+  toolbarRight?: React.ReactNode
   initialColumnVisibility?: VisibilityState
   /** Called when column visibility changes */
   onColumnVisibilityChange?: (visibility: VisibilityState) => void
@@ -121,6 +138,54 @@ interface Props<T> {
   totalFiltered?: number
   /** Called when user clicks "select all filtered". */
   onSelectAllFiltered?: () => void
+
+  // --- Inline editing props (optional, used by SpreadsheetView) ---
+  /** Enable inline cell editing mode. */
+  editable?: boolean
+  /** Collection fields metadata for cell editors. */
+  fields?: Field[]
+  /** Currently editing cell position. */
+  editingCell?: CellPosition | null
+  /** Current edit value. */
+  editValue?: unknown
+  /** Called when edit value changes. */
+  onEditValueChange?: (v: unknown) => void
+  /** Called to start editing a cell (double-click or key). */
+  onStartEditing?: (row: number, col: number, initialChar?: string) => void
+  /** Called to commit the current edit. */
+  onCommitEdit?: () => void
+  /** Called to cancel the current edit. */
+  onCancelEdit?: () => void
+  /** Save state per cell ("rowId:colSlug" → 'saving'|'saved'). */
+  cellSaveState?: Map<string, CellSaveState>
+  /** Whether a cell is currently being edited (suppresses navigation). */
+  isEditingCell?: boolean
+  /** Keyboard handler for editing mode. */
+  onEditKeyDown?: (e: React.KeyboardEvent) => void
+  /** Get field metadata for a column index. */
+  getFieldForCol?: (colIdx: number) => Field | null
+  /** Called when Delete/Backspace clears a cell. */
+  onClearCell?: (row: number, col: number) => void
+  /** Called when pasting data from clipboard. */
+  onPaste?: (startRow: number, startCol: number, matrix: string[][]) => void
+  /** Called when Ctrl+X cuts the selection (copy + clear). */
+  onCut?: (startRow: number, startCol: number, endRow: number, endCol: number) => void
+  /** Called when Ctrl+D fills selection down from first row. */
+  onFillDown?: (startRow: number, startCol: number, endRow: number, endCol: number) => void
+  /** Called when Ctrl+R fills selection right from first column. */
+  onFillRight?: (startRow: number, startCol: number, endRow: number, endCol: number) => void
+  /** Cell context menu actions. */
+  onDeleteRow?: (rowId: string) => void
+  /** Show the bottom empty row for new entries. */
+  showNewRow?: boolean
+  /** Current values in the new row. */
+  newRowValues?: Record<string, unknown>
+  /** Called when a field in the new row changes. */
+  onNewRowChange?: (fieldSlug: string, value: unknown) => void
+  /** Called to commit the new row. */
+  onNewRowCommit?: () => void
+  /** Called when the active cell changes (for format toolbar). */
+  onActiveCellChange?: (cell: CellPosition | null) => void
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -144,6 +209,7 @@ export function DataTable<T>({
   summaryFn,
   onSummaryFnChange,
   toolbar,
+  toolbarRight,
   initialColumnVisibility,
   onColumnVisibilityChange: onColumnVisibilityChangeProp,
   initialColumnPinning,
@@ -155,12 +221,42 @@ export function DataTable<T>({
   onSelectionChange,
   totalFiltered,
   onSelectAllFiltered,
+  // Inline editing props
+  editable,
+  fields: editableFields,
+  editingCell,
+  editValue,
+  onEditValueChange,
+  onStartEditing,
+  onCommitEdit,
+  onCancelEdit,
+  cellSaveState,
+  isEditingCell,
+  onEditKeyDown,
+  getFieldForCol,
+  onClearCell,
+  onPaste,
+  onCut,
+  onFillDown,
+  onFillRight,
+  onDeleteRow,
+  showNewRow,
+  newRowValues,
+  onNewRowChange,
+  onNewRowCommit,
+  onActiveCellChange,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
-  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>(
-    initialColumnPinning ?? { left: [], right: [] },
-  )
+  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>(() => {
+    const base = initialColumnPinning ?? { left: [], right: [] }
+    // Ensure _rowNum is always pinned left.
+    const left = base.left ?? []
+    if (!left.includes('_rowNum')) {
+      return { ...base, left: ['_rowNum', ...left] }
+    }
+    return base
+  })
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({})
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([])
 
@@ -184,52 +280,76 @@ export function DataTable<T>({
     return () => { el.removeEventListener('scroll', check); ro.disconnect() }
   }, [data, columnVisibility])
 
-  // Prepend checkbox column when selectable.
+  // Prepend row number column + optional checkbox column.
   const augmentedColumns = useMemo(() => {
-    if (!selectable) return columns
-    const checkCol: ColumnDef<T, unknown> = {
-      id: '_select',
+    const cols: ColumnDef<T, unknown>[] = []
+
+    // Row number column — always first, always pinned left.
+    const rowNumCol: ColumnDef<T, unknown> = {
+      id: '_rowNum',
       enableSorting: false,
       enableHiding: false,
+      enableResizing: false,
       size: 40,
-      header: () => {
-        const allIds = data.map((d) => String((d as EntryRow).id))
-        const allSelected = allIds.length > 0 && allIds.every((id) => selectedRowIds?.has(id))
-        return (
-          <Checkbox
-            checked={allSelected}
-            onCheckedChange={(checked) => {
-              if (checked) {
-                const next = new Set(selectedRowIds)
-                allIds.forEach((id) => next.add(id))
-                onSelectionChange?.(next)
-              } else {
-                const next = new Set(selectedRowIds)
-                allIds.forEach((id) => next.delete(id))
-                onSelectionChange?.(next)
-              }
-            }}
-          />
-        )
-      },
+      header: () => null,
       cell: ({ row }) => {
-        const id = String((row.original as EntryRow).id)
+        const idx = data.indexOf(row.original)
+        const num = (page - 1) * limit + idx + 1
         return (
-          <Checkbox
-            checked={selectedRowIds?.has(id) ?? false}
-            onCheckedChange={(checked) => {
-              const next = new Set(selectedRowIds)
-              if (checked) next.add(id)
-              else next.delete(id)
-              onSelectionChange?.(next)
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
+          <span className="text-[11px] text-stone-400 select-none text-center block tabular-nums">{num}</span>
         )
       },
     }
-    return [checkCol, ...columns]
-  }, [selectable, columns, data, selectedRowIds, onSelectionChange])
+    cols.push(rowNumCol)
+
+    if (selectable) {
+      const checkCol: ColumnDef<T, unknown> = {
+        id: '_select',
+        enableSorting: false,
+        enableHiding: false,
+        size: 32,
+        header: () => {
+          const allIds = data.map((d) => String((d as EntryRow).id))
+          const allSelected = allIds.length > 0 && allIds.every((id) => selectedRowIds?.has(id))
+          return (
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  const next = new Set(selectedRowIds)
+                  allIds.forEach((id) => next.add(id))
+                  onSelectionChange?.(next)
+                } else {
+                  const next = new Set(selectedRowIds)
+                  allIds.forEach((id) => next.delete(id))
+                  onSelectionChange?.(next)
+                }
+              }}
+            />
+          )
+        },
+        cell: ({ row }) => {
+          const id = String((row.original as EntryRow).id)
+          return (
+            <Checkbox
+              checked={selectedRowIds?.has(id) ?? false}
+              onCheckedChange={(checked) => {
+                const next = new Set(selectedRowIds)
+                if (checked) next.add(id)
+                else next.delete(id)
+                onSelectionChange?.(next)
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          )
+        },
+      }
+      cols.push(checkCol)
+    }
+
+    cols.push(...columns)
+    return cols
+  }, [selectable, columns, data, page, limit, selectedRowIds, onSelectionChange])
 
   const table = useReactTable({
     data,
@@ -268,22 +388,49 @@ export function DataTable<T>({
   const visibleCols = table.getVisibleFlatColumns()
   const colIds = useMemo(() => visibleCols.map((c) => c.id), [visibleCols])
 
-  // Skip indices for action columns during tab navigation.
+  // Skip indices for non-data columns during tab navigation.
   const skipColIndices = useMemo(() => {
     const skip: number[] = []
     colIds.forEach((id, i) => {
-      if (id === '_actions') skip.push(i)
+      if (id === '_actions' || id === '_rowNum' || id === '_select') skip.push(i)
     })
     return skip
   }, [colIds])
+
+  const ROW_HEIGHT = 28
+
+  const getGridData = useCallback(
+    (row: number, col: number) => {
+      const colId = colIds[col]
+      return (data[row] as Record<string, unknown> | undefined)?.[colId]
+    },
+    [data, colIds],
+  )
+
+  const gridPageSize = useMemo(() => {
+    const el = scrollRef.current
+    if (!el) return 20
+    return Math.max(1, Math.floor(el.clientHeight / ROW_HEIGHT) - 1)
+  }, // eslint-disable-next-line react-hooks/exhaustive-deps
+  [scrollRef.current, visibleRows.length])
 
   const grid = useGridNavigation({
     rowCount: visibleRows.length,
     colCount: colIds.length,
     skipColumns: skipColIndices,
+    isEditing: isEditingCell,
+    onStartEditing: editable ? onStartEditing : undefined,
+    onClearCell: editable ? onClearCell : undefined,
+    getData: editable ? getGridData : undefined,
+    pageSize: gridPageSize,
   })
 
-  // Clipboard: copy.
+  // Notify parent about active cell changes (for format toolbar).
+  useEffect(() => {
+    onActiveCellChange?.(grid.activeCell)
+  }, [grid.activeCell, onActiveCellChange])
+
+  // Clipboard: copy & paste.
   const handleClipboard = useCallback(
     async (e: React.KeyboardEvent) => {
       if (!grid.activeCell) return
@@ -299,9 +446,73 @@ export function DataTable<T>({
         e.preventDefault()
         await copyToClipboard(data as EntryRow[], colIds, range)
       }
+
+      if (isCtrl && e.key === 'v' && editable && onPaste) {
+        e.preventDefault()
+        try {
+          const matrix = await pasteFromClipboard()
+          if (matrix.length > 0) {
+            onPaste(grid.activeCell.row, grid.activeCell.col, matrix)
+          }
+        } catch {
+          // Clipboard read may fail if permission denied
+        }
+      }
+
+      // Ctrl+X: cut (copy + clear)
+      if (isCtrl && e.key === 'x' && editable && onCut) {
+        const range = grid.selection ?? {
+          startRow: grid.activeCell.row,
+          startCol: grid.activeCell.col,
+          endRow: grid.activeCell.row,
+          endCol: grid.activeCell.col,
+        }
+        e.preventDefault()
+        await copyToClipboard(data as EntryRow[], colIds, range)
+        const n = normalize(range)
+        onCut(n.startRow, n.startCol, n.endRow, n.endCol)
+      }
+
+      // Ctrl+D: fill down
+      if (isCtrl && e.key === 'd' && editable && onFillDown) {
+        e.preventDefault()
+        if (grid.selection) {
+          const n = normalize(grid.selection)
+          if (n.endRow > n.startRow) onFillDown(n.startRow, n.startCol, n.endRow, n.endCol)
+        } else if (grid.activeCell.row > 0) {
+          // No selection: copy cell above into active cell
+          onFillDown(grid.activeCell.row - 1, grid.activeCell.col, grid.activeCell.row, grid.activeCell.col)
+        }
+      }
+
+      // Ctrl+R: fill right
+      if (isCtrl && e.key === 'r' && editable && onFillRight) {
+        e.preventDefault()
+        if (grid.selection) {
+          const n = normalize(grid.selection)
+          if (n.endCol > n.startCol) onFillRight(n.startRow, n.startCol, n.endRow, n.endCol)
+        } else if (grid.activeCell.col > 0) {
+          onFillRight(grid.activeCell.row, grid.activeCell.col - 1, grid.activeCell.row, grid.activeCell.col)
+        }
+      }
+
+      // Ctrl+;: insert today's date
+      if (isCtrl && e.key === ';' && editable && onPaste) {
+        e.preventDefault()
+        const today = new Date().toISOString().split('T')[0]
+        onPaste(grid.activeCell.row, grid.activeCell.col, [[today]])
+      }
     },
-    [grid.activeCell, grid.selection, data, colIds],
+    [grid.activeCell, grid.selection, data, colIds, editable, onPaste, onCut, onFillDown, onFillRight],
   )
+
+  // Cell right-click context menu state (for editable mode).
+  const [cellMenu, setCellMenu] = useState<{
+    x: number
+    y: number
+    rowIdx: number
+    colIdx: number
+  } | null>(null)
 
   // Header right-click context menu state.
   const [headerMenu, setHeaderMenu] = useState<{
@@ -333,10 +544,15 @@ export function DataTable<T>({
   // Combined keydown handler.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // When editing, route to editing handler first
+      if (isEditingCell && onEditKeyDown) {
+        onEditKeyDown(e)
+        if (e.defaultPrevented) return
+      }
       handleClipboard(e)
       grid.handleKeyDown(e)
     },
-    [handleClipboard, grid.handleKeyDown],
+    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown],
   )
 
   // Clear grid state when data changes (page navigation).
@@ -380,7 +596,6 @@ export function DataTable<T>({
   )
 
   // Virtual scrolling — only activate when row count exceeds threshold.
-  const ROW_HEIGHT = 41
   const VIRTUAL_THRESHOLD = 40
   const useVirtual = visibleRows.length > VIRTUAL_THRESHOLD
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
@@ -399,11 +614,30 @@ export function DataTable<T>({
     rowVirtualizer.scrollToIndex(grid.activeCell.row, { align: 'auto' })
   }, [useVirtual, grid.activeCell, rowVirtualizer])
 
+  // Formula bar: compute cell reference and display value.
+  const formulaBarInfo = useMemo(() => {
+    if (!editable || !grid.activeCell) return null
+    const { row, col } = grid.activeCell
+    // Count non-data columns before this col to compute letter index.
+    const nonDataCols = new Set(['_rowNum', '_select', '_actions'])
+    let dataColIdx = 0
+    for (let i = 0; i < col; i++) {
+      if (!nonDataCols.has(colIds[i])) dataColIdx++
+    }
+    if (nonDataCols.has(colIds[col])) return null
+    const letter = colIndexToLetter(dataColIdx)
+    const rowNum = (page - 1) * limit + row + 1
+    const colId = colIds[col]
+    const value = data[row] ? String((data[row] as Record<string, unknown>)[colId] ?? '') : ''
+    return { ref: `${letter}${rowNum}`, value }
+  }, [editable, grid.activeCell, colIds, data, page, limit])
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-1">
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-1">{toolbar}</div>
+        {toolbarRight}
         <DropdownMenu>
           <DropdownMenuTrigger
             className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent"
@@ -453,6 +687,18 @@ export function DataTable<T>({
         </DropdownMenu>
       </div>
 
+      {/* Formula bar */}
+      {editable && (
+        <div className="flex items-center border border-stone-300 bg-white h-7 text-sm">
+          <div className="w-14 px-2 border-r border-stone-300 bg-[#f0f0f0] text-center text-[11px] font-medium text-stone-600 flex items-center justify-center h-full select-none tabular-nums">
+            {formulaBarInfo?.ref ?? ''}
+          </div>
+          <div className="flex-1 px-2 truncate text-stone-700 text-[13px]">
+            {formulaBarInfo?.value ?? ''}
+          </div>
+        </div>
+      )}
+
       {/* Select-all-filtered banner */}
       {selectable && selectedRowIds && data.length > 0 && (() => {
         const allPageIds = data.map((d) => String((d as EntryRow).id))
@@ -480,12 +726,12 @@ export function DataTable<T>({
           scrollRef.current = el
           ;(grid.containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
         }}
-        className={`rounded-lg border border-stone-200/80 bg-white shadow-sm overflow-auto focus:outline-none ${useVirtual ? 'max-h-[calc(100vh-280px)]' : ''}`}
+        className={`border border-stone-300 bg-white overflow-auto focus:outline-none ${useVirtual ? 'max-h-[calc(100vh-340px)]' : ''}`}
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
         <Table style={{ width: table.getCenterTotalSize() }} role="grid" aria-rowcount={total ?? data.length}>
-          <TableHeader role="rowgroup" className="bg-stone-50/80">
+          <TableHeader role="rowgroup" className="bg-[#f0f0f0]">
             <DndContext
               sensors={dndSensors}
               collisionDetection={closestCenter}
@@ -500,7 +746,7 @@ export function DataTable<T>({
                   const isPinned = header.column.getIsPinned()
                   const pinnedLeftCols = columnPinning.left ?? []
                   const isLastPinnedLeft = isPinned === 'left' && headerIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
-                  const isSystemCol = header.column.id === '_select' || header.column.id === '_actions'
+                  const isSystemCol = header.column.id === '_select' || header.column.id === '_actions' || header.column.id === '_rowNum'
 
                   return (
                     <SortableTableHead
@@ -509,7 +755,7 @@ export function DataTable<T>({
                       disabled={!!isPinned || isSystemCol}
                       role="columnheader"
                       aria-sort={sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : canSort ? 'none' : undefined}
-                      className={`relative group ${isPinned ? 'bg-stone-50' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-border' : ''}`}
+                      className={`relative group ${isPinned ? 'bg-[#f0f0f0]' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-stone-400' : ''}`}
                       style={{
                         width: header.getSize(),
                         position: isPinned ? 'sticky' : undefined,
@@ -559,7 +805,7 @@ export function DataTable<T>({
           <TableBody
             ref={tableBodyRef}
             role="rowgroup"
-            style={useVirtual ? { height: rowVirtualizer.getTotalSize(), position: 'relative' } : undefined}
+            style={useVirtual ? { height: rowVirtualizer.getTotalSize() + (showNewRow ? ROW_HEIGHT : 0), position: 'relative' } : undefined}
           >
             {visibleRows.length === 0 ? (
               <TableRow role="row">
@@ -578,7 +824,7 @@ export function DataTable<T>({
                   key={row.id}
                   role="row"
                   aria-rowindex={(page - 1) * limit + rowIdx + 2}
-                  className={`${onRowClick ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-muted/60`}
+                  className={`${onRowClick ? 'cursor-pointer' : ''} ${highlightRows > 0 && rowIdx < highlightRows ? 'animate-highlight-row' : ''} ${isNewRow ? 'animate-row-enter' : ''} ${(row.original as EntryRow)._optimistic ? 'opacity-60' : ''} hover:bg-blue-50/40`}
                   style={useVirtual ? {
                     position: 'absolute',
                     top: 0,
@@ -610,11 +856,13 @@ export function DataTable<T>({
                     const edgeLeft = inSel && colIdx === selNorm.c1
                     const edgeRight = inSel && colIdx === selNorm.c2
 
+                    const isRowNum = cell.column.id === '_rowNum'
+
                     return (
                       <TableCell
                         key={cell.id}
                         role="gridcell"
-                        className={`${isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-border' : ''} relative ${isActive ? 'ring-2 ring-primary ring-inset' : ''} ${edgeTop ? 'border-t-2 border-t-primary' : ''} ${edgeBottom ? 'border-b-2 border-b-primary' : ''} ${edgeLeft ? 'border-l-2 border-l-primary' : ''} ${edgeRight ? 'border-r-2 border-r-primary' : ''}`}
+                        className={`${isRowNum ? 'bg-[#f0f0f0] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-stone-400' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#d4e5f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#2266cc]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#2266cc]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#2266cc]' : ''} ${edgeRight ? 'border-r-2 border-r-[#2266cc]' : ''}`}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
@@ -626,27 +874,100 @@ export function DataTable<T>({
                           e.stopPropagation()
                           grid.handleCellClick(rowIdx, colIdx, e)
                         }}
+                        onDoubleClick={(e) => {
+                          if (editable && onStartEditing) {
+                            e.stopPropagation()
+                            onStartEditing(rowIdx, colIdx, '')
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          if (editable) {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setCellMenu({ x: e.clientX, y: e.clientY, rowIdx, colIdx })
+                          }
+                        }}
                       >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        {editable && getFieldForCol ? (
+                          <GridCell
+                            field={getFieldForCol(colIdx)}
+                            value={(row.original as Record<string, unknown>)[cell.column.id]}
+                            isEditing={editingCell?.row === rowIdx && editingCell?.col === colIdx}
+                            editValue={editValue}
+                            onEditValueChange={onEditValueChange ?? (() => {})}
+                            onCommit={onCommitEdit ?? (() => {})}
+                            onCancel={onCancelEdit ?? (() => {})}
+                            onKeyDown={onEditKeyDown ?? (() => {})}
+                            saveState={cellSaveState?.get(`${(row.original as EntryRow).id}:${cell.column.id}`) ?? null}
+                            displayContent={flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          />
+                        ) : (
+                          flexRender(cell.column.columnDef.cell, cell.getContext())
+                        )}
                       </TableCell>
                     )
                   })}
                 </TableRow>
                 )})
             )}
+            {/* Bottom empty row for new entries (editable mode) */}
+            {showNewRow && visibleRows.length > 0 && (
+              <TableRow
+                className="bg-muted/20 hover:bg-muted/40 border-t border-dashed"
+                style={useVirtual ? {
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${ROW_HEIGHT}px`,
+                  transform: `translateY(${rowVirtualizer.getTotalSize()}px)`,
+                } : undefined}
+              >
+                {table.getVisibleFlatColumns().map((col) => {
+                  const isRowNum = col.id === '_rowNum'
+                  const isSystem = col.id === '_select' || col.id === '_actions' || col.id === '_status' || col.id === 'created_at' || isRowNum
+                  // Show "+ 새 항목" in first data column
+                  const isFirstDataCol = !isSystem && table.getVisibleFlatColumns().findIndex((c) => {
+                    const id = c.id
+                    return id !== '_rowNum' && id !== '_select' && id !== '_actions' && id !== '_status' && id !== 'created_at'
+                  }) === table.getVisibleFlatColumns().indexOf(col)
+                  return (
+                    <TableCell
+                      key={col.id}
+                      className={`text-muted-foreground ${isRowNum ? 'bg-[#f0f0f0]' : ''}`}
+                      style={{ width: col.getSize() }}
+                      onClick={() => {
+                        if (!isSystem && onNewRowChange) {
+                          // Focus the new row cell
+                        }
+                      }}
+                    >
+                      {isRowNum ? null : isFirstDataCol ? (
+                        <span className="text-xs text-muted-foreground/60">+ 새 항목</span>
+                      ) : isSystem ? null : (
+                        <NewRowCell
+                          field={editableFields?.find((f) => f.slug === col.id) ?? null}
+                          value={newRowValues?.[col.id]}
+                          onChange={(v) => onNewRowChange?.(col.id, v)}
+                          onCommit={() => onNewRowCommit?.()}
+                        />
+                      )}
+                    </TableCell>
+                  )
+                })}
+              </TableRow>
+            )}
           </TableBody>
           {/* Summary row */}
           {summaryRow && Object.keys(summaryRow).length > 0 && (
             <TableFooter>
-              <TableRow className="border-t-2 bg-muted/30 font-medium">
-                {table.getVisibleFlatColumns().map((col, i) => {
+              <TableRow className="border-t-2 font-medium">
+                {table.getVisibleFlatColumns().map((col) => {
                   const summary = summaryRow[col.id]
                   const currentFn = summaryFn?.[col.id] || 'sum'
+                  const isRowNum = col.id === '_rowNum'
                   return (
-                    <TableCell key={col.id} className="text-xs py-1.5">
-                      {i === 0 && !summary ? (
-                        <span className="text-muted-foreground font-normal">집계</span>
-                      ) : null}
+                    <TableCell key={col.id} className={`text-xs py-1 ${isRowNum ? 'bg-[#f0f0f0]' : ''}`}>
                       {summary ? (
                         <div className="flex items-center gap-1.5">
                           {onSummaryFnChange && (
@@ -680,23 +1001,19 @@ export function DataTable<T>({
         </Table>
       </div>
       {canScrollRight && (
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent rounded-r-md" />
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
       )}
       </div>
 
-      {/* Selection indicator */}
-      {grid.selection && (
-        <div className="text-xs text-muted-foreground">
-          {(() => {
-            const r1 = Math.min(grid.selection.startRow, grid.selection.endRow)
-            const r2 = Math.max(grid.selection.startRow, grid.selection.endRow)
-            const c1 = Math.min(grid.selection.startCol, grid.selection.endCol)
-            const c2 = Math.max(grid.selection.startCol, grid.selection.endCol)
-            const rows = r2 - r1 + 1
-            const cols = c2 - c1 + 1
-            return `${rows}행 x ${cols}열 선택`
-          })()}
-        </div>
+      {/* Status bar (Excel-like) */}
+      {editable && (
+        <StatusBar
+          selection={grid.selection}
+          activeCell={grid.activeCell}
+          data={data as Record<string, unknown>[]}
+          colIds={colIds}
+          fields={editableFields}
+        />
       )}
 
       {/* Header context menu (right-click) */}
@@ -759,6 +1076,45 @@ export function DataTable<T>({
             </button>
           )}
         </div>
+      )}
+
+      {/* Cell context menu (right-click, editable mode) */}
+      {editable && cellMenu && (
+        <GridContextMenu
+          position={cellMenu}
+          onCopy={async () => {
+            const range = grid.selection ?? (grid.activeCell ? {
+              startRow: grid.activeCell.row,
+              startCol: grid.activeCell.col,
+              endRow: grid.activeCell.row,
+              endCol: grid.activeCell.col,
+            } : null)
+            if (range) {
+              await copyToClipboard(data as EntryRow[], colIds, range)
+            }
+          }}
+          onPaste={async () => {
+            if (!grid.activeCell || !onPaste) return
+            try {
+              const matrix = await pasteFromClipboard()
+              if (matrix.length > 0) {
+                onPaste(grid.activeCell.row, grid.activeCell.col, matrix)
+              }
+            } catch { /* permission denied */ }
+          }}
+          onDeleteRow={() => {
+            const row = visibleRows[cellMenu.rowIdx]
+            if (row) {
+              const rowId = String((row.original as EntryRow).id)
+              onDeleteRow?.(rowId)
+            }
+          }}
+          onClearCell={() => {
+            onClearCell?.(cellMenu.rowIdx, cellMenu.colIdx)
+          }}
+          onClose={() => setCellMenu(null)}
+          canDelete={!!onDeleteRow}
+        />
       )}
 
       {/* Pagination footer */}
@@ -887,6 +1243,139 @@ function SortableTableHead({
       )}
       {children}
     </TableHead>
+  )
+}
+
+// Simple inline input for new row cells.
+function NewRowCell({
+  field,
+  value,
+  onChange,
+  onCommit,
+}: {
+  field: Field | null
+  value: unknown
+  onChange: (v: unknown) => void
+  onCommit: () => void
+}) {
+  if (!field) return null
+
+  // Only support simple types in the new row
+  switch (field.field_type) {
+    case 'text':
+    case 'textarea':
+      return (
+        <input
+          type="text"
+          className="w-full bg-transparent border-none outline-none text-sm px-0 placeholder:text-muted-foreground/40"
+          placeholder={field.label}
+          value={String(value ?? '')}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              onCommit()
+            }
+          }}
+        />
+      )
+    case 'number':
+    case 'integer':
+      return (
+        <input
+          type="number"
+          className="w-full bg-transparent border-none outline-none text-sm px-0 placeholder:text-muted-foreground/40 [&::-webkit-inner-spin-button]:appearance-none"
+          placeholder={field.label}
+          value={value != null ? String(value) : ''}
+          onChange={(e) => {
+            const raw = e.target.value
+            if (raw === '') onChange(null)
+            else onChange(field.field_type === 'integer' ? parseInt(raw, 10) : parseFloat(raw))
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              onCommit()
+            }
+          }}
+        />
+      )
+    default:
+      return <span className="text-xs text-muted-foreground/40">{field.label}</span>
+  }
+}
+
+// Excel-like status bar with selection info and numeric aggregates.
+function StatusBar({
+  selection,
+  activeCell,
+  data,
+  colIds,
+  fields,
+}: {
+  selection: { startRow: number; startCol: number; endRow: number; endCol: number } | null
+  activeCell: CellPosition | null
+  data: Record<string, unknown>[]
+  colIds: string[]
+  fields?: Field[]
+}) {
+  const stats = useMemo(() => {
+    if (!selection) return null
+    const r1 = Math.min(selection.startRow, selection.endRow)
+    const r2 = Math.max(selection.startRow, selection.endRow)
+    const c1 = Math.min(selection.startCol, selection.endCol)
+    const c2 = Math.max(selection.startCol, selection.endCol)
+    const rows = r2 - r1 + 1
+    const cols = c2 - c1 + 1
+
+    // Collect numeric values from selected cells.
+    const numericTypes = new Set(['number', 'integer', 'decimal'])
+    const nums: number[] = []
+    for (let r = r1; r <= r2; r++) {
+      const row = data[r]
+      if (!row) continue
+      for (let c = c1; c <= c2; c++) {
+        const colId = colIds[c]
+        if (!colId) continue
+        const field = fields?.find((f) => f.slug === colId)
+        if (!field || !numericTypes.has(field.field_type)) continue
+        const v = row[colId]
+        if (v != null && typeof v === 'number' && !isNaN(v)) nums.push(v)
+        else if (v != null && typeof v === 'string') {
+          const n = parseFloat(v)
+          if (!isNaN(n)) nums.push(n)
+        }
+      }
+    }
+
+    let sum = 0
+    let avg = 0
+    if (nums.length > 0) {
+      sum = nums.reduce((a, b) => a + b, 0)
+      avg = sum / nums.length
+    }
+
+    return { rows, cols, nums, sum, avg }
+  }, [selection, data, colIds, fields])
+
+  if (!selection && !activeCell) return null
+
+  return (
+    <div className="flex items-center justify-end gap-4 text-[11px] text-stone-500 bg-[#f0f0f0] border border-stone-300 px-3 h-6">
+      {stats && (
+        <>
+          <span>{stats.rows}행 x {stats.cols}열</span>
+          {stats.nums.length > 0 && (
+            <>
+              <span className="text-stone-300">|</span>
+              <span>합계: <strong className="text-stone-700 tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+              <span>평균: <strong className="text-stone-700 tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+              <span>개수: <strong className="text-stone-700 tabular-nums">{stats.nums.length}</strong></span>
+            </>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 

@@ -49,6 +49,17 @@ export type FieldType =
 /** Cardinality of a relation between two collections. */
 export type RelationType = 'one_to_one' | 'one_to_many' | 'many_to_many'
 
+/** Describes a relation field in another collection that points TO the current collection. */
+export interface ReverseRelField {
+  source_collection_id: string
+  source_collection_slug: string
+  source_collection_label: string
+  source_field_slug: string
+  source_field_label: string
+  relation_type: RelationType
+  junction_table?: string
+}
+
 /** FK metadata linking one collection's field to another collection's rows. */
 export interface Relation {
   id: string
@@ -110,6 +121,7 @@ export interface NumberFieldOptions extends CommonFieldOptions {
   display_type?: 'currency' | 'percent' | 'rating' | 'progress'
   currency_code?: string
   max_rating?: number
+  decimal_places?: number // undefined = free decimal, 0 = integer behavior, 1-4 = fixed
 }
 
 export type IntegerFieldOptions = NumberFieldOptions
@@ -290,10 +302,26 @@ export interface Collection {
   process_enabled: boolean
   sort_order: number
   access_config: AccessConfig
+  workbook_id?: string
   created_at: string
   updated_at: string
   created_by?: string
   fields?: Field[]
+  reverse_relations?: ReverseRelField[]
+}
+
+/** Workbook is the "앱" (app) entity — a container for related sheets (collections). */
+export interface Workbook {
+  id: string
+  label: string
+  icon?: string
+  group_label?: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+  created_by?: string
+  locked_by?: string
+  locked_at?: string
 }
 
 /**
@@ -532,9 +560,8 @@ export interface TotalsResult {
  * - `calendar` — entries plotted on a date/datetime field.
  * - `gallery`  — card grid with image thumbnails.
  * - `gantt`    — timeline bar chart for date-range fields.
- * - `form`     — public or internal data-entry form.
  */
-export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery' | 'gantt' | 'form'
+export type ViewType = 'spreadsheet'
 
 /** A saved view configuration for a collection. */
 export interface View {
@@ -666,7 +693,7 @@ export interface UpdateSavedViewReq {
 // --- Automations ---
 
 /** Event that fires an automation rule. */
-export type TriggerType = 'record_created' | 'record_updated' | 'record_deleted' | 'status_change' | 'schedule' | 'form_submit'
+export type TriggerType = 'record_created' | 'record_updated' | 'record_deleted' | 'status_change' | 'schedule'
 /** Side-effect an automation can perform when its conditions pass. */
 export type ActionType = 'send_notification' | 'update_field' | 'call_webhook'
 /** Comparison operators for automation condition predicates. */

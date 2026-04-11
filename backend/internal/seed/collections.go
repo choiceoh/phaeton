@@ -64,7 +64,8 @@ func orgSubsidiariesPreset() Preset {
 			{
 				Slug:      "sort_order",
 				Label:     "정렬 순서",
-				FieldType: schema.FieldInteger,
+				FieldType: schema.FieldNumber,
+				Options:   jsonRaw(map[string]any{"decimal_places": 0}),
 			},
 			{
 				Slug:         "is_active",
@@ -100,7 +101,8 @@ func orgDepartmentsPreset() Preset {
 			{
 				Slug:      "sort_order",
 				Label:     "정렬 순서",
-				FieldType: schema.FieldInteger,
+				FieldType: schema.FieldNumber,
+				Options:   jsonRaw(map[string]any{"decimal_places": 0}),
 			},
 			{
 				Slug:         "is_active",
@@ -181,7 +183,8 @@ func milestonesPreset() Preset {
 			{
 				Slug:      "seq_order",
 				Label:     "순서",
-				FieldType: schema.FieldInteger,
+				FieldType: schema.FieldNumber,
+				Options:   jsonRaw(map[string]any{"decimal_places": 0}),
 			},
 			{
 				Slug:      "status",

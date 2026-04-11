@@ -391,7 +391,11 @@ func ParsePagination(params url.Values) (page, limit, offset int) {
 	if page > 10_000 {
 		page = 10_000
 	}
-	if l, err := strconv.Atoi(params.Get("limit")); err == nil && l > 0 && l <= 100 {
+	maxLimit := 100
+	if params.Get("_bulk") == "true" {
+		maxLimit = 5000
+	}
+	if l, err := strconv.Atoi(params.Get("limit")); err == nil && l > 0 && l <= maxLimit {
 		limit = l
 	}
 	offset = (page - 1) * limit

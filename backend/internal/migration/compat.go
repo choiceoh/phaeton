@@ -37,7 +37,7 @@ var compatMatrix = map[schema.FieldType]map[schema.FieldType]compatEntry{
 	},
 	schema.FieldNumber: {
 		schema.FieldText:    {convAlways, ""},
-		schema.FieldInteger: {convConditional, `%s IS NOT NULL AND %s != TRUNC(%s)`},
+		schema.FieldInteger: {convAlways, ""}, // unified: both use NUMERIC now
 	},
 	schema.FieldInteger: {
 		schema.FieldText:   {convAlways, ""},

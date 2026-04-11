@@ -132,7 +132,8 @@ func run() int {
 	// SSE real-time events.
 	sseBroker := events.NewBroker()
 	sseHandler := handler.NewSSEHandler(sseBroker)
-	// Forward bus events to SSE broker.
+	workbookHandler := handler.NewWorkbookHandler(store, cache, migEngine, sseBroker)
+	// Forward bus events to SSE broker, including cross-sheet invalidation.
 	bus.Subscribe(func(_ context.Context, ev events.Event) {
 		sseBroker.Broadcast(events.SSEMessage{
 			Type:           string(ev.Type),
@@ -141,7 +142,27 @@ func run() int {
 			RecordID:       ev.RecordID,
 			ActorUserID:    ev.ActorUserID,
 			ActorName:      ev.ActorName,
+			WorkbookID:     ev.WorkbookID,
 		})
+
+		// Cross-sheet invalidation: when a record changes, notify sibling sheets
+		// that have computed fields referencing the changed sheet.
+		if ev.WorkbookID != "" && (ev.Type == events.EventRecordCreate || ev.Type == events.EventRecordUpdate || ev.Type == events.EventRecordDelete) {
+			siblings := cache.SheetsInWorkbook(ev.WorkbookID)
+			for _, sib := range siblings {
+				if sib.ID == ev.CollectionID {
+					continue
+				}
+				if hasCrossRef(sib, ev.CollectionID, cache) {
+					sseBroker.Broadcast(events.SSEMessage{
+						Type:           "cross_sheet_invalidation",
+						CollectionID:   sib.ID,
+						CollectionSlug: sib.Slug,
+						WorkbookID:     ev.WorkbookID,
+					})
+				}
+			}
+		}
 	})
 
 	// API rate limiter: 60 req/s per user, burst of 120.
@@ -220,6 +241,7 @@ func run() int {
 		pool:          pool,
 		cache:         cache,
 		schemaH:       schemaHandler,
+		workbookH:     workbookHandler,
 		dynH:          dynHandler,
 		viewH:         viewHandler,
 		savedViewH:    savedViewHandler,
@@ -266,6 +288,30 @@ func run() int {
 		autoEngine.SetBaseContext(ctx)
 		autoScheduler.Start(ctx)
 
+		// Expired workbook lock cleanup — every 5 minutes, release locks older than 30 min.
+		go func() {
+			ticker := time.NewTicker(5 * time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					n, err := store.ReleaseExpiredLocks(ctx, 30*time.Minute)
+					if err != nil {
+						slog.Error("release expired locks", "error", err)
+						continue
+					}
+					if n > 0 {
+						slog.Info("released expired workbook locks", "count", n)
+						sseBroker.Broadcast(events.SSEMessage{
+							Type: string(events.EventWorkbookUnlocked),
+						})
+					}
+				}
+			}
+		}()
+
 		logging.PrintBanner(os.Stderr, logging.BannerInfo{
 			Version: version,
 			Addr:    ln.Addr().String(),
@@ -305,6 +351,7 @@ type routerConfig struct {
 	pool          *pgxpool.Pool
 	cache         *schema.Cache
 	schemaH       *handler.SchemaHandler
+	workbookH     *handler.WorkbookHandler
 	dynH          *handler.DynHandler
 	viewH         *handler.ViewHandler
 	savedViewH    *handler.SavedViewHandler
@@ -433,6 +480,33 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Get("/relationship-graph", cfg.schemaH.RelationshipGraph)
 			r.Get("/collections/{id}/process/transitions", cfg.schemaH.AvailableTransitions)
 
+			// Folders: all authenticated users.
+			r.Get("/folders", cfg.workbookH.ListFolders)
+			r.Get("/folders/{id}", cfg.workbookH.GetFolder)
+			r.Post("/folders", cfg.workbookH.CreateFolder)
+			r.Patch("/folders/{id}", cfg.workbookH.UpdateFolder)
+			r.Delete("/folders/{id}", cfg.workbookH.DeleteFolder)
+
+			// Workbooks (apps): read for all, write for director/pm.
+			r.Get("/workbooks", cfg.schemaH.ListWorkbooks)
+			r.Get("/workbooks/sheet-counts", cfg.schemaH.SheetCounts)
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("director", "pm"))
+				r.Post("/workbooks", cfg.schemaH.CreateWorkbook)
+				r.Patch("/workbooks/{workbookId}", cfg.schemaH.UpdateWorkbook)
+				r.Delete("/workbooks/{workbookId}", cfg.schemaH.DeleteWorkbook)
+			})
+
+			// Sheets within workbook.
+			r.Get("/workbooks/{id}/sheets", cfg.workbookH.ListSheets)
+			r.Post("/workbooks/{id}/sheets", cfg.workbookH.CreateSheet)
+			r.Post("/sheets/{id}/move", cfg.workbookH.MoveSheet)
+
+			// Workbook lock (edit lock — one user at a time).
+			r.Get("/workbooks/{workbookId}/lock", cfg.workbookH.GetLock)
+			r.Post("/workbooks/{workbookId}/lock", cfg.workbookH.AcquireLock)
+			r.Delete("/workbooks/{workbookId}/lock", cfg.workbookH.ReleaseLock)
+
 			// Create collection: all authenticated users.
 			r.Post("/collections", cfg.schemaH.CreateCollection)
 
@@ -514,19 +588,22 @@ func buildRouter(cfg routerConfig) *chi.Mux {
 			r.Get("/{slug}/gantt", cfg.dynH.GanttView)
 			r.Get("/{slug}/kanban", cfg.dynH.KanbanView)
 			r.Get("/{slug}/export.csv", cfg.dynH.ExportCSV)
+			r.Get("/{slug}/export.xlsx", cfg.dynH.ExportXLSX)
 			r.Get("/{slug}/export.pdf", cfg.dynH.ExportPDF)
 			r.Post("/{slug}/email-report", cfg.reportH.EmailReport)
 			r.Get("/{slug}/{id}", cfg.dynH.Get)
 
-			// Write: director, pm, engineer.
+			// Write: director, pm, engineer — also check workbook lock.
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("director", "pm", "engineer"))
+				r.Use(middleware.WorkbookLock(cfg.cache))
 				r.Post("/{slug}", cfg.dynH.Create)
 				r.Post("/{slug}/bulk", cfg.dynH.BulkCreate)
 				r.Post("/{slug}/formula-preview", cfg.dynH.FormulaPreview)
 				r.Patch("/{slug}/batch", cfg.dynH.BatchUpdate)
 				r.Delete("/{slug}/bulk", cfg.dynH.BulkDelete)
-				r.Post("/{slug}/import", cfg.dynH.ImportCSV)
+				r.Post("/{slug}/import", cfg.dynH.ImportFile)
+				r.Post("/{slug}/import/preview", cfg.dynH.ImportPreview)
 				r.Patch("/{slug}/{id}", cfg.dynH.Update)
 				r.Delete("/{slug}/{id}", cfg.dynH.Delete)
 			})
@@ -618,5 +695,36 @@ func writeIndex(w http.ResponseWriter, indexHTML []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Write(indexHTML)
+}
+
+// hasCrossRef checks whether a collection has any computed fields (formula, lookup, rollup)
+// that reference the given target collection, either directly via relation fields or
+// through cross-sheet formulas. Used for SSE cross-sheet invalidation.
+func hasCrossRef(col schema.Collection, targetCollectionID string, cache *schema.Cache) bool {
+	for _, f := range col.Fields {
+		// Check if any relation field points to the target collection.
+		if f.FieldType == schema.FieldRelation && f.Relation != nil && f.Relation.TargetCollectionID == targetCollectionID {
+			// If there are computed fields in this collection, changes to the target
+			// could affect them.
+			for _, cf := range col.Fields {
+				if cf.FieldType.IsComputed() {
+					return true
+				}
+			}
+		}
+	}
+	// Also check reverse: if the target has a relation to this collection,
+	// rollup/lookup fields here might reference it.
+	revRels := cache.ReverseRelations(col.ID)
+	for _, rev := range revRels {
+		if rev.SourceCollectionID == targetCollectionID {
+			for _, cf := range col.Fields {
+				if cf.FieldType.IsComputed() {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 

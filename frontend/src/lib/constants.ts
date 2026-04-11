@@ -1,33 +1,41 @@
 import type { FieldType } from './types'
 
-// -- 용어 한국어화 (테이블→앱, 필드→항목, 레코드→데이터) --
+// -- 용어 한국어화 (앱/시트/항목/데이터) --
+// 앱 = 시트 컨테이너 (_meta.workbooks), 시트 = 개별 데이터 테이블 (_meta.collections)
 export const TERM = {
-  collection: '앱',
-  collections: '앱 목록',
+  app: '앱',
+  apps: '앱 목록',
+  newApp: '새 앱 만들기',
+  noApps: '아직 앱이 없습니다',
+  noAppsDesc: '새 앱을 만들어 데이터 관리를 시작하세요.',
+  collection: '시트',
+  collections: '시트',
   field: '항목',
   fields: '항목',
   record: '데이터',
   records: '데이터',
-  newCollection: '새 앱 만들기',
+  newCollection: '새 시트',
   newRecord: '새 데이터',
-  noCollections: '아직 앱이 없습니다',
-  noCollectionsDesc: '새 앱을 만들어 데이터 관리를 시작하세요.',
+  noCollections: '아직 시트가 없습니다',
+  noCollectionsDesc: '새 시트를 만들어 데이터를 관리하세요.',
   noRecords: '아직 데이터가 없습니다',
   noRecordsDesc: '"새 데이터" 버튼을 눌러 첫 데이터를 입력하세요.',
+  workbookGroup: '워크북',
+  uncategorized: '미분류',
 } as const
 
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: '텍스트',
   textarea: '긴 글',
   number: '숫자',
-  integer: '정수',
+  integer: '숫자 (정수)',
   boolean: '체크박스',
   date: '날짜',
   datetime: '일시',
   time: '시간',
   select: '선택',
   multiselect: '다중 선택',
-  relation: '연결',
+  relation: '다른 시트 참조',
   user: '사용자',
   file: '파일',
   json: 'json',
@@ -66,16 +74,16 @@ export const ROLE_LABELS: Record<string, string> = {
 }
 
 export const ON_DELETE_OPTIONS = [
-  { value: 'SET NULL', label: '연결 해제', description: '연결만 끊고 상대 레코드는 유지합니다' },
-  { value: 'CASCADE', label: '함께 삭제', description: '이 레코드 삭제 시 연결된 상대도 삭제됩니다' },
-  { value: 'RESTRICT', label: '삭제 차단', description: '연결된 상대가 있으면 삭제할 수 없습니다' },
-  { value: 'NO ACTION', label: '동작 없음', description: '삭제 시 연결 상태를 변경하지 않습니다' },
+  { value: 'SET NULL', label: '참조 해제', description: '참조만 끊고 상대 레코드는 유지합니다' },
+  { value: 'CASCADE', label: '함께 삭제', description: '이 레코드 삭제 시 참조된 상대도 삭제됩니다' },
+  { value: 'RESTRICT', label: '삭제 차단', description: '참조된 상대가 있으면 삭제할 수 없습니다' },
+  { value: 'NO ACTION', label: '동작 없음', description: '삭제 시 참조 상태를 변경하지 않습니다' },
 ]
 
 export const RELATION_TYPE_OPTIONS = [
-  { value: 'one_to_one', label: '1:1', description: '하나의 레코드가 상대 앱의 하나와만 연결됩니다' },
-  { value: 'one_to_many', label: '1:N', description: '하나의 레코드가 상대 앱의 여러 레코드와 연결됩니다' },
-  { value: 'many_to_many', label: 'N:M', description: '양쪽 레코드가 서로 여러 개와 자유롭게 연결됩니다' },
+  { value: 'one_to_one', label: '1:1', description: '하나의 레코드가 상대 시트의 하나와만 참조됩니다' },
+  { value: 'one_to_many', label: '1:N', description: '하나의 레코드가 상대 시트의 여러 레코드와 참조됩니다' },
+  { value: 'many_to_many', label: 'N:M', description: '양쪽 레코드가 서로 여러 개와 자유롭게 참조됩니다' },
 ]
 
 export const RELATION_TYPE_LABELS: Record<string, string> = Object.fromEntries(
@@ -100,6 +108,15 @@ export const NUMBER_DISPLAY_TYPES = [
   { value: 'currency', label: '통화 (₩)' },
   { value: 'percent', label: '퍼센트 (%)' },
   { value: 'progress', label: '진행률 바' },
+]
+
+export const DECIMAL_PLACES_OPTIONS = [
+  { value: '', label: '자동' },
+  { value: '0', label: '0 (정수)' },
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+  { value: '4', label: '4' },
 ]
 
 export const TEXT_DISPLAY_TYPES = [

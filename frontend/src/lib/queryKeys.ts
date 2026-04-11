@@ -35,7 +35,15 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.departments.all, 'detail', id] as const,
   },
 
-  /** Collection (app) keys. Invalidate `.all` after create/delete. */
+  /** Workbook (app) keys. Invalidate `.all` after create/delete. */
+  workbooks: {
+    all: ['workbooks'] as const,
+    list: () => [...queryKeys.workbooks.all, 'list'] as const,
+    sheetCounts: () => [...queryKeys.workbooks.all, 'sheetCounts'] as const,
+    lock: (id: string) => [...queryKeys.workbooks.all, 'lock', id] as const,
+  },
+
+  /** Collection (sheet) keys. Invalidate `.all` after create/delete. */
   collections: {
     all: ['collections'] as const,
     list: () => [...queryKeys.collections.all, 'list'] as const,
@@ -57,6 +65,8 @@ export const queryKeys = {
     /** Paginated/filtered entry list for a collection. */
     list: (slug: string, query?: Record<string, unknown>) =>
       [...queryKeys.entries.all, slug, 'list', query ?? {}] as const,
+    /** All rows for a collection in local (bulk) mode. */
+    bulk: (slug: string) => [...queryKeys.entries.all, slug, 'bulk'] as const,
     /** Single entry by collection slug and record ID. */
     detail: (slug: string, id: string) =>
       [...queryKeys.entries.all, slug, 'detail', id] as const,
@@ -127,13 +137,6 @@ export const queryKeys = {
     /** Execution history for a single automation. */
     runs: (id: string) =>
       [...queryKeys.automations.all, 'runs', id] as const,
-  },
-
-  /** Chart configuration keys, scoped by collection ID. */
-  charts: {
-    all: ['charts'] as const,
-    list: (collectionId: string) =>
-      [...queryKeys.charts.all, 'list', collectionId] as const,
   },
 
   /** Webhook event keys. */

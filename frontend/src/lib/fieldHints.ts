@@ -16,7 +16,7 @@ export const FIELD_HINTS: Partial<Record<FieldType, FieldHint>> = {
   time: { description: '시간 선택', example: '예: 출퇴근 시각' },
   select: { description: '옵션 중 하나 선택', example: '예: 상태, 카테고리' },
   multiselect: { description: '여러 옵션 선택', example: '예: 태그, 담당 부서' },
-  relation: { description: '다른 앱과 연결', example: '예: 소속 프로젝트' },
+  relation: { description: '다른 시트의 데이터를 참조', example: '예: 프로젝트 시트의 담당자' },
   user: { description: '사용자 선택', example: '예: 담당자, 승인자' },
   file: { description: '파일 첨부', example: '예: 계약서, 이미지' },
   json: { description: 'JSON 구조화 데이터', example: '예: 설정값, 메타데이터' },

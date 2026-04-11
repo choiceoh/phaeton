@@ -1,5 +1,11 @@
 # Data Engine 구현 가이드
 
+> **주의**: 이 문서의 코드 예시(Engine 구조체, works_apps/works_fields 테이블)는 **v1 초기 설계** 기준.
+> 현재 구현은 `backend/internal/handler/dynamic.go` (DynHandler), `backend/internal/schema/` (Store/Cache/Models),
+> `backend/internal/migration/` (MigrationEngine)으로 재구성됨. 메타 테이블은 `_meta.collections`, `_meta.fields`.
+> **데이터 처리 방향**: 셀 편집·필터·정렬·같은 시트 수식 → 클라이언트 로컬 처리, 크로스시트 수식·검색·대량 데이터 → 서버.
+> 상세 전환 계획: `docs/11-SPREADSHEET-PIVOT.md`
+
 ## 목표
 
 사용자가 만든 동적 테이블(`wd_*`)에 대한 CRUD + 쿼리 레이어. Schema Engine이 테이블 구조(DDL)를 책임지고, Data Engine은 그 위에서 **안전하고 빠른 데이터 조작**을 담당한다.

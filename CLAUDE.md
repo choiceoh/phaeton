@@ -2,16 +2,29 @@
 
 ## 프로젝트
 
-노코드 업무앱 플랫폼 **Topworks**. 사용자가 코드 없이 앱(폼+데이터+뷰)을 만들고 ERP 기능을 직접 구성.
+**스프레드시트 중심 업무 플랫폼 Topworks**. 동기화·시트간 연동이 가능한 스프레드시트 모임.
 외부 정식 이름은 **Topworks**, 내부 개발명/코드명은 **Phaeton**. 폴더명·모듈 경로·DB 자격증명·도커 볼륨·localStorage 키 등 내부 식별자는 `phaeton`을 그대로 사용. 엔드유저에게 보이는 UI 텍스트·이메일 제목·AI 프롬프트·User-Agent 등은 모두 **Topworks**로 표기.
-각 앱 = 진짜 PostgreSQL 테이블 (동적 DDL). Go 백엔드 + Vite React SPA.
-사용자 300명, DGX Spark 구동.
+
+### 핵심 컨셉
+- **앱 = 엑셀 파일(워크북)**, 그 안에 여러 시트 — `Workbook` (`_meta.workbooks`)
+- **폴더 = 유사 앱들의 그룹** — `Folder` (`_meta.folders`, 1단계 중첩 지원)
+- **시트 = 개별 데이터 테이블** — `Collection` (`_meta.collections`, 동적 PostgreSQL 테이블 `data.wd_*`)
+- 시트 간 **크로스시트 수식** (LOOKUP, SUMREL 등) + **자동 동기화** + **양방향 링크**
+- 내부 코드 용어(Collection, Field, Entry)는 유지, **UI 표시만 변경** (앱→앱, 시트→시트, 항목→열, 데이터→행)
+- Go 백엔드 + Vite React SPA. 사용자 300명, DGX Spark 구동.
+
+### 데이터 처리 전략 (Local-First)
+- **한 앱은 동시 편집 차단** (잠금 모드) — 한 사용자가 앱을 열면 다른 사용자는 읽기 전용
+- **로컬 처리**: 셀 편집(즉시 UI 반영 → 디바운스 배치 저장), 필터/정렬(클라이언트 메모리), 같은 시트 수식(JS 엔진)
+- **서버 처리 유지**: 크로스시트 수식(LOOKUP/SUMREL), 검색(`_tsv` GIN), 페이지네이션(대량 데이터), 관계 확장
+- **대용량 폴백**: 5,000행 이하 → 전체 로드+로컬 처리, 5,000행 초과 → 서버 쿼리 폴백
 
 ## 필독 문서
 
+- `docs/11-SPREADSHEET-PIVOT.md` — **스프레드시트 전환 마스터 플랜** (로컬 처리 전략, GAP 분석, 구현 우선순위)
 - `docs/08-PHAETON-V2-DESIGN.md` — 전체 설계, 아키텍처, 데이터 모델
 - `docs/09-DATA-ENGINE-GUIDE.md` — Data Engine CRUD/쿼리 구현 가이드
-- `docs/10-COMPETITIVE-ANALYSIS.md` — 경쟁 분석 및 구현 로드맵 (다우오피스 Works + Airtable/NocoDB/AppSheet/Monday/ClickUp)
+- `docs/10-COMPETITIVE-ANALYSIS.md` — 경쟁 분석 및 구현 로드맵
 
 ### 참고 문서
 
@@ -62,19 +75,18 @@ frontend/
     contexts/                  AIAvailabilityContext, UndoContext
     pages/                     AIChatPage, AppBuilderPage, AppListPage, AppSettingsPage,
                                AppViewPage, AutomationsPage, DashboardPage, EntryPage,
-                               GlobalAutomationsPage, GlobalCalendarPage, GlobalDashboardPage,
-                               InterfaceDesignerPage, LoginPage, MigrationHistoryPage,
-                               MyTasksPage, NotFoundPage, OrgChartPage, ProcessPage,
+                               GlobalAutomationsPage, GlobalDashboardPage,
+                               LoginPage, MigrationHistoryPage,
+                               NotFoundPage, ProcessPage,
                                ProfilePage, RelationshipPage, SettingsPage, UsersPage
     components/works/          AIAutomationDialog, AIBuildDialog, AppBuilder, AppCard,
                                BulkEditPanel, CSVImportPreview, EntryComments, EntryForm,
                                EntryHistory, FieldPalette, FieldPreview, FieldProperties,
-                               FilterBuilder, FilterChips, FormPreview, FormulaEditor,
+                               FilterBuilder, FilterChips, FormulaEditor,
                                IconPicker, PreviewDialog, ProcessFlowDiagram,
-                               RelationshipGraph, SchedulePicker, SetupChecklist,
+                               RelationshipGraph, SchedulePicker,
                                SortPanel, SpreadsheetInput, TemplateGallery
-    components/works/views/    CalendarDayView, CalendarView, CalendarWeekView, ChartPanel,
-                               FormView, GalleryView, GanttView, KanbanView, ViewGuide
+    components/works/views/    SpreadsheetView (엑셀뷰, 유일한 뷰 타입), ChartPanel
     components/common/         AIChatPanel, CoachMark, CommandPalette, ConfirmDialog, DataTable,
                                EmptyState, ErrorBoundary, ErrorState, Form,
                                HotkeyHelpDialog, LoadingState, NotificationBell, OfflineBanner,
@@ -98,28 +110,38 @@ frontend/
 
 ## 디자인 철학
 
-> **"누구나 30초 만에 쓸 수 있지만, 파워유저는 한계를 느끼지 않는다."**
+> **"엑셀이랑 똑같은데, 뭔가 더 고급지다."**
 
-### PC 중심 플랫폼
-- **PC가 기본, 모바일은 보조** — 업무용 노코드 플랫폼 특성상 PC(데스크톱/노트북) 화면이 주 사용 환경. 레이아웃·컴포넌트 설계 시 넓은 화면을 기본으로 설계하고, 모바일은 최소한의 열람 용도로만 지원
-- **넓은 화면 활용** — 페이지 레이아웃에 불필요한 max-w 제약(max-w-sm, max-w-md 등)을 걸어 좁게 만들지 않음. 카드·리스트는 그리드로 가로 공간을 활용하고, 폼은 다열 배치로 데스크톱 공간을 효율적으로 사용
-- **모바일 전용 패턴 지양** — 로그인 같은 예외를 제외하고, 중앙 정렬된 좁은 카드 레이아웃(모바일 앱 스타일)은 사용하지 않음
+Topworks는 **엑셀 그 자체**다. 구조, 조작법, 단축키, 사고방식 전부 엑셀과 동일하게 간다. 엑셀 사용자가 아무 설명 없이 열어도 바로 쓸 수 있어야 한다. 다만 폰트, 여백, 완성도, 디테일에서 "이거 좀 고급인데?"라는 느낌을 준다. 엑셀의 투박함을 벗기고 프리미엄 질감을 입히는 것이 전부.
 
-### 표면: 쉽고 빠르고 유려하게
-- **3초 안에 이해** — 처음 보는 사용자도 다음 행동을 즉시 알 수 있어야 한다. 설명서가 필요하면 UI가 틀린 것
-- **제로 설정 시작** — 앱 생성 → 필드 추가 → 데이터 입력까지 클릭 3번 이내. 온보딩 허들 최소화
-- **즉각 반응** — 모든 인터랙션은 체감 0ms. 낙관적 업데이트, 스켈레톤, 트랜지션으로 대기감 제거
-- **자연스러운 흐름** — 드래그앤드롭, 인라인 편집, 키보드 단축키 등 사용자가 생각하는 순서대로 동작
+### 엑셀과 완전히 동일
+- **셀 인터랙션** — 클릭→즉시 편집, Tab/Enter 이동, 화살표 탐색, 범위 선택, 복사/붙여넣기. 엑셀 사용자의 근육 기억 100% 존중
+- **수식 바** — 셀 위 수식 입력줄, `=` 시작 시 수식 모드, 함수 자동완성. 엑셀과 동일한 위치·동작
+- **시트 탭** — 하단 시트 탭, 우클릭 메뉴(이름 변경, 복제, 삭제, 이동), 탭 드래그 순서 변경
+- **열/행 조작** — 열 너비 드래그, 행 높이 조절, 열 숨기기/표시, 열 고정(freeze pane)
+- **필터/정렬** — 열 헤더 드롭다운에서 필터·정렬 (엑셀 자동 필터와 동일한 UX)
+- **키보드 단축키** — Ctrl+C/V/Z/Y, Ctrl+S, Ctrl+F, Ctrl+Shift+L 등 엑셀 단축키 그대로
+- **즉각 반응** — 셀 편집·필터·정렬·수식 전부 로컬 처리, 서버 왕복 없음. 타이핑 즉시 반영
 
-### 비주얼
-- 심플한 흑백 UI — 아이콘은 Lucide (스트로크 스타일), 유니코드 이모지/컬러 아이콘 사용 금지
-- shadcn/ui 컴포넌트 톤 유지, 과도한 색상·그림자·장식 지양
+### 엑셀보다 고급진 마감
+- **타이포그래피** — Calibri 11pt 대신 모던 산세리프, 최적화된 행간·자간. 글자 하나하나가 깔끔
+- **여백과 그리드** — 엑셀의 빽빽한 격자 대신 여유 있는 셀 패딩, 얇은 보더, 화이트 배경. 데이터가 숨 쉼
+- **색상** — 흑백 기조 + 최소 액센트. 셀 상태는 서체·아이콘으로 구분, 과도한 색상 없음
+- **아이콘** — Lucide (스트로크 스타일), 유니코드 이모지/컬러 아이콘 금지
+- **마이크로 트랜지션** — 포커스 이동, 패널 개폐, 시트 전환에 미세한 애니메이션. 딱딱하지 않고 부드러움
+- **컨텍스트 패널** — 행 상세를 팝업 대신 우측 슬라이드오버로. 시트를 벗어나지 않고 확인·편집
 
-### 이면: 파워유저도 한계 없이
-- **점진적 복잡도 노출** — 기본은 단순하게, 고급 기능은 필요할 때만 드러냄. 초보자를 압도하지 않되, 꺼내 쓸 수 있는 깊이는 충분히
-- **프로급 기능 완비** — 고급 필터·정렬·그룹핑, 다중 뷰(리스트·캘린더·칸반·갤러리), 조건부 서식, 수식 필드, 관계형 연결 등 전문 도구 수준의 기능을 빠짐없이 제공
-- **자동화와 확장** — 반복 업무는 자동화 규칙으로, 외부 연동은 웹훅/API로. 사용자가 성장할수록 플랫폼도 함께 확장
-- **대량 데이터 대응** — 수만 건 데이터도 느려지지 않는 성능. 페이지네이션, 가상 스크롤, 서버사이드 연산으로 규모에 관계없이 쾌적
+### 엑셀에 없는 것 (눈에 안 띄게)
+- **크로스시트 수식** — `시트명!컬럼` 참조, LOOKUP/SUMREL. 엑셀 시트 간 참조와 유사한 문법
+- **양방향 링크** — 관계 설정 시 상대 시트에 역참조 자동 표시
+- **실시간 동기화** — 다른 사용자 변경이 SSE로 즉시 반영, 별도 UI 없이 자연스럽게
+- **자동화** — 조건부 알림, 필드 자동 업데이트, 웹훅. 매크로의 노코드 버전
+- **AI** — 수식 생성, 데이터 분석, 자동 분류. 엑셀에 없는 결정적 차별점
+
+### PC 중심
+- **PC가 기본, 모바일은 보조** — 넓은 화면 기본 설계, 모바일은 열람 용도
+- **화면 전체 활용** — 불필요한 max-w 제약 없음. 시트가 화면을 꽉 채움
+- **모바일 전용 패턴 지양** — 중앙 정렬 좁은 카드 레이아웃 사용 안 함 (로그인 예외)
 
 ## 코드 스타일
 
@@ -498,3 +520,35 @@ queryKeys
 ?expand=true              → 관계 필드의 대상 레코드 전체 정보 포함
 ?format=display           → 날짜 등을 한국어 포맷으로 변환
 ```
+
+---
+
+## 스프레드시트 전환 현황
+
+> 상세 플랜: `docs/11-SPREADSHEET-PIVOT.md`
+
+### 완료된 전환
+- **워크북 잠금 시스템** — 동시 편집 차단, 잠금 API, WorkbookLock 미들웨어, 만료 정리 ✅
+- **JS 수식 엔진** — 같은 시트 수식 로컬 연산, 셀 편집 즉각 반영 ✅
+- **크로스시트 동기화** — 백엔드 의존성 그래프 + SSE `cross_sheet_invalidation` + 프론트 캐시 무효화 ✅
+- **엑셀 UI** — 행번호, 수식입력줄, 상태바, 그리드선, 활성셀 하이라이트 ✅
+- **Excel(XLSX) 가져오기/내보내기** + 붙여넣기 호환성 ✅
+- Folder 모델 + CRUD API ✅
+- Workbook 모델 (1앱=N시트) + API + 프론트 훅 ✅
+- 뷰 단일화 — SpreadsheetView만 남김 ✅
+- SavedView → 시트 탭 ✅
+- 크로스시트 수식 함수 (LOOKUP, SUMREL 등) + 구문 파서 (`SheetSlug!col`) ✅
+- 역참조 메타데이터 (`ReverseRelField`, 캐시 인덱스) ✅
+- 자동화/대시보드/설정/프로세스 → 시트 통합 ✅
+- 용어 변경 (collection → 시트) ✅
+
+### 남은 GAP
+1. **클라이언트 필터/정렬** — 전체 데이터 로드 + tanstack 클라이언트 모드 (5,000행 이하)
+2. **양방향 링크** — 핸들러 역참조 데이터 조회 + 프론트 렌더링
+3. **네비게이션 재구성** — 좌측 사이드바(폴더→워크북→시트 트리), 하단 시트 탭, EntryPage→슬라이드오버
+
+### 아키텍처 판단: Local-First Processing
+- **동시 편집 차단**: 워크북 단위 잠금 → 충돌 처리 불필요, 아키텍처 단순화
+- **로컬 처리 범위**: 셀 편집 + 같은 시트 수식 → JS 엔진으로 즉각 반영 (구현 완료)
+- **서버 처리 유지**: 크로스시트 수식 + 검색 + 페이지네이션 + 관계 확장
+- **크로스시트 수식**: 시트 전환 시 한 번만 서버 연산 → 이후 같은 시트 내 작업은 로컬

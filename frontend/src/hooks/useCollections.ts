@@ -15,9 +15,76 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
-import type { Collection, CreateCollectionReq, CreateFieldIn, Field } from '@/lib/types'
+import type { Collection, CreateCollectionReq, CreateFieldIn, Field, Workbook } from '@/lib/types'
 
-// --- Reads ---
+// --- Workbooks ---
+
+/** Fetch all workbooks. */
+export function useWorkbooks() {
+  return useQuery({
+    queryKey: queryKeys.workbooks.list(),
+    queryFn: () => api.get<Workbook[]>('/schema/workbooks'),
+  })
+}
+
+/** Fetch sheet counts per app (workbook). */
+export function useSheetCounts() {
+  return useQuery({
+    queryKey: queryKeys.workbooks.sheetCounts(),
+    queryFn: () => api.get<Record<string, number>>('/schema/workbooks/sheet-counts'),
+    staleTime: 60_000,
+  })
+}
+
+/** Create a new app (workbook). */
+export function useCreateWorkbook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { label: string; icon?: string }) =>
+      api.post<Workbook>('/schema/workbooks', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.workbooks.all })
+    },
+  })
+}
+
+/** Update a workbook (rename, icon, sort_order). */
+export function useUpdateWorkbook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...input }: { id: string; label?: string; icon?: string; sort_order?: number }) =>
+      api.patch<Workbook>(`/schema/workbooks/${id}`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.workbooks.all })
+    },
+  })
+}
+
+/** Delete a workbook. Collections in it become uncategorized. */
+export function useDeleteWorkbook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/schema/workbooks/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.workbooks.all })
+      qc.invalidateQueries({ queryKey: queryKeys.collections.all })
+    },
+  })
+}
+
+/** Move a collection to a different workbook (or uncategorize it). */
+export function useMoveCollection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, workbookId }: { id: string; workbookId: string | null }) =>
+      api.patch<Collection>(`/schema/collections/${id}`, { workbook_id: workbookId ?? '' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.collections.all })
+    },
+  })
+}
+
+// --- Collections (Sheets) ---
 
 /** Fetch the full list of collections the current user can access. */
 export function useCollections() {
@@ -81,7 +148,7 @@ export function useCreateCollection() {
 export function useUpdateCollection(id: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: Partial<Pick<Collection, 'label' | 'description' | 'icon' | 'sort_order' | 'process_enabled' | 'access_config'>>) =>
+    mutationFn: (input: Partial<Pick<Collection, 'label' | 'description' | 'icon' | 'sort_order' | 'process_enabled' | 'access_config' | 'workbook_id'>>) =>
       api.patch<Collection>(`/schema/collections/${id}`, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.collections.detail(id) })
@@ -128,6 +195,21 @@ export function useAddField(collectionId: string) {
         qc.invalidateQueries({ queryKey: queryKeys.collections.detail(collectionId) })
         qc.invalidateQueries({ queryKey: queryKeys.collections.list() })
       }
+    },
+  })
+}
+
+/**
+ * Update a field's metadata (label, options, etc.) via PATCH.
+ * Used by FormatToolbar to change display_type, decimal_places, etc.
+ */
+export function useUpdateField() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ fieldId, body }: { fieldId: string; body: Record<string, unknown> }) =>
+      api.patch(`/schema/fields/${fieldId}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.collections.all })
     },
   })
 }

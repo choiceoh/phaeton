@@ -30,6 +30,8 @@ export interface EntryListParams {
   filters?: Record<string, string> // { status: "eq:active", capacity: "gte:100" }
   /** JSON-serialized FilterGroup for AND/OR filter groups */
   _filter?: string
+  /** "true" to load reverse-relation data */
+  reverse?: string
 }
 
 export interface EntryListResult {
@@ -46,6 +48,7 @@ function buildQueryString(params: EntryListParams): string {
   if (params.limit) search.set('limit', String(params.limit))
   if (params.sort) search.set('sort', params.sort)
   if (params.expand) search.set('expand', params.expand)
+  if (params.reverse) search.set('reverse', params.reverse)
   if (params._filter) {
     search.set('_filter', params._filter)
   } else if (params.filters) {
@@ -583,33 +586,6 @@ export function useMyTasks() {
   return useQuery({
     queryKey: ['myTasks'],
     queryFn: () => api.get<MyTaskItem[]>('/my-tasks'),
-    staleTime: 30_000,
-  })
-}
-
-// ---------------------------------------------------------------------------
-// Global Calendar (cross-collection)
-// ---------------------------------------------------------------------------
-
-export interface GlobalCalendarEvent {
-  id: string
-  label: string
-  date: string
-  endDate?: string
-  collectionId: string
-  collectionLabel: string
-  collectionSlug: string
-  collectionIcon?: string
-}
-
-/** Fetch calendar events across all collections for the global calendar dashboard. */
-export function useGlobalCalendarEvents(year: number, month: number) {
-  return useQuery({
-    queryKey: ['globalCalendar', year, month],
-    queryFn: () =>
-      api.get<GlobalCalendarEvent[]>(
-        `/calendar/events?year=${year}&month=${month}`,
-      ),
     staleTime: 30_000,
   })
 }

@@ -84,16 +84,3 @@ export function useAIMapCSVColumns(slug: string | undefined) {
       api.post<Record<string, string>>(`/ai/map-csv-columns/${slug}`, { headers }, { timeout: AI_TIMEOUT }),
   })
 }
-
-export interface AIChartResult {
-  name: string
-  chart_type: string
-  config: Record<string, unknown>
-}
-
-export function useAIBuildChart(collectionId: string | undefined) {
-  return useMutation({
-    mutationFn: (description: string) =>
-      api.post<AIChartResult>(`/ai/build-chart/${collectionId}`, { description }, { timeout: AI_TIMEOUT }),
-  })
-}

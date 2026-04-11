@@ -23,7 +23,9 @@ const (
 	EventRecordCreate EventType = "record_created"
 	EventRecordUpdate EventType = "record_updated"
 	EventRecordDelete EventType = "record_deleted"
-	EventFormSubmit   EventType = "form_submit"
+	EventFormSubmit       EventType = "form_submit"
+	EventWorkbookLocked   EventType = "workbook_locked"
+	EventWorkbookUnlocked EventType = "workbook_unlocked"
 )
 
 // Event is published when something notable happens.
@@ -34,6 +36,7 @@ type Event struct {
 	RecordID       string
 	ActorUserID    string
 	ActorName      string
+	WorkbookID     string // Parent workbook ID (for cross-sheet invalidation).
 	Title          string
 	Body           string
 

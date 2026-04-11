@@ -45,7 +45,7 @@ func (h *ViewHandler) CreateView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.ViewType == "" {
-		req.ViewType = "list"
+		req.ViewType = "spreadsheet"
 	}
 
 	view, err := h.store.CreateView(r.Context(), collectionID, &req)

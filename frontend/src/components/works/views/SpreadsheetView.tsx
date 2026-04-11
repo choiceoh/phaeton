@@ -1,0 +1,525 @@
+/**
+ * SpreadsheetView — Excel-like inline editing view for collection data.
+ *
+ * Wraps DataTable with inline editing capabilities via useInlineEditing.
+ * Receives data from the parent (AppViewPage) — no duplicate fetching.
+ */
+import type { ColumnDef, SortingState, VisibilityState, ColumnPinningState } from '@tanstack/react-table'
+import { useCallback, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+
+import { DataTable } from '@/components/common/DataTable'
+import { useFormulaEngine } from '@/hooks/useFormulaEngine'
+import type { CellPosition } from '@/hooks/useGridNavigation'
+import { useInlineEditing } from '@/hooks/useInlineEditing'
+import { isLayoutType, isComputedType } from '@/lib/constants'
+import { formatCell } from '@/lib/formatCell'
+import type { Collection, Field } from '@/lib/types'
+
+import FormatToolbar from '../FormatToolbar'
+
+interface SpreadsheetViewProps {
+  collection: Collection
+  data: Record<string, unknown>[]
+  total: number
+  page: number
+  limit: number
+  onPageChange: (page: number) => void
+  onLimitChange: (limit: number) => void
+  onSortChange: (sort: SortingState) => void
+  onRowClick: (row: Record<string, unknown>) => void
+  updateEntry: (params: { id: string; body: Record<string, unknown> }) => Promise<unknown>
+  createEntry: (body: Record<string, unknown>) => Promise<unknown>
+  deleteEntry: (id: string) => void
+  batchUpdateEntry: (updates: { id: string; fields: Record<string, unknown> }[]) => void
+  canManage: boolean
+  toolbar?: React.ReactNode
+  toolbarRight?: React.ReactNode
+  summaryRow?: Record<string, { label: string; value: string | number }>
+  summaryFn?: Record<string, string>
+  onSummaryFnChange?: (columnId: string, fn: string) => void
+  emptyTitle?: string
+  emptyDescription?: string
+  emptyAction?: React.ReactNode
+  onReverseCellClick?: (sourceCollectionId: string, sourceFieldSlug: string, recordId: string) => void
+  onUpdateFieldOptions?: (fieldId: string, options: Record<string, unknown>) => Promise<void>
+}
+
+/**
+ * Parse a date string from various formats (Excel, Korean, ISO, US).
+ * Returns ISO date string (YYYY-MM-DD) or null.
+ */
+function parseDateFlexible(raw: string): string | null {
+  // ISO: 2024-03-15
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+  // Korean dot: 2024.03.15
+  const dotMatch = raw.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/)
+  if (dotMatch) {
+    return `${dotMatch[1]}-${dotMatch[2].padStart(2, '0')}-${dotMatch[3].padStart(2, '0')}`
+  }
+  // Korean text: 2024년 3월 15일
+  const koMatch = raw.match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/)
+  if (koMatch) {
+    return `${koMatch[1]}-${koMatch[2].padStart(2, '0')}-${koMatch[3].padStart(2, '0')}`
+  }
+  // US format: 3/15/2024 or 03/15/2024
+  const usMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (usMatch) {
+    return `${usMatch[3]}-${usMatch[1].padStart(2, '0')}-${usMatch[2].padStart(2, '0')}`
+  }
+  // ISO datetime: 2024-03-15T09:00:00
+  const dtMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T ]/)
+  if (dtMatch) return dtMatch[1]
+  return null
+}
+
+/** Coerce a pasted string value to the appropriate type for a field. */
+function coerceValue(raw: string, field: Field): unknown {
+  if (raw === '') return null
+  switch (field.field_type) {
+    case 'number':
+    case 'integer': {
+      const cleaned = raw.replace(/[,₩$€¥\s]/g, '').replace(/%$/, '')
+      const dp = (field.options as Record<string, unknown> | undefined)?.decimal_places
+      const effectiveDp = typeof dp === 'number' ? dp : (field.field_type === 'integer' ? 0 : undefined)
+      if (effectiveDp === 0) {
+        const n = parseInt(cleaned, 10)
+        return isNaN(n) ? null : n
+      }
+      const n = parseFloat(cleaned)
+      return isNaN(n) ? null : n
+    }
+    case 'boolean':
+      return ['true', '1', '✓', '참', 'yes', 'y'].includes(raw.toLowerCase())
+    case 'date': {
+      const parsed = parseDateFlexible(raw)
+      return parsed ?? raw
+    }
+    case 'datetime': {
+      // Try to preserve full datetime, fall back to date-only
+      if (/^\d{4}-\d{2}-\d{2}[T ]/.test(raw)) return raw
+      const parsed = parseDateFlexible(raw)
+      return parsed ?? raw
+    }
+    case 'time':
+      return raw
+    case 'multiselect':
+      return raw.split(',').map((s) => s.trim()).filter(Boolean)
+    default:
+      return raw
+  }
+}
+
+export default function SpreadsheetView({
+  collection,
+  data,
+  total,
+  page,
+  limit,
+  onPageChange,
+  onLimitChange,
+  onSortChange,
+  onRowClick,
+  updateEntry,
+  createEntry,
+  deleteEntry,
+  batchUpdateEntry,
+  canManage,
+  toolbar,
+  toolbarRight,
+  summaryRow,
+  summaryFn,
+  onSummaryFnChange,
+  emptyTitle,
+  emptyDescription,
+  emptyAction,
+  onReverseCellClick,
+  onUpdateFieldOptions,
+}: SpreadsheetViewProps) {
+  const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
+  const [activeColumnField, setActiveColumnField] = useState<Field | null>(null)
+
+  // Track active cell column to show format toolbar
+  const dataFields = useMemo(
+    () => collection?.fields?.filter((f) => !isLayoutType(f.field_type)) ?? [],
+    [collection],
+  )
+  const handleActiveCellChange = useCallback(
+    (cell: CellPosition | null) => {
+      if (!cell) { setActiveColumnField(null); return }
+      const field = dataFields[cell.col] ?? null
+      setActiveColumnField(field)
+    },
+    [dataFields],
+  )
+
+  // Column visibility/pinning persistence
+  const colVisStorageKey = collection.id ? `phaeton:colvis:${collection.id}:spreadsheet` : null
+  const colPinStorageKey = collection.id ? `phaeton:colpin:${collection.id}:spreadsheet` : null
+
+  const [initialColumnVisibility] = useState<VisibilityState>(() => {
+    if (colVisStorageKey) {
+      try {
+        const saved = localStorage.getItem(colVisStorageKey)
+        if (saved) return JSON.parse(saved)
+      } catch { /* ignore */ }
+    }
+    if (!collection?.fields) return {}
+    const dataFields = collection.fields.filter((f) => !isLayoutType(f.field_type))
+    const vis: Record<string, boolean> = {}
+    dataFields.forEach((f, i) => {
+      if (i >= 8) vis[f.slug] = false
+    })
+    // Reverse-relation columns hidden by default (toggle via column selector)
+    if (collection.reverse_relations) {
+      for (const rev of collection.reverse_relations) {
+        vis[`_rev_${rev.source_collection_slug}_${rev.source_field_slug}`] = false
+      }
+    }
+    return vis
+  })
+
+  const [initialColumnPinning] = useState<ColumnPinningState>(() => {
+    if (colPinStorageKey) {
+      try {
+        const saved = localStorage.getItem(colPinStorageKey)
+        if (saved) return JSON.parse(saved)
+      } catch { /* ignore */ }
+    }
+    return { left: [], right: [] }
+  })
+
+  const handleColumnVisibilityChange = useCallback(
+    (vis: VisibilityState) => {
+      if (colVisStorageKey) {
+        try { localStorage.setItem(colVisStorageKey, JSON.stringify(vis)) } catch { /* ignore */ }
+      }
+    },
+    [colVisStorageKey],
+  )
+
+  const handleColumnPinningChange = useCallback(
+    (pin: ColumnPinningState) => {
+      if (colPinStorageKey) {
+        try { localStorage.setItem(colPinStorageKey, JSON.stringify(pin)) } catch { /* ignore */ }
+      }
+    },
+    [colPinStorageKey],
+  )
+
+  // Editable fields (exclude layout/computed)
+  const editableFields = useMemo(
+    () => collection?.fields?.filter((f) => !isLayoutType(f.field_type)) ?? [],
+    [collection],
+  )
+
+  // Formula engine for instant formula recomputation after cell edits
+  const { recomputeRow } = useFormulaEngine(editableFields)
+
+  // System columns and reverse-relation columns should never be editable
+  const readOnlyColumns = useMemo(() => {
+    const base = new Set(['_select', '_actions', 'created_at', '_status'])
+    if (collection.reverse_relations) {
+      for (const rev of collection.reverse_relations) {
+        base.add(`_rev_${rev.source_collection_slug}_${rev.source_field_slug}`)
+      }
+    }
+    return base
+  }, [collection])
+
+  // Build columns (similar to AppViewPage but simpler — no search highlighting)
+  const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
+    if (!collection?.fields) return []
+    const cols: ColumnDef<Record<string, unknown>>[] = []
+
+    cols.push(
+      ...collection.fields
+        .filter((f) => !isLayoutType(f.field_type))
+        .map((f) => ({
+          id: f.slug,
+          header: f.label,
+          enableSorting: true,
+          size: f.field_type === 'textarea' ? 250 : 150,
+          cell: ({ row }: { row: { original: Record<string, unknown> } }) => {
+            const v = row.original[f.slug]
+            return formatCell(v, f)
+          },
+        })),
+    )
+
+    cols.push({
+      id: 'created_at',
+      header: '작성일',
+      enableSorting: true,
+      size: 100,
+      cell: ({ row }) => {
+        const v = row.original.created_at
+        if (!v) return '-'
+        return new Date(v as string).toLocaleDateString('ko')
+      },
+    })
+
+    // Reverse-relation virtual columns (read-only backlinks)
+    if (collection.reverse_relations) {
+      for (const rev of collection.reverse_relations) {
+        const virtualKey = `_rev_${rev.source_collection_slug}_${rev.source_field_slug}`
+        cols.push({
+          id: virtualKey,
+          header: `← ${rev.source_collection_label}`,
+          enableSorting: false,
+          size: 180,
+          cell: ({ row }: { row: { original: Record<string, unknown> } }) => {
+            const v = row.original[virtualKey]
+            if (!v || (Array.isArray(v) && v.length === 0)) return '-'
+            if (!Array.isArray(v)) return String(v)
+            return (
+              <span className="flex flex-wrap gap-1">
+                {(v as { id: string; label: string }[]).map((item, i) => (
+                  <span
+                    key={item.id ?? i}
+                    className={onReverseCellClick ? 'cursor-pointer text-blue-600 hover:underline' : ''}
+                    onClick={
+                      onReverseCellClick
+                        ? (e) => {
+                            e.stopPropagation()
+                            onReverseCellClick(rev.source_collection_id, rev.source_field_slug, String(row.original.id))
+                          }
+                        : undefined
+                    }
+                  >
+                    {item.label ?? item.id}{i < (v as unknown[]).length - 1 ? ',' : ''}
+                  </span>
+                ))}
+              </span>
+            )
+          },
+        })
+      }
+    }
+
+    return cols
+  }, [collection, onReverseCellClick])
+
+  // Visible column IDs (derived from TanStack table — approximated here)
+  const visibleColumnIds = useMemo(
+    () => columns.map((c) => c.id ?? '').filter(Boolean),
+    [columns],
+  )
+
+  // Inline editing
+  const inlineEditing = useInlineEditing({
+    data,
+    fields: editableFields,
+    columnIds: visibleColumnIds,
+    onCellSave: async (rowId, fieldSlug, value) => {
+      try {
+        // Recompute formula fields locally for instant feedback.
+        // Formula values are included in the optimistic update body so they
+        // appear immediately in the React Query cache. The server ignores
+        // formula keys (no DB column).
+        const row = data.find((r) => String(r.id) === rowId)
+        const patchedRow = row ? { ...row, [fieldSlug]: value } : undefined
+        const formulaOverrides = patchedRow ? recomputeRow(patchedRow, fieldSlug) : {}
+        await updateEntry({ id: rowId, body: { [fieldSlug]: value, ...formulaOverrides } })
+      } catch (err) {
+        toast.error('저장 ��패')
+        throw err
+      }
+    },
+    onCellClear: async (rowId, fieldSlug) => {
+      try {
+        const row = data.find((r) => String(r.id) === rowId)
+        const patchedRow = row ? { ...row, [fieldSlug]: null } : undefined
+        const formulaOverrides = patchedRow ? recomputeRow(patchedRow, fieldSlug) : {}
+        await updateEntry({ id: rowId, body: { [fieldSlug]: null, ...formulaOverrides } })
+      } catch (err) {
+        toast.error('삭제 실패')
+        throw err
+      }
+    },
+    readOnlyColumns,
+    moveTo: () => {}, // Navigation managed by DataTable's internal grid
+  })
+
+  // Cut handler (Ctrl+X): clear selected cells after copy
+  const handleCut = useCallback(
+    (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let r = startRow; r <= endRow; r++) {
+        const rowData = data[r]
+        if (!rowData) continue
+        const fields: Record<string, unknown> = {}
+        for (let c = startCol; c <= endCol; c++) {
+          const colId = visibleColumnIds[c]
+          if (!colId || readOnlyColumns.has(colId)) continue
+          const field = editableFields.find((f) => f.slug === colId)
+          if (!field || isComputedType(field.field_type)) continue
+          fields[colId] = null
+        }
+        if (Object.keys(fields).length > 0) {
+          updates.push({ id: String(rowData.id), fields })
+        }
+      }
+      if (updates.length > 0) batchUpdateEntry(updates)
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+  )
+
+  // Fill down handler (Ctrl+D): copy first row values to rows below
+  const handleFillDown = useCallback(
+    (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let c = startCol; c <= endCol; c++) {
+        const colId = visibleColumnIds[c]
+        if (!colId || readOnlyColumns.has(colId)) continue
+        const field = editableFields.find((f) => f.slug === colId)
+        if (!field || isComputedType(field.field_type)) continue
+        const sourceValue = data[startRow]?.[colId]
+        for (let r = startRow + 1; r <= endRow; r++) {
+          const rowData = data[r]
+          if (!rowData) continue
+          const existing = updates.find((u) => u.id === String(rowData.id))
+          if (existing) {
+            existing.fields[colId] = sourceValue
+          } else {
+            updates.push({ id: String(rowData.id), fields: { [colId]: sourceValue } })
+          }
+        }
+      }
+      if (updates.length > 0) {
+        batchUpdateEntry(updates)
+        toast.success(`${updates.length}행 채우기 완료`)
+      }
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+  )
+
+  // Fill right handler (Ctrl+R): copy first column values to columns right
+  const handleFillRight = useCallback(
+    (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let r = startRow; r <= endRow; r++) {
+        const rowData = data[r]
+        if (!rowData) continue
+        const sourceColId = visibleColumnIds[startCol]
+        if (!sourceColId) continue
+        const sourceValue = rowData[sourceColId]
+        const fields: Record<string, unknown> = {}
+        for (let c = startCol + 1; c <= endCol; c++) {
+          const colId = visibleColumnIds[c]
+          if (!colId || readOnlyColumns.has(colId)) continue
+          const field = editableFields.find((f) => f.slug === colId)
+          if (!field || isComputedType(field.field_type)) continue
+          fields[colId] = sourceValue
+        }
+        if (Object.keys(fields).length > 0) {
+          updates.push({ id: String(rowData.id), fields })
+        }
+      }
+      if (updates.length > 0) {
+        batchUpdateEntry(updates)
+        toast.success(`${updates.length}행 채우기 완료`)
+      }
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry],
+  )
+
+  // Paste handler
+  const handlePaste = useCallback(
+    (startRow: number, startCol: number, matrix: string[][]) => {
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+      for (let r = 0; r < matrix.length; r++) {
+        const dataRow = data[startRow + r]
+        if (!dataRow) continue
+        const fields: Record<string, unknown> = {}
+        for (let c = 0; c < matrix[r].length; c++) {
+          const colId = visibleColumnIds[startCol + c]
+          if (!colId || readOnlyColumns.has(colId)) continue
+          const field = editableFields.find((f) => f.slug === colId)
+          if (!field || isComputedType(field.field_type)) continue
+          fields[colId] = coerceValue(matrix[r][c], field)
+        }
+        if (Object.keys(fields).length > 0) {
+          // Recompute formula fields for each pasted row
+          const patchedRow = { ...dataRow, ...fields }
+          const changedSlugs = Object.keys(fields)
+          let formulaOverrides: Record<string, unknown> = {}
+          for (const slug of changedSlugs) {
+            formulaOverrides = { ...formulaOverrides, ...recomputeRow(patchedRow, slug) }
+          }
+          updates.push({ id: String(dataRow.id), fields: { ...fields, ...formulaOverrides } })
+        }
+      }
+      if (updates.length > 0) {
+        batchUpdateEntry(updates)
+        toast.success(`${updates.length}행 붙여넣기 완료`)
+      }
+    },
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry, recomputeRow],
+  )
+
+  return (
+    <DataTable
+      columns={columns}
+      data={data}
+      total={total}
+      page={page}
+      limit={limit}
+      onPageChange={onPageChange}
+      onLimitChange={onLimitChange}
+      onSortChange={onSortChange}
+      onRowClick={onRowClick}
+      emptyTitle={emptyTitle}
+      emptyDescription={emptyDescription}
+      emptyAction={emptyAction}
+      summaryRow={summaryRow}
+      summaryFn={summaryFn}
+      onSummaryFnChange={onSummaryFnChange}
+      toolbar={
+        <>
+          {toolbar}
+          {canManage && onUpdateFieldOptions && activeColumnField && (
+            <FormatToolbar
+              field={activeColumnField}
+              collectionId={collection.id}
+              onUpdateOptions={onUpdateFieldOptions}
+            />
+          )}
+        </>
+      }
+      toolbarRight={toolbarRight}
+      initialColumnVisibility={initialColumnVisibility}
+      onColumnVisibilityChange={handleColumnVisibilityChange}
+      initialColumnPinning={initialColumnPinning}
+      onColumnPinningChange={handleColumnPinningChange}
+      // Inline editing props
+      editable={canManage}
+      fields={editableFields}
+      editingCell={inlineEditing.editingCell}
+      editValue={inlineEditing.editValue}
+      onEditValueChange={inlineEditing.setEditValue}
+      onStartEditing={inlineEditing.startEditing}
+      onCommitEdit={inlineEditing.commitEdit}
+      onCancelEdit={inlineEditing.cancelEdit}
+      cellSaveState={inlineEditing.cellSaveState}
+      isEditingCell={inlineEditing.isEditing}
+      onEditKeyDown={inlineEditing.handleEditKeyDown}
+      getFieldForCol={inlineEditing.getFieldForCol}
+      onClearCell={inlineEditing.clearCell}
+      onPaste={handlePaste}
+      onCut={canManage ? handleCut : undefined}
+      onFillDown={canManage ? handleFillDown : undefined}
+      onFillRight={canManage ? handleFillRight : undefined}
+      onDeleteRow={canManage ? deleteEntry : undefined}
+      onActiveCellChange={handleActiveCellChange}
+      showNewRow={canManage}
+      newRowValues={newRowValues}
+      onNewRowChange={(slug, v) => setNewRowValues((prev) => ({ ...prev, [slug]: v }))}
+      onNewRowCommit={() => {
+        if (Object.keys(newRowValues).length > 0) {
+          createEntry(newRowValues).then(() => setNewRowValues({})).catch(() => {})
+        }
+      }}
+    />
+  )
+}
