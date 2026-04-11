@@ -915,8 +915,8 @@ export function DataTable<T>({
 
       {/* Formula bar (Excel-style: NameBox | fx | value) */}
       {editable && (
-        <div className="flex items-center border border-[#d4d4d4] bg-white h-[22px] text-[11px]">
-          <div className="w-16 px-1.5 border-r border-[#d4d4d4] bg-[#e6e6e6] text-center font-medium text-[#333] flex items-center justify-center h-full select-none tabular-nums">
+        <div className="flex items-center border border-[#d4d4d4] bg-white h-[28px] text-[12px]">
+          <div className="w-16 px-1.5 border-r border-[#d4d4d4] bg-[#e6e6e6] text-center font-medium text-[#333] flex items-center justify-center h-full select-none tabular-nums cursor-cell">
             {formulaBarInfo?.ref ?? ''}
           </div>
           <Popover open={fxOpen} onOpenChange={setFxOpen}>
@@ -952,7 +952,7 @@ export function DataTable<T>({
               ))}
             </PopoverContent>
           </Popover>
-          <div className="flex-1 px-1.5 truncate text-[#333] text-[12px]">
+          <div className="flex-1 px-1.5 truncate text-[#333] text-[12px] cursor-text">
             {formulaBarInfo?.value ?? ''}
           </div>
         </div>
