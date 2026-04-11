@@ -76,6 +76,7 @@ import {
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { CellPosition } from '@/hooks/useGridNavigation'
 import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
+import { useExcelToolbarOptional } from '@/contexts/ExcelToolbarContext'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
 import { useCellDragMove } from '@/hooks/useCellDragMove'
 import { useFillHandle } from '@/hooks/useFillHandle'
@@ -1334,9 +1335,9 @@ export function DataTable<T>({
       )}
       </div>
 
-      {/* Status bar (Excel-like) */}
+      {/* Status bar — pushed to ExcelToolbarContext for SheetTabBar */}
       {editable && (
-        <StatusBar
+        <StatusBarBridge
           selection={grid.selection}
           activeCell={grid.activeCell}
           data={data as Record<string, unknown>[]}
@@ -1568,8 +1569,8 @@ export function DataTable<T>({
         />
       )}
 
-      {/* Pagination footer */}
-      {total !== undefined && total > 0 && (
+      {/* Pagination footer — hidden in client mode (all data loaded locally) */}
+      {!clientMode && total !== undefined && total > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <span>
@@ -1754,8 +1755,9 @@ function NewRowCell({
   }
 }
 
-// Excel-like status bar with selection info and numeric aggregates.
-function StatusBar({
+// StatusBarBridge — computes selection stats and pushes content to
+// ExcelToolbarContext so SheetTabBar can render it on the same row.
+function StatusBarBridge({
   selection,
   activeCell,
   data,
@@ -1768,6 +1770,9 @@ function StatusBar({
   colIds: string[]
   fields?: Field[]
 }) {
+  const ctx = useExcelToolbarOptional()
+  const setStatusBar = ctx?.setStatusBar
+
   const stats = useMemo(() => {
     if (!selection) return null
     const r1 = Math.min(selection.startRow, selection.endRow)
@@ -1777,7 +1782,6 @@ function StatusBar({
     const rows = r2 - r1 + 1
     const cols = c2 - c1 + 1
 
-    // Collect numeric values from selected cells.
     const numericTypes = new Set(['number', 'integer', 'decimal'])
     const nums: number[] = []
     for (let r = r1; r <= r2; r++) {
@@ -1807,26 +1811,38 @@ function StatusBar({
     return { rows, cols, nums, sum, avg }
   }, [selection, data, colIds, fields])
 
-  if (!selection && !activeCell) return null
+  useEffect(() => {
+    if (!setStatusBar) return
+    if (!selection && !activeCell) {
+      setStatusBar(null)
+      return
+    }
+    setStatusBar(
+      <>
+        {stats && (
+          <>
+            <span className="text-[#666]">{stats.rows}행 x {stats.cols}열</span>
+            {stats.nums.length > 0 && (
+              <>
+                <span className="text-[#c0c0c0]">|</span>
+                <span>합계: <strong className="text-[#333] tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+                <span>평균: <strong className="text-[#333] tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+                <span>개수: <strong className="text-[#333] tabular-nums">{stats.nums.length}</strong></span>
+              </>
+            )}
+          </>
+        )}
+      </>,
+    )
+  }, [selection, activeCell, stats, setStatusBar])
 
-  return (
-    <div className="flex items-center gap-4 text-[11px] text-[#333] bg-[#e6e6e6] border border-[#d4d4d4] px-3 h-[22px]">
-      <span className="text-[#666] mr-auto">준비</span>
-      {stats && (
-        <>
-          <span className="text-[#666]">{stats.rows}행 x {stats.cols}열</span>
-          {stats.nums.length > 0 && (
-            <>
-              <span className="text-[#c0c0c0]">|</span>
-              <span>합계: <strong className="text-[#333] tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-              <span>평균: <strong className="text-[#333] tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-              <span>개수: <strong className="text-[#333] tabular-nums">{stats.nums.length}</strong></span>
-            </>
-          )}
-        </>
-      )}
-    </div>
-  )
+  // Clean up on unmount
+  useEffect(() => {
+    if (!setStatusBar) return
+    return () => setStatusBar(null)
+  }, [setStatusBar])
+
+  return null
 }
 
 // Renders a compact set of page number buttons around the current page.
