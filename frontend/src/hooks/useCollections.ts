@@ -133,6 +133,32 @@ export function useAddField(collectionId: string) {
 }
 
 /**
+ * Update a field (ALTER TABLE ALTER COLUMN). Two-step preview/confirm pattern
+ * for potentially dangerous changes (e.g. type conversion).
+ */
+export function useUpdateField() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      fieldId,
+      input,
+      confirm,
+    }: {
+      fieldId: string
+      input: Partial<Pick<Field, 'label' | 'field_type' | 'is_required' | 'is_unique' | 'is_indexed' | 'default_value' | 'options' | 'width' | 'height'>>
+      confirm: boolean
+    }) =>
+      api.patch<Field | { confirmation_required: boolean; preview: unknown }>(
+        `/schema/fields/${fieldId}${confirm ? '?confirm=true' : ''}`,
+        input,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.collections.all })
+    },
+  })
+}
+
+/**
  * Delete a field (ALTER TABLE DROP COLUMN). Same two-step preview/confirm
  * pattern as useDeleteCollection — preview shows affected data before commit.
  */

@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 import { Monitor } from 'lucide-react'
 
 import AppBuilder from '@/components/works/AppBuilder'
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
 export default function AppBuilderPage() {
+  const { appId } = useParams()
   const isMobile = useIsMobile()
   const navigate = useNavigate()
 
@@ -28,7 +29,7 @@ export default function AppBuilderPage() {
 
   return (
     <div>
-      <AppBuilder />
+      <AppBuilder appId={appId} />
     </div>
   )
 }

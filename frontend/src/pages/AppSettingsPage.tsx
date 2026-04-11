@@ -97,7 +97,19 @@ export default function AppSettingsPage() {
 
       <div className="space-y-6">
         {canManage && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <Card className="p-4">
+              <h2 className="mb-1 text-sm font-semibold">앱 수정</h2>
+              <p className="text-sm text-muted-foreground">
+                앱의 항목(필드) 구조를 추가하거나 변경합니다.
+              </p>
+              <Link to={`/apps/${collection.id}/edit`}>
+                <Button variant="outline" size="sm" className="mt-3">
+                  앱 수정
+                </Button>
+              </Link>
+            </Card>
+
             <Card className="p-4">
               <h2 className="mb-3 text-sm font-semibold">기본 정보</h2>
               <div className="flex items-center gap-3">
