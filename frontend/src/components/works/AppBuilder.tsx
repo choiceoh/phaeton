@@ -7,13 +7,24 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, Sparkles, X } from 'lucide-react'
-import { useCollections, useCreateCollection } from '@/hooks/useCollections'
+import {
+  useAddField,
+  useCollection,
+  useCollections,
+  useCreateCollection,
+  useDeleteField,
+  useUpdateCollection,
+  useUpdateField,
+} from '@/hooks/useCollections'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import type { AIBuildResult } from '@/hooks/useAI'
 import { useAIGenerateSlug } from '@/hooks/useAI'
 import { formatError } from '@/lib/api'
-import type { CreateCollectionReq, FieldType } from '@/lib/types'
+import type { CreateCollectionReq, Field, FieldType } from '@/lib/types'
+import ErrorState from '@/components/common/ErrorState'
+import LoadingState from '@/components/common/LoadingState'
+import PageHeader from '@/components/common/PageHeader'
 
 import CoachMark from '@/components/common/CoachMark'
 
@@ -41,8 +52,45 @@ const BUILDER_COACH_STEPS = [
   },
 ]
 
-export default function AppBuilder() {
+function fieldToFieldDraft(f: Field): FieldDraft {
+  return {
+    id: f.id,
+    slug: f.slug,
+    label: f.label,
+    field_type: f.field_type,
+    is_required: f.is_required,
+    is_unique: f.is_unique,
+    is_indexed: f.is_indexed,
+    default_value: f.default_value as string | undefined,
+    width: f.width,
+    height: f.height,
+    options: f.options,
+    relation: f.relation
+      ? {
+          target_collection_id: f.relation.target_collection_id,
+          relation_type: f.relation.relation_type as 'one_to_one' | 'one_to_many' | 'many_to_many',
+          on_delete: f.relation.on_delete,
+        }
+      : undefined,
+  }
+}
+
+function hasFieldChanged(draft: FieldDraft, original: Field): boolean {
+  return (
+    draft.label !== original.label ||
+    draft.field_type !== original.field_type ||
+    draft.is_required !== original.is_required ||
+    draft.is_unique !== original.is_unique ||
+    draft.is_indexed !== original.is_indexed ||
+    draft.width !== original.width ||
+    draft.height !== original.height ||
+    JSON.stringify(draft.options ?? {}) !== JSON.stringify(original.options ?? {})
+  )
+}
+
+export default function AppBuilder({ appId }: { appId?: string }) {
   const navigate = useNavigate()
+  const isEditMode = !!appId
   const fieldCounter = useRef(0)
   const [slug, setSlug] = useState('')
   const [slugManual, setSlugManual] = useState(false)
@@ -51,28 +99,62 @@ export default function AppBuilder() {
   const [fields, setFields] = useState<FieldDraft[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const initializedRef = useRef(false)
+  const originalFieldsRef = useRef<Field[]>([])
 
   const { data: collections = [] } = useCollections()
+  const {
+    data: existingCollection,
+    isLoading: isLoadingCollection,
+    isError: isCollectionError,
+    error: collectionError,
+    refetch: refetchCollection,
+  } = useCollection(appId)
   const createCollection = useCreateCollection()
+  const updateCollection = useUpdateCollection(appId ?? '')
+  const addField = useAddField(appId ?? '')
+  const updateField = useUpdateField()
+  const deleteField = useDeleteField()
   const aiAvailable = useAIAvailable()
   const generateSlug = useAIGenerateSlug()
   const [showAINudge, setShowAINudge] = useState(false)
 
+  // Initialize state from existing collection in edit mode
   useEffect(() => {
-    if (aiAvailable) {
+    if (isEditMode && existingCollection && !initializedRef.current) {
+      initializedRef.current = true
+      setLabel(existingCollection.label)
+      setSlug(existingCollection.slug)
+      setSlugManual(true)
+      setDescription(existingCollection.description || '')
+      originalFieldsRef.current = existingCollection.fields ?? []
+      setFields((existingCollection.fields ?? []).map(fieldToFieldDraft))
+    }
+  }, [isEditMode, existingCollection])
+
+  useEffect(() => {
+    if (!isEditMode && aiAvailable) {
       try {
         if (!localStorage.getItem('phaeton:ai-builder-nudge-dismissed')) setShowAINudge(true)
       } catch { /* ignore */ }
     }
-  }, [aiAvailable])
+  }, [isEditMode, aiAvailable])
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
   const selectedField = fields.find((f) => f.id === selectedId) || null
 
-  const isDirty = useMemo(
-    () => label.trim() !== '' || slug.trim() !== '' || description.trim() !== '' || fields.length > 0,
-    [label, slug, description, fields],
-  )
+  const isDirty = useMemo(() => {
+    if (!isEditMode) {
+      return label.trim() !== '' || slug.trim() !== '' || description.trim() !== '' || fields.length > 0
+    }
+    if (!existingCollection) return false
+    return (
+      label !== existingCollection.label ||
+      description !== (existingCollection.description || '') ||
+      JSON.stringify(fields) !== JSON.stringify((existingCollection.fields ?? []).map(fieldToFieldDraft))
+    )
+  }, [isEditMode, label, slug, description, fields, existingCollection])
 
   const blocker = useUnsavedChanges(isDirty)
 
@@ -207,12 +289,116 @@ export default function AppBuilder() {
     })
   }
 
+  async function handleEditSave() {
+    setError('')
+    if (!label.trim()) {
+      setError('이름은 필수입니다.')
+      return
+    }
+    for (const f of fields) {
+      if (!f.slug) {
+        setError(`항목 "${f.label}"의 영문 ID가 비어 있습니다.`)
+        return
+      }
+    }
+
+    setSaving(true)
+    try {
+      const originalFields = originalFieldsRef.current
+      const originalById = new Map(originalFields.map((f) => [f.id, f]))
+      const currentIds = new Set(fields.map((f) => f.id))
+
+      // 1. Update collection metadata if changed
+      if (
+        label !== existingCollection?.label ||
+        description !== (existingCollection?.description || '')
+      ) {
+        await updateCollection.mutateAsync({
+          label: label.trim(),
+          description: description.trim() || undefined,
+        })
+      }
+
+      // 2. Delete removed fields
+      for (const orig of originalFields) {
+        if (!currentIds.has(orig.id)) {
+          await deleteField.mutateAsync({ fieldId: orig.id, confirm: true })
+        }
+      }
+
+      // 3. Add new fields (id starts with 'field_' or 'ai_')
+      for (const draft of fields) {
+        if (!originalById.has(draft.id)) {
+          const input = {
+            slug: draft.slug,
+            label: draft.label,
+            field_type: draft.field_type,
+            is_required: draft.is_required,
+            is_unique: draft.is_unique,
+            is_indexed: draft.is_indexed,
+            default_value: draft.default_value,
+            options: draft.options,
+            width: draft.width,
+            height: draft.height,
+            relation: draft.relation,
+          }
+          await addField.mutateAsync({ input, confirm: true })
+        }
+      }
+
+      // 4. Update modified fields
+      for (const draft of fields) {
+        const orig = originalById.get(draft.id)
+        if (orig && hasFieldChanged(draft, orig)) {
+          await updateField.mutateAsync({
+            fieldId: draft.id,
+            input: {
+              label: draft.label,
+              field_type: draft.field_type,
+              is_required: draft.is_required,
+              is_unique: draft.is_unique,
+              is_indexed: draft.is_indexed,
+              options: draft.options,
+              width: draft.width,
+              height: draft.height,
+            },
+            confirm: true,
+          })
+        }
+      }
+
+      toast.success('앱이 수정되었습니다')
+      navigate(`/apps/${appId}`)
+    } catch (err) {
+      const msg = formatError(err)
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (isEditMode && isLoadingCollection) return <LoadingState />
+  if (isEditMode && isCollectionError) return <ErrorState error={collectionError} onRetry={() => refetchCollection()} />
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">새 앱 만들기</h1>
-        <AIBuildDialog onApply={handleAIApply} />
-      </div>
+      {isEditMode && existingCollection ? (
+        <PageHeader
+          breadcrumb={[
+            { label: '앱 목록', href: '/apps' },
+            { label: existingCollection.label, href: `/apps/${existingCollection.id}` },
+            { label: '수정' },
+          ]}
+          title="앱 수정"
+          description={`/${existingCollection.slug} 앱의 항목 구조를 변경합니다`}
+        />
+      ) : (
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">새 앱 만들기</h1>
+          <AIBuildDialog onApply={handleAIApply} />
+        </div>
+      )}
 
       {showAINudge && (
         <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground animate-fade-in">
@@ -258,6 +444,8 @@ export default function AppBuilder() {
                     value={slug}
                     onChange={(e) => handleSlugChange(e.target.value)}
                     placeholder="자동 생성됨"
+                    readOnly={isEditMode}
+                    className={isEditMode ? 'bg-muted' : ''}
                   />
                   {generateSlug.isPending && (
                     <Loader2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
@@ -284,10 +472,10 @@ export default function AppBuilder() {
 
       <div className="flex justify-end pb-16">
         <Button
-          onClick={handleSave}
-          disabled={createCollection.isPending || !label.trim() || !slug.trim()}
+          onClick={isEditMode ? handleEditSave : handleSave}
+          disabled={(isEditMode ? saving : createCollection.isPending) || !label.trim() || !slug.trim()}
         >
-          {createCollection.isPending ? '저장 중...' : '저장'}
+          {(isEditMode ? saving : createCollection.isPending) ? '저장 중...' : '저장'}
         </Button>
       </div>
 
