@@ -295,6 +295,8 @@ export function DataTable<T>({
     return base
   })
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({})
+  const [rowSizing, setRowSizing] = useState<Record<number, number>>({})
+  const [resizingRow, setResizingRow] = useState<{ idx: number; startY: number; startH: number } | null>(null)
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([])
 
   // Horizontal scroll indicator state.
@@ -317,6 +319,25 @@ export function DataTable<T>({
     return () => { el.removeEventListener('scroll', check); ro.disconnect() }
   }, [data, columnVisibility])
 
+  // Row resize drag handler.
+  useEffect(() => {
+    if (!resizingRow) return
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientY - resizingRow.startY
+      setRowSizing((prev) => ({
+        ...prev,
+        [resizingRow.idx]: Math.max(20, resizingRow.startH + delta),
+      }))
+    }
+    const handleMouseUp = () => setResizingRow(null)
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [resizingRow])
+
   // Prepend row number column + optional checkbox column.
   const augmentedColumns = useMemo(() => {
     const cols: ColumnDef<T, unknown>[] = []
@@ -333,7 +354,18 @@ export function DataTable<T>({
         const idx = data.indexOf(row.original)
         const num = (page - 1) * limit + idx + 1
         return (
-          <span className="text-[11px] text-stone-400 select-none text-center block tabular-nums">{num}</span>
+          <div className="relative h-full">
+            <span className="text-[11px] text-stone-400 select-none text-center block tabular-nums">{num}</span>
+            {/* Row resize handle */}
+            <div
+              className="absolute bottom-0 left-0 w-full h-[3px] cursor-row-resize hover:bg-primary/30 z-10"
+              onMouseDown={(e) => {
+                e.stopPropagation()
+                const td = (e.target as HTMLElement).closest('td')!
+                setResizingRow({ idx, startY: e.clientY, startH: td.offsetHeight })
+              }}
+            />
+          </div>
         )
       },
     }
@@ -630,13 +662,19 @@ export function DataTable<T>({
   const useVirtual = totalGridRows > VIRTUAL_THRESHOLD
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
 
+  const getRowHeight = useCallback((index: number) => rowSizing[index] || ROW_HEIGHT, [rowSizing])
   const rowVirtualizer = useVirtualizer({
     count: totalGridRows,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: getRowHeight,
     overscan: 8,
     enabled: useVirtual,
   })
+
+  // Re-measure when row sizes change.
+  useEffect(() => {
+    if (useVirtual) rowVirtualizer.measure()
+  }, [rowSizing, useVirtual, rowVirtualizer])
 
   // Scroll active cell into view when navigating via keyboard.
   useEffect(() => {
@@ -887,7 +925,7 @@ export function DataTable<T>({
                 </TableCell>
               </TableRow>
             ) : (
-              (useVirtual ? rowVirtualizer.getVirtualItems() : Array.from({ length: totalGridRows }, (_, i) => ({ index: i, start: 0, size: ROW_HEIGHT }))).map((virtualItem) => {
+              (useVirtual ? rowVirtualizer.getVirtualItems() : Array.from({ length: totalGridRows }, (_, i) => ({ index: i, start: 0, size: getRowHeight(i) }))).map((virtualItem) => {
                 const rowIdx = virtualItem.index
                 const isEmptyGridRow = rowIdx >= visibleRows.length
 
@@ -1003,7 +1041,7 @@ export function DataTable<T>({
                     width: '100%',
                     height: `${virtualItem.size}px`,
                     transform: `translateY(${virtualItem.start}px)`,
-                  } : undefined}
+                  } : { height: `${getRowHeight(rowIdx)}px` }}
                   onClick={() => onRowClick?.(row.original)}
                 >
                   {row.getVisibleCells().map((cell, colIdx) => {
