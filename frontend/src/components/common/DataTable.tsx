@@ -827,7 +827,7 @@ export function DataTable<T>({
   }, [editable, grid.activeCell, colIds, data, page, limit])
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col h-full gap-1">
       {/* Toolbar — hidden when content is piped to ExcelRibbon */}
       {(toolbar || toolbarRight) && <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-1">{toolbar}</div>
@@ -947,13 +947,13 @@ export function DataTable<T>({
         return null
       })()}
 
-      <div className="relative">
+      <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={(el) => {
           scrollRef.current = el
           ;(grid.containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
         }}
-        className={`border border-[#d4d4d4] bg-white overflow-auto focus:outline-none ${useVirtual ? 'max-h-[calc(100vh-340px)]' : ''}`}
+        className="border border-[#d4d4d4] bg-white overflow-auto focus:outline-none flex-1 min-h-0"
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
