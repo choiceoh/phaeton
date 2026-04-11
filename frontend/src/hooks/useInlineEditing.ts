@@ -35,6 +35,10 @@ export interface UseInlineEditingOptions {
   readOnlyColumns?: Set<string>
   /** Navigation callback after commit (from useGridNavigation). */
   moveTo: (row: number, col: number, extend: boolean) => void
+  /** Number of empty rows beyond data (free grid mode). 0 = no empty rows. */
+  emptyRowCount?: number
+  /** Called when a cell in an empty row is committed. */
+  onEmptyRowSave?: (fieldSlug: string, value: unknown) => Promise<void>
 }
 
 export function useInlineEditing({
@@ -45,6 +49,8 @@ export function useInlineEditing({
   onCellClear,
   readOnlyColumns = new Set(),
   moveTo,
+  emptyRowCount = 0,
+  onEmptyRowSave,
 }: UseInlineEditingOptions) {
   const [editingCell, setEditingCell] = useState<CellPosition | null>(null)
   const [editValue, setEditValue] = useState<unknown>(null)
@@ -81,7 +87,16 @@ export function useInlineEditing({
   const startEditing = useCallback(
     (row: number, col: number, initialChar?: string) => {
       if (!isEditableCol(col)) return
-      if (row >= data.length) return // new row handled separately
+      const isEmptyRow = row >= data.length && row < data.length + emptyRowCount
+      if (row >= data.length && !isEmptyRow) return // beyond grid boundary
+
+      if (isEmptyRow) {
+        // Empty row: start editing with blank value
+        originalValueRef.current = null
+        setEditValue(initialChar ?? '')
+        setEditingCell({ row, col })
+        return
+      }
 
       const colId = columnIds[col]
       const currentValue = data[row]?.[colId]
@@ -122,7 +137,7 @@ export function useInlineEditing({
       }
       setEditingCell({ row, col })
     },
-    [isEditableCol, data, columnIds, getFieldForCol, onCellSave],
+    [isEditableCol, data, columnIds, getFieldForCol, onCellSave, emptyRowCount],
   )
 
   /** Commit the current edit. */
@@ -131,6 +146,16 @@ export function useInlineEditing({
       if (!editingCell) return
       const { row, col } = editingCell
       const colId = columnIds[col]
+
+      // Empty row commit — create new entry
+      if (row >= data.length) {
+        setEditingCell(null)
+        if (editValue != null && editValue !== '' && onEmptyRowSave) {
+          await onEmptyRowSave(colId, editValue)
+        }
+        return
+      }
+
       const rowId = String(data[row]?.id)
       const key = `${rowId}:${colId}`
 
@@ -161,7 +186,7 @@ export function useInlineEditing({
         })
       }
     },
-    [editingCell, editValue, data, columnIds, onCellSave],
+    [editingCell, editValue, data, columnIds, onCellSave, onEmptyRowSave],
   )
 
   /** Cancel the current edit. */
@@ -174,7 +199,7 @@ export function useInlineEditing({
   const clearCell = useCallback(
     (row: number, col: number) => {
       if (!isEditableCol(col)) return
-      if (row >= data.length) return
+      if (row >= data.length) return // empty rows: no-op
 
       const colId = columnIds[col]
       const rowId = String(data[row]?.id)

@@ -199,6 +199,12 @@ interface Props<T> {
   /** Per-column filters for client-side filtering. */
   columnFilters?: { id: string; value: unknown }[]
 
+  // --- Free grid mode (empty rows below data) ---
+  /** Number of empty rows to show below data (free grid mode). */
+  emptyRowCount?: number
+  /** Called when fill extends into empty rows. */
+  onFillIntoEmptyRows?: (rows: Record<string, unknown>[]) => void
+
   // --- Column management (optional, used by SpreadsheetView) ---
   /** Called to rename a column. */
   onRenameColumn?: (columnId: string, newLabel: string) => void
@@ -270,6 +276,8 @@ export function DataTable<T>({
   clientMode,
   globalFilter: globalFilterProp,
   columnFilters: columnFiltersProp,
+  emptyRowCount = 0,
+  onFillIntoEmptyRows,
   onRenameColumn,
   onDeleteColumn,
   onAddColumn,
@@ -481,8 +489,10 @@ export function DataTable<T>({
     return skip
   }, [colIds])
 
+  const totalGridRows = visibleRows.length + emptyRowCount
+
   const grid = useGridNavigation({
-    rowCount: visibleRows.length,
+    rowCount: totalGridRows,
     colCount: colIds.length,
     skipColumns: skipColIndices,
     isEditing: isEditingCell,
@@ -503,6 +513,7 @@ export function DataTable<T>({
     readOnlyColumns: new Set(['_select', '_actions', '_rowNum', 'created_at', '_status']),
     containerRef: grid.containerRef,
     onFill: onFill ?? (() => {}),
+    onFillIntoEmptyRows,
     onAutoScroll: autoScroll.update,
     onAutoScrollStop: autoScroll.stop,
   })
@@ -648,12 +659,12 @@ export function DataTable<T>({
   // Virtual scrolling — only activate when row count exceeds threshold.
   const ROW_HEIGHT = 20
   const VIRTUAL_THRESHOLD = 40
-  const useVirtual = visibleRows.length > VIRTUAL_THRESHOLD
+  const useVirtual = totalGridRows > VIRTUAL_THRESHOLD
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
 
   const getRowHeight = useCallback((index: number) => rowSizing[index] || ROW_HEIGHT, [rowSizing])
   const rowVirtualizer = useVirtualizer({
-    count: visibleRows.length,
+    count: totalGridRows,
     getScrollElement: () => scrollRef.current,
     estimateSize: getRowHeight,
     overscan: 8,
@@ -905,17 +916,115 @@ export function DataTable<T>({
           <TableBody
             ref={tableBodyRef}
             role="rowgroup"
-            style={useVirtual ? { height: rowVirtualizer.getTotalSize() + (showNewRow ? ROW_HEIGHT : 0), position: 'relative' } : undefined}
+            style={useVirtual ? { height: rowVirtualizer.getTotalSize() + (showNewRow && emptyRowCount === 0 ? ROW_HEIGHT : 0), position: 'relative' } : undefined}
           >
-            {visibleRows.length === 0 ? (
+            {visibleRows.length === 0 && emptyRowCount === 0 ? (
               <TableRow role="row">
                 <TableCell role="gridcell" colSpan={columns.length}>
                   <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} variant={emptyVariant} />
                 </TableCell>
               </TableRow>
             ) : (
-              (useVirtual ? rowVirtualizer.getVirtualItems() : visibleRows.map((_, i) => ({ index: i, start: 0, size: getRowHeight(i) }))).map((virtualItem) => {
+              (useVirtual ? rowVirtualizer.getVirtualItems() : Array.from({ length: totalGridRows }, (_, i) => ({ index: i, start: 0, size: getRowHeight(i) }))).map((virtualItem) => {
                 const rowIdx = virtualItem.index
+                const isEmptyGridRow = rowIdx >= visibleRows.length
+
+                // --- Empty row rendering ---
+                if (isEmptyGridRow) {
+                  const emptyRowNum = (page - 1) * limit + rowIdx + 1
+                  return (
+                    <TableRow
+                      key={`_empty_${rowIdx}`}
+                      role="row"
+                      aria-rowindex={emptyRowNum + 1}
+                      className="hover:bg-[#d6e4f0]/10"
+                      style={useVirtual ? {
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: `${virtualItem.size}px`,
+                        transform: `translateY(${virtualItem.start}px)`,
+                      } : undefined}
+                    >
+                      {table.getVisibleFlatColumns().map((col, colIdx) => {
+                        const isRowNum = col.id === '_rowNum'
+                        const isSystem = col.id === '_select' || col.id === '_actions' || col.id === '_status' || col.id === 'created_at'
+                        const isActive = grid.activeCell?.row === rowIdx && grid.activeCell?.col === colIdx
+                        const isSelected = isCellInRange(rowIdx, colIdx, grid.selection)
+                        const isPinned = col.getIsPinned()
+
+                        // Fill preview edge flags for empty rows
+                        const fp = fillHandle.fillPreview
+                        const inFillPreview = fp && rowIdx >= fp.startRow && rowIdx <= fp.endRow && colIdx >= fp.startCol && colIdx <= fp.endCol
+                        const fpTop = inFillPreview && rowIdx === fp.startRow
+                        const fpBottom = inFillPreview && rowIdx === fp.endRow
+                        const fpLeft = inFillPreview && colIdx === fp.startCol
+                        const fpRight = inFillPreview && colIdx === fp.endCol
+
+                        // Selection edge flags
+                        const sel = grid.selection
+                        const selNorm = sel ? {
+                          r1: Math.min(sel.startRow, sel.endRow),
+                          r2: Math.max(sel.startRow, sel.endRow),
+                          c1: Math.min(sel.startCol, sel.endCol),
+                          c2: Math.max(sel.startCol, sel.endCol),
+                        } : null
+                        const inSel = isSelected && selNorm
+                        const edgeTop = inSel && rowIdx === selNorm.r1
+                        const edgeBottom = inSel && rowIdx === selNorm.r2
+                        const edgeLeft = inSel && colIdx === selNorm.c1
+                        const edgeRight = inSel && colIdx === selNorm.c2
+
+                        return (
+                          <TableCell
+                            key={col.id}
+                            role="gridcell"
+                            data-row={rowIdx}
+                            data-col={colIdx}
+                            className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''}`}
+                            style={{
+                              width: col.getSize(),
+                              position: isPinned ? 'sticky' : undefined,
+                              left: isPinned === 'left' ? col.getStart('left') : undefined,
+                              right: isPinned === 'right' ? col.getAfter('right') : undefined,
+                              zIndex: isPinned ? 1 : undefined,
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              grid.handleCellClick(rowIdx, colIdx, e)
+                            }}
+                            onDoubleClick={(e) => {
+                              if (editable && onStartEditing && !isSystem && !isRowNum) {
+                                e.stopPropagation()
+                                onStartEditing(rowIdx, colIdx, '')
+                              }
+                            }}
+                          >
+                            {isRowNum ? (
+                              <span className="text-muted-foreground/40">{emptyRowNum}</span>
+                            ) : isSystem ? null : editable && getFieldForCol && editingCell?.row === rowIdx && editingCell?.col === colIdx ? (
+                              <GridCell
+                                field={getFieldForCol(colIdx)}
+                                value={null}
+                                isEditing={true}
+                                editValue={editValue}
+                                onEditValueChange={onEditValueChange ?? (() => {})}
+                                onCommit={onCommitEdit ?? (() => {})}
+                                onCancel={onCancelEdit ?? (() => {})}
+                                onKeyDown={onEditKeyDown ?? (() => {})}
+                                saveState={null}
+                                displayContent={null}
+                              />
+                            ) : null}
+                          </TableCell>
+                        )
+                      })}
+                    </TableRow>
+                  )
+                }
+
+                // --- Data row rendering ---
                 const row = visibleRows[rowIdx]
                 const rowId = String((row.original as EntryRow).id ?? row.id)
                 const isNewRow = newRowId != null && rowId === newRowId
@@ -1091,8 +1200,8 @@ export function DataTable<T>({
                 </TableRow>
                 )})
             )}
-            {/* Bottom empty row for new entries (editable mode) */}
-            {showNewRow && visibleRows.length > 0 && (
+            {/* Bottom empty row for new entries (editable mode, DB mode only) */}
+            {showNewRow && emptyRowCount === 0 && visibleRows.length > 0 && (
               <TableRow
                 className="bg-muted/20 hover:bg-muted/40 border-t border-dashed"
                 style={useVirtual ? {
