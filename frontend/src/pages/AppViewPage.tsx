@@ -580,6 +580,33 @@ export default function AppViewPage() {
     }
   }, [collection, refetch])
 
+  // Sync toolbar content to ExcelLayout context.
+  // These hooks must stay above the early returns to maintain consistent hook order.
+  const workbookLabel = useMemo(() => {
+    if (!collection?.workbook_id || !workbooks) return ''
+    return workbooks.find((w) => w.id === collection.workbook_id)?.label ?? ''
+  }, [collection?.workbook_id, workbooks])
+
+  useEffect(() => {
+    if (!collection) return
+    excelToolbar.setCollectionLabel(collection.label)
+    excelToolbar.setWorkbookLabel(workbookLabel)
+  }, [collection?.label, workbookLabel, excelToolbar])
+
+  // Toolbar/tabs/actions sync — refs are assigned after the early return,
+  // then the effects (which always run) push the ref values into context.
+  const toolbarContentRef = useRef<React.ReactNode>(null)
+  const sheetTabsRef = useRef<React.ReactNode>(null)
+  const pageActionsRef = useRef<React.ReactNode>(null)
+  // Reset refs each render; they'll be re-assigned below only when collection is loaded.
+  toolbarContentRef.current = null
+  sheetTabsRef.current = null
+  pageActionsRef.current = null
+
+  useEffect(() => { excelToolbar.setToolbarContent(toolbarContentRef.current) })
+  useEffect(() => { excelToolbar.setSheetTabs(sheetTabsRef.current) })
+  useEffect(() => { excelToolbar.setPageActions(pageActionsRef.current) })
+
   if (colLoading) return <LoadingState variant="table" />
   if (colError) return <ErrorState error={colErr} />
   if (!collection) return null
@@ -787,7 +814,7 @@ export default function AppViewPage() {
   }
 
   // Sheet tabs (SavedViews) rendered in toolbar right area.
-  const sheetTabs = (
+  sheetTabsRef.current = (
     <div className="flex items-center gap-1 overflow-x-auto scrollbar-none shrink-0">
       <button
         type="button"
@@ -866,7 +893,7 @@ export default function AppViewPage() {
   )
 
   // Toolbar rendered inside DataTable.
-  const tableToolbar = (
+  toolbarContentRef.current = (
     <>
     <div className="flex items-center gap-2 flex-wrap w-full">
       {selectedRowIds.size > 0 ? (
@@ -1125,43 +1152,22 @@ export default function AppViewPage() {
     </>
   )
 
-  // Sync toolbar content to ExcelLayout context
-  const workbookLabel = useMemo(() => {
-    if (!collection?.workbook_id || !workbooks) return ''
-    return workbooks.find((w) => w.id === collection.workbook_id)?.label ?? ''
-  }, [collection?.workbook_id, workbooks])
-
-  useEffect(() => {
-    excelToolbar.setCollectionLabel(collection.label)
-    excelToolbar.setWorkbookLabel(workbookLabel)
-  }, [collection.label, workbookLabel])
-
-  useEffect(() => {
-    excelToolbar.setToolbarContent(tableToolbar)
-  }, [tableToolbar])
-
-  useEffect(() => {
-    excelToolbar.setSheetTabs(sheetTabs)
-  }, [sheetTabs])
-
-  useEffect(() => {
-    excelToolbar.setPageActions(
-      <>
-        <Link to={`/apps/${collection.id}/interface`}>
-          <Button variant="outline" size="sm" className="h-7 gap-1 text-[11px]">
-            <LayoutGrid className="h-3.5 w-3.5" />
-            인터페이스
-          </Button>
-        </Link>
-        {canManage && (
-          <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => setSettingsOpen(true)}>설정</Button>
-        )}
-        <Button size="sm" className="h-7 text-[11px]" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
-          {TERM.newRecord}
+  pageActionsRef.current = (
+    <>
+      <Link to={`/apps/${collection.id}/interface`}>
+        <Button variant="outline" size="sm" className="h-7 gap-1 text-[11px]">
+          <LayoutGrid className="h-3.5 w-3.5" />
+          인터페이스
         </Button>
-      </>
-    )
-  }, [collection.id, canManage, appId])
+      </Link>
+      {canManage && (
+        <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => setSettingsOpen(true)}>설정</Button>
+      )}
+      <Button size="sm" className="h-7 text-[11px]" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
+        {TERM.newRecord}
+      </Button>
+    </>
+  )
 
   return (
     <div className="flex flex-col h-full">
