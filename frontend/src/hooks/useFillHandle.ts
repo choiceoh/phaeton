@@ -2,11 +2,14 @@
  * useFillHandle — Drag-to-fill hook for spreadsheet cells.
  *
  * Renders a small blue square at the bottom-right of the active cell/selection.
- * Dragging it vertically auto-fills cells with values based on field type:
+ * Dragging it vertically or horizontally auto-fills cells with values based on field type:
  * - Text/select: repeat source values
  * - Number: detect arithmetic sequence and continue, or repeat
- * - Date: increment by day
+ * - Date: increment by day (or detected interval)
  * - Computed/layout fields: skip
+ *
+ * Double-clicking the fill handle auto-fills downward to match the adjacent
+ * column's data extent (Excel behavior).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -23,6 +26,8 @@ interface UseFillHandleOptions {
   readOnlyColumns: Set<string>
   containerRef: React.RefObject<HTMLDivElement | null>
   onFill: (updates: { id: string; fields: Record<string, unknown> }[]) => void
+  onAutoScroll?: (x: number, y: number) => void
+  onAutoScrollStop?: () => void
 }
 
 export interface FillPreviewRange {
@@ -31,6 +36,8 @@ export interface FillPreviewRange {
   startCol: number
   endCol: number
 }
+
+type FillDirection = 'vertical' | 'horizontal' | null
 
 /**
  * Generate fill values for a column based on source values and field type.
@@ -103,11 +110,16 @@ export function useFillHandle({
   readOnlyColumns,
   containerRef,
   onFill,
+  onAutoScroll,
+  onAutoScrollStop,
 }: UseFillHandleOptions) {
   const [fillPreview, setFillPreview] = useState<FillPreviewRange | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const dragStateRef = useRef<{
     sourceRange: { startRow: number; endRow: number; startCol: number; endCol: number }
+    direction: FillDirection
+    startClientX: number
+    startClientY: number
   } | null>(null)
 
   // Compute the source range from active cell or selection
@@ -137,12 +149,20 @@ export function useFillHandle({
       e.preventDefault()
       e.stopPropagation()
 
-      dragStateRef.current = { sourceRange }
+      dragStateRef.current = {
+        sourceRange,
+        direction: null,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+      }
       setIsDragging(true)
+      document.body.style.userSelect = 'none'
 
       const handleMouseMove = (ev: MouseEvent) => {
         const container = containerRef.current
         if (!container || !dragStateRef.current) return
+
+        onAutoScroll?.(ev.clientX, ev.clientY)
 
         // Find the cell under the cursor using data attributes
         const el = document.elementFromPoint(ev.clientX, ev.clientY)
@@ -152,33 +172,63 @@ export function useFillHandle({
         if (!cell) return
 
         const targetRow = parseInt(cell.dataset.row ?? '', 10)
+        const targetCol = parseInt(cell.dataset.col ?? '', 10)
         if (isNaN(targetRow)) return
 
         const src = dragStateRef.current.sourceRange
 
-        // Only allow vertical fill (extending below or above the source)
-        if (targetRow > src.endRow) {
-          setFillPreview({
-            startRow: src.endRow + 1,
-            endRow: targetRow,
-            startCol: src.startCol,
-            endCol: src.endCol,
-          })
-        } else if (targetRow < src.startRow) {
-          setFillPreview({
-            startRow: targetRow,
-            endRow: src.startRow - 1,
-            startCol: src.startCol,
-            endCol: src.endCol,
-          })
-        } else {
-          setFillPreview(null)
+        // Lock direction on first significant movement
+        if (!dragStateRef.current.direction) {
+          const dx = Math.abs(ev.clientX - dragStateRef.current.startClientX)
+          const dy = Math.abs(ev.clientY - dragStateRef.current.startClientY)
+          if (dx < 5 && dy < 5) return
+          dragStateRef.current.direction = dy >= dx ? 'vertical' : 'horizontal'
+        }
+
+        if (dragStateRef.current.direction === 'vertical') {
+          if (targetRow > src.endRow) {
+            setFillPreview({
+              startRow: src.endRow + 1,
+              endRow: targetRow,
+              startCol: src.startCol,
+              endCol: src.endCol,
+            })
+          } else if (targetRow < src.startRow) {
+            setFillPreview({
+              startRow: targetRow,
+              endRow: src.startRow - 1,
+              startCol: src.startCol,
+              endCol: src.endCol,
+            })
+          } else {
+            setFillPreview(null)
+          }
+        } else if (dragStateRef.current.direction === 'horizontal' && !isNaN(targetCol)) {
+          if (targetCol > src.endCol) {
+            setFillPreview({
+              startRow: src.startRow,
+              endRow: src.endRow,
+              startCol: src.endCol + 1,
+              endCol: targetCol,
+            })
+          } else if (targetCol < src.startCol) {
+            setFillPreview({
+              startRow: src.startRow,
+              endRow: src.endRow,
+              startCol: targetCol,
+              endCol: src.startCol - 1,
+            })
+          } else {
+            setFillPreview(null)
+          }
         }
       }
 
       const handleMouseUp = () => {
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
+        document.body.style.userSelect = ''
+        onAutoScrollStop?.()
 
         setIsDragging(false)
 
@@ -191,35 +241,156 @@ export function useFillHandle({
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [sourceRange, containerRef],
+    [sourceRange, containerRef, onAutoScroll, onAutoScrollStop],
   )
 
-  // Separate the fill execution to be called after state settles
+  /** Execute fill: apply values from source range to preview range. */
   const executeFill = useCallback(() => {
     setFillPreview((currentPreview) => {
       if (!currentPreview || !dragStateRef.current) return null
 
       const src = dragStateRef.current.sourceRange
-      const fillCount = currentPreview.endRow - currentPreview.startRow + 1
+      const direction = dragStateRef.current.direction
       const updates: { id: string; fields: Record<string, unknown> }[] = []
 
-      for (let col = src.startCol; col <= src.endCol; col++) {
+      if (direction === 'vertical') {
+        // Vertical fill: for each column, fill rows
+        const fillCount = currentPreview.endRow - currentPreview.startRow + 1
+
+        for (let col = src.startCol; col <= src.endCol; col++) {
+          const colId = columnIds[col]
+          if (!colId || readOnlyColumns.has(colId)) continue
+
+          const field = fields.find((f) => f.slug === colId)
+          if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
+
+          const sourceVals: unknown[] = []
+          for (let r = src.startRow; r <= src.endRow; r++) {
+            sourceVals.push(data[r]?.[colId])
+          }
+
+          const fillVals = generateFillValues(sourceVals, fillCount, field.field_type)
+
+          for (let i = 0; i < fillCount; i++) {
+            const targetRowIdx = currentPreview.startRow + i
+            const row = data[targetRowIdx]
+            if (!row) continue
+
+            const rowId = String(row.id)
+            let update = updates.find((u) => u.id === rowId)
+            if (!update) {
+              update = { id: rowId, fields: {} }
+              updates.push(update)
+            }
+            update.fields[colId] = fillVals[i]
+          }
+        }
+      } else if (direction === 'horizontal') {
+        // Horizontal fill: for each row, fill columns
+        const fillColCount = currentPreview.endCol - currentPreview.startCol + 1
+
+        for (let row = src.startRow; row <= src.endRow; row++) {
+          const rowData = data[row]
+          if (!rowData) continue
+          const rowId = String(rowData.id)
+
+          // Collect source values across columns for this row
+          const sourceVals: unknown[] = []
+          const sourceFieldTypes: string[] = []
+          for (let c = src.startCol; c <= src.endCol; c++) {
+            const colId = columnIds[c]
+            if (colId) {
+              sourceVals.push(rowData[colId])
+              const field = fields.find((f) => f.slug === colId)
+              sourceFieldTypes.push(field?.field_type ?? 'text')
+            }
+          }
+
+          for (let i = 0; i < fillColCount; i++) {
+            const targetCol = currentPreview.startCol + i
+            const targetColId = columnIds[targetCol]
+            if (!targetColId || readOnlyColumns.has(targetColId)) continue
+
+            const targetField = fields.find((f) => f.slug === targetColId)
+            if (!targetField || isComputedType(targetField.field_type) || isLayoutType(targetField.field_type)) continue
+
+            // Repeat pattern from source values
+            const val = sourceVals[i % sourceVals.length]
+
+            let update = updates.find((u) => u.id === rowId)
+            if (!update) {
+              update = { id: rowId, fields: {} }
+              updates.push(update)
+            }
+            update.fields[targetColId] = val
+          }
+        }
+      }
+
+      if (updates.length > 0) {
+        onFill(updates)
+      }
+
+      dragStateRef.current = null
+      return null
+    })
+  }, [columnIds, readOnlyColumns, fields, data, onFill])
+
+  /**
+   * Double-click on fill handle: auto-fill downward to match adjacent column's
+   * data extent (Excel behavior).
+   */
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!sourceRange) return
+      e.preventDefault()
+      e.stopPropagation()
+
+      // Find the left adjacent column with data to determine fill extent
+      let refCol = sourceRange.startCol - 1
+      // Skip system/readonly columns
+      while (refCol >= 0 && readOnlyColumns.has(columnIds[refCol])) refCol--
+
+      if (refCol < 0) {
+        // Try right adjacent
+        refCol = sourceRange.endCol + 1
+        while (refCol < columnIds.length && readOnlyColumns.has(columnIds[refCol])) refCol++
+      }
+
+      if (refCol < 0 || refCol >= columnIds.length) return
+
+      const refColId = columnIds[refCol]
+      if (!refColId) return
+
+      // Find the last non-empty row in the reference column starting from source end
+      let lastRow = sourceRange.endRow
+      for (let r = sourceRange.endRow + 1; r < data.length; r++) {
+        const val = data[r]?.[refColId]
+        if (val === null || val === undefined || val === '') break
+        lastRow = r
+      }
+
+      if (lastRow <= sourceRange.endRow) return
+
+      const fillCount = lastRow - sourceRange.endRow
+      const updates: { id: string; fields: Record<string, unknown> }[] = []
+
+      for (let col = sourceRange.startCol; col <= sourceRange.endCol; col++) {
         const colId = columnIds[col]
         if (!colId || readOnlyColumns.has(colId)) continue
 
         const field = fields.find((f) => f.slug === colId)
         if (!field || isComputedType(field.field_type) || isLayoutType(field.field_type)) continue
 
-        // Collect source values for this column
         const sourceVals: unknown[] = []
-        for (let r = src.startRow; r <= src.endRow; r++) {
+        for (let r = sourceRange.startRow; r <= sourceRange.endRow; r++) {
           sourceVals.push(data[r]?.[colId])
         }
 
         const fillVals = generateFillValues(sourceVals, fillCount, field.field_type)
 
         for (let i = 0; i < fillCount; i++) {
-          const targetRowIdx = currentPreview.startRow + i
+          const targetRowIdx = sourceRange.endRow + 1 + i
           const row = data[targetRowIdx]
           if (!row) continue
 
@@ -236,11 +407,9 @@ export function useFillHandle({
       if (updates.length > 0) {
         onFill(updates)
       }
-
-      dragStateRef.current = null
-      return null
-    })
-  }, [columnIds, readOnlyColumns, fields, data, onFill])
+    },
+    [sourceRange, columnIds, readOnlyColumns, fields, data, onFill],
+  )
 
   // Cleanup on unmount
   useEffect(() => {
@@ -259,6 +428,7 @@ export function useFillHandle({
     fillPreview,
     isDragging,
     handleFillHandleMouseDown: handleMouseDown,
+    handleFillHandleDoubleClick: handleDoubleClick,
     sourceRange,
   }
 }
