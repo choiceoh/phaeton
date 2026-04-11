@@ -5,8 +5,12 @@ include .env
 export
 endif
 
-# 개발
-dev: dev-api dev-ui
+# 개발 (API + UI 병렬 실행)
+dev:
+	@trap 'kill 0' EXIT; \
+	(cd backend && AUTH_DISABLED=true go run ./cmd/server) & \
+	(cd frontend && npm run dev) & \
+	wait
 
 dev-api:
 	cd backend && AUTH_DISABLED=true go run ./cmd/server

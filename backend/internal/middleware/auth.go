@@ -29,8 +29,8 @@ type UserClaims struct {
 
 // DevUser is the hard-coded user injected when auth is disabled.
 var DevUser = UserClaims{
-	UserID: "dev-user",
-	Email:  "dev@topworks.local",
+	UserID: "ce3e41d2-0abb-4c98-955c-adf1ce26717c",
+	Email:  "choiceoh@topsolar.kr",
 	Name:   "개발자",
 	Role:   "director",
 }

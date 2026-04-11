@@ -527,14 +527,13 @@ export interface TotalsResult {
 
 /**
  * Supported view layouts for a collection:
- * - `list`     — spreadsheet-style data grid (default).
+ * - `list`     — data grid (default).
  * - `kanban`   — card columns grouped by a select/status field.
  * - `calendar` — entries plotted on a date/datetime field.
- * - `gallery`  — card grid with image thumbnails.
  * - `gantt`    — timeline bar chart for date-range fields.
  * - `form`     — public or internal data-entry form.
  */
-export type ViewType = 'list' | 'kanban' | 'calendar' | 'gallery' | 'gantt' | 'form'
+export type ViewType = 'list' | 'kanban' | 'calendar' | 'gantt' | 'form'
 
 /** A saved view configuration for a collection. */
 export interface View {

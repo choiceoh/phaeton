@@ -66,7 +66,6 @@ import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
 import CalendarView from '@/components/works/views/CalendarView'
-import GalleryView from '@/components/works/views/GalleryView'
 import FormView from '@/components/works/views/FormView'
 import GanttView from '@/components/works/views/GanttView'
 import KanbanView from '@/components/works/views/KanbanView'
@@ -688,7 +687,6 @@ export default function AppViewPage() {
 
   const hasKanban = !!selectField
   const hasCalendar = !!dateField
-  const hasGallery = !!fileField
   const hasGantt = dateFields.length >= 1
   const hasProcessKanban = process?.is_enabled && (process.statuses?.length ?? 0) > 0
 
@@ -1325,12 +1323,6 @@ export default function AppViewPage() {
                 캘린더
               </TabsTrigger>
             )}
-            {hasGallery && (
-              <TabsTrigger value="gallery" className="gap-1">
-                <LayoutGrid className="h-3.5 w-3.5" />
-                갤러리
-              </TabsTrigger>
-            )}
             {hasGantt && (
               <TabsTrigger value="gantt" className="gap-1">
                 <GanttChart className="h-3.5 w-3.5" />
@@ -1454,18 +1446,6 @@ export default function AppViewPage() {
             </TabsContent>
           )}
 
-          {hasGallery && fileField && (
-            <TabsContent value="gallery" className="mt-0">
-              <ErrorBoundary key="gallery">
-              <GalleryView
-                imageField={fileField}
-                fields={collection.fields ?? []}
-                entries={list.data}
-                onEntryClick={handleEntryClick}
-              />
-              </ErrorBoundary>
-            </TabsContent>
-          )}
 
           {hasGantt && (
             <TabsContent value="gantt" className="mt-0">
