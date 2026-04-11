@@ -40,6 +40,12 @@ interface SpreadsheetViewProps {
   emptyAction?: React.ReactNode
   onInsertRow?: () => void
   onFilterByValue?: (fieldSlug: string, value: unknown) => void
+  /** When true, filtering/sorting/pagination is handled client-side by tanstack. */
+  clientMode?: boolean
+  /** Client-side column filters (used when clientMode is true). */
+  globalFilter?: string
+  /** Client-side filter function (used when clientMode is true). */
+  columnFilters?: { id: string; value: unknown }[]
 }
 
 /**
@@ -130,6 +136,9 @@ export default function SpreadsheetView({
   emptyAction,
   onInsertRow,
   onFilterByValue,
+  clientMode,
+  globalFilter,
+  columnFilters,
 }: SpreadsheetViewProps) {
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
 
@@ -190,11 +199,17 @@ export default function SpreadsheetView({
   // Formula engine for instant formula recomputation after cell edits
   const { recomputeRow } = useFormulaEngine(editableFields)
 
-  // System columns that should never be editable
-  const readOnlyColumns = useMemo(
-    () => new Set(['_select', '_actions', 'created_at', '_status']),
-    [],
-  )
+  // System columns and reverse relation columns should never be editable.
+  const readOnlyColumns = useMemo(() => {
+    const s = new Set(['_select', '_actions', 'created_at', '_status'])
+    // Mark all reverse relation columns as read-only.
+    if (data.length > 0) {
+      for (const key of Object.keys(data[0])) {
+        if (key.startsWith('_reverse_')) s.add(key)
+      }
+    }
+    return s
+  }, [data])
 
   // Build columns (similar to AppViewPage but simpler — no search highlighting)
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
@@ -228,8 +243,34 @@ export default function SpreadsheetView({
       },
     })
 
+    // Auto-detect reverse relation keys (_reverse_*) from data and add columns.
+    if (data.length > 0) {
+      const sample = data[0]
+      for (const key of Object.keys(sample)) {
+        if (!key.startsWith('_reverse_')) continue
+        const rev = sample[key] as { count?: number; label?: string } | undefined
+        const headerLabel = rev?.label ? `${rev.label}` : key.replace('_reverse_', '').replaceAll('_', ' ')
+        cols.push({
+          id: key,
+          header: headerLabel,
+          enableSorting: false,
+          size: 100,
+          cell: ({ row }: { row: { original: Record<string, unknown> } }) => {
+            const val = row.original[key] as { count?: number; ids?: string[] } | undefined
+            const count = val?.count ?? 0
+            if (count === 0) return <span className="text-muted-foreground">-</span>
+            return (
+              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                {count}건
+              </span>
+            )
+          },
+        })
+      }
+    }
+
     return cols
-  }, [collection])
+  }, [collection, data])
 
   // Visible column IDs (derived from TanStack table — approximated here)
   const visibleColumnIds = useMemo(
@@ -370,6 +411,9 @@ export default function SpreadsheetView({
       onFilterByValue={onFilterByValue}
       onFill={canManage ? handleFill : undefined}
       onCellMove={canManage ? handleFill : undefined}
+      clientMode={clientMode}
+      globalFilter={globalFilter}
+      columnFilters={columnFilters}
       showNewRow={canManage}
       newRowValues={newRowValues}
       onNewRowChange={(slug, v) => setNewRowValues((prev) => ({ ...prev, [slug]: v }))}

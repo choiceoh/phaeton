@@ -22,6 +22,9 @@ import {
   type VisibilityState,
   flexRender,
   getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -47,9 +50,11 @@ import {
   ChevronsLeft,
   ChevronsRight,
   GripVertical,
+  Pencil,
   PinIcon,
   PinOffIcon,
   Settings2,
+  Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -188,6 +193,18 @@ interface Props<T> {
   onNewRowChange?: (fieldSlug: string, value: unknown) => void
   /** Called to commit the new row. */
   onNewRowCommit?: () => void
+  /** When true, filtering/sorting/pagination is handled client-side. */
+  clientMode?: boolean
+  /** Global filter string for client-side text search. */
+  globalFilter?: string
+  /** Per-column filters for client-side filtering. */
+  columnFilters?: { id: string; value: unknown }[]
+  /** Called when the user requests to rename a column (via header context menu). */
+  onRenameColumn?: (columnId: string) => void
+  /** Called when the user requests to delete a column (via header context menu). */
+  onDeleteColumn?: (columnId: string) => void
+  /** Extra column appended at the end (e.g. "+" add column). Header-only, no data cells. */
+  extraHeaderColumn?: React.ReactNode
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -247,6 +264,12 @@ export function DataTable<T>({
   newRowValues,
   onNewRowChange,
   onNewRowCommit,
+  clientMode,
+  globalFilter: globalFilterProp,
+  columnFilters: columnFiltersProp,
+  onRenameColumn,
+  onDeleteColumn,
+  extraHeaderColumn,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
@@ -356,7 +379,15 @@ export function DataTable<T>({
   const table = useReactTable({
     data,
     columns: augmentedColumns,
-    state: { sorting, columnVisibility, columnPinning, columnSizing, columnOrder },
+    state: {
+      sorting,
+      columnVisibility,
+      columnPinning,
+      columnSizing,
+      columnOrder,
+      ...(clientMode && globalFilterProp != null ? { globalFilter: globalFilterProp } : {}),
+      ...(clientMode && columnFiltersProp ? { columnFilters: columnFiltersProp } : {}),
+    },
     onColumnOrderChange: setColumnOrder,
     onSortingChange: (updater) => {
       const next = typeof updater === 'function' ? updater(sorting) : updater
@@ -375,15 +406,30 @@ export function DataTable<T>({
     },
     onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
-    manualPagination: true,
-    manualSorting: true,
+    // In client mode, tanstack handles filtering/sorting/pagination.
+    // In server mode, the server handles them (manual = true).
+    manualPagination: !clientMode,
+    manualSorting: !clientMode,
+    manualFiltering: !clientMode,
+    ...(clientMode
+      ? {
+          getFilteredRowModel: getFilteredRowModel(),
+          getSortedRowModel: getSortedRowModel(),
+          getPaginationRowModel: getPaginationRowModel(),
+          globalFilterFn: 'includesString' as const,
+        }
+      : {}),
     columnResizeMode: 'onChange',
     pageCount: total && limit ? Math.ceil(total / limit) : -1,
   })
 
-  const totalPages = total && limit ? Math.ceil(total / limit) : 0
-  const showingFrom = total ? (page - 1) * limit + 1 : 0
-  const showingTo = Math.min(page * limit, total ?? 0)
+  // In client mode, use the filtered row count from tanstack.
+  const effectiveTotal = clientMode
+    ? table.getFilteredRowModel().rows.length
+    : (total ?? 0)
+  const totalPages = effectiveTotal && limit ? Math.ceil(effectiveTotal / limit) : 0
+  const showingFrom = effectiveTotal ? (page - 1) * limit + 1 : 0
+  const showingTo = Math.min(page * limit, effectiveTotal)
 
   // Grid navigation state.
   const visibleRows = table.getRowModel().rows
@@ -756,6 +802,11 @@ export function DataTable<T>({
                   )
                 })}
                 </SortableContext>
+                {extraHeaderColumn && (
+                  <TableHead className="w-10 text-center">
+                    {extraHeaderColumn}
+                  </TableHead>
+                )}
               </TableRow>
             ))}
             </DndContext>
@@ -1105,8 +1156,37 @@ export function DataTable<T>({
               }}
             >
               <Settings2 className="h-3.5 w-3.5" />
-              컬럼 숨기기
+              숨기기
             </button>
+          )}
+          {onRenameColumn && headerMenu.column.id !== '_rowNum' && headerMenu.column.id !== '_select' && headerMenu.column.id !== 'created_at' && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+              onClick={() => {
+                onRenameColumn(headerMenu.column.id)
+                setHeaderMenu(null)
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              이름 변경
+            </button>
+          )}
+          {onDeleteColumn && headerMenu.column.id !== '_rowNum' && headerMenu.column.id !== '_select' && headerMenu.column.id !== 'created_at' && (
+            <>
+              <div className="my-1 h-px bg-border" />
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  onDeleteColumn(headerMenu.column.id)
+                  setHeaderMenu(null)
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                삭제
+              </button>
+            </>
           )}
         </div>
       )}

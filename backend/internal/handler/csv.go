@@ -442,26 +442,15 @@ func coerceCSVValue(val string, f schema.Field) (any, error) {
 	switch f.FieldType {
 	case schema.FieldText, schema.FieldTextarea:
 		return val, nil
-
-	case schema.FieldNumber:
+	case schema.FieldNumber, schema.FieldInteger:
 		cleaned := strings.NewReplacer(",", "", " ", "", "₩", "", "$", "", "€", "", "¥", "").Replace(val)
 		cleaned = strings.TrimSuffix(cleaned, "%")
 		n, err := strconv.ParseFloat(cleaned, 64)
 		if err != nil {
 			return nil, fmt.Errorf("expected number, got %q", val)
 		}
-		return n, nil
-
-	case schema.FieldInteger:
-		cleaned := strings.NewReplacer(",", "", " ", "", "₩", "", "$", "", "€", "", "¥", "").Replace(val)
-		n, err := strconv.ParseInt(cleaned, 10, 64)
-		if err != nil {
-			// Try parsing as float and truncating (Excel sometimes exports integers as "100.0").
-			f, ferr := strconv.ParseFloat(cleaned, 64)
-			if ferr != nil {
-				return nil, fmt.Errorf("expected integer, got %q", val)
-			}
-			return int64(f), nil
+		if dp := schema.EffectiveDecimalPlaces(f); dp != nil && *dp == 0 {
+			return int64(n), nil
 		}
 		return n, nil
 

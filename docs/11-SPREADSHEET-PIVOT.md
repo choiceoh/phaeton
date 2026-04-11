@@ -114,82 +114,40 @@ Topworks를 **"동기화·시트간 연동이 좋은 스프레드시트 모임"*
 
 ## 4. 남은 작업
 
-### GAP 1: 로컬 처리 전환 — 대부분 완료
+### ~~GAP 1: 로컬 처리 전환~~ — 완료 ✅
 
-**완료:**
-- JS 수식 엔진 (`frontend/src/lib/formulaEngine.ts`) — 같은 시트 수식 로컬 연산 ✅ (#288)
+- JS 수식 엔진 ✅ (#288)
 - 셀 편집 즉각 반영 ✅ (#288)
-- 앱 잠금 시스템 — 워크북 단위 동시 편집 차단 ✅ (#292)
+- 앱 잠금 시스템 ✅ (#292)
+- 클라이언트 필터/정렬 (5,000행 이하 자동 전환, tanstack 클라이언트 모드) ✅
+- 선택적: 셀 편집 디바운스 배치 저장 (향후 최적화)
 
-**남은 작업:**
+### ~~GAP 2: 양방향 링크~~ — 완료 ✅
 
-1. **데이터 전체 로드 + 클라이언트 필터/정렬**
-   - `useEntries` 훅: 5,000행 이하 시 전체 데이터 fetch → 클라이언트 필터/정렬
-   - `@tanstack/react-table`의 `getFilteredRowModel()`, `getSortedRowModel()` 활성화
-   - 5,000행 초과 시 서버 폴백 유지
-   - 파일: `frontend/src/hooks/useEntries.ts`, `frontend/src/pages/AppViewPage.tsx`
-
-2. **셀 편집 디바운스 배치 저장** (선택적 최적화)
-   - 현재: 셀 편집마다 개별 API 호출. 잠금 모드에서는 충돌 없으므로 배치 가능
-   - 변경 큐 → 디바운스(1~2초) → 배치 API 호출로 네트워크 호출 감소
-   - 파일: `frontend/src/hooks/useInlineEditing.ts`
-
-### GAP 2: 양방향 링크 (Bidirectional Links)
-
-**백엔드 인프라 완료** (#283): `ReverseRelField` 구조체 + 캐시 `reverseRels` 인덱스 + `cache.ReverseRelations(collectionID)` 메서드.
-**남은 작업**: 핸들러에서 역참조 데이터를 실제로 조회·주입하는 부분 + 프론트 렌더링.
-
-**작업 항목:**
-
-1. **백엔드: 역참조 데이터 조회 API** ← 핵심 남은 작업
-   - `DynHandler.List()`에서 `cache.ReverseRelations(collectionID)`로 역참조 메타 획득
-   - 각 역참조에 대해 "이 레코드를 참조하는 원본 시트 레코드들" 배치 쿼리
-   - 응답에 역참조 필드 데이터 주입 (별도 키, 예: `_reverse_relations`)
-   - 파일: `backend/internal/handler/dynamic.go`, `backend/internal/handler/computed.go`
-
-2. **프론트: 역참조 열 렌더링**
-   - 역참조 필드를 그리드에 read-only 열로 표시
-   - 클릭 시 원본 시트/행으로 이동
-   - 파일: `frontend/src/components/common/GridCell.tsx`, `frontend/src/components/common/DataTable.tsx`
+- 백엔드: `loadReverseRelations()` — 배치 쿼리로 역참조 데이터 조회, `_reverse_{slug}_{field}` 키 주입 ✅
+- 프론트: SpreadsheetView에서 `_reverse_*` 키 자동 감지 → read-only 열 (건수 배지) ✅
 
 ### ~~GAP 3: 크로스시트 자동 동기화~~ — 완료 ✅
 
-- 백엔드: `cross_sheet_invalidation` SSE 이벤트 + `hasCrossRef()` 감지 ✅ (#283)
-- 프론트: `useSSE`에서 `cross_sheet_invalidation` 수신 → entries 캐시 무효화 ✅ (#292)
+- 백엔드 + 프론트 모두 완료 ✅ (#283, #292)
 
-### GAP 4: 네비게이션 / UX 재구성
+### GAP 4: 네비게이션 / UX 재구성 — 별도 세션에서 병렬 진행 중
 
-**현재**: 상단 네비바 + AppListPage(카드 갤러리).
-**목표**: 좌측 사이드바(폴더→워크북→시트 트리) + 하단 시트 탭.
+1. **좌측 사이드바 (시트 트리)** — 별도 세션에서 구현 중
+2. **하단 시트 탭** — 별도 세션에서 구현 중
+3. **EntryPage → 슬라이드오버 패널** — 별도 세션에서 구현 중
+4. **인라인 열 관리** — 별도 세션에서 구현 중
 
-**작업 항목:**
+### 정리 작업 — 완료 ✅
 
-1. **좌측 사이드바 (시트 트리)**
-   - 폴더(`_meta.folders`) → 워크북(앱) → 시트 3단 트리
-   - 백엔드 Folder API 완료: `GET/POST/PATCH/DELETE /api/schema/folders` ✅
-   - 프론트 사이드바 컴포넌트 구현 필요
-   - 접기/펼치기, 드래그 재정렬
-   - 파일: `frontend/src/layouts/RootLayout.tsx`, 새 컴포넌트 `SheetSidebar.tsx`
-
-2. **하단 시트 탭**
-   - 같은 워크북 내 시트들을 하단 탭으로 표시
-   - SavedView 탭과 별도 레이어 (SavedView = 같은 시트의 필터 프리셋, 하단 탭 = 다른 시트 전환)
-   - 파일: `frontend/src/pages/AppViewPage.tsx`
-
-3. **EntryPage → 슬라이드오버 패널**
-   - 행 상세를 별도 페이지 대신 우측 슬라이드오버
-   - EntryForm, EntryComments, EntryHistory 컴포넌트 유지, 패널 안에 렌더링
-   - 파일: `frontend/src/pages/EntryPage.tsx`, `frontend/src/pages/AppViewPage.tsx`
-
-4. **라우터 경로 정리**
-   - 불필요 페이지 삭제: MyTasksPage, InterfaceDesignerPage, OrgChartPage
-   - 파일: `frontend/src/main.tsx`
-
-5. **인라인 열 관리**
-   - 열 헤더 "+" 버튼 → 새 열 추가 (FieldPalette 드롭다운)
-   - 열 헤더 우클릭 → 컨텍스트 메뉴 (이름 변경, 타입 변경, 삭제, 숨기기)
-   - AppBuilderPage → "새 시트 만들기" 다이얼로그로 축소
-   - 파일: `frontend/src/components/works/views/SpreadsheetView.tsx`, `frontend/src/components/common/DataTable.tsx`
+- 죽은 백엔드 라우트 제거 (calendar/gantt/kanban, GlobalCalendarEvents) ✅
+- dynamic_views.go 핸들러 삭제 (-900줄) ✅
+- 불필요 페이지 삭제 (MyTasks, InterfaceDesigner, OrgChart) ✅
+- FormPreview 컴포넌트 삭제 ✅
+- Layout 필드 (label/line/spacer) FieldPalette에서 숨김 ✅
+- ViewType 스키마 comment 수정 (spreadsheet만) ✅
+- 한국어 용어 갱신 (앱 빌더→시트 빌더 등) ✅
+- _version 낙관적 잠금 유지 (안전망, comment 추가) ✅
 
 ---
 

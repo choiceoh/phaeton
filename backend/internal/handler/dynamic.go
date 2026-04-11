@@ -199,6 +199,9 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Load M:N links.
 	h.loadM2MFields(r.Context(), records, fields, col.Slug)
 
+	// Load reverse relations (bidirectional links).
+	h.loadReverseRelations(r.Context(), records, col.ID)
+
 	// Optional display formatting.
 	if params.Get("format") == "display" {
 		applyDisplayFormat(records, fields)
@@ -268,6 +271,9 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Load M:N links.
 	h.loadM2MFields(r.Context(), records, fields, col.Slug)
+
+	// Load reverse relations (bidirectional links).
+	h.loadReverseRelations(r.Context(), records, col.ID)
 
 	// Optional display formatting.
 	if r.URL.Query().Get("format") == "display" {
@@ -461,6 +467,8 @@ func (h *DynHandler) Create(w http.ResponseWriter, r *http.Request) {
 //
 //   - Optimistic locking: if the request body includes _version, the WHERE clause
 //     checks it matches the current version; a mismatch returns 409 Conflict.
+//     NOTE: With workbook-level lock in place, _version conflicts should be rare
+//     but is kept as a safety net for API key access and edge cases.
 //   - Process transitions: if the collection has process_enabled and _status is
 //     being changed, the transition is validated against allowed roles/users.
 //   - RLS: viewers can only update rows they created.
@@ -2367,6 +2375,119 @@ func (h *DynHandler) loadM2MFields(ctx context.Context, records []map[string]any
 				row[f.Slug] = links
 			} else {
 				row[f.Slug] = []string{}
+			}
+		}
+	}
+}
+
+// loadReverseRelations injects bidirectional link counts into each record.
+// For each collection that has a relation field pointing TO the current
+// collection, this queries how many source records reference each result record
+// and adds a "_reverse_{sourceSlug}_{fieldSlug}" key with {count, ids}.
+func (h *DynHandler) loadReverseRelations(ctx context.Context, records []map[string]any, collectionID string) {
+	if len(records) == 0 {
+		return
+	}
+	revRels := h.cache.ReverseRelations(collectionID)
+	if len(revRels) == 0 {
+		return
+	}
+
+	// Collect all target record IDs.
+	var recordIDs []string
+	for _, row := range records {
+		if id, ok := row["id"].(string); ok {
+			recordIDs = append(recordIDs, id)
+		}
+	}
+	if len(recordIDs) == 0 {
+		return
+	}
+
+	// Build placeholders once (shared across queries).
+	placeholders := make([]string, len(recordIDs))
+	args := make([]any, len(recordIDs))
+	for i, id := range recordIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	phStr := strings.Join(placeholders, ",")
+
+	for _, rev := range revRels {
+		key := fmt.Sprintf("_reverse_%s_%s", rev.SourceCollectionSlug, rev.SourceFieldSlug)
+
+		if rev.RelationType == schema.RelManyToMany && rev.JunctionTable != "" {
+			// M:N reverse: query the junction table.
+			// In an M:N relation where the source collection has the M:N field
+			// pointing to our collection, the junction table stores
+			// (owner_id = source, target_id = our record).
+			juncTable := pgutil.QuoteQualified("data", rev.JunctionTable)
+			sql := fmt.Sprintf(
+				"SELECT target_id, owner_id FROM %s WHERE target_id IN (%s)",
+				juncTable, phStr,
+			)
+			rows, err := h.pool.Query(ctx, sql, args...)
+			if err != nil {
+				slog.Warn("loadReverseRelations: m2m query error", "key", key, "error", err)
+				continue
+			}
+			linkMap := make(map[string][]string)
+			for rows.Next() {
+				vals, err := rows.Values()
+				if err != nil {
+					continue
+				}
+				if len(vals) < 2 {
+					continue
+				}
+				targetID := fmt.Sprint(normalizeValue(vals[0]))
+				sourceID := fmt.Sprint(normalizeValue(vals[1]))
+				linkMap[targetID] = append(linkMap[targetID], sourceID)
+			}
+			rows.Close()
+			for _, row := range records {
+				id := fmt.Sprint(row["id"])
+				if ids, ok := linkMap[id]; ok {
+					row[key] = map[string]any{"count": len(ids), "ids": ids, "label": rev.SourceCollectionLabel}
+				} else {
+					row[key] = map[string]any{"count": 0, "ids": []string{}, "label": rev.SourceCollectionLabel}
+				}
+			}
+		} else {
+			// Normal (1:1, 1:N) reverse: the source table has a FK column
+			// pointing to our record IDs.
+			srcTable := pgutil.QuoteQualified("data", rev.SourceCollectionSlug)
+			srcCol := pgutil.QuoteIdent(rev.SourceFieldSlug)
+			sql := fmt.Sprintf(
+				"SELECT %s, id FROM %s WHERE %s IN (%s) AND deleted_at IS NULL",
+				srcCol, srcTable, srcCol, phStr,
+			)
+			rows, err := h.pool.Query(ctx, sql, args...)
+			if err != nil {
+				slog.Warn("loadReverseRelations: query error", "key", key, "error", err)
+				continue
+			}
+			linkMap := make(map[string][]string)
+			for rows.Next() {
+				vals, err := rows.Values()
+				if err != nil {
+					continue
+				}
+				if len(vals) < 2 {
+					continue
+				}
+				targetID := fmt.Sprint(normalizeValue(vals[0]))
+				sourceID := fmt.Sprint(normalizeValue(vals[1]))
+				linkMap[targetID] = append(linkMap[targetID], sourceID)
+			}
+			rows.Close()
+			for _, row := range records {
+				id := fmt.Sprint(row["id"])
+				if ids, ok := linkMap[id]; ok {
+					row[key] = map[string]any{"count": len(ids), "ids": ids, "label": rev.SourceCollectionLabel}
+				} else {
+					row[key] = map[string]any{"count": 0, "ids": []string{}, "label": rev.SourceCollectionLabel}
+				}
 			}
 		}
 	}

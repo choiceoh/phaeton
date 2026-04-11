@@ -2,7 +2,7 @@
  * CRUD hooks for saved views (user-created filter/sort/visibility presets).
  *
  * Saved views differ from "views" (useViews): a View defines the display
- * type (list, kanban, calendar), while a SavedView is a named preset of
+ * type (spreadsheet only), while a SavedView is a named preset of
  * filters, sort order, and column visibility within a view. Think of them
  * as bookmarks for frequently-used query configurations.
  *

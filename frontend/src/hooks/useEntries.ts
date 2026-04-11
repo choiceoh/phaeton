@@ -30,6 +30,8 @@ export interface EntryListParams {
   filters?: Record<string, string> // { status: "eq:active", capacity: "gte:100" }
   /** JSON-serialized FilterGroup for AND/OR filter groups */
   _filter?: string
+  /** "true" to load reverse-relation data */
+  reverse?: string
 }
 
 export interface EntryListResult {
@@ -46,6 +48,7 @@ function buildQueryString(params: EntryListParams): string {
   if (params.limit) search.set('limit', String(params.limit))
   if (params.sort) search.set('sort', params.sort)
   if (params.expand) search.set('expand', params.expand)
+  if (params.reverse) search.set('reverse', params.reverse)
   if (params._filter) {
     search.set('_filter', params._filter)
   } else if (params.filters) {
@@ -72,6 +75,29 @@ export function useEntries(slug: string | undefined, params: EntryListParams = {
       api.getList<EntryRow>(`/data/${slug}${buildQueryString(params)}`),
     enabled: !!slug,
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Threshold: collections with ≤ this many rows use client-side filter/sort. */
+export const CLIENT_MODE_THRESHOLD = 5000
+
+/**
+ * Fetch ALL entries for a collection (up to CLIENT_MODE_THRESHOLD).
+ *
+ * Used when the total row count is small enough for client-side
+ * filtering/sorting via @tanstack/react-table. No server-side
+ * filter/sort params are sent — the client handles them locally.
+ *
+ * Only enabled when `enabled` is true (caller must check total first).
+ */
+export function useAllEntries(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.entries.list(slug ?? '', { _all: true }),
+    queryFn: () =>
+      api.getList<EntryRow>(`/data/${slug}?limit=${CLIENT_MODE_THRESHOLD}&expand=auto`),
+    enabled: !!slug && enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
   })
 }
 

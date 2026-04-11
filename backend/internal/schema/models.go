@@ -29,7 +29,7 @@ const (
 	FieldText        FieldType = "text"        // Single-line text (VARCHAR-like).
 	FieldTextarea    FieldType = "textarea"    // Multi-line text (TEXT column).
 	FieldNumber      FieldType = "number"      // Decimal number (DOUBLE PRECISION).
-	FieldInteger     FieldType = "integer"     // Whole number (BIGINT).
+	FieldInteger     FieldType = "integer"     // Deprecated: alias for number with decimal_places:0. Kept for backward compatibility.
 	FieldBoolean     FieldType = "boolean"     // True/false toggle (BOOLEAN).
 	FieldDate        FieldType = "date"        // Calendar date without time (DATE).
 	FieldDatetime    FieldType = "datetime"    // Timestamp with timezone (TIMESTAMPTZ).
@@ -81,6 +81,11 @@ func (ft FieldType) IsComputed() bool {
 // NoColumn returns true for field types that do not produce a DB column.
 func (ft FieldType) NoColumn() bool {
 	return ft.IsLayout() || ft.IsComputed()
+}
+
+// IsNumeric returns true for number and integer (deprecated alias) field types.
+func (ft FieldType) IsNumeric() bool {
+	return ft == FieldNumber || ft == FieldInteger
 }
 
 // IsManyToMany returns true if this is a M:N relation field (no DB column).
@@ -366,7 +371,7 @@ type View struct {
 	ID           string          `json:"id"`
 	CollectionID string          `json:"collection_id"`
 	Name         string          `json:"name"`
-	ViewType     string          `json:"view_type"` // list, kanban, calendar, gallery
+	ViewType     string          `json:"view_type"` // spreadsheet
 	Config       json.RawMessage `json:"config"`
 	SortOrder    int             `json:"sort_order"`
 	IsDefault    bool            `json:"is_default"`

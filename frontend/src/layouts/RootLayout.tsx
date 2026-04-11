@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { LogOut, Network, Settings, User } from 'lucide-react'
+import { LogOut, Settings, User } from 'lucide-react'
 
 import AIChatPanel from '@/components/common/AIChatPanel'
 import CommandPalette from '@/components/common/CommandPalette'
+import SheetSidebar from '@/components/common/SheetSidebar'
 import { AIAvailabilityProvider } from '@/contexts/AIAvailabilityContext'
 import LoadingState from '@/components/common/LoadingState'
 import NotificationBell from '@/components/common/NotificationBell'
@@ -48,85 +49,78 @@ export default function RootLayout() {
 
   return (
     <AIAvailabilityProvider>
-      <div className="min-h-screen overflow-x-hidden bg-background">
-        <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-border/60 bg-white/80 px-6 py-1.5 backdrop-blur-md backdrop-saturate-150">
-          <div className="flex items-center gap-1.5">
-            <Link to="/" className="mr-5 flex items-center gap-2 text-base font-bold tracking-tight text-foreground" viewTransition>
-              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-foreground text-[10px] font-bold text-white shadow-sm">T</span>
-              <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Topworks</span>
-            </Link>
-            <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto">
-              {/* 워크스페이스 */}
-              <NavLink to="/my-tasks" className={navCls} viewTransition>내 업무</NavLink>
-              <NavLink to="/apps" className={navCls} viewTransition>앱</NavLink>
-              <div className="mx-1.5 h-4 w-px bg-border" aria-hidden="true" />
+      <div className="flex h-screen overflow-hidden bg-background">
+        {/* Left sidebar — sheet tree */}
+        <SheetSidebar />
 
-              {/* 도구 */}
-              <NavLink to="/automations" className={navCls} viewTransition>자동화</NavLink>
-              <NavLink to="/ai" className={navCls} viewTransition>AI</NavLink>
+        {/* Main column */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-border/60 bg-white/80 px-6 py-1.5 backdrop-blur-md backdrop-saturate-150">
+            <div className="flex items-center gap-1.5">
+              <Link to="/" className="mr-5 flex items-center gap-2 text-base font-bold tracking-tight text-foreground" viewTransition>
+                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-foreground text-[10px] font-bold text-white shadow-sm">T</span>
+                <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Topworks</span>
+              </Link>
+              <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto">
+                {/* 도구 */}
+                <NavLink to="/automations" className={navCls} viewTransition>자동화</NavLink>
+                <NavLink to="/ai" className={navCls} viewTransition>AI</NavLink>
 
-              {/* 관리 */}
-              {(user.role === 'director' || user.role === 'pm') && (
-                <>
-                  <div className="mx-1.5 h-4 w-px bg-border" aria-hidden="true" />
-                  <NavLink to="/history" className={navCls} viewTransition>이력</NavLink>
-                  <NavLink to="/admin/users" className={navCls} viewTransition>사용자 관리</NavLink>
-                  <NavLink to="/settings" className={navCls} viewTransition>설정</NavLink>
-                </>
-              )}
+                {/* 관리 */}
+                {(user.role === 'director' || user.role === 'pm') && (
+                  <>
+                    <div className="mx-1.5 h-4 w-px bg-border" aria-hidden="true" />
+                    <NavLink to="/history" className={navCls} viewTransition>이력</NavLink>
+                    <NavLink to="/admin/users" className={navCls} viewTransition>사용자 관리</NavLink>
+                    <NavLink to="/settings" className={navCls} viewTransition>설정</NavLink>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            <NotificationBell />
-            <button
-              type="button"
-              onClick={() => navigate('/admin/org')}
-              className={`rounded-md p-1.5 transition-colors hover:bg-accent ${pathname.startsWith('/admin/org') ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              title="조직도"
-            >
-              <Network className="h-4.5 w-4.5" />
-            </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent focus-visible:outline-none">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback className="bg-foreground text-[11px] font-medium text-white">
-                    {user.name.slice(0, 1)}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-sm font-medium text-foreground">{user.name}</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className="font-normal">
-                    <p className="text-sm font-medium">{user.name}</p>
-                    <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role] ?? user.role}</p>
-                  </DropdownMenuLabel>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => navigate('/profile')}>
-                    <User className="mr-2 h-4 w-4" />
-                    내 정보
-                  </DropdownMenuItem>
-                  {(user.role === 'director' || user.role === 'pm') && (
-                    <DropdownMenuItem onClick={() => navigate('/settings')}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      설정
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+              <NotificationBell />
+              <DropdownMenu>
+                <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent focus-visible:outline-none">
+                  <Avatar className="h-6 w-6">
+                    <AvatarFallback className="bg-foreground text-[11px] font-medium text-white">
+                      {user.name.slice(0, 1)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium text-foreground">{user.name}</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="font-normal">
+                      <p className="text-sm font-medium">{user.name}</p>
+                      <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role] ?? user.role}</p>
+                    </DropdownMenuLabel>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => navigate('/profile')}>
+                      <User className="mr-2 h-4 w-4" />
+                      내 정보
                     </DropdownMenuItem>
-                  )}
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => logout.mutate()}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  로그아웃
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </nav>
-        <main className="px-6 pt-2 pb-4">
-          <Outlet />
-        </main>
+                    {(user.role === 'director' || user.role === 'pm') && (
+                      <DropdownMenuItem onClick={() => navigate('/settings')}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        설정
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => logout.mutate()}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    로그아웃
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </nav>
+          <main className="flex-1 overflow-y-auto px-6 pt-2 pb-4">
+            <Outlet />
+          </main>
+        </div>
         <AIChatPanel />
         <CommandPalette />
       </div>

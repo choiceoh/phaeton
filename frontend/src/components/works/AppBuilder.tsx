@@ -21,7 +21,6 @@ import AIBuildDialog from './AIBuildDialog'
 import FieldPalette from './FieldPalette'
 import { type FieldDraft } from './FieldPreview'
 import FieldProperties from './FieldProperties'
-import FormPreview from './FormPreview'
 
 const BUILDER_COACH_STEPS = [
   {
@@ -270,15 +269,25 @@ export default function AppBuilder() {
               </div>
             </div>
           </div>
-          <FormPreview
-            fields={fields}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onReorder={setFields}
-            onRemove={handleRemoveField}
-            onAdd={handleAddField}
-            onFieldChange={handleFieldChange}
-          />
+          {/* Field list preview (FormPreview removed — spreadsheet paradigm) */}
+          {fields.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">왼쪽 팔레트에서 항목을 추가하세요</p>
+          ) : (
+            <div className="space-y-1">
+              {fields.map((f) => (
+                <div
+                  key={f.id}
+                  className={`flex items-center justify-between rounded-md border px-3 py-1.5 text-sm cursor-pointer ${selectedId === f.id ? 'border-primary bg-primary/5' : 'hover:bg-accent'}`}
+                  onClick={() => setSelectedId(f.id)}
+                >
+                  <span>{f.label} <span className="text-xs text-muted-foreground">({f.field_type})</span></span>
+                  <button type="button" className="text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleRemoveField(f.id) }}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

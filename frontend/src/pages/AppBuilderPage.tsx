@@ -16,7 +16,7 @@ export default function AppBuilderPage() {
         <div>
           <h2 className="text-lg font-semibold">PC에서 이용해 주세요</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            앱 빌더는 넓은 화면에서 사용할 수 있습니다.
+            시트 빌더는 넓은 화면에서 사용할 수 있습니다.
           </p>
         </div>
         <Button variant="outline" onClick={() => navigate('/apps')}>
