@@ -686,6 +686,11 @@ func serveSPA(r *chi.Mux) {
 			writeIndex(w, indexHTML)
 			return
 		}
+		// Service worker files must never be cached by the browser
+		if strings.HasSuffix(path, "sw.js") || strings.HasPrefix(path, "workbox-") {
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Service-Worker-Allowed", "/")
+		}
 		fileServer.ServeHTTP(w, req)
 	})
 }

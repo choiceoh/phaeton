@@ -22,22 +22,22 @@ export default function SheetTabBar() {
   if (siblings.length === 0) return null
 
   return (
-    <div className="flex items-center h-[22px] bg-[#e6e6e6] border-t border-[#d4d4d4] select-none">
+    <div className="flex items-center h-[32px] bg-[#e6e6e6] border-t border-[#d4d4d4] select-none">
       {/* Navigation arrows */}
-      <div className="flex items-center border-r border-[#d4d4d4] px-0.5 h-full">
+      <div className="flex items-center border-r border-[#d4d4d4] px-1 h-full">
         <button
           type="button"
-          className="p-0.5 hover:bg-[#d0d0d0] rounded-sm"
+          className="p-1 hover:bg-[#d0d0d0] rounded-sm"
           aria-label="이전 시트"
         >
-          <ChevronLeft className="h-3 w-3 text-[#666]" />
+          <ChevronLeft className="h-3.5 w-3.5 text-[#666]" />
         </button>
         <button
           type="button"
-          className="p-0.5 hover:bg-[#d0d0d0] rounded-sm"
+          className="p-1 hover:bg-[#d0d0d0] rounded-sm"
           aria-label="다음 시트"
         >
-          <ChevronRight className="h-3 w-3 text-[#666]" />
+          <ChevronRight className="h-3.5 w-3.5 text-[#666]" />
         </button>
       </div>
 
@@ -49,7 +49,7 @@ export default function SheetTabBar() {
             <button
               key={col.id}
               type="button"
-              className={`inline-flex items-center px-3 text-[11px] border-r border-[#d4d4d4] h-full transition-colors whitespace-nowrap ${
+              className={`inline-flex items-center px-4 text-[12px] border-r border-[#d4d4d4] h-full transition-colors whitespace-nowrap ${
                 isActive
                   ? 'bg-white text-[#333] font-medium border-t-2 border-t-[#005a9e]'
                   : 'bg-[#e6e6e6] text-[#666] hover:bg-[#d8d8d8]'
@@ -65,14 +65,14 @@ export default function SheetTabBar() {
       </div>
 
       {/* Add sheet button */}
-      <div className="flex items-center border-l border-[#d4d4d4] px-1 h-full">
+      <div className="flex items-center border-l border-[#d4d4d4] px-1.5 h-full">
         <button
           type="button"
-          className="p-0.5 hover:bg-[#d0d0d0] rounded-sm"
+          className="p-1 hover:bg-[#d0d0d0] rounded-sm"
           aria-label="시트 추가"
           title="새 시트"
         >
-          <Plus className="h-3 w-3 text-[#666]" />
+          <Plus className="h-3.5 w-3.5 text-[#666]" />
         </button>
       </div>
     </div>

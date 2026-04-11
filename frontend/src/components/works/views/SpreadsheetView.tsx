@@ -11,9 +11,10 @@ import { toast } from 'sonner'
 import { DataTable } from '@/components/common/DataTable'
 import { useFormulaEngine } from '@/hooks/useFormulaEngine'
 import { useInlineEditing } from '@/hooks/useInlineEditing'
+import { coerceValue } from '@/lib/coercion'
 import { isLayoutType, isComputedType } from '@/lib/constants'
 import { formatCell } from '@/lib/formatCell'
-import type { Collection, Field } from '@/lib/types'
+import type { Collection } from '@/lib/types'
 
 interface SpreadsheetViewProps {
   collection: Collection
@@ -51,70 +52,15 @@ interface SpreadsheetViewProps {
   onAddColumn?: () => void
   onActiveCellChange?: (cell: import('@/hooks/useGridNavigation').CellPosition | null, selection: import('@/hooks/useGridNavigation').SelectionRange | null) => void
   onFormatShortcut?: (key: 'bold' | 'italic') => void
+  /** Free grid mode: edits are local-only, no server calls */
+  freeGridMode?: boolean
+  /** Returns true if a cell has been locally modified but not saved */
+  cellDirtyFn?: (rowId: string, fieldSlug: string) => boolean
+  /** Returns error message for a cell (from coercion failure on save attempt) */
+  cellErrorFn?: (rowId: string, fieldSlug: string) => string | null
 }
 
-/**
- * Parse a date string from various formats (Excel, Korean, ISO, US).
- * Returns ISO date string (YYYY-MM-DD) or null.
- */
-function parseDateFlexible(raw: string): string | null {
-  // ISO: 2024-03-15
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
-  // Korean dot: 2024.03.15
-  const dotMatch = raw.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/)
-  if (dotMatch) {
-    return `${dotMatch[1]}-${dotMatch[2].padStart(2, '0')}-${dotMatch[3].padStart(2, '0')}`
-  }
-  // Korean text: 2024년 3월 15일
-  const koMatch = raw.match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/)
-  if (koMatch) {
-    return `${koMatch[1]}-${koMatch[2].padStart(2, '0')}-${koMatch[3].padStart(2, '0')}`
-  }
-  // US format: 3/15/2024 or 03/15/2024
-  const usMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (usMatch) {
-    return `${usMatch[3]}-${usMatch[1].padStart(2, '0')}-${usMatch[2].padStart(2, '0')}`
-  }
-  // ISO datetime: 2024-03-15T09:00:00
-  const dtMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T ]/)
-  if (dtMatch) return dtMatch[1]
-  return null
-}
-
-/** Coerce a pasted string value to the appropriate type for a field. */
-function coerceValue(raw: string, field: Field): unknown {
-  if (raw === '') return null
-  switch (field.field_type) {
-    case 'number': {
-      const cleaned = raw.replace(/[,₩$€¥\s]/g, '').replace(/%$/, '')
-      const n = parseFloat(cleaned)
-      return isNaN(n) ? null : n
-    }
-    case 'integer': {
-      const cleaned = raw.replace(/[,₩$€¥\s]/g, '')
-      const n = parseInt(cleaned, 10)
-      return isNaN(n) ? null : n
-    }
-    case 'boolean':
-      return ['true', '1', '✓', '참', 'yes', 'y'].includes(raw.toLowerCase())
-    case 'date': {
-      const parsed = parseDateFlexible(raw)
-      return parsed ?? raw
-    }
-    case 'datetime': {
-      // Try to preserve full datetime, fall back to date-only
-      if (/^\d{4}-\d{2}-\d{2}[T ]/.test(raw)) return raw
-      const parsed = parseDateFlexible(raw)
-      return parsed ?? raw
-    }
-    case 'time':
-      return raw
-    case 'multiselect':
-      return raw.split(',').map((s) => s.trim()).filter(Boolean)
-    default:
-      return raw
-  }
-}
+// parseDateFlexible and coerceValue are imported from @/lib/coercion
 
 export default function SpreadsheetView({
   collection,
@@ -149,6 +95,9 @@ export default function SpreadsheetView({
   onAddColumn,
   onActiveCellChange,
   onFormatShortcut,
+  freeGridMode,
+  cellDirtyFn,
+  cellErrorFn,
 }: SpreadsheetViewProps) {
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
 
@@ -288,11 +237,22 @@ export default function SpreadsheetView({
     [columns],
   )
 
+  const EMPTY_ROW_BUFFER = 30
+  const emptyRowCount = clientMode && canManage ? EMPTY_ROW_BUFFER : 0
+
   // Inline editing
   const inlineEditing = useInlineEditing({
     data,
     fields: editableFields,
     columnIds: visibleColumnIds,
+    emptyRowCount,
+    onEmptyRowSave: async (fieldSlug, value) => {
+      try {
+        await createEntry({ [fieldSlug]: value })
+      } catch {
+        toast.error('행 생성 실패')
+      }
+    },
     onCellSave: async (rowId, fieldSlug, value) => {
       try {
         // Recompute formula fields locally for instant feedback.
@@ -344,13 +304,24 @@ export default function SpreadsheetView({
     [data, recomputeRow, batchUpdateEntry],
   )
 
+  // Fill into empty rows handler (free grid mode)
+  const handleFillIntoEmptyRows = useCallback(
+    (rows: Record<string, unknown>[]) => {
+      rows.reduce(
+        (chain, fields) => chain.then(() => createEntry(fields)).then(() => {}),
+        Promise.resolve(),
+      ).catch(() => toast.error('행 생성 실패'))
+    },
+    [createEntry],
+  )
+
   // Paste handler
   const handlePaste = useCallback(
     (startRow: number, startCol: number, matrix: string[][]) => {
       const updates: { id: string; fields: Record<string, unknown> }[] = []
+      const newEntries: Record<string, unknown>[] = []
       for (let r = 0; r < matrix.length; r++) {
-        const dataRow = data[startRow + r]
-        if (!dataRow) continue
+        const rowIdx = startRow + r
         const fields: Record<string, unknown> = {}
         for (let c = 0; c < matrix[r].length; c++) {
           const colId = visibleColumnIds[startCol + c]
@@ -359,7 +330,14 @@ export default function SpreadsheetView({
           if (!field || isComputedType(field.field_type)) continue
           fields[colId] = coerceValue(matrix[r][c], field)
         }
-        if (Object.keys(fields).length > 0) {
+        if (Object.keys(fields).length === 0) continue
+
+        if (rowIdx >= data.length) {
+          // Paste into empty row — create new entry
+          newEntries.push(fields)
+        } else {
+          const dataRow = data[rowIdx]
+          if (!dataRow) continue
           // Recompute formula fields for each pasted row
           const patchedRow = { ...dataRow, ...fields }
           const changedSlugs = Object.keys(fields)
@@ -372,10 +350,19 @@ export default function SpreadsheetView({
       }
       if (updates.length > 0) {
         batchUpdateEntry(updates)
-        toast.success(`${updates.length}행 붙여넣기 완료`)
+      }
+      if (newEntries.length > 0) {
+        newEntries.reduce(
+          (chain, entry) => chain.then(() => createEntry(entry)).then(() => {}),
+          Promise.resolve(),
+        ).catch(() => toast.error('행 생성 실패'))
+      }
+      const totalAffected = updates.length + newEntries.length
+      if (totalAffected > 0) {
+        toast.success(`${totalAffected}행 붙여넣기 완료`)
       }
     },
-    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry, recomputeRow],
+    [data, visibleColumnIds, readOnlyColumns, editableFields, batchUpdateEntry, recomputeRow, createEntry],
   )
 
   return (
@@ -424,12 +411,17 @@ export default function SpreadsheetView({
       clientMode={clientMode}
       globalFilter={globalFilter}
       columnFilters={columnFilters}
+      emptyRowCount={emptyRowCount}
+      onFillIntoEmptyRows={canManage ? handleFillIntoEmptyRows : undefined}
       showNewRow={canManage}
       newRowValues={newRowValues}
       onNewRowChange={(slug, v) => setNewRowValues((prev) => ({ ...prev, [slug]: v }))}
       onNewRowCommit={() => {
         if (Object.keys(newRowValues).length > 0) {
           createEntry(newRowValues).then(() => setNewRowValues({})).catch(() => {})
+        } else if (freeGridMode) {
+          // In free grid mode, allow committing empty rows too
+          createEntry({}).then(() => setNewRowValues({})).catch(() => {})
         }
       }}
       columnManagement={canManage && !!(onRenameColumn || onDeleteColumn || onAddColumn)}
@@ -438,6 +430,9 @@ export default function SpreadsheetView({
       onAddColumn={onAddColumn}
       onActiveCellChange={onActiveCellChange}
       onFormatShortcut={onFormatShortcut}
+      freeGridMode={freeGridMode}
+      cellDirtyFn={cellDirtyFn}
+      cellErrorFn={cellErrorFn}
     />
   )
 }

@@ -204,6 +204,12 @@ interface Props<T> {
   /** Called when formatting shortcuts (Ctrl+B, Ctrl+I) are pressed. */
   onFormatShortcut?: (key: 'bold' | 'italic') => void
 
+  // --- Free grid mode (empty rows below data) ---
+  /** Number of empty rows to show below data (free grid mode). */
+  emptyRowCount?: number
+  /** Called when fill extends into empty rows. */
+  onFillIntoEmptyRows?: (rows: Record<string, unknown>[]) => void
+
   // --- Column management (optional, used by SpreadsheetView) ---
   /** Called to rename a column. */
   onRenameColumn?: (columnId: string, newLabel: string) => void
@@ -213,6 +219,12 @@ interface Props<T> {
   onAddColumn?: () => void
   /** Whether column management is enabled. */
   columnManagement?: boolean
+  /** Free grid mode: edits are local-only, no server calls */
+  freeGridMode?: boolean
+  /** Returns true if a cell has been locally modified but not saved */
+  cellDirtyFn?: (rowId: string, fieldSlug: string) => boolean
+  /** Returns error message for a cell (from coercion failure on save attempt) */
+  cellErrorFn?: (rowId: string, fieldSlug: string) => string | null
 }
 
 // DataTable wraps @tanstack/react-table with shadcn UI primitives.
@@ -275,12 +287,17 @@ export function DataTable<T>({
   clientMode,
   globalFilter: globalFilterProp,
   columnFilters: columnFiltersProp,
+  emptyRowCount = 0,
+  onFillIntoEmptyRows,
   onRenameColumn,
   onDeleteColumn,
   onActiveCellChange,
   onFormatShortcut,
   onAddColumn,
   columnManagement,
+  freeGridMode,
+  cellDirtyFn,
+  cellErrorFn,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {})
@@ -294,6 +311,8 @@ export function DataTable<T>({
     return base
   })
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({})
+  const [rowSizing, setRowSizing] = useState<Record<number, number>>({})
+  const [resizingRow, setResizingRow] = useState<{ idx: number; startY: number; startH: number } | null>(null)
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([])
 
   // Horizontal scroll indicator state.
@@ -316,6 +335,25 @@ export function DataTable<T>({
     return () => { el.removeEventListener('scroll', check); ro.disconnect() }
   }, [data, columnVisibility])
 
+  // Row resize drag handler.
+  useEffect(() => {
+    if (!resizingRow) return
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientY - resizingRow.startY
+      setRowSizing((prev) => ({
+        ...prev,
+        [resizingRow.idx]: Math.max(20, resizingRow.startH + delta),
+      }))
+    }
+    const handleMouseUp = () => setResizingRow(null)
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [resizingRow])
+
   // Prepend row number column + optional checkbox column.
   const augmentedColumns = useMemo(() => {
     const cols: ColumnDef<T, unknown>[] = []
@@ -332,7 +370,18 @@ export function DataTable<T>({
         const idx = data.indexOf(row.original)
         const num = (page - 1) * limit + idx + 1
         return (
-          <span className="text-[11px] text-stone-400 select-none text-center block tabular-nums">{num}</span>
+          <div className="relative h-full">
+            <span className="text-[11px] text-stone-400 select-none text-center block tabular-nums">{num}</span>
+            {/* Row resize handle */}
+            <div
+              className="absolute bottom-0 left-0 w-full h-[3px] cursor-row-resize hover:bg-primary/30 z-10"
+              onMouseDown={(e) => {
+                e.stopPropagation()
+                const td = (e.target as HTMLElement).closest('td')!
+                setResizingRow({ idx, startY: e.clientY, startH: td.offsetHeight })
+              }}
+            />
+          </div>
         )
       },
     }
@@ -456,8 +505,10 @@ export function DataTable<T>({
     return skip
   }, [colIds])
 
+  const totalGridRows = visibleRows.length + emptyRowCount
+
   const grid = useGridNavigation({
-    rowCount: visibleRows.length,
+    rowCount: totalGridRows,
     colCount: colIds.length,
     skipColumns: skipColIndices,
     isEditing: isEditingCell,
@@ -465,8 +516,15 @@ export function DataTable<T>({
     onClearCell: editable ? onClearCell : undefined,
   })
 
-  // Auto-scroll during drag operations.
-  const autoScroll = useAutoScroll(scrollRef)
+  // Ref-based onTick for auto-scroll (avoids circular dependency with hooks).
+  const autoScrollTickRef = useRef<(x: number, y: number) => void>(() => {})
+
+  // Auto-scroll with onTick that dispatches to the active drag operation.
+  const autoScroll = useAutoScroll(scrollRef, {
+    onTick: useCallback((x: number, y: number) => {
+      autoScrollTickRef.current(x, y)
+    }, []),
+  })
 
   // Fill handle hook.
   const fillHandle = useFillHandle({
@@ -478,6 +536,7 @@ export function DataTable<T>({
     readOnlyColumns: new Set(['_select', '_actions', '_rowNum', 'created_at', '_status']),
     containerRef: grid.containerRef,
     onFill: onFill ?? (() => {}),
+    onFillIntoEmptyRows,
     onAutoScroll: autoScroll.update,
     onAutoScrollStop: autoScroll.stop,
   })
@@ -499,6 +558,13 @@ export function DataTable<T>({
   useEffect(() => {
     onActiveCellChange?.(grid.activeCell, grid.selection)
   }, [grid.activeCell, grid.selection, onActiveCellChange])
+
+  // Wire up auto-scroll onTick to dispatch to whichever drag is active.
+  autoScrollTickRef.current = (x: number, y: number) => {
+    grid.updateDragSelection(x, y)
+    fillHandle.updateFillPreview(x, y)
+    cellDrag.updateDragGhost(x, y, cellDrag.lastCtrlRef.current)
+  }
 
   // Clipboard: copy & paste.
   const handleClipboard = useCallback(
@@ -641,16 +707,22 @@ export function DataTable<T>({
   // Virtual scrolling — only activate when row count exceeds threshold.
   const ROW_HEIGHT = 20
   const VIRTUAL_THRESHOLD = 40
-  const useVirtual = visibleRows.length > VIRTUAL_THRESHOLD
+  const useVirtual = totalGridRows > VIRTUAL_THRESHOLD
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
 
+  const getRowHeight = useCallback((index: number) => rowSizing[index] || ROW_HEIGHT, [rowSizing])
   const rowVirtualizer = useVirtualizer({
-    count: visibleRows.length,
+    count: totalGridRows,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: getRowHeight,
     overscan: 8,
     enabled: useVirtual,
   })
+
+  // Re-measure when row sizes change.
+  useEffect(() => {
+    if (useVirtual) rowVirtualizer.measure()
+  }, [rowSizing, useVirtual, rowVirtualizer])
 
   // Scroll active cell into view when navigating via keyboard.
   useEffect(() => {
@@ -811,6 +883,7 @@ export function DataTable<T>({
                         zIndex: isPinned ? 2 : undefined,
                       }}
                       onContextMenu={(e) => handleHeaderContextMenu(e, header.column)}
+                      data-col-idx={headerIdx}
                       onMouseDown={!isSystemCol ? (e) => {
                         if (e.button !== 0) return
                         // Select entire column on click (don't conflict with sort/resize)
@@ -818,21 +891,23 @@ export function DataTable<T>({
                         if (target.closest('.cursor-col-resize')) return
                         grid.selectColumn(headerIdx, e.shiftKey)
                         e.preventDefault()
+                        document.body.style.userSelect = 'none'
 
-                        // Support drag across headers
+                        // Support drag across headers with auto-scroll
                         const handleHeaderDragMove = (ev: MouseEvent) => {
+                          autoScroll.update(ev.clientX, ev.clientY)
                           const el = document.elementFromPoint(ev.clientX, ev.clientY)
                           if (!el) return
-                          const th = (el as HTMLElement).closest('[role="columnheader"]') as HTMLElement | null
+                          const th = (el as HTMLElement).closest('[data-col-idx]') as HTMLElement | null
                           if (!th) return
-                          // Find the header index
-                          const allHeaders = Array.from(th.parentElement?.children ?? [])
-                          const idx = allHeaders.indexOf(th)
-                          if (idx >= 0) grid.selectColumn(idx, true)
+                          const idx = parseInt(th.dataset.colIdx ?? '', 10)
+                          if (!isNaN(idx)) grid.selectColumn(idx, true)
                         }
                         const handleHeaderDragUp = () => {
                           document.removeEventListener('mousemove', handleHeaderDragMove)
                           document.removeEventListener('mouseup', handleHeaderDragUp)
+                          document.body.style.userSelect = ''
+                          autoScroll.stop()
                         }
                         document.addEventListener('mousemove', handleHeaderDragMove)
                         document.addEventListener('mouseup', handleHeaderDragUp)
@@ -892,17 +967,115 @@ export function DataTable<T>({
           <TableBody
             ref={tableBodyRef}
             role="rowgroup"
-            style={useVirtual ? { height: rowVirtualizer.getTotalSize() + (showNewRow ? ROW_HEIGHT : 0), position: 'relative' } : undefined}
+            style={useVirtual ? { height: rowVirtualizer.getTotalSize() + (showNewRow && emptyRowCount === 0 ? ROW_HEIGHT : 0), position: 'relative' } : undefined}
           >
-            {visibleRows.length === 0 ? (
+            {visibleRows.length === 0 && emptyRowCount === 0 ? (
               <TableRow role="row">
                 <TableCell role="gridcell" colSpan={columns.length}>
                   <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} variant={emptyVariant} />
                 </TableCell>
               </TableRow>
             ) : (
-              (useVirtual ? rowVirtualizer.getVirtualItems() : visibleRows.map((_, i) => ({ index: i, start: 0, size: ROW_HEIGHT }))).map((virtualItem) => {
+              (useVirtual ? rowVirtualizer.getVirtualItems() : Array.from({ length: totalGridRows }, (_, i) => ({ index: i, start: 0, size: getRowHeight(i) }))).map((virtualItem) => {
                 const rowIdx = virtualItem.index
+                const isEmptyGridRow = rowIdx >= visibleRows.length
+
+                // --- Empty row rendering ---
+                if (isEmptyGridRow) {
+                  const emptyRowNum = (page - 1) * limit + rowIdx + 1
+                  return (
+                    <TableRow
+                      key={`_empty_${rowIdx}`}
+                      role="row"
+                      aria-rowindex={emptyRowNum + 1}
+                      className="hover:bg-[#d6e4f0]/10"
+                      style={useVirtual ? {
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: `${virtualItem.size}px`,
+                        transform: `translateY(${virtualItem.start}px)`,
+                      } : undefined}
+                    >
+                      {table.getVisibleFlatColumns().map((col, colIdx) => {
+                        const isRowNum = col.id === '_rowNum'
+                        const isSystem = col.id === '_select' || col.id === '_actions' || col.id === '_status' || col.id === 'created_at'
+                        const isActive = grid.activeCell?.row === rowIdx && grid.activeCell?.col === colIdx
+                        const isSelected = isCellInRange(rowIdx, colIdx, grid.selection)
+                        const isPinned = col.getIsPinned()
+
+                        // Fill preview edge flags for empty rows
+                        const fp = fillHandle.fillPreview
+                        const inFillPreview = fp && rowIdx >= fp.startRow && rowIdx <= fp.endRow && colIdx >= fp.startCol && colIdx <= fp.endCol
+                        const fpTop = inFillPreview && rowIdx === fp.startRow
+                        const fpBottom = inFillPreview && rowIdx === fp.endRow
+                        const fpLeft = inFillPreview && colIdx === fp.startCol
+                        const fpRight = inFillPreview && colIdx === fp.endCol
+
+                        // Selection edge flags
+                        const sel = grid.selection
+                        const selNorm = sel ? {
+                          r1: Math.min(sel.startRow, sel.endRow),
+                          r2: Math.max(sel.startRow, sel.endRow),
+                          c1: Math.min(sel.startCol, sel.endCol),
+                          c2: Math.max(sel.startCol, sel.endCol),
+                        } : null
+                        const inSel = isSelected && selNorm
+                        const edgeTop = inSel && rowIdx === selNorm.r1
+                        const edgeBottom = inSel && rowIdx === selNorm.r2
+                        const edgeLeft = inSel && colIdx === selNorm.c1
+                        const edgeRight = inSel && colIdx === selNorm.c2
+
+                        return (
+                          <TableCell
+                            key={col.id}
+                            role="gridcell"
+                            data-row={rowIdx}
+                            data-col={colIdx}
+                            className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''}`}
+                            style={{
+                              width: col.getSize(),
+                              position: isPinned ? 'sticky' : undefined,
+                              left: isPinned === 'left' ? col.getStart('left') : undefined,
+                              right: isPinned === 'right' ? col.getAfter('right') : undefined,
+                              zIndex: isPinned ? 1 : undefined,
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              grid.handleCellClick(rowIdx, colIdx, e)
+                            }}
+                            onDoubleClick={(e) => {
+                              if (editable && onStartEditing && !isSystem && !isRowNum) {
+                                e.stopPropagation()
+                                onStartEditing(rowIdx, colIdx, '')
+                              }
+                            }}
+                          >
+                            {isRowNum ? (
+                              <span className="text-muted-foreground/40">{emptyRowNum}</span>
+                            ) : isSystem ? null : editable && getFieldForCol && editingCell?.row === rowIdx && editingCell?.col === colIdx ? (
+                              <GridCell
+                                field={getFieldForCol(colIdx)}
+                                value={null}
+                                isEditing={true}
+                                editValue={editValue}
+                                onEditValueChange={onEditValueChange ?? (() => {})}
+                                onCommit={onCommitEdit ?? (() => {})}
+                                onCancel={onCancelEdit ?? (() => {})}
+                                onKeyDown={onEditKeyDown ?? (() => {})}
+                                saveState={null}
+                                displayContent={null}
+                              />
+                            ) : null}
+                          </TableCell>
+                        )
+                      })}
+                    </TableRow>
+                  )
+                }
+
+                // --- Data row rendering ---
                 const row = visibleRows[rowIdx]
                 const rowId = String((row.original as EntryRow).id ?? row.id)
                 const isNewRow = newRowId != null && rowId === newRowId
@@ -919,7 +1092,7 @@ export function DataTable<T>({
                     width: '100%',
                     height: `${virtualItem.size}px`,
                     transform: `translateY(${virtualItem.start}px)`,
-                  } : undefined}
+                  } : { height: `${getRowHeight(rowIdx)}px` }}
                   onClick={() => onRowClick?.(row.original)}
                 >
                   {row.getVisibleCells().map((cell, colIdx) => {
@@ -962,6 +1135,11 @@ export function DataTable<T>({
                     const dgLeft = inDragGhost && colIdx === dg.startCol
                     const dgRight = inDragGhost && colIdx === dg.endCol
 
+                    // Free grid dirty/error indicators
+                    const rowId = String((row.original as EntryRow).id)
+                    const isCellDirty = freeGridMode && cellDirtyFn && !isRowNum && cellDirtyFn(rowId, cell.column.id)
+                    const cellError = freeGridMode && cellErrorFn && !isRowNum ? cellErrorFn(rowId, cell.column.id) : null
+
                     // Is this cell the bottom-right corner of the active cell/selection? (fill handle position)
                     const isFillHandleCell = editable && onFill && !isRowNum && (() => {
                       if (grid.selection) {
@@ -985,7 +1163,8 @@ export function DataTable<T>({
                         role="gridcell"
                         data-row={rowIdx}
                         data-col={colIdx}
-                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''}`}
+                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''} ${cellError ? 'cell-error' : ''}`}
+                        title={cellError ?? undefined}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
@@ -1005,8 +1184,10 @@ export function DataTable<T>({
                           if (isRowNum) {
                             grid.selectRow(rowIdx, e.shiftKey)
                             e.preventDefault()
-                            // Support drag across row numbers
+                            document.body.style.userSelect = 'none'
+                            // Support drag across row numbers with auto-scroll
                             const handleRowDragMove = (ev: MouseEvent) => {
+                              autoScroll.update(ev.clientX, ev.clientY)
                               const el = document.elementFromPoint(ev.clientX, ev.clientY)
                               if (!el) return
                               const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
@@ -1017,6 +1198,8 @@ export function DataTable<T>({
                             const handleRowDragUp = () => {
                               document.removeEventListener('mousemove', handleRowDragMove)
                               document.removeEventListener('mouseup', handleRowDragUp)
+                              document.body.style.userSelect = ''
+                              autoScroll.stop()
                             }
                             document.addEventListener('mousemove', handleRowDragMove)
                             document.addEventListener('mouseup', handleRowDragUp)
@@ -1059,6 +1242,9 @@ export function DataTable<T>({
                           }
                         }}
                       >
+                        {isCellDirty && (
+                          <span className="absolute top-0 left-0 w-0 h-0 border-l-[5px] border-t-[5px] border-l-blue-500 border-t-blue-500 border-r-[5px] border-b-[5px] border-r-transparent border-b-transparent z-[1]" />
+                        )}
                         {editable && getFieldForCol ? (
                           <GridCell
                             field={getFieldForCol(colIdx)}
@@ -1069,7 +1255,7 @@ export function DataTable<T>({
                             onCommit={onCommitEdit ?? (() => {})}
                             onCancel={onCancelEdit ?? (() => {})}
                             onKeyDown={onEditKeyDown ?? (() => {})}
-                            saveState={cellSaveState?.get(`${(row.original as EntryRow).id}:${cell.column.id}`) ?? null}
+                            saveState={freeGridMode ? null : (cellSaveState?.get(`${(row.original as EntryRow).id}:${cell.column.id}`) ?? null)}
                             displayContent={flexRender(cell.column.columnDef.cell, cell.getContext())}
                           />
                         ) : (
@@ -1088,8 +1274,8 @@ export function DataTable<T>({
                 </TableRow>
                 )})
             )}
-            {/* Bottom empty row for new entries (editable mode) */}
-            {showNewRow && visibleRows.length > 0 && (
+            {/* Bottom empty row for new entries (editable mode, DB mode only) */}
+            {showNewRow && emptyRowCount === 0 && visibleRows.length > 0 && (
               <TableRow
                 className="bg-muted/20 hover:bg-muted/40 border-t border-dashed"
                 style={useVirtual ? {
