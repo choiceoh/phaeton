@@ -1,4 +1,5 @@
 import { MessageSquare } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog'
@@ -8,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useComments, useCreateComment, useDeleteComment } from '@/hooks/useComments'
 import { useCurrentUser } from '@/hooks/useAuth'
+import { fadeSlideUp, FAST } from '@/lib/motion'
 
 interface Props {
   slug: string
@@ -35,8 +37,17 @@ export default function EntryComments({ slug, recordId }: Props) {
           </div>
         ))
       ) : commentsData?.data?.length ? (
-        commentsData.data.map((c) => (
-          <div key={c.id} className="rounded-md border p-3 text-sm">
+        <AnimatePresence initial={false}>
+        {commentsData.data.map((c) => (
+          <motion.div
+            key={c.id}
+            variants={fadeSlideUp}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={FAST}
+            className="rounded-md border p-3 text-sm"
+          >
             <div className="flex items-center justify-between">
               <span className="font-medium">{c.user_name}</span>
               <div className="flex items-center gap-2">
@@ -56,8 +67,9 @@ export default function EntryComments({ slug, recordId }: Props) {
               </div>
             </div>
             <p className="mt-1 whitespace-pre-wrap">{c.body}</p>
-          </div>
-        ))
+          </motion.div>
+        ))}
+        </AnimatePresence>
       ) : (
         <EmptyState
           compact

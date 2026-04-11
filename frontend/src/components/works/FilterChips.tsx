@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { Badge } from '@/components/ui/badge'
+import { fadeScale, FAST } from '@/lib/motion'
 import { Button } from '@/components/ui/button'
 import { FILTER_OPERATORS } from '@/lib/constants'
 import type { Field, FilterCondition, FilterGroup } from '@/lib/types'
@@ -58,10 +59,11 @@ export default function FilterChips({
         {conditions.map((c) => (
           <motion.div
             key={c.id}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            variants={fadeScale}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={FAST}
           >
             <Badge
               variant="secondary"
@@ -86,10 +88,11 @@ export default function FilterChips({
         {sortItems.map((s, i) => (
           <motion.div
             key={`sort-${i}`}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            variants={fadeScale}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={FAST}
           >
             <Badge
               variant="secondary"

@@ -5,6 +5,8 @@
  * column's field type (number display type, decimal places, currency code,
  * text display type). Changes are persisted via PATCH field options API.
  */
+import { motion } from 'framer-motion'
+
 import {
   Select,
   SelectContent,
@@ -18,6 +20,7 @@ import {
   TEXT_DISPLAY_TYPES,
 } from '@/lib/constants'
 import { isNumericField, getDecimalPlaces, getDisplayType } from '@/lib/fieldGuards'
+import { fadeSlideDown, FAST } from '@/lib/motion'
 import type { Field } from '@/lib/types'
 
 interface FormatToolbarProps {
@@ -39,7 +42,14 @@ export default function FormatToolbar({ field, onUpdateOptions }: FormatToolbarP
   }
 
   return (
-    <div className="flex items-center gap-2 border-t pt-1.5 mt-1.5">
+    <motion.div
+      variants={fadeSlideDown}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={FAST}
+      className="flex items-center gap-2 border-t pt-1.5 mt-1.5"
+    >
       <span className="text-xs text-muted-foreground shrink-0">{field.label}</span>
 
       {/* Display type selector */}
@@ -94,6 +104,6 @@ export default function FormatToolbar({ field, onUpdateOptions }: FormatToolbarP
           </SelectContent>
         </Select>
       )}
-    </div>
+    </motion.div>
   )
 }

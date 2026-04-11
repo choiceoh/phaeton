@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 
 import { useExcelToolbar } from '@/contexts/ExcelToolbarContext'
+import { BASE } from '@/lib/motion'
 import { useCollections } from '@/hooks/useCollections'
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
@@ -126,9 +128,9 @@ export default function SheetTabBar() {
               <button
                 key={col.id}
                 type="button"
-                className={`inline-flex items-center px-4 text-[12px] border-r border-[#d4d4d4] h-full transition-all duration-150 whitespace-nowrap ${
+                className={`relative inline-flex items-center px-4 text-[12px] border-r border-[#d4d4d4] h-full transition-colors duration-150 whitespace-nowrap ${
                   isActive
-                    ? 'bg-white text-[#333] font-medium border-t-2 border-t-[#005a9e]'
+                    ? 'bg-white text-[#333] font-medium'
                     : 'bg-[#e6e6e6] text-[#666] hover:bg-[#d8d8d8]'
                 }`}
                 onClick={() => {
@@ -137,6 +139,13 @@ export default function SheetTabBar() {
                 onDoubleClick={() => startEditing(col.id, col.label)}
               >
                 {col.label}
+                {isActive && (
+                  <motion.div
+                    layoutId="activeSheetTab"
+                    className="absolute top-0 left-0 right-0 h-[2px] bg-[#005a9e]"
+                    transition={BASE}
+                  />
+                )}
               </button>
             )
           })}
