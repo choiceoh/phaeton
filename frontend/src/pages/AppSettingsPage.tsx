@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { Monitor } from 'lucide-react'
@@ -29,6 +29,7 @@ import {
 } from '@/hooks/useCollections'
 import { useMembers, useAddMember, useRemoveMember } from '@/hooks/useMembers'
 import { formatError } from '@/lib/api'
+import { isComputedType, isLayoutType } from '@/lib/constants'
 import type { RLSFilter } from '@/lib/types'
 
 export default function AppSettingsPage() {
@@ -285,6 +286,10 @@ export default function AppSettingsPage() {
         )}
 
         {canManage && (
+          <ListSettingsSection collection={collection} updateCollection={updateCollection} />
+        )}
+
+        {canManage && (
           <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
             <h2 className="text-base font-semibold text-destructive">위험 영역</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -314,6 +319,121 @@ export default function AppSettingsPage() {
         loading={deleteCollection.isPending}
       />
     </div>
+  )
+}
+
+function ListSettingsSection({
+  collection,
+  updateCollection,
+}: {
+  collection: NonNullable<ReturnType<typeof useCollection>['data']>
+  updateCollection: ReturnType<typeof useUpdateCollection>
+}) {
+  const fields = collection.fields ?? []
+
+  const titleCandidates = useMemo(
+    () => fields.filter((f) => !isLayoutType(f.field_type) && !isComputedType(f.field_type)),
+    [fields],
+  )
+
+  const sortCandidates = useMemo(
+    () => [
+      { slug: 'created_at', label: '생성일' },
+      { slug: 'updated_at', label: '수정일' },
+      ...fields
+        .filter((f) => !isLayoutType(f.field_type) && !isComputedType(f.field_type))
+        .map((f) => ({ slug: f.slug, label: f.label })),
+    ],
+    [fields],
+  )
+
+  return (
+    <section>
+      <h2 className="mb-1 text-lg font-semibold">목록 표시 설정</h2>
+      <p className="mb-3 text-sm text-muted-foreground">
+        데이터 목록의 제목열과 기본 정렬 순서를 설정합니다.
+      </p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <Label>제목열</Label>
+          <p className="mb-1.5 text-xs text-muted-foreground">캘린더, 간트 등에서 레코드 이름으로 표시됩니다.</p>
+          <Select
+            value={collection.title_field_id || '_auto'}
+            onValueChange={(v) => {
+              updateCollection.mutate(
+                { title_field_id: v === '_auto' ? '' : v },
+                {
+                  onSuccess: () => toast.success('제목열이 변경되었습니다'),
+                  onError: (err) => toast.error(formatError(err)),
+                },
+              )
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_auto">자동 (첫 번째 텍스트 필드)</SelectItem>
+              {titleCandidates.map((f) => (
+                <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label>기본 정렬 항목</Label>
+          <p className="mb-1.5 text-xs text-muted-foreground">목록 진입 시 기본으로 적용되는 정렬 기준입니다.</p>
+          <Select
+            value={collection.default_sort_field || '_default'}
+            onValueChange={(v) => {
+              updateCollection.mutate(
+                { default_sort_field: v === '_default' ? '' : v },
+                {
+                  onSuccess: () => toast.success('기본 정렬이 변경되었습니다'),
+                  onError: (err) => toast.error(formatError(err)),
+                },
+              )
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_default">기본 (생성일 내림차순)</SelectItem>
+              {sortCandidates.map((f) => (
+                <SelectItem key={f.slug} value={f.slug}>{f.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label>정렬 순서</Label>
+          <p className="mb-1.5 text-xs text-muted-foreground">오름차순(A-Z, 1-9) 또는 내림차순(Z-A, 9-1).</p>
+          <Select
+            value={collection.default_sort_order || 'desc'}
+            onValueChange={(v) => {
+              updateCollection.mutate(
+                { default_sort_order: v as 'asc' | 'desc' },
+                {
+                  onSuccess: () => toast.success('정렬 순서가 변경되었습니다'),
+                  onError: (err) => toast.error(formatError(err)),
+                },
+              )
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="asc">오름차순</SelectItem>
+              <SelectItem value="desc">내림차순</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </section>
   )
 }
 

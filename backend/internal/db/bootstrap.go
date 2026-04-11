@@ -381,6 +381,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE _meta.fields ADD COLUMN IF NOT EXISTS height SMALLINT NOT NULL DEFAULT 1`,
 		`ALTER TABLE _meta.process_transitions ADD COLUMN IF NOT EXISTS allowed_user_ids UUID[] NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE _meta.webhook_events ADD COLUMN IF NOT EXISTS error_message TEXT`,
+		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS title_field_id UUID REFERENCES _meta.fields(id) ON DELETE SET NULL`,
+		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS default_sort_field VARCHAR(63)`,
+		`ALTER TABLE _meta.collections ADD COLUMN IF NOT EXISTS default_sort_order VARCHAR(4)`,
 	}
 
 	for _, stmt := range append(stmts, alters...) {

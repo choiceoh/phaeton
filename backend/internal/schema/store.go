@@ -25,34 +25,46 @@ func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // ---------- Collection ----------
 
-const colCols = `id, slug, label, description, icon, is_system, process_enabled, sort_order, access_config, created_at, updated_at, created_by`
+const colCols = `id, slug, label, description, icon, is_system, process_enabled, sort_order, title_field_id, default_sort_field, default_sort_order, access_config, created_at, updated_at, created_by`
 
 // scanCollection reads a single row matching the colCols column list into a Collection.
 // It handles NULL-able optional columns (description, icon, created_by) via pointer intermediaries
 // and unmarshals the access_config JSONB column into the AccessConfig struct.
 func scanCollection(row pgx.Row) (Collection, error) {
 	var (
-		c         Collection
-		id        pgtype.UUID
-		createdBy pgtype.UUID
-		desc      *string
-		icon      *string
-		acRaw     []byte
+		c                Collection
+		id               pgtype.UUID
+		createdBy        pgtype.UUID
+		titleFieldID     pgtype.UUID
+		desc             *string
+		icon             *string
+		defaultSortField *string
+		defaultSortOrder *string
+		acRaw            []byte
 	)
 	err := row.Scan(
 		&id, &c.Slug, &c.Label, &desc, &icon,
-		&c.IsSystem, &c.ProcessEnabled, &c.SortOrder, &acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy,
+		&c.IsSystem, &c.ProcessEnabled, &c.SortOrder,
+		&titleFieldID, &defaultSortField, &defaultSortOrder,
+		&acRaw, &c.CreatedAt, &c.UpdatedAt, &createdBy,
 	)
 	if err != nil {
 		return Collection{}, err
 	}
 	c.ID = uuidStr(id)
 	c.CreatedBy = uuidStr(createdBy)
+	c.TitleFieldID = uuidStr(titleFieldID)
 	if desc != nil {
 		c.Description = *desc
 	}
 	if icon != nil {
 		c.Icon = *icon
+	}
+	if defaultSortField != nil {
+		c.DefaultSortField = *defaultSortField
+	}
+	if defaultSortOrder != nil {
+		c.DefaultSortOrder = *defaultSortOrder
 	}
 	if len(acRaw) > 0 {
 		if err := json.Unmarshal(acRaw, &c.AccessConfig); err != nil {
@@ -209,6 +221,22 @@ func (s *Store) UpdateCollection(ctx context.Context, id string, req *UpdateColl
 			return Collection{}, fmt.Errorf("marshal access_config: %w", err)
 		}
 		args = append(args, acJSON)
+		argIdx++
+	}
+	if req.TitleFieldID != nil {
+		sets = append(sets, fmt.Sprintf("title_field_id = $%d", argIdx))
+		u, _ := parseUUID(*req.TitleFieldID)
+		args = append(args, u)
+		argIdx++
+	}
+	if req.DefaultSortField != nil {
+		sets = append(sets, fmt.Sprintf("default_sort_field = $%d", argIdx))
+		args = append(args, nilIfEmpty(*req.DefaultSortField))
+		argIdx++
+	}
+	if req.DefaultSortOrder != nil {
+		sets = append(sets, fmt.Sprintf("default_sort_order = $%d", argIdx))
+		args = append(args, nilIfEmpty(*req.DefaultSortOrder))
 		argIdx++
 	}
 

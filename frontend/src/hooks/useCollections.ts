@@ -81,7 +81,7 @@ export function useCreateCollection() {
 export function useUpdateCollection(id: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: Partial<Pick<Collection, 'label' | 'description' | 'icon' | 'sort_order' | 'process_enabled' | 'access_config'>>) =>
+    mutationFn: (input: Partial<Pick<Collection, 'label' | 'description' | 'icon' | 'sort_order' | 'process_enabled' | 'access_config' | 'title_field_id' | 'default_sort_field' | 'default_sort_order'>>) =>
       api.patch<Collection>(`/schema/collections/${id}`, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.collections.detail(id) })
