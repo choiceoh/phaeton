@@ -33,7 +33,7 @@ import {
   isLayoutType,
   NUMBER_DISPLAY_TYPES,
   ON_DELETE_OPTIONS,
-  RELATION_TYPE_LABELS,
+  RELATION_TYPE_OPTIONS,
   ROLLUP_FUNCTIONS,
   TEXT_DISPLAY_TYPES,
   VALIDATION_OPTIONS,
@@ -527,8 +527,13 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(RELATION_TYPE_LABELS).map(([v, l]) => (
-                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    {RELATION_TYPE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value} label={o.label}>
+                        <div className="flex flex-col items-start whitespace-normal">
+                          <span>{o.label}</span>
+                          <span className="text-xs text-muted-foreground">{o.description}</span>
+                        </div>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -937,7 +942,12 @@ export default function FieldProperties({ field, collections, siblingFields, onC
                 </SelectTrigger>
                 <SelectContent>
                   {ON_DELETE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    <SelectItem key={o.value} value={o.value} label={o.label}>
+                      <div className="flex flex-col items-start whitespace-normal">
+                        <span>{o.label}</span>
+                        <span className="text-xs text-muted-foreground">{o.description}</span>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

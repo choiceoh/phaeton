@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, GitBranch, Layers, MousePointerClick, Search, Settings } from 'lucide-react'
+import { ChevronDown, ChevronUp, GitBranch, Layers, MousePointerClick, Search, Settings, Sparkles } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
@@ -10,12 +10,14 @@ import PageHeader from '@/components/common/PageHeader'
 import TemplateGallery from '@/components/works/TemplateGallery'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
 import { useCollections, useCollectionCounts } from '@/hooks/useCollections'
 import { TERM } from '@/lib/constants'
 
 export default function AppListPage() {
   const { data: collections, isLoading, isError, error, refetch } = useCollections()
   const { data: counts } = useCollectionCounts()
+  const aiAvailable = useAIAvailable()
   const [showTemplates, setShowTemplates] = useState(false)
   const [search, setSearch] = useState('')
 
@@ -87,6 +89,26 @@ export default function AppListPage() {
               </Link>
             }
           />
+          {/* AI quick start */}
+          {aiAvailable && (
+            <div className="mt-6 flex items-center gap-4 rounded-lg border p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                <Sparkles className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-medium">AI로 첫 앱 만들기</h4>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  어떤 데이터를 관리하고 싶은지 설명하면 AI가 앱 구조를 제안합니다
+                </p>
+              </div>
+              <Link to="/apps/new">
+                <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  시작하기
+                </Button>
+              </Link>
+            </div>
+          )}
           {/* Onboarding guide */}
           <div className="mt-8 space-y-4">
             <h3 className="text-center text-sm font-medium text-muted-foreground">

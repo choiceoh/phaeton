@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
@@ -6,7 +6,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Sparkles, X } from 'lucide-react'
 import { useCollections, useCreateCollection } from '@/hooks/useCollections'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useAIAvailable } from '@/contexts/AIAvailabilityContext'
@@ -56,6 +56,15 @@ export default function AppBuilder() {
   const createCollection = useCreateCollection()
   const aiAvailable = useAIAvailable()
   const generateSlug = useAIGenerateSlug()
+  const [showAINudge, setShowAINudge] = useState(false)
+
+  useEffect(() => {
+    if (aiAvailable) {
+      try {
+        if (!localStorage.getItem('phaeton:ai-builder-nudge-dismissed')) setShowAINudge(true)
+      } catch { /* ignore */ }
+    }
+  }, [aiAvailable])
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
   const selectedField = fields.find((f) => f.id === selectedId) || null
@@ -204,6 +213,23 @@ export default function AppBuilder() {
         <h1 className="text-2xl font-bold">새 앱 만들기</h1>
         <AIBuildDialog onApply={handleAIApply} />
       </div>
+
+      {showAINudge && (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground animate-fade-in">
+          <Sparkles className="h-4 w-4 shrink-0" />
+          <span>AI에게 앱 구조를 설명하면 자동으로 만들어 줍니다</span>
+          <button
+            type="button"
+            onClick={() => {
+              setShowAINudge(false)
+              try { localStorage.setItem('phaeton:ai-builder-nudge-dismissed', '1') } catch { /* ignore */ }
+            }}
+            className="ml-auto text-muted-foreground/60 hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
