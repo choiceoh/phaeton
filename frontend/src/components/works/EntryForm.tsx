@@ -893,6 +893,7 @@ function FileInput({
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    e.target.value = ''
     if (file.size > 50 * 1024 * 1024) {
       toast.error('파일은 50MB 이하여야 합니다')
       return
