@@ -78,6 +78,8 @@ import {
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { CellPosition } from '@/hooks/useGridNavigation'
 import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
+import { useCellDragMove } from '@/hooks/useCellDragMove'
+import { useFillHandle } from '@/hooks/useFillHandle'
 import type { CellSaveState } from '@/hooks/useInlineEditing'
 import { copyToClipboard, pasteFromClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
@@ -175,6 +177,14 @@ interface Props<T> {
   onPaste?: (startRow: number, startCol: number, matrix: string[][]) => void
   /** Cell context menu actions. */
   onDeleteRow?: (rowId: string) => void
+  /** Called when user requests inserting a new row via context menu. */
+  onInsertRow?: () => void
+  /** Called when user requests filtering by a cell's value. */
+  onFilterByValue?: (fieldSlug: string, value: unknown) => void
+  /** Called when fill handle drag completes. */
+  onFill?: (updates: { id: string; fields: Record<string, unknown> }[]) => void
+  /** Called when cells are dragged to move or copy. */
+  onCellMove?: (updates: { id: string; fields: Record<string, unknown> }[]) => void
   /** Show the bottom empty row for new entries. */
   showNewRow?: boolean
   /** Current values in the new row. */
@@ -246,6 +256,10 @@ export function DataTable<T>({
   onClearCell,
   onPaste,
   onDeleteRow,
+  onInsertRow,
+  onFilterByValue,
+  onFill,
+  onCellMove,
   showNewRow,
   newRowValues,
   onNewRowChange,
@@ -438,6 +452,29 @@ export function DataTable<T>({
     isEditing: isEditingCell,
     onStartEditing: editable ? onStartEditing : undefined,
     onClearCell: editable ? onClearCell : undefined,
+  })
+
+  // Fill handle hook.
+  const fillHandle = useFillHandle({
+    activeCell: grid.activeCell,
+    selection: grid.selection,
+    data: data as Record<string, unknown>[],
+    columnIds: colIds,
+    fields: editableFields ?? [],
+    readOnlyColumns: new Set(['_select', '_actions', '_rowNum', 'created_at', '_status']),
+    containerRef: grid.containerRef,
+    onFill: onFill ?? (() => {}),
+  })
+
+  // Cell drag move/copy hook.
+  const cellDrag = useCellDragMove({
+    activeCell: grid.activeCell,
+    selection: grid.selection,
+    data: data as Record<string, unknown>[],
+    columnIds: colIds,
+    fields: editableFields ?? [],
+    readOnlyColumns: new Set(['_select', '_actions', '_rowNum', 'created_at', '_status']),
+    onMove: onCellMove ?? (() => {}),
   })
 
   // Clipboard: copy & paste.
@@ -830,11 +867,42 @@ export function DataTable<T>({
 
                     const isRowNum = cell.column.id === '_rowNum'
 
+                    // Fill preview edge flags
+                    const fp = fillHandle.fillPreview
+                    const inFillPreview = fp && rowIdx >= fp.startRow && rowIdx <= fp.endRow && colIdx >= fp.startCol && colIdx <= fp.endCol
+                    const fpTop = inFillPreview && rowIdx === fp.startRow
+                    const fpBottom = inFillPreview && rowIdx === fp.endRow
+                    const fpLeft = inFillPreview && colIdx === fp.startCol
+                    const fpRight = inFillPreview && colIdx === fp.endCol
+
+                    // Drag ghost edge flags
+                    const dg = cellDrag.dragGhost
+                    const inDragGhost = dg && rowIdx >= dg.startRow && rowIdx <= dg.endRow && colIdx >= dg.startCol && colIdx <= dg.endCol
+                    const dgPrefix = dg?.mode === 'copy' ? 'drag-ghost-copy' : 'drag-ghost-move'
+                    const dgTop = inDragGhost && rowIdx === dg.startRow
+                    const dgBottom = inDragGhost && rowIdx === dg.endRow
+                    const dgLeft = inDragGhost && colIdx === dg.startCol
+                    const dgRight = inDragGhost && colIdx === dg.endCol
+
+                    // Is this cell the bottom-right corner of the active cell/selection? (fill handle position)
+                    const isFillHandleCell = editable && onFill && !isRowNum && (() => {
+                      if (grid.selection) {
+                        const sn = {
+                          r2: Math.max(grid.selection.startRow, grid.selection.endRow),
+                          c2: Math.max(grid.selection.startCol, grid.selection.endCol),
+                        }
+                        return rowIdx === sn.r2 && colIdx === sn.c2
+                      }
+                      return isActive
+                    })()
+
                     return (
                       <TableCell
                         key={cell.id}
                         role="gridcell"
-                        className={`${isRowNum ? 'bg-[#f0f0f0] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-stone-400' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#d4e5f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#2266cc]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#2266cc]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#2266cc]' : ''} ${edgeRight ? 'border-r-2 border-r-[#2266cc]' : ''}`}
+                        data-row={rowIdx}
+                        data-col={colIdx}
+                        className={`${isRowNum ? 'bg-[#f0f0f0] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-stone-400' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#d4e5f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#2266cc]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#2266cc]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#2266cc]' : ''} ${edgeRight ? 'border-r-2 border-r-[#2266cc]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''}`}
                         style={{
                           width: cell.column.getSize(),
                           position: isPinned ? 'sticky' : undefined,
@@ -842,7 +910,18 @@ export function DataTable<T>({
                           right: isPinned === 'right' ? cell.column.getAfter('right') : undefined,
                           zIndex: isPinned ? 1 : undefined,
                         }}
+                        onMouseMove={editable && onCellMove ? (e) => cellDrag.handleCellMouseMove(e, rowIdx, colIdx) : undefined}
+                        onMouseDown={editable && onCellMove ? (e) => {
+                          // Only intercept for drag (left button, near border)
+                          if (e.button === 0) cellDrag.handleCellMouseDown(e, rowIdx, colIdx)
+                        } : undefined}
                         onClick={(e) => {
+                          // Suppress click after drag
+                          if (cellDrag.didDragRef.current) {
+                            cellDrag.didDragRef.current = false
+                            e.stopPropagation()
+                            return
+                          }
                           e.stopPropagation()
                           grid.handleCellClick(rowIdx, colIdx, e)
                         }}
@@ -875,6 +954,12 @@ export function DataTable<T>({
                           />
                         ) : (
                           flexRender(cell.column.columnDef.cell, cell.getContext())
+                        )}
+                        {isFillHandleCell && (
+                          <div
+                            className="fill-handle"
+                            onMouseDown={fillHandle.handleFillHandleMouseDown}
+                          />
                         )}
                       </TableCell>
                     )
@@ -995,6 +1080,33 @@ export function DataTable<T>({
           style={{ left: headerMenu.x, top: headerMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
+          {headerMenu.column.getCanSort() && (
+            <>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                onClick={() => {
+                  onSortChange?.([{ id: headerMenu.column.id, desc: false }])
+                  setHeaderMenu(null)
+                }}
+              >
+                <ArrowDownUp className="h-3.5 w-3.5" />
+                오름차순 정렬
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                onClick={() => {
+                  onSortChange?.([{ id: headerMenu.column.id, desc: true }])
+                  setHeaderMenu(null)
+                }}
+              >
+                <ArrowDownUp className="h-3.5 w-3.5 rotate-180" />
+                내림차순 정렬
+              </button>
+              <div className="my-1 h-px bg-border" />
+            </>
+          )}
           {headerMenu.column.getIsPinned() ? (
             <button
               type="button"
@@ -1115,6 +1227,26 @@ export function DataTable<T>({
           }}
           onClose={() => setCellMenu(null)}
           canDelete={!!onDeleteRow}
+          onInsertRowAbove={onInsertRow ? () => onInsertRow() : undefined}
+          onInsertRowBelow={onInsertRow ? () => onInsertRow() : undefined}
+          onSortAscending={() => {
+            const colId = colIds[cellMenu.colIdx]
+            if (colId) onSortChange?.([{ id: colId, desc: false }])
+          }}
+          onSortDescending={() => {
+            const colId = colIds[cellMenu.colIdx]
+            if (colId) onSortChange?.([{ id: colId, desc: true }])
+          }}
+          onFilterByValue={onFilterByValue ? () => {
+            const colId = colIds[cellMenu.colIdx]
+            const value = (data[cellMenu.rowIdx] as Record<string, unknown>)?.[colId]
+            if (colId) onFilterByValue(colId, value)
+          } : undefined}
+          cellValue={(data[cellMenu.rowIdx] as Record<string, unknown>)?.[colIds[cellMenu.colIdx]]}
+          columnLabel={(() => {
+            const col = table.getColumn(colIds[cellMenu.colIdx])
+            return col ? String(col.columnDef.header ?? col.id) : undefined
+          })()}
         />
       )}
 
