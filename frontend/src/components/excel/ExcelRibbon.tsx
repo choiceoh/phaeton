@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -114,10 +115,12 @@ export default function ExcelRibbon() {
                 <span className="text-[11px] text-[#333]">{user.name}</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44 rounded-none">
-                <DropdownMenuLabel className="font-normal">
-                  <p className="text-xs font-medium">{user.name}</p>
-                  <p className="text-[10px] text-[#666]">{ROLE_LABELS[user.role] ?? user.role}</p>
-                </DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="font-normal">
+                    <p className="text-xs font-medium">{user.name}</p>
+                    <p className="text-[10px] text-[#666]">{ROLE_LABELS[user.role] ?? user.role}</p>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate('/profile')}>
                   <User className="mr-2 h-3.5 w-3.5" />
