@@ -45,8 +45,12 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import NumberFlow from '@number-flow/react'
 import {
+  ArrowDownAZ,
+  ArrowUpAZ,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
+  Filter,
   PinIcon,
   PinOffIcon,
   Plus,
@@ -60,6 +64,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -122,9 +127,10 @@ function getCellClassName(
   dgLeft: any,
   dgRight: any,
   cellError: string | null,
+  isActiveRow?: boolean,
 ): string {
   const cls: string[] = ['relative']
-  if (isRowNum) cls.push('bg-[#e6e6e6] border-r border-r-stone-300 text-center')
+  if (isRowNum) cls.push(`${isActiveRow ? 'bg-[#b8d4e8]' : 'bg-[#e6e6e6]'} border-r border-r-stone-300 text-center`)
   else if (isPinned) cls.push('bg-background')
   if (isLastPinnedLeftCell) cls.push('border-r-2 border-r-[#b0b0b0]')
   if (isActive && !isRowNum) cls.push('grid-cell-active')
@@ -163,6 +169,14 @@ function colIndexToLetter(idx: number): string {
     n = Math.floor(n / 26) - 1
   }
   return result
+}
+
+function letterToColIndex(letters: string): number {
+  let result = 0
+  for (let i = 0; i < letters.length; i++) {
+    result = result * 26 + (letters.charCodeAt(i) - 64)
+  }
+  return result - 1
 }
 
 // ── fx 팝오버 — 함수 목록 ──────────────────────────────────────────────────
@@ -457,6 +471,9 @@ export function DataTable<T>({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollRight, setCanScrollRight] = useState(false)
   const [fxOpen, setFxOpen] = useState(false)
+  const [nameBoxEditing, setNameBoxEditing] = useState(false)
+  const [nameBoxValue, setNameBoxValue] = useState('')
+  const nameBoxRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const el = scrollRef.current
@@ -1031,9 +1048,55 @@ export function DataTable<T>({
       {/* Formula bar (Excel-style: NameBox | fx | value) */}
       {editable && (
         <div className="flex items-center border border-[#d4d4d4] bg-white h-[28px] text-[12px]">
-          <div className="w-16 px-1.5 border-r border-[#d4d4d4] bg-[#e6e6e6] text-center font-medium text-[#333] flex items-center justify-center h-full select-none tabular-nums cursor-cell">
-            {formulaBarInfo?.ref ?? ''}
-          </div>
+          {nameBoxEditing ? (
+            <input
+              ref={nameBoxRef}
+              className="w-16 px-1.5 border-r border-[#d4d4d4] bg-white text-center font-medium text-[#333] h-full tabular-nums text-[12px] outline-none"
+              value={nameBoxValue}
+              onChange={(e) => setNameBoxValue(e.target.value.toUpperCase())}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  const m = nameBoxValue.match(/^([A-Z]+)(\d+)$/i)
+                  if (m) {
+                    const targetDataCol = letterToColIndex(m[1].toUpperCase())
+                    const targetRow = parseInt(m[2], 10) - 1 - ((page - 1) * limit)
+                    // Map data column index to actual column index (skip system cols)
+                    const nonDataCols = new Set(['_rowNum', '_select', '_actions'])
+                    let dataIdx = 0
+                    let actualCol = -1
+                    for (let i = 0; i < colIds.length; i++) {
+                      if (!nonDataCols.has(colIds[i])) {
+                        if (dataIdx === targetDataCol) { actualCol = i; break }
+                        dataIdx++
+                      }
+                    }
+                    if (actualCol >= 0 && targetRow >= 0) {
+                      grid.moveTo(targetRow, actualCol, false)
+                    }
+                  }
+                  setNameBoxEditing(false)
+                  scrollRef.current?.focus()
+                } else if (e.key === 'Escape') {
+                  setNameBoxEditing(false)
+                  scrollRef.current?.focus()
+                }
+              }}
+              onBlur={() => setNameBoxEditing(false)}
+              autoFocus
+              onFocus={(e) => e.target.select()}
+            />
+          ) : (
+            <div
+              className="w-16 px-1.5 border-r border-[#d4d4d4] bg-[#e6e6e6] text-center font-medium text-[#333] flex items-center justify-center h-full select-none tabular-nums cursor-cell"
+              onClick={() => {
+                setNameBoxValue(formulaBarInfo?.ref ?? '')
+                setNameBoxEditing(true)
+              }}
+            >
+              {formulaBarInfo?.ref ?? ''}
+            </div>
+          )}
           <Popover open={fxOpen} onOpenChange={setFxOpen}>
             <PopoverTrigger
               className="w-6 border-r border-[#d4d4d4] flex items-center justify-center text-[#666] italic select-none h-full cursor-pointer hover:bg-[#d9e1f2] transition-colors"
@@ -1067,9 +1130,32 @@ export function DataTable<T>({
               ))}
             </PopoverContent>
           </Popover>
-          <div className="flex-1 px-1.5 truncate text-[#333] text-[12px] cursor-text">
-            {formulaBarInfo?.value ?? ''}
-          </div>
+          <input
+            className="flex-1 px-1.5 text-[#333] text-[12px] h-full border-none outline-none bg-transparent"
+            value={isEditingCell ? String(editValue ?? '') : (formulaBarInfo?.value ?? '')}
+            readOnly={!editable || !onStartEditing}
+            onFocus={() => {
+              const ac = grid.activeCell
+              if (ac && onStartEditing && !isEditingCell) {
+                onStartEditing(ac.row, ac.col, '')
+              }
+            }}
+            onChange={(e) => {
+              if (isEditingCell && onEditValueChange) {
+                onEditValueChange(e.target.value)
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                onCommitEdit?.()
+                scrollRef.current?.focus()
+              } else if (e.key === 'Escape') {
+                onCancelEdit?.()
+                scrollRef.current?.focus()
+              }
+            }}
+          />
         </div>
       )}
 
@@ -1100,7 +1186,7 @@ export function DataTable<T>({
           scrollRef.current = el
           ;(grid.containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
         }}
-        className="border border-[#d4d4d4] bg-white overflow-auto focus:outline-none flex-1 min-h-0"
+        className="border border-[#e2e2e2] bg-white overflow-auto focus:outline-none flex-1 min-h-0"
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
@@ -1122,6 +1208,8 @@ export function DataTable<T>({
                   const isLastPinnedLeft = isPinned === 'left' && headerIdx === pinnedLeftCols.length - 1 + (selectable ? 1 : 0)
                   const isSystemCol = header.column.id === '_select' || header.column.id === '_actions' || header.column.id === '_rowNum'
 
+                  const isActiveCol = grid.activeCell?.col === headerIdx
+
                   return (
                     <SortableTableHead
                       key={header.id}
@@ -1129,7 +1217,7 @@ export function DataTable<T>({
                       disabled={!!isPinned || isSystemCol}
                       role="columnheader"
                       aria-sort={sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : canSort ? 'none' : undefined}
-                      className={`relative group ${isPinned ? 'bg-[#e6e6e6]' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-[#b0b0b0]' : ''}`}
+                      className={`relative group ${isActiveCol && !isSystemCol ? 'bg-[#b8d4e8]' : isPinned ? 'bg-[#e6e6e6]' : ''} ${isLastPinnedLeft ? 'border-r-2 border-r-[#b0b0b0]' : ''}`}
                       style={{
                         width: header.getSize(),
                         position: isPinned ? 'sticky' : undefined,
@@ -1192,6 +1280,37 @@ export function DataTable<T>({
                             <span className="text-[8px] leading-none opacity-0 group-hover:opacity-40 transition-opacity">▼</span>
                           )}
                         </button>
+                      )}
+                      {/* Column header dropdown (filter/sort) */}
+                      {canSort && !isSystemCol && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 h-4 w-4 flex items-center justify-center rounded-sm hover:bg-[#d9e1f2] transition-opacity z-[3]"
+                            onClick={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                          >
+                            <ChevronDown className="h-3 w-3 text-[#666]" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-44">
+                            <DropdownMenuItem onClick={() => onSortChange?.([{ id: header.column.id, desc: false }])}>
+                              <ArrowUpAZ className="h-3.5 w-3.5 mr-2" />
+                              오름차순 정렬
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onSortChange?.([{ id: header.column.id, desc: true }])}>
+                              <ArrowDownAZ className="h-3.5 w-3.5 mr-2" />
+                              내림차순 정렬
+                            </DropdownMenuItem>
+                            {onFilterByValue && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => onFilterByValue(header.column.id, undefined)}>
+                                  <Filter className="h-3.5 w-3.5 mr-2" />
+                                  값으로 필터
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                       {/* Resize handle */}
                       <div
@@ -1297,6 +1416,7 @@ export function DataTable<T>({
                               inFillPreview, fpTop, fpBottom, fpLeft, fpRight,
                               null, '', null, null, null, null,
                               null,
+                              grid.activeCell?.row === rowIdx,
                             )}
                             style={colBaseStyles[colIdx]}
                             onClick={(e) => {
@@ -1420,6 +1540,7 @@ export function DataTable<T>({
                           inFillPreview, fpTop, fpBottom, fpLeft, fpRight,
                           inDragGhost, dgPrefix, dgTop, dgBottom, dgLeft, dgRight,
                           cellError,
+                          grid.activeCell?.row === rowIdx,
                         )}
                         title={cellError ?? undefined}
                         style={cellFmt && (cellFmt.bg || cellFmt.color || cellFmt.fontSize || cellFmt.bold || cellFmt.italic)

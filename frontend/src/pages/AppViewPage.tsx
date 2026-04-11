@@ -10,7 +10,9 @@
  */
 import type { SortingState } from '@tanstack/react-table'
 import {
+  ArrowDownAZ,
   ArrowDownUp,
+  ArrowUpAZ,
   Download,
   Ellipsis,
   FileSpreadsheet,
@@ -639,14 +641,17 @@ export default function AppViewPage() {
   const toolbarContentRef = useRef<React.ReactNode>(null)
   const sheetTabsRef = useRef<React.ReactNode>(null)
   const pageActionsRef = useRef<React.ReactNode>(null)
+  const dataTabContentRef = useRef<React.ReactNode>(null)
   // Reset refs each render; they'll be re-assigned below only when collection is loaded.
   toolbarContentRef.current = null
   sheetTabsRef.current = null
   pageActionsRef.current = null
+  dataTabContentRef.current = null
 
   useEffect(() => { excelToolbar.setToolbarContent(toolbarContentRef.current) })
   useEffect(() => { excelToolbar.setSheetTabs(sheetTabsRef.current) })
   useEffect(() => { excelToolbar.setPageActions(pageActionsRef.current) })
+  useEffect(() => { excelToolbar.setDataTabContent(dataTabContentRef.current) })
 
   if (colLoading) return <LoadingState variant="table" />
   if (colError) return <ErrorState error={colErr} />
@@ -930,6 +935,52 @@ export default function AppViewPage() {
           </PopoverContent>
         </Popover>
       )}
+    </div>
+  )
+
+  // Data tab content (sort/filter controls for "데이터" ribbon tab).
+  const activeColSlug = fmtActiveCell ? fmtColumnIds[fmtActiveCell.col] : undefined
+  const activeColField = activeColSlug && collection?.fields?.find(f => f.slug === activeColSlug)
+  dataTabContentRef.current = (
+    <div className="flex items-center gap-1">
+      {/* Sort group */}
+      <div className="flex items-center gap-0.5 border-r border-[#d4d4d4] pr-2 mr-1">
+        <button
+          type="button"
+          className="flex flex-col items-center px-1.5 py-0.5 rounded hover:bg-[#e0e0e0] text-[10px] disabled:opacity-40"
+          disabled={!activeColField}
+          onClick={() => {
+            if (activeColSlug) handleHeaderSortChange([{ id: activeColSlug, desc: false }])
+          }}
+        >
+          <ArrowUpAZ className="h-4 w-4" />
+          <span>오름차순</span>
+        </button>
+        <button
+          type="button"
+          className="flex flex-col items-center px-1.5 py-0.5 rounded hover:bg-[#e0e0e0] text-[10px] disabled:opacity-40"
+          disabled={!activeColField}
+          onClick={() => {
+            if (activeColSlug) handleHeaderSortChange([{ id: activeColSlug, desc: true }])
+          }}
+        >
+          <ArrowDownAZ className="h-4 w-4" />
+          <span>내림차순</span>
+        </button>
+      </div>
+      {/* Filter toggle */}
+      <button
+        type="button"
+        className={`flex flex-col items-center px-1.5 py-0.5 rounded hover:bg-[#e0e0e0] text-[10px] ${hasActiveFilters ? 'text-[#005a9e]' : ''}`}
+        onClick={() => {
+          if (hasActiveFilters) {
+            setFilterGroup(emptyFilterGroup())
+          }
+        }}
+      >
+        <Filter className={`h-4 w-4 ${hasActiveFilters ? 'text-[#005a9e]' : ''}`} />
+        <span>{hasActiveFilters ? '필터 해제' : '필터'}</span>
+      </button>
     </div>
   )
 

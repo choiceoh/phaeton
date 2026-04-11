@@ -22,6 +22,9 @@ interface ExcelToolbarState {
   /** Status bar content (selection stats) — rendered in SheetTabBar */
   statusBar: ReactNode
   setStatusBar: (content: ReactNode) => void
+  /** Data tab content (sort/filter controls) — rendered in ExcelRibbon */
+  dataTabContent: ReactNode
+  setDataTabContent: (content: ReactNode) => void
 }
 
 const ExcelToolbarContext = createContext<ExcelToolbarState | null>(null)
@@ -34,6 +37,7 @@ export function ExcelToolbarProvider({ children }: { children: ReactNode }) {
   const [pageActions, setPageActions] = useState<ReactNode>(null)
   const [readOnlyBanner, setReadOnlyBanner] = useState<ReactNode>(null)
   const [statusBar, setStatusBar] = useState<ReactNode>(null)
+  const [dataTabContent, setDataTabContent] = useState<ReactNode>(null)
 
   return (
     <ExcelToolbarContext.Provider
@@ -45,6 +49,7 @@ export function ExcelToolbarProvider({ children }: { children: ReactNode }) {
         pageActions, setPageActions,
         readOnlyBanner, setReadOnlyBanner,
         statusBar, setStatusBar,
+        dataTabContent, setDataTabContent,
       }}
     >
       {children}
