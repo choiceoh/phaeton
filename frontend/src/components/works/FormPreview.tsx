@@ -38,6 +38,24 @@ import { getChoices, getDisplayType, getFieldOptions } from '@/lib/fieldGuards'
 
 import type { FieldDraft } from './FieldPreview'
 
+const GRID_COLS = 6
+
+function computeFieldRows(fields: FieldDraft[]): number[] {
+  const rowOf: number[] = []
+  let row = 0
+  let used = 0
+  for (const f of fields) {
+    const w = isLayoutType(f.field_type) ? GRID_COLS : (f.width || GRID_COLS)
+    if (used + w > GRID_COLS && used > 0) {
+      row++
+      used = 0
+    }
+    rowOf.push(row)
+    used += w
+  }
+  return rowOf
+}
+
 interface Props {
   fields: FieldDraft[]
   selectedId: string | null
@@ -116,7 +134,44 @@ export default function FormPreview({ fields, selectedId, onSelect, onReorder, o
     if (oldIndex === -1 || newIndex === -1) return
     const updated = [...fields]
     const [moved] = updated.splice(oldIndex, 1)
+
+    const restRows = computeFieldRows(updated)
+    const neighborIdx = Math.max(0, Math.min(
+      oldIndex < newIndex ? newIndex - 1 : newIndex,
+      updated.length - 1,
+    ))
+    const targetRow = updated.length > 0 ? restRows[neighborIdx] : 0
+
+    const restRowMembers: number[] = []
+    for (let i = 0; i < restRows.length; i++) {
+      if (restRows[i] === targetRow) restRowMembers.push(i)
+    }
+
     updated.splice(newIndex, 0, moved)
+
+    // Map rest indices → final indices (items at ≥ newIndex shifted +1 after insert).
+    const finalIndices = restRowMembers.map((i) => (i >= newIndex ? i + 1 : i))
+    finalIndices.push(newIndex)
+    finalIndices.sort((a, b) => a - b)
+
+    const hasLayout = finalIndices.some((i) => isLayoutType(updated[i].field_type))
+
+    if (!hasLayout && finalIndices.length <= GRID_COLS) {
+      const total = finalIndices.reduce((s, i) => s + (updated[i].width || GRID_COLS), 0)
+      if (total > GRID_COLS) {
+        const count = finalIndices.length
+        const base = Math.floor(GRID_COLS / count)
+        const extra = GRID_COLS - base * count
+        for (let k = 0; k < count; k++) {
+          const w = base + (k < extra ? 1 : 0)
+          updated[finalIndices[k]] = {
+            ...updated[finalIndices[k]],
+            width: Math.max(1, Math.min(GRID_COLS, w)),
+          }
+        }
+      }
+    }
+
     onReorder(updated)
   }
 

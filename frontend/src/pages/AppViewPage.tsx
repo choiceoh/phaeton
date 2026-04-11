@@ -598,7 +598,7 @@ export default function AppViewPage() {
     }
   }
 
-  const [importingCSV, setImportingCSV] = useState(false)
+  const [, setImportingCSV] = useState(false)
   const [csvPreviewFile, setCsvPreviewFile] = useState<File | null>(null)
   const [csvPreviewOpen, setCsvPreviewOpen] = useState(false)
 
