@@ -16,7 +16,7 @@ interface Props {
 
 export default function PageHeader({ title, description, actions, breadcrumb }: Props) {
   return (
-    <div className="mb-10 flex flex-wrap items-start justify-between gap-4">
+    <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
       <div>
         {breadcrumb && breadcrumb.length > 0 && (
           <nav aria-label="breadcrumb" className="mb-2 flex items-center gap-1 text-sm text-muted-foreground">

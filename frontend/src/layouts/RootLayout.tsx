@@ -49,10 +49,10 @@ export default function RootLayout() {
   return (
     <AIAvailabilityProvider>
       <div className="min-h-screen overflow-x-hidden bg-background">
-        <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-border/60 bg-white/80 px-6 py-2.5 backdrop-blur-md backdrop-saturate-150">
+        <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-border/60 bg-white/80 px-6 py-1.5 backdrop-blur-md backdrop-saturate-150">
           <div className="flex items-center gap-1.5">
-            <Link to="/" className="mr-5 flex items-center gap-2.5 text-lg font-bold tracking-tight text-foreground" viewTransition>
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-white shadow-sm">T</span>
+            <Link to="/" className="mr-5 flex items-center gap-2 text-base font-bold tracking-tight text-foreground" viewTransition>
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-foreground text-[10px] font-bold text-white shadow-sm">T</span>
               <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Topworks</span>
             </Link>
             <div className="scrollbar-none flex items-center gap-0.5 overflow-x-auto">
@@ -89,7 +89,7 @@ export default function RootLayout() {
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent focus-visible:outline-none">
-                <Avatar className="h-7 w-7">
+                <Avatar className="h-6 w-6">
                   <AvatarFallback className="bg-foreground text-[11px] font-medium text-white">
                     {user.name.slice(0, 1)}
                   </AvatarFallback>
@@ -125,7 +125,7 @@ export default function RootLayout() {
             </DropdownMenu>
           </div>
         </nav>
-        <main className="mx-auto max-w-7xl px-6 py-10">
+        <main className="px-6 pt-2 pb-4">
           <Outlet />
         </main>
         <AIChatPanel />
