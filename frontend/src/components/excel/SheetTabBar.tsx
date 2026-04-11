@@ -1,15 +1,23 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 
 import { useExcelToolbar } from '@/contexts/ExcelToolbarContext'
 import { useCollections } from '@/hooks/useCollections'
+import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/queryKeys'
 
 export default function SheetTabBar() {
   const { appId } = useParams()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const { data: allCollections } = useCollections()
   const { statusBar } = useExcelToolbar()
+
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Find current collection and its siblings in the same workbook
   const siblings = useMemo(() => {
@@ -20,6 +28,39 @@ export default function SheetTabBar() {
       .filter((c) => c.workbook_id === cur.workbook_id)
       .sort((a, b) => a.sort_order - b.sort_order)
   }, [allCollections, appId])
+
+  const rename = useMutation({
+    mutationFn: ({ id, label }: { id: string; label: string }) =>
+      api.patch(`/schema/collections/${id}`, { label }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.collections.all })
+    },
+  })
+
+  const startEditing = useCallback((id: string, label: string) => {
+    setEditingId(id)
+    setEditValue(label)
+  }, [])
+
+  const commitRename = useCallback(() => {
+    if (!editingId) return
+    const trimmed = editValue.trim()
+    const col = siblings.find((c) => c.id === editingId)
+    setEditingId(null)
+    if (!trimmed || trimmed === col?.label) return
+    rename.mutate({ id: editingId, label: trimmed })
+  }, [editingId, editValue, siblings, rename])
+
+  const cancelEditing = useCallback(() => {
+    setEditingId(null)
+  }, [])
+
+  useEffect(() => {
+    if (editingId && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editingId])
 
   return (
     <div className="flex items-center h-[32px] bg-[#e6e6e6] border-t border-[#d4d4d4] select-none text-[11px]">
@@ -48,6 +89,39 @@ export default function SheetTabBar() {
         <div className="flex items-end gap-0 overflow-x-auto scrollbar-none h-full">
           {siblings.map((col) => {
             const isActive = col.id === appId
+            const isEditing = editingId === col.id
+
+            if (isEditing) {
+              return (
+                <div
+                  key={col.id}
+                  className={`inline-flex items-center border-r border-[#d4d4d4] h-full ${
+                    isActive
+                      ? 'bg-white border-t-2 border-t-[#005a9e]'
+                      : 'bg-[#e6e6e6]'
+                  }`}
+                >
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        commitRename()
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        cancelEditing()
+                      }
+                    }}
+                    className="h-full px-2 text-[12px] bg-transparent outline-none border border-[#005a9e] min-w-[40px] w-[100px]"
+                  />
+                </div>
+              )
+            }
+
             return (
               <button
                 key={col.id}
@@ -60,6 +134,7 @@ export default function SheetTabBar() {
                 onClick={() => {
                   if (!isActive) navigate(`/apps/${col.id}`)
                 }}
+                onDoubleClick={() => startEditing(col.id, col.label)}
               >
                 {col.label}
               </button>
