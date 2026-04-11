@@ -79,7 +79,7 @@ export function useEntries(slug: string | undefined, params: EntryListParams = {
 }
 
 /** Threshold: collections with ≤ this many rows use client-side filter/sort. */
-export const CLIENT_MODE_THRESHOLD = 5000
+export const CLIENT_MODE_THRESHOLD = 1000
 
 /**
  * Fetch ALL entries for a collection (up to CLIENT_MODE_THRESHOLD).
