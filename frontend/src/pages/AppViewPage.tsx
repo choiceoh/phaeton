@@ -236,6 +236,7 @@ export default function AppViewPage() {
     sort: sortParam,
     expand,
     filters,
+    reverse: 'true',
   })
 
   const createEntry = useCreateEntry(collection?.slug ?? '')
@@ -481,6 +482,16 @@ export default function AppViewPage() {
 
   function handleEntryClick(entry: Record<string, unknown>) {
     navigate(`/apps/${appId}/entries/${entry.id}`)
+  }
+
+  /** Navigate to the source collection filtered by the reverse-relation FK. */
+  function handleReverseCellClick(sourceCollectionId: string, sourceFieldSlug: string, recordId: string) {
+    const filter = JSON.stringify({
+      logic: 'and',
+      conditions: [{ field: sourceFieldSlug, operator: 'eq', value: recordId }],
+      groups: [],
+    })
+    navigate(`/apps/${sourceCollectionId}?_filter=${encodeURIComponent(filter)}`)
   }
 
   function handleBulkStatusChange(status: string) {
@@ -1043,6 +1054,7 @@ export default function AppViewPage() {
                 </Button>
               ) : undefined
             }
+            onReverseCellClick={handleReverseCellClick}
           />
         </ErrorBoundary>
       )}

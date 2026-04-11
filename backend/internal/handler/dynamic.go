@@ -199,6 +199,11 @@ func (h *DynHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Load M:N links.
 	h.loadM2MFields(r.Context(), records, fields, col.Slug)
 
+	// Load reverse-relation data (opt-in via ?reverse=true).
+	if params.Get("reverse") == "true" {
+		h.loadReverseRelFields(r.Context(), records, col)
+	}
+
 	// Optional display formatting.
 	if params.Get("format") == "display" {
 		applyDisplayFormat(records, fields)
@@ -268,6 +273,11 @@ func (h *DynHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Load M:N links.
 	h.loadM2MFields(r.Context(), records, fields, col.Slug)
+
+	// Load reverse-relation data (opt-in via ?reverse=true).
+	if r.URL.Query().Get("reverse") == "true" {
+		h.loadReverseRelFields(r.Context(), records, col)
+	}
 
 	// Optional display formatting.
 	if r.URL.Query().Get("format") == "display" {
@@ -2367,6 +2377,186 @@ func (h *DynHandler) loadM2MFields(ctx context.Context, records []map[string]any
 				row[f.Slug] = links
 			} else {
 				row[f.Slug] = []string{}
+			}
+		}
+	}
+}
+
+// displayFieldSlug returns the slug of the first text-type field in the list,
+// falling back to "id" if no text field exists.
+func displayFieldSlug(fields []schema.Field) string {
+	for _, f := range fields {
+		if f.FieldType == schema.FieldText {
+			return f.Slug
+		}
+	}
+	return "id"
+}
+
+// loadReverseRelFields populates virtual reverse-relation columns on records.
+// For each collection that has a relation field pointing TO the current collection,
+// it queries the source table and injects matching records as _rev_{sourceSlug}_{fieldSlug}.
+func (h *DynHandler) loadReverseRelFields(ctx context.Context, records []map[string]any, col schema.Collection) {
+	revRels := h.cache.ReverseRelations(col.ID)
+	if len(revRels) == 0 || len(records) == 0 {
+		return
+	}
+
+	// Collect all record IDs.
+	var recordIDs []string
+	for _, row := range records {
+		if id, ok := row["id"].(string); ok {
+			recordIDs = append(recordIDs, id)
+		}
+	}
+	if len(recordIDs) == 0 {
+		return
+	}
+
+	for _, rev := range revRels {
+		virtualKey := "_rev_" + rev.SourceCollectionSlug + "_" + rev.SourceFieldSlug
+
+		// Determine the display field for the source collection.
+		sourceFields := h.cache.Fields(rev.SourceCollectionID)
+		dispField := displayFieldSlug(sourceFields)
+
+		// Build placeholders.
+		placeholders := make([]string, len(recordIDs))
+		args := make([]any, len(recordIDs))
+		for i, id := range recordIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = id
+		}
+		inClause := strings.Join(placeholders, ",")
+
+		if rev.RelationType == schema.RelManyToMany && rev.JunctionTable != "" {
+			// M:N reverse: query junction table then batch-fetch source labels.
+			// Junction columns: {sourceSlug}_id and {currentSlug}_id
+			sourceCol := rev.SourceCollectionSlug + "_id"
+			currentCol := col.Slug + "_id"
+
+			qJunc := pgutil.QuoteQualified("data", rev.JunctionTable)
+			juncSQL := fmt.Sprintf("SELECT %s, %s FROM %s WHERE %s IN (%s)",
+				pgutil.QuoteIdent(sourceCol), pgutil.QuoteIdent(currentCol),
+				qJunc, pgutil.QuoteIdent(currentCol), inClause)
+
+			rows, err := h.pool.Query(ctx, juncSQL, args...)
+			if err != nil {
+				slog.Warn("loadReverseRelFields: junction query failed", "rev", virtualKey, "error", err)
+				for _, row := range records {
+					row[virtualKey] = []any{}
+				}
+				continue
+			}
+
+			// linkMap: currentRecordID → []sourceIDs
+			linkMap := make(map[string][]string)
+			allSourceIDs := make(map[string]struct{})
+			for rows.Next() {
+				vals, err := rows.Values()
+				if err != nil {
+					continue
+				}
+				if len(vals) < 2 {
+					continue
+				}
+				srcID := fmt.Sprint(normalizeValue(vals[0]))
+				curID := fmt.Sprint(normalizeValue(vals[1]))
+				linkMap[curID] = append(linkMap[curID], srcID)
+				allSourceIDs[srcID] = struct{}{}
+			}
+			rows.Close()
+
+			// Batch-fetch display labels for source records.
+			labelMap := make(map[string]string)
+			if len(allSourceIDs) > 0 {
+				srcIDs := make([]string, 0, len(allSourceIDs))
+				for id := range allSourceIDs {
+					srcIDs = append(srcIDs, id)
+				}
+				srcPlaceholders := make([]string, len(srcIDs))
+				srcArgs := make([]any, len(srcIDs))
+				for i, id := range srcIDs {
+					srcPlaceholders[i] = fmt.Sprintf("$%d", i+1)
+					srcArgs[i] = id
+				}
+				qSrc := pgutil.QuoteQualified("data", rev.SourceCollectionSlug)
+				labelSQL := fmt.Sprintf("SELECT id, %s FROM %s WHERE id IN (%s) AND deleted_at IS NULL",
+					pgutil.QuoteIdent(dispField), qSrc, strings.Join(srcPlaceholders, ","))
+				lRows, err := h.pool.Query(ctx, labelSQL, srcArgs...)
+				if err == nil {
+					for lRows.Next() {
+						vals, err := lRows.Values()
+						if err != nil || len(vals) < 2 {
+							continue
+						}
+						labelMap[fmt.Sprint(normalizeValue(vals[0]))] = fmt.Sprint(vals[1])
+					}
+					lRows.Close()
+				}
+			}
+
+			// Assign to records.
+			for _, row := range records {
+				id, ok := row["id"].(string)
+				if !ok {
+					id = fmt.Sprint(row["id"])
+				}
+				if srcIDs, ok := linkMap[id]; ok {
+					items := make([]any, 0, len(srcIDs))
+					for _, sid := range srcIDs {
+						lbl := labelMap[sid]
+						if lbl == "" {
+							lbl = sid
+						}
+						items = append(items, map[string]any{"id": sid, "label": lbl})
+					}
+					row[virtualKey] = items
+				} else {
+					row[virtualKey] = []any{}
+				}
+			}
+		} else {
+			// 1:1 / 1:N reverse: query source table directly.
+			qSrc := pgutil.QuoteQualified("data", rev.SourceCollectionSlug)
+			srcSQL := fmt.Sprintf("SELECT id, %s, %s FROM %s WHERE %s IN (%s) AND deleted_at IS NULL",
+				pgutil.QuoteIdent(dispField), pgutil.QuoteIdent(rev.SourceFieldSlug),
+				qSrc, pgutil.QuoteIdent(rev.SourceFieldSlug), inClause)
+
+			rows, err := h.pool.Query(ctx, srcSQL, args...)
+			if err != nil {
+				slog.Warn("loadReverseRelFields: source query failed", "rev", virtualKey, "error", err)
+				for _, row := range records {
+					row[virtualKey] = []any{}
+				}
+				continue
+			}
+
+			// linkMap: targetRecordID → []items
+			linkMap := make(map[string][]any)
+			for rows.Next() {
+				vals, err := rows.Values()
+				if err != nil || len(vals) < 3 {
+					continue
+				}
+				srcID := fmt.Sprint(normalizeValue(vals[0]))
+				lbl := fmt.Sprint(vals[1])
+				fkVal := fmt.Sprint(normalizeValue(vals[2]))
+				linkMap[fkVal] = append(linkMap[fkVal], map[string]any{"id": srcID, "label": lbl})
+			}
+			rows.Close()
+
+			// Assign to records.
+			for _, row := range records {
+				id, ok := row["id"].(string)
+				if !ok {
+					id = fmt.Sprint(row["id"])
+				}
+				if items, ok := linkMap[id]; ok {
+					row[virtualKey] = items
+				} else {
+					row[virtualKey] = []any{}
+				}
 			}
 		}
 	}

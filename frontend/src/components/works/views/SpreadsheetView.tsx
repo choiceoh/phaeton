@@ -38,6 +38,7 @@ interface SpreadsheetViewProps {
   emptyTitle?: string
   emptyDescription?: string
   emptyAction?: React.ReactNode
+  onReverseCellClick?: (sourceCollectionId: string, sourceFieldSlug: string, recordId: string) => void
 }
 
 /**
@@ -126,6 +127,7 @@ export default function SpreadsheetView({
   emptyTitle,
   emptyDescription,
   emptyAction,
+  onReverseCellClick,
 }: SpreadsheetViewProps) {
   const [newRowValues, setNewRowValues] = useState<Record<string, unknown>>({})
 
@@ -146,6 +148,12 @@ export default function SpreadsheetView({
     dataFields.forEach((f, i) => {
       if (i >= 8) vis[f.slug] = false
     })
+    // Reverse-relation columns hidden by default (toggle via column selector)
+    if (collection.reverse_relations) {
+      for (const rev of collection.reverse_relations) {
+        vis[`_rev_${rev.source_collection_slug}_${rev.source_field_slug}`] = false
+      }
+    }
     return vis
   })
 
@@ -186,11 +194,16 @@ export default function SpreadsheetView({
   // Formula engine for instant formula recomputation after cell edits
   const { recomputeRow } = useFormulaEngine(editableFields)
 
-  // System columns that should never be editable
-  const readOnlyColumns = useMemo(
-    () => new Set(['_select', '_actions', 'created_at', '_status']),
-    [],
-  )
+  // System columns and reverse-relation columns should never be editable
+  const readOnlyColumns = useMemo(() => {
+    const base = new Set(['_select', '_actions', 'created_at', '_status'])
+    if (collection.reverse_relations) {
+      for (const rev of collection.reverse_relations) {
+        base.add(`_rev_${rev.source_collection_slug}_${rev.source_field_slug}`)
+      }
+    }
+    return base
+  }, [collection])
 
   // Build columns (similar to AppViewPage but simpler — no search highlighting)
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
@@ -224,8 +237,46 @@ export default function SpreadsheetView({
       },
     })
 
+    // Reverse-relation virtual columns (read-only backlinks)
+    if (collection.reverse_relations) {
+      for (const rev of collection.reverse_relations) {
+        const virtualKey = `_rev_${rev.source_collection_slug}_${rev.source_field_slug}`
+        cols.push({
+          id: virtualKey,
+          header: `← ${rev.source_collection_label}`,
+          enableSorting: false,
+          size: 180,
+          cell: ({ row }: { row: { original: Record<string, unknown> } }) => {
+            const v = row.original[virtualKey]
+            if (!v || (Array.isArray(v) && v.length === 0)) return '-'
+            if (!Array.isArray(v)) return String(v)
+            return (
+              <span className="flex flex-wrap gap-1">
+                {(v as { id: string; label: string }[]).map((item, i) => (
+                  <span
+                    key={item.id ?? i}
+                    className={onReverseCellClick ? 'cursor-pointer text-blue-600 hover:underline' : ''}
+                    onClick={
+                      onReverseCellClick
+                        ? (e) => {
+                            e.stopPropagation()
+                            onReverseCellClick(rev.source_collection_id, rev.source_field_slug, String(row.original.id))
+                          }
+                        : undefined
+                    }
+                  >
+                    {item.label ?? item.id}{i < (v as unknown[]).length - 1 ? ',' : ''}
+                  </span>
+                ))}
+              </span>
+            )
+          },
+        })
+      }
+    }
+
     return cols
-  }, [collection])
+  }, [collection, onReverseCellClick])
 
   // Visible column IDs (derived from TanStack table — approximated here)
   const visibleColumnIds = useMemo(
