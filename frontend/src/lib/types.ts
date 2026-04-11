@@ -235,6 +235,18 @@ export interface ExpandedRecord {
   [key: string]: unknown
 }
 
+/** Per-cell formatting (background, font color, bold, italic, fontSize). */
+export interface CellFormat {
+  bg?: string
+  color?: string
+  bold?: boolean
+  italic?: boolean
+  fontSize?: number
+}
+
+/** Map of field slug → cell format for one row. */
+export type CellFormats = Record<string, CellFormat>
+
 /**
  * A single row from a dynamic table. System columns (_created_by, _status,
  * etc.) are optional; all user-defined columns are accessed via string index.
@@ -247,6 +259,7 @@ export interface EntryRow extends Record<string, unknown> {
   _optimistic?: boolean
   _created_by?: string | ExpandedRecord
   _status?: string
+  _cell_formats?: CellFormats
   created_at?: string
   updated_at?: string
   _created_at?: string

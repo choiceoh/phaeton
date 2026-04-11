@@ -102,6 +102,7 @@ func GenerateCreateTable(col schema.Collection, fields []schema.Field) (up, down
 		"updated_by UUID",
 		"deleted_at TIMESTAMPTZ",
 		"_version INTEGER NOT NULL DEFAULT 1",
+		`"_cell_formats" JSONB DEFAULT '{}'::jsonb`,
 	)
 
 	// Create sequences for autonumber fields before the table.
@@ -355,6 +356,14 @@ func GenerateDropStatusColumn(tableSlug string) (up, down []string) {
 	qTable := quoteIdent("data", tableSlug)
 	up = []string{fmt.Sprintf("ALTER TABLE %s DROP COLUMN IF EXISTS %q", qTable, "_status")}
 	down = []string{fmt.Sprintf("ALTER TABLE %s ADD COLUMN %q VARCHAR(255)", qTable, "_status")}
+	return up, down
+}
+
+// GenerateAddCellFormatsColumn produces DDL to add the _cell_formats JSONB column.
+func GenerateAddCellFormatsColumn(tableSlug string) (up, down []string) {
+	qTable := quoteIdent("data", tableSlug)
+	up = []string{fmt.Sprintf(`ALTER TABLE %s ADD COLUMN IF NOT EXISTS "_cell_formats" JSONB DEFAULT '{}'::jsonb`, qTable)}
+	down = []string{fmt.Sprintf(`ALTER TABLE %s DROP COLUMN IF EXISTS "_cell_formats"`, qTable)}
 	return up, down
 }
 

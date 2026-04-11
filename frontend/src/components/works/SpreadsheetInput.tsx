@@ -274,6 +274,7 @@ export default function SpreadsheetInput({
   const [activeCell, setActiveCell] = useState<CellPos | null>(null)
   const [selAnchor, setSelAnchor] = useState<CellPos | null>(null)
   const [selCursor, setSelCursor] = useState<CellPos | null>(null)
+  const [editingCell, setEditingCell] = useState<CellPos | null>(null) // cell currently in edit mode
   const [editingFormula, setEditingFormula] = useState<string | null>(null) // raw formula text while editing
   const [colWidths, setColWidths] = useState<Record<number, number>>({})
   const [rowHeights, setRowHeights] = useState<Record<number, number>>({})
@@ -437,6 +438,7 @@ export default function SpreadsheetInput({
       setActiveCell({ row, col })
       setSelAnchor({ row, col })
       setSelCursor({ row, col })
+      setEditingCell(null)
       setEditingFormula(null)
     }
   }
@@ -445,13 +447,47 @@ export default function SpreadsheetInput({
 
   function focusCell(row: number, col: number) {
     setActiveCell({ row, col })
+    setEditingCell(null)
     setEditingFormula(null)
     requestAnimationFrame(() => {
-      const input = tableRef.current?.querySelector(
-        `[data-cell="${row}-${col}"]`,
-      ) as HTMLInputElement | null
-      input?.focus()
+      const td = tableRef.current?.querySelector(
+        `td[data-sscell="${row}-${col}"]`,
+      ) as HTMLElement | null
+      td?.focus()
     })
+  }
+
+  function startEditing(row: number, col: number, initialChar?: string) {
+    setEditingCell({ row, col })
+    if (initialChar) {
+      // Type-to-replace: set value to the typed char immediately
+      const visRow = visibleRows[row]
+      if (visRow) {
+        const colDef = subColumns[col]
+        if (colDef) {
+          if (initialChar === '=') {
+            setEditingFormula(initialChar)
+          } else {
+            setEditingFormula(null)
+          }
+          updateCell(visRow.originalIdx, colDef.key, colDef.type === 'number' ? (initialChar === '' ? null : Number(initialChar) || null) : initialChar)
+        }
+      }
+    } else {
+      // Double-click/F2: keep existing value, check for formula
+      const visRow = visibleRows[row]
+      if (visRow) {
+        const colDef = subColumns[col]
+        if (colDef) {
+          const raw = visRow.row[colDef.key]
+          if (typeof raw === 'string' && raw.startsWith('=')) {
+            setEditingFormula(raw)
+          } else {
+            setEditingFormula(null)
+          }
+        }
+      }
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent, rowIdx: number, colIdx: number) {
@@ -459,9 +495,10 @@ export default function SpreadsheetInput({
     const maxCol = subColumns.length - 1
     let nextRow = rowIdx
     let nextCol = colIdx
+    const isEditing = editingCell?.row === rowIdx && editingCell?.col === colIdx
 
-    // Shift+Arrow for selection expansion
-    if (e.shiftKey && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+    // Shift+Arrow for selection expansion (only when not editing)
+    if (!isEditing && e.shiftKey && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
       e.preventDefault()
       const cursor = selCursor || { row: rowIdx, col: colIdx }
       let nr = cursor.row, nc = cursor.col
@@ -492,19 +529,41 @@ export default function SpreadsheetInput({
         else { addRow(); nextRow = rowIdx + 1 }
         break
       case 'ArrowUp':
+        if (isEditing) return // let cursor move inside input
         if (rowIdx > 0) nextRow = rowIdx - 1
         break
       case 'ArrowDown':
+        if (isEditing) return // let cursor move inside input
         if (rowIdx < maxRow) nextRow = rowIdx + 1
         break
+      case 'ArrowLeft':
+        if (isEditing) return
+        return
+      case 'ArrowRight':
+        if (isEditing) return
+        return
       case 'Escape':
+        setEditingCell(null)
         setEditingFormula(null)
         setSelAnchor(null)
         setSelCursor(null)
+        // Re-focus the td
+        requestAnimationFrame(() => {
+          const td = tableRef.current?.querySelector(
+            `td[data-sscell="${rowIdx}-${colIdx}"]`,
+          ) as HTMLElement | null
+          td?.focus()
+        })
+        return
+      case 'F2':
+        if (!isEditing) {
+          e.preventDefault()
+          startEditing(rowIdx, colIdx)
+        }
         return
       case 'Delete':
       case 'Backspace':
-        if (selection && !(e.target instanceof HTMLInputElement)) {
+        if (!isEditing && selection) {
           e.preventDefault()
           const { r0, r1, c0, c1 } = selection
           const next = displayRows.map((r, ri) => {
@@ -519,8 +578,24 @@ export default function SpreadsheetInput({
           emitChange(next)
           return
         }
+        if (!isEditing) {
+          // Clear single cell
+          e.preventDefault()
+          const visRow = visibleRows[rowIdx]
+          const colDef = subColumns[colIdx]
+          if (visRow && colDef) {
+            updateCell(visRow.originalIdx, colDef.key, colDef.type === 'number' ? null : '')
+          }
+          return
+        }
         return
       default:
+        // Printable key while not editing → start editing with that char (type-to-replace)
+        if (!isEditing && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault()
+          startEditing(rowIdx, colIdx, e.key)
+          return
+        }
         return
     }
 
@@ -898,11 +973,15 @@ export default function SpreadsheetInput({
                   const { display, isFormula } = getCellDisplay(row, col.key, originalIdx, ci)
                   const condClass = getCellCondStyles(col.key, isFormula ? display : cellValue)
 
+                  const isCellEditing = editingCell?.row === ri && editingCell?.col === ci
+
                   return (
                     <td
                       key={col.key}
+                      data-sscell={`${ri}-${ci}`}
+                      tabIndex={-1}
                       className={[
-                        'p-0 border-r border-b relative',
+                        'p-0 border-r border-b relative outline-none',
                         isActive ? 'ring-2 ring-primary ring-inset z-[5]' : '',
                         isSelected && !isActive ? 'bg-primary/10' : '',
                         condClass,
@@ -911,65 +990,75 @@ export default function SpreadsheetInput({
                       rowSpan={merge?.rowSpan}
                       colSpan={merge?.colSpan}
                       onClick={(e) => handleCellClick(ri, ci, e)}
+                      onDoubleClick={() => startEditing(ri, ci)}
+                      onKeyDown={(e) => handleKeyDown(e, ri, ci)}
                     >
-                      {col.type === 'select' ? (
-                        <select
-                          data-cell={`${ri}-${ci}`}
-                          className="h-full w-full bg-transparent px-1.5 text-sm outline-none border-0"
-                          value={(cellValue as string) || ''}
-                          onChange={(e) => updateCell(originalIdx, col.key, e.target.value)}
-                          onFocus={() => { setActiveCell({ row: ri, col: ci }); setEditingFormula(null) }}
-                          onKeyDown={(e) => handleKeyDown(e, ri, ci)}
-                        >
-                          <option value="" />
-                          {(col.choices || []).map((c) => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
-                        </select>
+                      {isCellEditing ? (
+                        col.type === 'select' ? (
+                          <select
+                            data-cell={`${ri}-${ci}`}
+                            className="h-full w-full bg-transparent px-1.5 text-sm outline-none border-0"
+                            value={(cellValue as string) || ''}
+                            onChange={(e) => updateCell(originalIdx, col.key, e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(e, ri, ci)}
+                            onBlur={() => setEditingCell(null)}
+                          >
+                            <option value="" />
+                            {(col.choices || []).map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            data-cell={`${ri}-${ci}`}
+                            type={isFormula || col.type === 'text' ? 'text' : 'number'}
+                            className={[
+                              'h-full w-full bg-transparent px-1.5 text-sm outline-none border-0',
+                              isFormula && editingFormula === null ? 'text-right' : '',
+                              condClass,
+                            ].filter(Boolean).join(' ')}
+                            value={
+                              editingFormula !== null
+                                ? editingFormula
+                                : (cellValue != null ? String(cellValue) : '')
+                            }
+                            onChange={(e) => {
+                              const v = e.target.value
+                              if (v.startsWith('=')) {
+                                setEditingFormula(v)
+                                updateCell(originalIdx, col.key, v)
+                              } else {
+                                setEditingFormula(null)
+                                updateCell(
+                                  originalIdx,
+                                  col.key,
+                                  col.type === 'number'
+                                    ? v === '' ? null : Number(v)
+                                    : v,
+                                )
+                              }
+                            }}
+                            onFocus={() => {
+                              const raw = row[col.key]
+                              if (typeof raw === 'string' && raw.startsWith('=')) {
+                                setEditingFormula(raw)
+                              }
+                            }}
+                            onBlur={() => { setEditingFormula(null); setEditingCell(null) }}
+                            onKeyDown={(e) => handleKeyDown(e, ri, ci)}
+                            autoFocus
+                          />
+                        )
                       ) : (
-                        <input
-                          data-cell={`${ri}-${ci}`}
-                          type={isFormula || col.type === 'text' ? 'text' : 'number'}
+                        <span
                           className={[
-                            'h-full w-full bg-transparent px-1.5 text-sm outline-none border-0',
-                            isFormula && editingFormula === null ? 'text-right' : '',
+                            'flex items-center h-full w-full px-1.5 text-sm truncate select-none cursor-default',
+                            isFormula ? 'justify-end' : '',
                             condClass,
                           ].filter(Boolean).join(' ')}
-                          value={
-                            isActive && editingFormula !== null
-                              ? editingFormula
-                              : isFormula && !(isActive && document.activeElement?.getAttribute('data-cell') === `${ri}-${ci}`)
-                                ? display
-                                : (cellValue != null ? String(cellValue) : '')
-                          }
-                          onChange={(e) => {
-                            const v = e.target.value
-                            if (v.startsWith('=')) {
-                              setEditingFormula(v)
-                              updateCell(originalIdx, col.key, v)
-                            } else {
-                              setEditingFormula(null)
-                              updateCell(
-                                originalIdx,
-                                col.key,
-                                col.type === 'number'
-                                  ? v === '' ? null : Number(v)
-                                  : v,
-                              )
-                            }
-                          }}
-                          onFocus={() => {
-                            setActiveCell({ row: ri, col: ci })
-                            const raw = row[col.key]
-                            if (typeof raw === 'string' && raw.startsWith('=')) {
-                              setEditingFormula(raw)
-                            } else {
-                              setEditingFormula(null)
-                            }
-                          }}
-                          onBlur={() => setEditingFormula(null)}
-                          onKeyDown={(e) => handleKeyDown(e, ri, ci)}
-                        />
+                        >
+                          {display || (cellValue != null ? String(cellValue) : '')}
+                        </span>
                       )}
                     </td>
                   )

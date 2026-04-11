@@ -71,8 +71,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { CellPosition } from '@/hooks/useGridNavigation'
+import type { CellPosition, SelectionRange } from '@/hooks/useGridNavigation'
 import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
+import { useExcelToolbarOptional } from '@/contexts/ExcelToolbarContext'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
 import { useCellDragMove } from '@/hooks/useCellDragMove'
 import { useFillHandle } from '@/hooks/useFillHandle'
@@ -81,13 +82,14 @@ import { copyToClipboard, pasteFromClipboard } from '@/lib/clipboard'
 import { PAGE_SIZE_OPTIONS } from '@/lib/constants'
 
 import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 import EmptyState from './EmptyState'
 import GridCell from './GridCell'
 import GridContextMenu from './GridContextMenu'
 import HeaderContextMenu from './HeaderContextMenu'
 import RowContextMenu from './RowContextMenu'
-import type { EntryRow, Field } from '@/lib/types'
+import type { CellFormat, EntryRow, Field } from '@/lib/types'
 
 /** Convert a 0-based column index to Excel-style letter (0→A, 25→Z, 26→AA). */
 function colIndexToLetter(idx: number): string {
@@ -99,6 +101,72 @@ function colIndexToLetter(idx: number): string {
   }
   return result
 }
+
+// ── fx 팝오버 — 함수 목록 ──────────────────────────────────────────────────
+
+const FX_CATEGORIES = [
+  {
+    label: '집계',
+    fns: [
+      { name: 'SUM', syntax: 'SUM(값1, 값2, ...)', desc: '합계' },
+      { name: 'AVG', syntax: 'AVG(값1, 값2, ...)', desc: '평균' },
+      { name: 'MIN', syntax: 'MIN(값1, 값2, ...)', desc: '최솟값' },
+      { name: 'MAX', syntax: 'MAX(값1, 값2, ...)', desc: '최댓값' },
+      { name: 'COUNT', syntax: 'COUNT(값1, 값2, ...)', desc: '개수' },
+    ],
+  },
+  {
+    label: '수학',
+    fns: [
+      { name: 'ROUND', syntax: 'ROUND(숫자, 자릿수)', desc: '반올림' },
+      { name: 'CEIL', syntax: 'CEIL(숫자)', desc: '올림' },
+      { name: 'FLOOR', syntax: 'FLOOR(숫자)', desc: '내림' },
+      { name: 'CEILING', syntax: 'CEILING(숫자, 배수)', desc: '배수 올림' },
+      { name: 'ABS', syntax: 'ABS(숫자)', desc: '절대값' },
+    ],
+  },
+  {
+    label: '조건',
+    fns: [
+      { name: 'IF', syntax: 'IF(조건, 참, 거짓)', desc: '조건 분기' },
+      { name: 'IFS', syntax: 'IFS(조건1, 값1, 조건2, 값2, ...)', desc: '다중 조건' },
+      { name: 'IFERROR', syntax: 'IFERROR(수식, 대체값)', desc: '오류 시 대체' },
+      { name: 'COALESCE', syntax: 'COALESCE(값1, 값2, ...)', desc: '첫 번째 비공백' },
+      { name: 'NULLIF', syntax: 'NULLIF(값1, 값2)', desc: '같으면 NULL' },
+    ],
+  },
+  {
+    label: '텍스트',
+    fns: [
+      { name: 'CONCATENATE', syntax: 'CONCATENATE(텍스트1, 텍스트2, ...)', desc: '텍스트 연결' },
+    ],
+  },
+  {
+    label: '날짜',
+    fns: [
+      { name: 'TODAY', syntax: 'TODAY()', desc: '오늘 날짜' },
+      { name: 'NOW', syntax: 'NOW()', desc: '현재 시각' },
+      { name: 'YEAR', syntax: 'YEAR(날짜)', desc: '연도 추출' },
+      { name: 'MONTH', syntax: 'MONTH(날짜)', desc: '월 추출' },
+      { name: 'DATEDIFF', syntax: 'DATEDIFF(시작, 종료, 단위)', desc: '날짜 차이' },
+      { name: 'WORKDAY', syntax: 'WORKDAY(날짜, 일수)', desc: '영업일 계산' },
+    ],
+  },
+  {
+    label: '크로스시트',
+    fns: [
+      { name: 'LOOKUP', syntax: 'LOOKUP(관계, 대상항목)', desc: '관계 조회' },
+      { name: 'VLOOKUP', syntax: 'VLOOKUP(관계, 대상항목)', desc: '값 조회' },
+      { name: 'SUMREL', syntax: 'SUMREL(관계, 대상항목)', desc: '관계 합계' },
+      { name: 'AVGREL', syntax: 'AVGREL(관계, 대상항목)', desc: '관계 평균' },
+      { name: 'MINREL', syntax: 'MINREL(관계, 대상항목)', desc: '관계 최솟값' },
+      { name: 'MAXREL', syntax: 'MAXREL(관계, 대상항목)', desc: '관계 최댓값' },
+      { name: 'COUNTREL', syntax: 'COUNTREL(관계, 대상항목)', desc: '관계 개수' },
+      { name: 'COUNTIF', syntax: 'COUNTIF(관계, 대상항목)', desc: '조건부 개수' },
+      { name: 'SUMIF', syntax: 'SUMIF(관계, 대상항목)', desc: '조건부 합계' },
+    ],
+  },
+]
 
 interface Props<T> {
   columns: ColumnDef<T, unknown>[]
@@ -198,6 +266,11 @@ interface Props<T> {
   /** Per-column filters for client-side filtering. */
   columnFilters?: { id: string; value: unknown }[]
 
+  /** Called when active cell or selection changes (for formatting toolbar). */
+  onActiveCellChange?: (cell: CellPosition | null, selection: SelectionRange | null) => void
+  /** Called when formatting shortcuts (Ctrl+B, Ctrl+I) are pressed. */
+  onFormatShortcut?: (key: 'bold' | 'italic') => void
+
   // --- Free grid mode (empty rows below data) ---
   /** Number of empty rows to show below data (free grid mode). */
   emptyRowCount?: number
@@ -285,6 +358,8 @@ export function DataTable<T>({
   onFillIntoEmptyRows,
   onRenameColumn,
   onDeleteColumn,
+  onActiveCellChange,
+  onFormatShortcut,
   onAddColumn,
   columnManagement,
   freeGridMode,
@@ -310,6 +385,7 @@ export function DataTable<T>({
   // Horizontal scroll indicator state.
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollRight, setCanScrollRight] = useState(false)
+  const [fxOpen, setFxOpen] = useState(false)
 
   useEffect(() => {
     const el = scrollRef.current
@@ -559,6 +635,14 @@ export function DataTable<T>({
     onAutoScrollStop: autoScroll.stop,
   })
 
+  // Copied range state for marching ants feedback.
+  const [copiedRange, setCopiedRange] = useState<SelectionRange | null>(null)
+
+  // Notify parent of active cell / selection changes (for formatting toolbar).
+  useEffect(() => {
+    onActiveCellChange?.(grid.activeCell, grid.selection)
+  }, [grid.activeCell, grid.selection, onActiveCellChange])
+
   // Wire up auto-scroll onTick to dispatch to whichever drag is active.
   autoScrollTickRef.current = (x: number, y: number) => {
     grid.updateDragSelection(x, y)
@@ -581,10 +665,12 @@ export function DataTable<T>({
         }
         e.preventDefault()
         await copyToClipboard(data as EntryRow[], colIds, range)
+        setCopiedRange(range)
       }
 
       if (isCtrl && e.key === 'v' && editable && onPaste) {
         e.preventDefault()
+        setCopiedRange(null)
         try {
           const matrix = await pasteFromClipboard()
           if (matrix.length > 0) {
@@ -664,10 +750,27 @@ export function DataTable<T>({
         onEditKeyDown(e)
         if (e.defaultPrevented) return
       }
+      // Escape clears copied range (marching ants)
+      if (e.key === 'Escape' && copiedRange) {
+        setCopiedRange(null)
+      }
+      // Formatting shortcuts: Ctrl/Cmd + B/I
+      if (onFormatShortcut && (e.ctrlKey || e.metaKey) && !isEditingCell && grid.activeCell) {
+        if (e.key === 'b' || e.key === 'B') {
+          e.preventDefault()
+          onFormatShortcut('bold')
+          return
+        }
+        if (e.key === 'i' || e.key === 'I') {
+          e.preventDefault()
+          onFormatShortcut('italic')
+          return
+        }
+      }
       handleClipboard(e)
       grid.handleKeyDown(e)
     },
-    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown],
+    [handleClipboard, grid.handleKeyDown, isEditingCell, onEditKeyDown, copiedRange, onFormatShortcut, grid.activeCell],
   )
 
   // Clear grid state when data changes (page navigation).
@@ -755,7 +858,7 @@ export function DataTable<T>({
   }, [editable, grid.activeCell, colIds, data, page, limit])
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col h-full gap-1">
       {/* Toolbar — hidden when content is piped to ExcelRibbon */}
       {(toolbar || toolbarRight) && <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-1">{toolbar}</div>
@@ -815,9 +918,39 @@ export function DataTable<T>({
           <div className="w-16 px-1.5 border-r border-[#d4d4d4] bg-[#e6e6e6] text-center font-medium text-[#333] flex items-center justify-center h-full select-none tabular-nums">
             {formulaBarInfo?.ref ?? ''}
           </div>
-          <div className="w-6 border-r border-[#d4d4d4] flex items-center justify-center text-[#666] italic select-none h-full">
-            fx
-          </div>
+          <Popover open={fxOpen} onOpenChange={setFxOpen}>
+            <PopoverTrigger
+              className="w-6 border-r border-[#d4d4d4] flex items-center justify-center text-[#666] italic select-none h-full cursor-pointer hover:bg-[#d9e1f2] transition-colors"
+            >
+              fx
+            </PopoverTrigger>
+            <PopoverContent className="w-72 max-h-80 overflow-y-auto p-0" align="start" sideOffset={2}>
+              {FX_CATEGORIES.map((cat) => (
+                <div key={cat.label}>
+                  <div className="sticky top-0 bg-muted/80 backdrop-blur-sm px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
+                    {cat.label}
+                  </div>
+                  {cat.fns.map((fn) => (
+                    <button
+                      key={fn.name}
+                      type="button"
+                      className="w-full text-left px-2 py-1 text-[11px] hover:bg-accent flex items-baseline gap-1.5"
+                      onClick={() => {
+                        setFxOpen(false)
+                        const ac = grid.activeCell
+                        if (ac && onStartEditing) {
+                          onStartEditing(ac.row, ac.col, `=${fn.name}(`)
+                        }
+                      }}
+                    >
+                      <span className="font-mono font-medium text-foreground shrink-0">{fn.name}</span>
+                      <span className="text-muted-foreground truncate">{fn.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </PopoverContent>
+          </Popover>
           <div className="flex-1 px-1.5 truncate text-[#333] text-[12px]">
             {formulaBarInfo?.value ?? ''}
           </div>
@@ -845,13 +978,13 @@ export function DataTable<T>({
         return null
       })()}
 
-      <div className="relative">
+      <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={(el) => {
           scrollRef.current = el
           ;(grid.containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el
         }}
-        className={`border border-[#d4d4d4] bg-white overflow-auto focus:outline-none ${useVirtual ? 'max-h-[calc(100vh-340px)]' : ''}`}
+        className="border border-[#d4d4d4] bg-white overflow-auto focus:outline-none flex-1 min-h-0"
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
@@ -1132,6 +1265,19 @@ export function DataTable<T>({
                     const fpLeft = inFillPreview && colIdx === fp.startCol
                     const fpRight = inFillPreview && colIdx === fp.endCol
 
+                    // Copy range edge flags (marching ants)
+                    const cpNorm = copiedRange ? {
+                      r1: Math.min(copiedRange.startRow, copiedRange.endRow),
+                      r2: Math.max(copiedRange.startRow, copiedRange.endRow),
+                      c1: Math.min(copiedRange.startCol, copiedRange.endCol),
+                      c2: Math.max(copiedRange.startCol, copiedRange.endCol),
+                    } : null
+                    const inCopy = cpNorm && rowIdx >= cpNorm.r1 && rowIdx <= cpNorm.r2 && colIdx >= cpNorm.c1 && colIdx <= cpNorm.c2
+                    const cpTop = inCopy && rowIdx === cpNorm.r1
+                    const cpBottom = inCopy && rowIdx === cpNorm.r2
+                    const cpLeft = inCopy && colIdx === cpNorm.c1
+                    const cpRight = inCopy && colIdx === cpNorm.c2
+
                     // Drag ghost edge flags
                     const dg = cellDrag.dragGhost
                     const inDragGhost = dg && rowIdx >= dg.startRow && rowIdx <= dg.endRow && colIdx >= dg.startCol && colIdx <= dg.endCol
@@ -1158,13 +1304,18 @@ export function DataTable<T>({
                       return isActive
                     })()
 
+                    // Cell formatting from _cell_formats.
+                    const cellFmt: CellFormat | undefined = !isRowNum
+                      ? (row.original as EntryRow)._cell_formats?.[cell.column.id]
+                      : undefined
+
                     return (
                       <TableCell
                         key={cell.id}
                         role="gridcell"
                         data-row={rowIdx}
                         data-col={colIdx}
-                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''} ${cellError ? 'cell-error' : ''}`}
+                        className={`${isRowNum ? 'bg-[#e6e6e6] border-r border-r-stone-300 text-center' : isPinned ? 'bg-background' : ''} ${isLastPinnedLeftCell ? 'border-r-2 border-r-[#b0b0b0]' : ''} relative ${isActive && !isRowNum ? 'grid-cell-active' : ''} ${isSelected && !isActive && !isRowNum ? 'bg-[#cce4f7]' : ''} ${edgeTop ? 'border-t-2 border-t-[#005a9e]' : ''} ${edgeBottom ? 'border-b-2 border-b-[#005a9e]' : ''} ${edgeLeft ? 'border-l-2 border-l-[#005a9e]' : ''} ${edgeRight ? 'border-r-2 border-r-[#005a9e]' : ''} ${inCopy ? 'copy-range-cell' : ''} ${cpTop ? 'copy-edge-top' : ''} ${cpBottom ? 'copy-edge-bottom' : ''} ${cpLeft ? 'copy-edge-left' : ''} ${cpRight ? 'copy-edge-right' : ''} ${inFillPreview ? 'fill-preview-bg' : ''} ${fpTop ? 'fill-preview-top' : ''} ${fpBottom ? 'fill-preview-bottom' : ''} ${fpLeft ? 'fill-preview-left' : ''} ${fpRight ? 'fill-preview-right' : ''} ${inDragGhost ? 'drag-ghost-bg' : ''} ${dgTop ? `${dgPrefix}-top` : ''} ${dgBottom ? `${dgPrefix}-bottom` : ''} ${dgLeft ? `${dgPrefix}-left` : ''} ${dgRight ? `${dgPrefix}-right` : ''} ${cellError ? 'cell-error' : ''}`}
                         title={cellError ?? undefined}
                         style={{
                           width: cell.column.getSize(),
@@ -1172,6 +1323,11 @@ export function DataTable<T>({
                           left: isPinned === 'left' ? cell.column.getStart('left') : undefined,
                           right: isPinned === 'right' ? cell.column.getAfter('right') : undefined,
                           zIndex: isPinned ? 1 : undefined,
+                          ...(cellFmt?.bg && !isSelected ? { backgroundColor: cellFmt.bg } : {}),
+                          ...(cellFmt?.color ? { color: cellFmt.color } : {}),
+                          ...(cellFmt?.fontSize ? { fontSize: `${cellFmt.fontSize}px` } : {}),
+                          ...(cellFmt?.bold ? { fontWeight: 600 } : {}),
+                          ...(cellFmt?.italic ? { fontStyle: 'italic' as const } : {}),
                         }}
                         onMouseMove={editable && onCellMove ? (e) => cellDrag.handleCellMouseMove(e, rowIdx, colIdx) : undefined}
                         onMouseDown={(e) => {
@@ -1227,6 +1383,7 @@ export function DataTable<T>({
                         onDoubleClick={(e) => {
                           if (editable && onStartEditing) {
                             e.stopPropagation()
+                            setCopiedRange(null)
                             onStartEditing(rowIdx, colIdx, '')
                           }
                         }}
@@ -1363,9 +1520,9 @@ export function DataTable<T>({
       )}
       </div>
 
-      {/* Status bar (Excel-like) */}
+      {/* Status bar — pushed to ExcelToolbarContext for SheetTabBar */}
       {editable && (
-        <StatusBar
+        <StatusBarBridge
           selection={grid.selection}
           activeCell={grid.activeCell}
           data={data as Record<string, unknown>[]}
@@ -1546,8 +1703,8 @@ export function DataTable<T>({
         />
       )}
 
-      {/* Pagination footer */}
-      {total !== undefined && total > 0 && (
+      {/* Pagination footer — hidden in client mode (all data loaded locally) */}
+      {!clientMode && total !== undefined && total > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <span>
@@ -1732,8 +1889,9 @@ function NewRowCell({
   }
 }
 
-// Excel-like status bar with selection info and numeric aggregates.
-function StatusBar({
+// StatusBarBridge — computes selection stats and pushes content to
+// ExcelToolbarContext so SheetTabBar can render it on the same row.
+function StatusBarBridge({
   selection,
   activeCell,
   data,
@@ -1746,6 +1904,9 @@ function StatusBar({
   colIds: string[]
   fields?: Field[]
 }) {
+  const ctx = useExcelToolbarOptional()
+  const setStatusBar = ctx?.setStatusBar
+
   const stats = useMemo(() => {
     if (!selection) return null
     const r1 = Math.min(selection.startRow, selection.endRow)
@@ -1755,7 +1916,6 @@ function StatusBar({
     const rows = r2 - r1 + 1
     const cols = c2 - c1 + 1
 
-    // Collect numeric values from selected cells.
     const numericTypes = new Set(['number', 'integer', 'decimal'])
     const nums: number[] = []
     for (let r = r1; r <= r2; r++) {
@@ -1785,26 +1945,38 @@ function StatusBar({
     return { rows, cols, nums, sum, avg }
   }, [selection, data, colIds, fields])
 
-  if (!selection && !activeCell) return null
+  useEffect(() => {
+    if (!setStatusBar) return
+    if (!selection && !activeCell) {
+      setStatusBar(null)
+      return
+    }
+    setStatusBar(
+      <>
+        {stats && (
+          <>
+            <span className="text-[#666]">{stats.rows}행 x {stats.cols}열</span>
+            {stats.nums.length > 0 && (
+              <>
+                <span className="text-[#c0c0c0]">|</span>
+                <span>합계: <strong className="text-[#333] tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+                <span>평균: <strong className="text-[#333] tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
+                <span>개수: <strong className="text-[#333] tabular-nums">{stats.nums.length}</strong></span>
+              </>
+            )}
+          </>
+        )}
+      </>,
+    )
+  }, [selection, activeCell, stats, setStatusBar])
 
-  return (
-    <div className="flex items-center gap-4 text-[11px] text-[#333] bg-[#e6e6e6] border border-[#d4d4d4] px-3 h-[22px]">
-      <span className="text-[#666] mr-auto">준비</span>
-      {stats && (
-        <>
-          <span className="text-[#666]">{stats.rows}행 x {stats.cols}열</span>
-          {stats.nums.length > 0 && (
-            <>
-              <span className="text-[#c0c0c0]">|</span>
-              <span>합계: <strong className="text-[#333] tabular-nums">{stats.sum.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-              <span>평균: <strong className="text-[#333] tabular-nums">{stats.avg.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></span>
-              <span>개수: <strong className="text-[#333] tabular-nums">{stats.nums.length}</strong></span>
-            </>
-          )}
-        </>
-      )}
-    </div>
-  )
+  // Clean up on unmount
+  useEffect(() => {
+    if (!setStatusBar) return
+    return () => setStatusBar(null)
+  }, [setStatusBar])
+
+  return null
 }
 
 // Renders a compact set of page number buttons around the current page.

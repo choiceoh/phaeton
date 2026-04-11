@@ -58,8 +58,8 @@ import FilterBuilder from '@/components/works/FilterBuilder'
 import FilterChips from '@/components/works/FilterChips'
 import AutomationsPanel from '@/components/works/AutomationsPanel'
 import SettingsPanel from '@/components/works/SettingsPanel'
-import SheetTabs from '@/components/works/SheetTabs'
 import SortPanel, { type SortItem } from '@/components/works/SortPanel'
+import { FormattingToolbar } from '@/components/excel/FormattingToolbar'
 import SpreadsheetView from '@/components/works/views/SpreadsheetView'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -97,16 +97,18 @@ import { useProcess } from '@/hooks/useProcess'
 import { useSavedViews, useCreateSavedView, useDeleteSavedView } from '@/hooks/useSavedViews'
 import { canManageCollection, useCurrentUser } from '@/hooks/useAuth'
 import { useAutomationRunToasts } from '@/hooks/useAutomationRunToasts'
+import { useCellFormatting } from '@/hooks/useCellFormatting'
 import { useConflictAwareUpdate } from '@/hooks/useConflictAwareUpdate'
 import { useGridBuffer } from '@/hooks/useGridBuffer'
 import { useWorkbookLock } from '@/hooks/useLock'
 import { useRetryToast } from '@/hooks/useRetryToast'
 import { api, ApiError, formatError } from '@/lib/api'
 import { TERM } from '@/lib/constants'
-import type { FieldType, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
+import type { CellPosition, SelectionRange } from '@/hooks/useGridNavigation'
+import type { EntryRow, FieldType, FilterCondition, FilterGroup, SavedView } from '@/lib/types'
 import { emptyFilterGroup, isFilterGroupEmpty, flattenFilterGroup, serializeFilterGroup } from '@/lib/types'
 
-const DEFAULT_LIMIT = 20
+const DEFAULT_LIMIT = 100
 
 // ---------------------------------------------------------------------------
 // Client-side filter helpers (used when dataset ≤ CLIENT_MODE_THRESHOLD)
@@ -217,6 +219,17 @@ export default function AppViewPage() {
   const [addColumnOpen, setAddColumnOpen] = useState(false)
   const [newColName, setNewColName] = useState('')
   const [newColType, setNewColType] = useState<FieldType>('text')
+
+  // Cell formatting state — tracks active cell for formatting toolbar.
+  const [fmtActiveCell, setFmtActiveCell] = useState<CellPosition | null>(null)
+  const [fmtSelection, setFmtSelection] = useState<SelectionRange | null>(null)
+  const handleActiveCellChange = useCallback(
+    (cell: CellPosition | null, sel: SelectionRange | null) => {
+      setFmtActiveCell(cell)
+      setFmtSelection(sel)
+    },
+    [],
+  )
 
   // Saved views state
   const [activeView, setActiveView] = useState<SavedView | null>(null)
@@ -363,6 +376,27 @@ export default function AppViewPage() {
   const [selectAllFilteredMode] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
+
+  // Cell formatting hook — derive column IDs from collection fields to match DataTable layout.
+  const fmtColumnIds = useMemo(() => {
+    if (!collection?.fields) return []
+    const ids = ['_rowNum']
+    for (const f of collection.fields) {
+      if (f.field_type !== 'label' && f.field_type !== 'line' && f.field_type !== 'spacer') {
+        ids.push(f.slug)
+      }
+    }
+    ids.push('created_at')
+    return ids
+  }, [collection?.fields])
+
+  const cellFormatting = useCellFormatting({
+    data: viewData as EntryRow[],
+    activeCell: fmtActiveCell,
+    selection: fmtSelection,
+    columnIds: fmtColumnIds,
+    batchUpdate: (updates) => batchUpdateEntry.mutate(updates),
+  })
 
   // Keyboard shortcuts
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -825,7 +859,7 @@ export default function AppViewPage() {
     <div className="flex items-center gap-1 overflow-x-auto scrollbar-none shrink-0">
       <button
         type="button"
-        className={`inline-flex items-center h-7 px-2.5 text-xs rounded-md border transition-colors ${
+        className={`inline-flex items-center h-8 px-2.5 text-xs rounded-md border transition-colors ${
           !activeView ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input hover:bg-accent'
         }`}
         onClick={() => clearView()}
@@ -836,7 +870,7 @@ export default function AppViewPage() {
         <button
           key={v.id}
           type="button"
-          className={`inline-flex items-center gap-1 h-7 px-2.5 text-xs rounded-md border transition-colors ${
+          className={`inline-flex items-center gap-1 h-8 px-2.5 text-xs rounded-md border transition-colors ${
             activeView?.id === v.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input hover:bg-accent'
           }`}
           onClick={() => {
@@ -964,6 +998,18 @@ export default function AppViewPage() {
       ) : (
         /* ── 기본 툴바 ── */
         <>
+      {/* ── Group 0: 셀 서식 ── */}
+      {canManage && !isReadOnly && (
+        <>
+          <FormattingToolbar
+            currentFormat={cellFormatting.currentFormat}
+            onFormatChange={cellFormatting.applyFormat}
+            disabled={!fmtActiveCell}
+          />
+          <div className="w-px h-4 bg-[#d4d4d4]" />
+        </>
+      )}
+
       {/* ── Group 1: 데이터 조회 (검색·필터·정렬) ── */}
       <div className="relative w-full sm:w-auto order-first">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1162,15 +1208,15 @@ export default function AppViewPage() {
   pageActionsRef.current = (
     <>
       <Link to={`/apps/${collection.id}/interface`}>
-        <Button variant="outline" size="sm" className="h-7 gap-1 text-[11px]">
+        <Button variant="outline" size="sm" className="h-8 gap-1 text-[11px]">
           <LayoutGrid className="h-3.5 w-3.5" />
           인터페이스
         </Button>
       </Link>
       {canManage && (
-        <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => setSettingsOpen(true)}>설정</Button>
+        <Button variant="outline" size="sm" className="h-8 text-[11px]" onClick={() => setSettingsOpen(true)}>설정</Button>
       )}
-      <Button size="sm" className="h-7 text-[11px]" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
+      <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate(`/apps/${appId}/entries/new`)}>
         {TERM.newRecord}
       </Button>
     </>
@@ -1302,13 +1348,17 @@ export default function AppViewPage() {
             onRenameColumn={canManage && !isReadOnly ? handleRenameColumn : undefined}
             onDeleteColumn={canManage && !isReadOnly ? handleDeleteColumn : undefined}
             onAddColumn={canManage && !isReadOnly ? handleAddColumn : undefined}
+            onActiveCellChange={handleActiveCellChange}
+            onFormatShortcut={(key) => {
+              if (key === 'bold') cellFormatting.applyFormat({ bold: true })
+              else if (key === 'italic') cellFormatting.applyFormat({ italic: true })
+            }}
             clientMode={isClientMode}
           />
           </div>
         </ErrorBoundary>
       )}
 
-      <SheetTabs workbookId={collection.workbook_id} currentCollectionId={collection.id} />
 
       <ImportPreview
         open={csvPreviewOpen}
