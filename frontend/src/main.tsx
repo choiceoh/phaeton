@@ -45,6 +45,7 @@ const router = createBrowserRouter([
       { path: 'apps', element: <EB><AppListPage /></EB> },
       { path: 'apps/relationships', element: <EB><RelationshipPage /></EB> },
       { path: 'apps/new', element: <EB><AppBuilderPage /></EB> },
+      { path: 'apps/:appId/edit', element: <EB><AppBuilderPage /></EB> },
       { path: 'apps/:appId', element: <EB><AppViewPage /></EB> },
       { path: 'apps/:appId/entries/new', element: <EB><EntryPage /></EB> },
       { path: 'apps/:appId/entries/:entryId', element: <EB><EntryPage /></EB> },
