@@ -290,10 +290,23 @@ export interface Collection {
   process_enabled: boolean
   sort_order: number
   access_config: AccessConfig
+  workbook_id?: string
   created_at: string
   updated_at: string
   created_by?: string
   fields?: Field[]
+}
+
+/** Workbook is the "앱" (app) entity — a container for related sheets (collections). */
+export interface Workbook {
+  id: string
+  label: string
+  icon?: string
+  group_label?: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+  created_by?: string
 }
 
 /**
