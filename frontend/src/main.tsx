@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router'
 
 import { ErrorBoundary } from './components/common/ErrorBoundary'
+import { InstallPrompt } from './components/common/InstallPrompt'
 import { OfflineBanner } from './components/common/OfflineBanner'
 import { Toaster } from './components/ui/sonner'
 import ExcelLayout from './layouts/ExcelLayout'
@@ -23,6 +24,7 @@ import RelationshipPage from './pages/RelationshipPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
 import './index.css'
+import './pwa'
 
 const EB = ErrorBoundary
 
@@ -67,6 +69,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
         <OfflineBanner />
+        <InstallPrompt />
         <RouterProvider router={router} />
       </ErrorBoundary>
       <Toaster richColors closeButton position="top-right" />
