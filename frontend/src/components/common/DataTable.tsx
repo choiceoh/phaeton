@@ -76,6 +76,7 @@ import {
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { CellPosition } from '@/hooks/useGridNavigation'
 import { isCellInRange, useGridNavigation } from '@/hooks/useGridNavigation'
+import { useAutoScroll } from '@/hooks/useAutoScroll'
 import { useCellDragMove } from '@/hooks/useCellDragMove'
 import { useFillHandle } from '@/hooks/useFillHandle'
 import type { CellSaveState } from '@/hooks/useInlineEditing'
@@ -467,6 +468,9 @@ export function DataTable<T>({
     onClearCell: editable ? onClearCell : undefined,
   })
 
+  // Auto-scroll during drag operations.
+  const autoScroll = useAutoScroll(scrollRef)
+
   // Fill handle hook.
   const fillHandle = useFillHandle({
     activeCell: grid.activeCell,
@@ -478,6 +482,8 @@ export function DataTable<T>({
     containerRef: grid.containerRef,
     onFill: onFill ?? (() => {}),
     onFillIntoEmptyRows,
+    onAutoScroll: autoScroll.update,
+    onAutoScrollStop: autoScroll.stop,
   })
 
   // Cell drag move/copy hook.
@@ -489,6 +495,8 @@ export function DataTable<T>({
     fields: editableFields ?? [],
     readOnlyColumns: new Set(['_select', '_actions', '_rowNum', 'created_at', '_status']),
     onMove: onCellMove ?? (() => {}),
+    onAutoScroll: autoScroll.update,
+    onAutoScrollStop: autoScroll.stop,
   })
 
   // Clipboard: copy & paste.
@@ -789,6 +797,32 @@ export function DataTable<T>({
                         zIndex: isPinned ? 2 : undefined,
                       }}
                       onContextMenu={(e) => handleHeaderContextMenu(e, header.column)}
+                      onMouseDown={!isSystemCol ? (e) => {
+                        if (e.button !== 0) return
+                        // Select entire column on click (don't conflict with sort/resize)
+                        const target = e.target as HTMLElement
+                        if (target.closest('.cursor-col-resize')) return
+                        grid.selectColumn(headerIdx, e.shiftKey)
+                        e.preventDefault()
+
+                        // Support drag across headers
+                        const handleHeaderDragMove = (ev: MouseEvent) => {
+                          const el = document.elementFromPoint(ev.clientX, ev.clientY)
+                          if (!el) return
+                          const th = (el as HTMLElement).closest('[role="columnheader"]') as HTMLElement | null
+                          if (!th) return
+                          // Find the header index
+                          const allHeaders = Array.from(th.parentElement?.children ?? [])
+                          const idx = allHeaders.indexOf(th)
+                          if (idx >= 0) grid.selectColumn(idx, true)
+                        }
+                        const handleHeaderDragUp = () => {
+                          document.removeEventListener('mousemove', handleHeaderDragMove)
+                          document.removeEventListener('mouseup', handleHeaderDragUp)
+                        }
+                        document.addEventListener('mousemove', handleHeaderDragMove)
+                        document.addEventListener('mouseup', handleHeaderDragUp)
+                      } : undefined}
                     >
                       {header.isPlaceholder ? null : (
                         <button
@@ -1039,14 +1073,46 @@ export function DataTable<T>({
                           zIndex: isPinned ? 1 : undefined,
                         }}
                         onMouseMove={editable && onCellMove ? (e) => cellDrag.handleCellMouseMove(e, rowIdx, colIdx) : undefined}
-                        onMouseDown={editable && onCellMove ? (e) => {
-                          // Only intercept for drag (left button, near border)
-                          if (e.button === 0) cellDrag.handleCellMouseDown(e, rowIdx, colIdx)
-                        } : undefined}
+                        onMouseDown={(e) => {
+                          if (e.button !== 0) return
+                          // Row number click → select entire row
+                          if (isRowNum) {
+                            grid.selectRow(rowIdx, e.shiftKey)
+                            e.preventDefault()
+                            // Support drag across row numbers
+                            const handleRowDragMove = (ev: MouseEvent) => {
+                              const el = document.elementFromPoint(ev.clientX, ev.clientY)
+                              if (!el) return
+                              const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
+                              if (!cell) return
+                              const r = parseInt(cell.dataset.row ?? '', 10)
+                              if (!isNaN(r)) grid.selectRow(r, true)
+                            }
+                            const handleRowDragUp = () => {
+                              document.removeEventListener('mousemove', handleRowDragMove)
+                              document.removeEventListener('mouseup', handleRowDragUp)
+                            }
+                            document.addEventListener('mousemove', handleRowDragMove)
+                            document.addEventListener('mouseup', handleRowDragUp)
+                            return
+                          }
+                          // Priority 1: cell drag (move/copy) — near border of selected cell
+                          if (editable && onCellMove) {
+                            cellDrag.handleCellMouseDown(e, rowIdx, colIdx)
+                            if (e.defaultPrevented) return
+                          }
+                          // Priority 2: drag-to-select — cell interior
+                          grid.handleCellMouseDown(rowIdx, colIdx, e, autoScroll.update, autoScroll.stop)
+                        }}
                         onClick={(e) => {
                           // Suppress click after drag
                           if (cellDrag.didDragRef.current) {
                             cellDrag.didDragRef.current = false
+                            e.stopPropagation()
+                            return
+                          }
+                          if (grid.didDragSelectRef.current) {
+                            grid.didDragSelectRef.current = false
                             e.stopPropagation()
                             return
                           }
@@ -1087,6 +1153,7 @@ export function DataTable<T>({
                           <div
                             className="fill-handle"
                             onMouseDown={fillHandle.handleFillHandleMouseDown}
+                            onDoubleClick={fillHandle.handleFillHandleDoubleClick}
                           />
                         )}
                       </TableCell>
