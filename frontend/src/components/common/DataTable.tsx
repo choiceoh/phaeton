@@ -458,8 +458,15 @@ export function DataTable<T>({
     onClearCell: editable ? onClearCell : undefined,
   })
 
-  // Auto-scroll during drag operations.
-  const autoScroll = useAutoScroll(scrollRef)
+  // Ref-based onTick for auto-scroll (avoids circular dependency with hooks).
+  const autoScrollTickRef = useRef<(x: number, y: number) => void>(() => {})
+
+  // Auto-scroll with onTick that dispatches to the active drag operation.
+  const autoScroll = useAutoScroll(scrollRef, {
+    onTick: useCallback((x: number, y: number) => {
+      autoScrollTickRef.current(x, y)
+    }, []),
+  })
 
   // Fill handle hook.
   const fillHandle = useFillHandle({
@@ -487,6 +494,13 @@ export function DataTable<T>({
     onAutoScroll: autoScroll.update,
     onAutoScrollStop: autoScroll.stop,
   })
+
+  // Wire up auto-scroll onTick to dispatch to whichever drag is active.
+  autoScrollTickRef.current = (x: number, y: number) => {
+    grid.updateDragSelection(x, y)
+    fillHandle.updateFillPreview(x, y)
+    cellDrag.updateDragGhost(x, y, cellDrag.lastCtrlRef.current)
+  }
 
   // Clipboard: copy & paste.
   const handleClipboard = useCallback(
@@ -786,6 +800,7 @@ export function DataTable<T>({
                         zIndex: isPinned ? 2 : undefined,
                       }}
                       onContextMenu={(e) => handleHeaderContextMenu(e, header.column)}
+                      data-col-idx={headerIdx}
                       onMouseDown={!isSystemCol ? (e) => {
                         if (e.button !== 0) return
                         // Select entire column on click (don't conflict with sort/resize)
@@ -793,21 +808,23 @@ export function DataTable<T>({
                         if (target.closest('.cursor-col-resize')) return
                         grid.selectColumn(headerIdx, e.shiftKey)
                         e.preventDefault()
+                        document.body.style.userSelect = 'none'
 
-                        // Support drag across headers
+                        // Support drag across headers with auto-scroll
                         const handleHeaderDragMove = (ev: MouseEvent) => {
+                          autoScroll.update(ev.clientX, ev.clientY)
                           const el = document.elementFromPoint(ev.clientX, ev.clientY)
                           if (!el) return
-                          const th = (el as HTMLElement).closest('[role="columnheader"]') as HTMLElement | null
+                          const th = (el as HTMLElement).closest('[data-col-idx]') as HTMLElement | null
                           if (!th) return
-                          // Find the header index
-                          const allHeaders = Array.from(th.parentElement?.children ?? [])
-                          const idx = allHeaders.indexOf(th)
-                          if (idx >= 0) grid.selectColumn(idx, true)
+                          const idx = parseInt(th.dataset.colIdx ?? '', 10)
+                          if (!isNaN(idx)) grid.selectColumn(idx, true)
                         }
                         const handleHeaderDragUp = () => {
                           document.removeEventListener('mousemove', handleHeaderDragMove)
                           document.removeEventListener('mouseup', handleHeaderDragUp)
+                          document.body.style.userSelect = ''
+                          autoScroll.stop()
                         }
                         document.addEventListener('mousemove', handleHeaderDragMove)
                         document.addEventListener('mouseup', handleHeaderDragUp)
@@ -970,8 +987,10 @@ export function DataTable<T>({
                           if (isRowNum) {
                             grid.selectRow(rowIdx, e.shiftKey)
                             e.preventDefault()
-                            // Support drag across row numbers
+                            document.body.style.userSelect = 'none'
+                            // Support drag across row numbers with auto-scroll
                             const handleRowDragMove = (ev: MouseEvent) => {
+                              autoScroll.update(ev.clientX, ev.clientY)
                               const el = document.elementFromPoint(ev.clientX, ev.clientY)
                               if (!el) return
                               const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
@@ -982,6 +1001,8 @@ export function DataTable<T>({
                             const handleRowDragUp = () => {
                               document.removeEventListener('mousemove', handleRowDragMove)
                               document.removeEventListener('mouseup', handleRowDragUp)
+                              document.body.style.userSelect = ''
+                              autoScroll.stop()
                             }
                             document.addEventListener('mousemove', handleRowDragMove)
                             document.addEventListener('mouseup', handleRowDragUp)

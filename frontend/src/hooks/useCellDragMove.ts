@@ -32,8 +32,8 @@ export interface DragGhostRange {
   mode: 'move' | 'copy'
 }
 
-const EDGE_THRESHOLD = 4 // pixels from cell border
-const FILL_HANDLE_SIZE = 8 // pixels from bottom-right corner (avoid fill handle)
+const EDGE_THRESHOLD = 6 // pixels from cell border
+const FILL_HANDLE_SIZE = 10 // pixels from bottom-right corner (avoid fill handle)
 
 function getSourceRange(activeCell: CellPosition | null, selection: SelectionRange | null) {
   if (selection) {
@@ -123,6 +123,46 @@ export function useCellDragMove({
     [isDragging, isCellInSource],
   )
 
+  /**
+   * Resolve the cell under a viewport coordinate and update drag ghost.
+   * Called from both mousemove and auto-scroll onTick.
+   */
+  const updateDragGhost = useCallback(
+    (clientX: number, clientY: number, ctrlKey = false) => {
+      if (!dragStateRef.current) return
+
+      const el = document.elementFromPoint(clientX, clientY)
+      if (!el) return
+      const targetCell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
+      if (!targetCell) return
+
+      const targetRow = parseInt(targetCell.dataset.row ?? '', 10)
+      const targetCol = parseInt(targetCell.dataset.col ?? '', 10)
+      if (isNaN(targetRow) || isNaN(targetCol)) return
+
+      const src = dragStateRef.current.sourceRange!
+      const rowOffset = targetRow - dragStateRef.current.startRow
+      const colOffset = targetCol - dragStateRef.current.startCol
+      const mode = ctrlKey ? 'copy' as const : 'move' as const
+
+      setDragGhost({
+        startRow: src.startRow + rowOffset,
+        endRow: src.endRow + rowOffset,
+        startCol: src.startCol + colOffset,
+        endCol: src.endCol + colOffset,
+        mode,
+      })
+    },
+    [],
+  )
+
+  // Keep a ref for the latest updateDragGhost for auto-scroll onTick
+  const updateDragGhostRef = useRef(updateDragGhost)
+  updateDragGhostRef.current = updateDragGhost
+
+  // Track the latest ctrlKey state for auto-scroll onTick
+  const lastCtrlRef = useRef(false)
+
   const handleCellMouseDown = useCallback(
     (e: React.MouseEvent, row: number, col: number) => {
       if (!isCellInSource(row, col) || !sourceRange) return
@@ -155,30 +195,9 @@ export function useCellDragMove({
 
         setIsDragging(true)
         didDragRef.current = true
+        lastCtrlRef.current = ev.ctrlKey || ev.metaKey
         onAutoScroll?.(ev.clientX, ev.clientY)
-
-        // Find the cell under cursor
-        const el = document.elementFromPoint(ev.clientX, ev.clientY)
-        if (!el) return
-        const targetCell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
-        if (!targetCell) return
-
-        const targetRow = parseInt(targetCell.dataset.row ?? '', 10)
-        const targetCol = parseInt(targetCell.dataset.col ?? '', 10)
-        if (isNaN(targetRow) || isNaN(targetCol)) return
-
-        const src = dragStateRef.current.sourceRange!
-        const rowOffset = targetRow - dragStateRef.current.startRow
-        const colOffset = targetCol - dragStateRef.current.startCol
-        const mode = (ev.ctrlKey || ev.metaKey) ? 'copy' as const : 'move' as const
-
-        setDragGhost({
-          startRow: src.startRow + rowOffset,
-          endRow: src.endRow + rowOffset,
-          startCol: src.startCol + colOffset,
-          endCol: src.endCol + colOffset,
-          mode,
-        })
+        updateDragGhostRef.current(ev.clientX, ev.clientY, ev.ctrlKey || ev.metaKey)
       }
 
       const handleMouseUp = () => {
@@ -295,5 +314,7 @@ export function useCellDragMove({
     didDragRef,
     handleCellMouseMove,
     handleCellMouseDown,
+    updateDragGhost,
+    lastCtrlRef,
   }
 }

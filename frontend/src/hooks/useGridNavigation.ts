@@ -283,6 +283,35 @@ export function useGridNavigation({
   )
 
   /**
+   * Resolve the cell under a given viewport coordinate and update selection.
+   * Shared by mousemove handler and auto-scroll onTick callback.
+   */
+  const updateDragSelection = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!dragSelectRef.current?.started) return
+
+      const el = document.elementFromPoint(clientX, clientY)
+      if (!el) return
+      const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
+      if (!cell) return
+
+      const targetRow = parseInt(cell.dataset.row ?? '', 10)
+      const targetCol = parseInt(cell.dataset.col ?? '', 10)
+      if (isNaN(targetRow) || isNaN(targetCol)) return
+
+      const anchor = dragSelectRef.current.anchor
+      setSelection({
+        startRow: anchor.row,
+        startCol: anchor.col,
+        endRow: clampRow(targetRow),
+        endCol: clampCol(targetCol),
+      })
+      setActiveCell({ row: clampRow(targetRow), col: clampCol(targetCol) })
+    },
+    [clampRow, clampCol],
+  )
+
+  /**
    * Drag-to-select: mousedown on a cell starts potential range selection.
    * After 5px movement threshold, begins extending selection via mousemove.
    * onAutoScroll is called during drag to enable edge-triggered auto-scroll.
@@ -290,6 +319,11 @@ export function useGridNavigation({
   const handleCellMouseDown = useCallback(
     (row: number, col: number, e: React.MouseEvent, onAutoScroll?: (x: number, y: number) => void, onAutoScrollStop?: () => void) => {
       if (e.button !== 0 || e.shiftKey) return
+
+      // Immediately select the clicked cell (Excel behavior)
+      anchorRef.current = { row, col }
+      setActiveCell({ row, col })
+      setSelection(null)
 
       dragSelectRef.current = {
         anchor: { row, col },
@@ -308,37 +342,18 @@ export function useGridNavigation({
           dragSelectRef.current.started = true
           didDragSelectRef.current = true
           document.body.style.userSelect = 'none'
-          // Set anchor cell on drag start
-          const anchor = dragSelectRef.current.anchor
-          anchorRef.current = anchor
-          setActiveCell(anchor)
+          document.body.style.cursor = 'cell'
         }
 
         onAutoScroll?.(ev.clientX, ev.clientY)
-
-        const el = document.elementFromPoint(ev.clientX, ev.clientY)
-        if (!el) return
-        const cell = (el as HTMLElement).closest('[data-row]') as HTMLElement | null
-        if (!cell) return
-
-        const targetRow = parseInt(cell.dataset.row ?? '', 10)
-        const targetCol = parseInt(cell.dataset.col ?? '', 10)
-        if (isNaN(targetRow) || isNaN(targetCol)) return
-
-        const anchor = dragSelectRef.current.anchor
-        setSelection({
-          startRow: anchor.row,
-          startCol: anchor.col,
-          endRow: clampRow(targetRow),
-          endCol: clampCol(targetCol),
-        })
-        setActiveCell({ row: clampRow(targetRow), col: clampCol(targetCol) })
+        updateDragSelection(ev.clientX, ev.clientY)
       }
 
       const handleMouseUp = () => {
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
         document.body.style.userSelect = ''
+        document.body.style.cursor = ''
         onAutoScrollStop?.()
         dragSelectRef.current = null
       }
@@ -346,7 +361,7 @@ export function useGridNavigation({
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [clampRow, clampCol],
+    [clampRow, clampCol, updateDragSelection],
   )
 
   /** Select an entire column (click on column header). */
@@ -412,6 +427,7 @@ export function useGridNavigation({
     handleKeyDown,
     handleCellClick,
     handleCellMouseDown,
+    updateDragSelection,
     didDragSelectRef,
     selectColumn,
     selectRow,
